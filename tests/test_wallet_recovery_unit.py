@@ -34,7 +34,6 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryStatus,
 )
 
-
 CHAIN = Chain.GNOSIS
 EOA_ADDR = "0x" + "a" * 40
 SAFE_ADDR = "0x" + "b" * 40

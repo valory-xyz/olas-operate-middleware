@@ -39,13 +39,12 @@ from operate.services.service import (
 
 from tests.conftest import TestOperateSevice
 
-
 DEFAULT_CONFIG_KWARGS = {
     "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
     "rpc": "https://rpc.com",
     "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
     "hash_timestamp": 1704063600,
-    "token": 42,
+    "token": 42,  # nosec
     "staked": True,
     "on_chain_state": 4,
     "staking_program_id": "staking_program_1",

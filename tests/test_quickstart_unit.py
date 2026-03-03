@@ -63,7 +63,6 @@ from operate.quickstart.utils import (
 )
 from operate.services.protocol import StakingState
 
-
 # ============================================================
 # Tests for operate/quickstart/utils.py
 # ============================================================

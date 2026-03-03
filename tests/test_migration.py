@@ -461,7 +461,7 @@ class TestMigrateServiceV9UnsupportedPackagePath:
                     "ledger_config": {"chain": "gnosis"},
                     "chain_data": {
                         "instances": [],
-                        "token": 1,
+                        "token": 1,  # nosec
                         "multisig": "0xmultisig",
                         "staked": False,
                         "on_chain_state": 3,
@@ -535,7 +535,7 @@ class TestMigrateServiceVersionMigrationPaths:
                     "chain_data": {
                         "multisig": "0xm",
                         "instances": [],
-                        "token": 1,
+                        "token": 1,  # nosec
                         "staked": False,
                         "on_chain_state": 3,
                         "user_params": {
@@ -591,7 +591,7 @@ class TestMigrateServiceVersionMigrationPaths:
                     "chain_data": {
                         "multisig": "0xm",
                         "instances": [],
-                        "token": 1,
+                        "token": 1,  # nosec
                         "staked": False,
                         "on_chain_state": 3,
                         "user_params": {

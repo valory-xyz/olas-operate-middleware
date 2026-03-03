@@ -46,7 +46,6 @@ from operate.bridge.providers.provider import (
 from operate.bridge.providers.relay_provider import RelayExecutionStatus, RelayProvider
 from operate.constants import ZERO_ADDRESS
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------

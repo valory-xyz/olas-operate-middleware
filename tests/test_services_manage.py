@@ -44,7 +44,6 @@ from tests.conftest import (
 )
 from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI
 
-
 # TODO Move this to test_services_funding.py once feat/funding_v2 branch is merged
 AGENT_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
 SERVICE_SAFE_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}

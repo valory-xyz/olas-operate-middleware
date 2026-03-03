@@ -36,7 +36,6 @@ from operate.settings import SETTINGS_JSON_VERSION, Settings
 from tests.conftest import create_wallets
 from tests.constants import CHAINS_TO_TEST
 
-
 # ---------------------------------------------------------------------------
 # Integration tests (require test_operate / test_env fixtures)
 # ---------------------------------------------------------------------------

@@ -46,7 +46,6 @@ from operate.services.funding_manager import FundingInProgressError
 from operate.wallet.master import InsufficientFundsException
 from operate.wallet.wallet_recovery_manager import WalletRecoveryError
 
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -327,7 +326,7 @@ class TestCreateAppInfra:
             with TestClient(app, raise_server_exceptions=False) as client:
                 m.password = None  # not logged in before login
                 resp = client.post(
-                    "/api/account/login", json={"password": "testpass123"}
+                    "/api/account/login", json={"password": "testpass123"}  # nosec
                 )
             # schedule_funding_job is called on successful login
             assert resp.status_code in (HTTPStatus.OK, HTTPStatus.UNAUTHORIZED)
@@ -348,7 +347,7 @@ class TestCreateAppInfra:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 # First login: funding_job is None → cancel_funding_job returns early
-                client.post("/api/account/login", json={"password": "pw"})
+                client.post("/api/account/login", json={"password": "pw"})  # nosec
 
     def test_cancel_funding_job_cancels_existing_task(self) -> None:
         """Cover lines 423-427: cancel when funding_job is non-None and cancel succeeds/fails."""
@@ -361,12 +360,12 @@ class TestCreateAppInfra:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 # Login twice: second login cancels the task from the first login.
-                client.post("/api/account/login", json={"password": "pw"})
+                client.post("/api/account/login", json={"password": "pw"})  # nosec
                 # Make cancel() return False (line 427 — cancellation failed log)
                 # To do this we need to manipulate the task. Since we're in a
                 # sync context, we just call login again. The second cancel_funding_job()
                 # call will find a real asyncio.Task and call .cancel() on it.
-                client.post("/api/account/login", json={"password": "pw"})
+                client.post("/api/account/login", json={"password": "pw"})  # nosec
 
     # ── pause_all_services ────────────────────────────────────────────────────
 
@@ -473,7 +472,7 @@ class TestCreateAppInfra:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 # Login to create a funding_job (so cancel_funding_job has something)
-                client.post("/api/account/login", json={"password": "pw"})
+                client.post("/api/account/login", json={"password": "pw"})  # nosec
                 # Lifespan startup has already run; teardown will run on __exit__
 
         # Verify watchdog was started and stopped
@@ -582,7 +581,9 @@ class TestAccountRoutes:
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
-                resp = client.post("/api/account", json={"password": "testpass123"})
+                resp = client.post(
+                    "/api/account", json={"password": "testpass123"}  # nosec
+                )
             assert resp.status_code == HTTPStatus.CONFLICT
 
     def test_update_password_value_error(self) -> None:
@@ -596,8 +597,8 @@ class TestAccountRoutes:
                 resp = client.put(
                     "/api/account",
                     json={
-                        "old_password": "testpass123",
-                        "new_password": "newpassword456",
+                        "old_password": "testpass123",  # nosec
+                        "new_password": "newpassword456",  # nosec
                     },
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
@@ -613,8 +614,8 @@ class TestAccountRoutes:
                 resp = client.put(
                     "/api/account",
                     json={
-                        "old_password": "testpass123",
-                        "new_password": "newpassword456",
+                        "old_password": "testpass123",  # nosec
+                        "new_password": "newpassword456",  # nosec
                     },
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
@@ -631,7 +632,7 @@ class TestAccountRoutes:
                     "/api/account",
                     json={
                         "mnemonic": "word " * 12,
-                        "new_password": "newpassword456",
+                        "new_password": "newpassword456",  # nosec
                     },
                 )
             # May succeed or fail depending on validation, but the route body runs
@@ -647,7 +648,7 @@ class TestAccountRoutes:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
-                    "/api/account/login", json={"password": "testpass123"}
+                    "/api/account/login", json={"password": "testpass123"}  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -660,7 +661,9 @@ class TestAccountRoutes:
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
-                resp = client.post("/api/account/login", json={"password": "wrongpass"})
+                resp = client.post(
+                    "/api/account/login", json={"password": "wrongpass"}  # nosec
+                )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
     def test_validate_password_no_account(self) -> None:
@@ -671,7 +674,7 @@ class TestAccountRoutes:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
-                    "/api/account/login", json={"password": "testpass123"}
+                    "/api/account/login", json={"password": "testpass123"}  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -755,7 +758,7 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/private_key",
-                    json={"password": "wrong_pass", "ledger_type": "ethereum"},
+                    json={"password": "wrong_pass", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -772,7 +775,10 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/mnemonic",
-                    json={"password": "testpass123", "ledger_type": "ethereum"},
+                    json={
+                        "password": "testpass123",
+                        "ledger_type": "ethereum",
+                    },  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -786,7 +792,7 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/mnemonic",
-                    json={"password": "wrong", "ledger_type": "ethereum"},
+                    json={"password": "wrong", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -800,7 +806,10 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/mnemonic",
-                    json={"password": "testpass123", "ledger_type": "ethereum"},
+                    json={
+                        "password": "testpass123",
+                        "ledger_type": "ethereum",
+                    },  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -813,7 +822,10 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/mnemonic",
-                    json={"password": "testpass123", "ledger_type": "ethereum"},
+                    json={
+                        "password": "testpass123",
+                        "ledger_type": "ethereum",
+                    },  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -830,7 +842,7 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/mnemonic",
-                    json={"password": "pass", "ledger_type": "ethereum"},
+                    json={"password": "pass", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -845,7 +857,7 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/mnemonic",
-                    json={"password": "pass", "ledger_type": "ethereum"},
+                    json={"password": "pass", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -1323,7 +1335,7 @@ class TestWalletWithdrawRoute:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/withdraw",
-                    json={"password": "x", "to": "0x0", "withdraw_assets": {}},
+                    json={"password": "x", "to": "0x0", "withdraw_assets": {}},  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -1336,7 +1348,11 @@ class TestWalletWithdrawRoute:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/withdraw",
-                    json={"password": "wrong", "to": "0x0", "withdraw_assets": {}},
+                    json={
+                        "password": "wrong",
+                        "to": "0x0",
+                        "withdraw_assets": {},
+                    },  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -1354,7 +1370,7 @@ class TestWalletWithdrawRoute:
                     resp = c.post(
                         "/api/wallet/withdraw",
                         json={
-                            "password": "pass",
+                            "password": "pass",  # nosec
                             "to": "0xto",
                             "withdraw_assets": {
                                 "gnosis": {
@@ -1375,7 +1391,7 @@ class TestWalletWithdrawRoute:
                 resp = c.post(
                     "/api/wallet/withdraw",
                     json={
-                        "password": "pass",
+                        "password": "pass",  # nosec
                         "to": "0xto",
                         "withdraw_assets": {"gnosis": {}},
                     },
@@ -1392,7 +1408,7 @@ class TestWalletWithdrawRoute:
                 resp = c.post(
                     "/api/wallet/withdraw",
                     json={
-                        "password": "pass",
+                        "password": "pass",  # nosec
                         "to": "0xto",
                         "withdraw_assets": {"gnosis": {}},
                     },
@@ -1414,7 +1430,7 @@ class TestWalletWithdrawRoute:
                     resp = c.post(
                         "/api/wallet/withdraw",
                         json={
-                            "password": "pass",
+                            "password": "pass",  # nosec
                             "to": "0xto",
                             "withdraw_assets": {
                                 "gnosis": {
@@ -2174,7 +2190,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpass123"},
+                    json={"new_password": "newpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -2186,7 +2202,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpass123"},
+                    json={"new_password": "newpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.FORBIDDEN
 
@@ -2198,7 +2214,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "short"},
+                    json={"new_password": "short"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
@@ -2211,7 +2227,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpassword123"},
+                    json={"new_password": "newpassword123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -2226,7 +2242,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpassword123"},
+                    json={"new_password": "newpassword123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
@@ -2239,7 +2255,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpassword123"},
+                    json={"new_password": "newpassword123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -2645,7 +2661,7 @@ class TestExtraCoverageLines:
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
-                resp = c.post("/api/account", json={"password": "short"})
+                resp = c.post("/api/account", json={"password": "short"})  # nosec
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
     def test_setup_account_valid_password_creates_account(self) -> None:
@@ -2656,7 +2672,9 @@ class TestExtraCoverageLines:
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
-                resp = c.post("/api/account", json={"password": "validpass123"})
+                resp = c.post(
+                    "/api/account", json={"password": "validpass123"}  # nosec
+                )
             assert resp.status_code == HTTPStatus.OK
 
     # ── PUT /api/account (lines 580, 588, 596, 604, 614) ─────────────────────
@@ -2669,7 +2687,8 @@ class TestExtraCoverageLines:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.put(
-                    "/api/account", json={"old_password": "x", "new_password": "y"}
+                    "/api/account",
+                    json={"old_password": "x", "new_password": "y"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -2680,7 +2699,9 @@ class TestExtraCoverageLines:
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
-                resp = c.put("/api/account", json={"new_password": "newpass123"})
+                resp = c.put(
+                    "/api/account", json={"new_password": "newpass123"}  # nosec
+                )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
     def test_update_password_both_credentials(self) -> None:
@@ -2693,9 +2714,9 @@ class TestExtraCoverageLines:
                 resp = c.put(
                     "/api/account",
                     json={
-                        "old_password": "old",
-                        "mnemonic": "word " * 12,
-                        "new_password": "newpass123",
+                        "old_password": "old",  # nosec
+                        "mnemonic": "word " * 12,  # nosec
+                        "new_password": "newpass123",  # nosec
                     },
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
@@ -2709,7 +2730,7 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.put(
                     "/api/account",
-                    json={"old_password": "oldpass", "new_password": "short"},
+                    json={"old_password": "oldpass", "new_password": "short"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
@@ -2723,7 +2744,10 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.put(
                     "/api/account",
-                    json={"old_password": "oldpass123", "new_password": "newpass456"},
+                    json={
+                        "old_password": "oldpass123",
+                        "new_password": "newpass456",
+                    },  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -2738,7 +2762,7 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post(
                     "/api/wallet/private_key",
-                    json={"password": "x", "ledger_type": "ethereum"},
+                    json={"password": "x", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -2752,7 +2776,7 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post(
                     "/api/wallet/private_key",
-                    json={"password": "x", "ledger_type": "ethereum"},
+                    json={"password": "x", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -2769,7 +2793,7 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post(
                     "/api/wallet/private_key",
-                    json={"password": "correct", "ledger_type": "ethereum"},
+                    json={"password": "correct", "ledger_type": "ethereum"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
             assert resp.json()["private_key"] == "0xprivkey"

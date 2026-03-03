@@ -37,7 +37,6 @@ from operate.bridge.bridge_manager import (
 from operate.bridge.providers.provider import ProviderRequest, ProviderRequestStatus
 from operate.operate_types import Chain
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

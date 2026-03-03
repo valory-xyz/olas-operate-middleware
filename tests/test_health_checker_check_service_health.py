@@ -15,7 +15,6 @@ import pytest
 
 from operate.services.health_checker import HealthChecker
 
-
 # aiohttp used via patch target "operate.services.health_checker.aiohttp.ClientSession"
 
 

@@ -69,7 +69,6 @@ from tests.conftest import (
 )
 from tests.constants import LOGGER, OPERATE_TEST
 
-
 AGENT_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
 SERVICE_SAFE_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
 
