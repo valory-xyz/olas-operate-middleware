@@ -103,6 +103,93 @@ def _mock_service(
 
 
 # ---------------------------------------------------------------------------
+# Tests for drain_agents_eoas
+# ---------------------------------------------------------------------------
+
+
+class TestDrainAgentsEOAs:
+    """Tests for FundingManager.drain_agents_eoas."""
+
+    def test_erc20_balances_are_drained_from_agent(self) -> None:
+        """drain_agents_eoas transfers non-zero ERC20 balances before native drain."""
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 500
+
+        with patch(
+            "operate.services.funding_manager.make_chain_ledger_api",
+            return_value=ledger_api,
+        ), patch(
+            "operate.services.funding_manager.get_asset_balance",
+            return_value=100,
+        ), patch(
+            "operate.services.funding_manager.get_asset_name",
+            return_value="USDC.e",
+        ), patch(
+            "operate.services.funding_manager.transfer_erc20_from_eoa"
+        ) as mock_transfer_erc20, patch(
+            "operate.services.funding_manager.drain_eoa"
+        ) as mock_drain_eoa, patch(
+            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.OLAS",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        mock_transfer_erc20.assert_called_once()
+        mock_drain_eoa.assert_called_once()
+
+    def test_zero_erc20_balance_skips_transfer(self) -> None:
+        """drain_agents_eoas skips ERC20 transfer when token balance is zero."""
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 500
+
+        with patch(
+            "operate.services.funding_manager.make_chain_ledger_api",
+            return_value=ledger_api,
+        ), patch(
+            "operate.services.funding_manager.get_asset_balance",
+            return_value=0,
+        ), patch(
+            "operate.services.funding_manager.get_asset_name",
+            return_value="USDC.e",
+        ), patch(
+            "operate.services.funding_manager.transfer_erc20_from_eoa"
+        ) as mock_transfer_erc20, patch(
+            "operate.services.funding_manager.drain_eoa"
+        ) as mock_drain_eoa, patch(
+            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.OLAS",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        mock_transfer_erc20.assert_not_called()
+        mock_drain_eoa.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # Tests for drain_service_safe (lines 133-248)
 # ---------------------------------------------------------------------------
 
@@ -148,6 +235,9 @@ class TestDrainServiceSafe:
                 {Chain.GNOSIS: TOKEN_ADDR},
             ), patch(
                 "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ), patch(
+                "operate.services.funding_manager.USDC_E",
                 {Chain.GNOSIS: TOKEN_ADDR},
             ):
                 ledger_api = MagicMock()
@@ -198,6 +288,9 @@ class TestDrainServiceSafe:
         ), patch(
             "operate.services.funding_manager.USDC",
             {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
+            {Chain.GNOSIS: TOKEN_ADDR},
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -246,6 +339,9 @@ class TestDrainServiceSafe:
         ), patch(
             "operate.services.funding_manager.USDC",
             {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
+            {Chain.GNOSIS: TOKEN_ADDR},
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -291,6 +387,9 @@ class TestDrainServiceSafe:
         ), patch(
             "operate.services.funding_manager.USDC",
             {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
+            {Chain.GNOSIS: TOKEN_ADDR},
         ):
             with pytest.raises(RuntimeError, match="unrecognized owner set"):
                 manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -335,6 +434,9 @@ class TestDrainServiceSafe:
             {Chain.GNOSIS: TOKEN_ADDR},
         ), patch(
             "operate.services.funding_manager.USDC",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
             {Chain.GNOSIS: TOKEN_ADDR},
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
@@ -384,6 +486,9 @@ class TestDrainServiceSafe:
         ), patch(
             "operate.services.funding_manager.USDC",
             {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
+            {Chain.GNOSIS: TOKEN_ADDR},
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -429,6 +534,9 @@ class TestDrainServiceSafe:
             {Chain.GNOSIS: TOKEN_ADDR},
         ), patch(
             "operate.services.funding_manager.USDC",
+            {Chain.GNOSIS: TOKEN_ADDR},
+        ), patch(
+            "operate.services.funding_manager.USDC_E",
             {Chain.GNOSIS: TOKEN_ADDR},
         ):
             with pytest.raises(RuntimeError, match="unrecognized owner set"):

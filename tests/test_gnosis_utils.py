@@ -48,6 +48,7 @@ from operate.utils.gnosis import (
     skill_input_hex_to_payload,
     swap_owner,
     transfer,
+    transfer_erc20_from_eoa,
     transfer_erc20_from_safe,
 )
 
@@ -759,10 +760,80 @@ class TestTransferErc20FromSafe:
                 amount=123.7,
             )
 
-        mock_instance.encode_abi.assert_called_once_with(
-            abi_element_identifier="transfer",
-            args=["0xRecipient", 123],
+
+class TestTransferErc20FromEoa:
+    """Tests for transfer_erc20_from_eoa."""
+
+    def test_returns_tx_hash(self) -> None:
+        """Test that transfer_erc20_from_eoa returns transaction hash from TxSettler."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        mock_txsettler_cls = MagicMock()
+        settler = (
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value
         )
+        settler.tx_hash = "0xhash"
+
+        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
+            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        ):
+            result = transfer_erc20_from_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                token="0x" + "b" * 40,
+                to="0x" + "c" * 40,
+                amount=12,
+            )
+
+        assert result == "0xhash"
+
+    def test_builds_transfer_tx_and_updates_gas(self) -> None:
+        """Test that tx builder creates ERC20 transfer and applies gas update helpers."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_ledger.api.eth.get_transaction_count.return_value = 7
+
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        built_tx = {"to": "0x" + "b" * 40, "value": 0}
+        mock_instance = MagicMock()
+        mock_instance.functions.transfer.return_value.build_transaction.return_value = (
+            built_tx
+        )
+
+        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
+            "operate.utils.gnosis.update_tx_with_gas_pricing"
+        ) as mock_update_gas_pricing, patch(
+            "operate.utils.gnosis.update_tx_with_gas_estimate"
+        ) as mock_update_gas_estimate, patch(
+            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        ), patch(
+            "operate.utils.gnosis.TxSettler"
+        ) as mock_txsettler_cls:
+            mock_contracts.erc20.get_instance.return_value = mock_instance
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
+                "0xhash"
+            )
+
+            transfer_erc20_from_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                token="0x" + "b" * 40,
+                to="0x" + "c" * 40,
+                amount=12,
+            )
+
+            tx_builder = mock_txsettler_cls.call_args.kwargs["tx_builder"]
+            tx = tx_builder()
+
+        assert tx == built_tx
+        mock_instance.functions.transfer.assert_called_once_with("0x" + "c" * 40, 12)
+        mock_update_gas_pricing.assert_called_once_with(built_tx, mock_ledger)
+        mock_update_gas_estimate.assert_called_once_with(built_tx, mock_ledger)
 
 
 class TestEstimateTransferTxFee:

@@ -22,6 +22,7 @@
 import json
 import typing as t
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from autonomy.deploy.constants import (
@@ -86,6 +87,20 @@ class TestMkdirs:
         build_dir.mkdir()
         mkdirs(build_dir)  # should not raise
         assert build_dir.exists()
+
+    def test_ignores_chown_permission_errors(self, tmp_path: Path) -> None:
+        """Test that mkdirs ignores os.chown PermissionError/AttributeError."""
+        build_dir = tmp_path / "build"
+
+        with patch(
+            "operate.services.service.os.chown",
+            side_effect=PermissionError,
+            create=True,
+        ):
+            mkdirs(build_dir)
+
+        assert (build_dir / PERSISTENT_DATA_DIR).exists()
+        assert (build_dir / AGENT_KEYS_DIR).exists()
 
 
 # ---------------------------------------------------------------------------

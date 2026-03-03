@@ -38,7 +38,11 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api
+from operate.ledger import (
+    get_default_ledger_api,
+    update_tx_with_gas_estimate,
+    update_tx_with_gas_pricing,
+)
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 
@@ -473,6 +477,53 @@ def transfer_erc20_from_safe(
         ledger_api=ledger_api,
         crypto=crypto,
         to=token,
+    )
+
+
+def transfer_erc20_from_eoa(
+    ledger_api: LedgerApi,
+    crypto: Crypto,
+    token: str,
+    to: str,
+    amount: t.Union[float, int],
+) -> str:
+    """Transfer ERC20 assets from an EOA to the given address."""
+    amount = int(amount)
+    sender_address = crypto.address
+
+    def _build_transfer_tx() -> t.Dict:
+        instance = registry_contracts.erc20.get_instance(
+            ledger_api=ledger_api,
+            contract_address=token,
+        )
+        tx = instance.functions.transfer(to, amount).build_transaction(
+            {
+                "from": sender_address,
+                "gas": 1,
+                "maxFeePerGas": 1,
+                "maxPriorityFeePerGas": 1,
+                "nonce": ledger_api.api.eth.get_transaction_count(sender_address),
+            }
+        )
+        update_tx_with_gas_pricing(tx, ledger_api)
+        update_tx_with_gas_estimate(tx, ledger_api)
+        return tx
+
+    return (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=_build_transfer_tx,
+        )
+        .transact()
+        .settle()
+        .tx_hash
     )
 
 

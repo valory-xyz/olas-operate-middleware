@@ -260,7 +260,10 @@ class TestRPCConfigBug:
             mock_make_api.return_value = mock_ledger_api
 
             # Mock other dependencies
-            with patch("operate.services.funding_manager.drain_eoa"):
+            with patch("operate.services.funding_manager.drain_eoa"), patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=0,
+            ), patch("operate.services.funding_manager.transfer_erc20_from_eoa"):
                 keys_manager.get_crypto_instance.return_value = Mock()
 
                 # Call drain_agents_eoas - this should use the service's custom RPC

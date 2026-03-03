@@ -58,6 +58,7 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
     OLAS,
     USDC,
+    USDC_E,
     WRAPPED_NATIVE_ASSET,
     get_asset_name,
 )
@@ -68,7 +69,7 @@ from operate.services.service import NON_EXISTENT_TOKEN, Service
 from operate.utils import concurrent_execute
 from operate.utils.gnosis import drain_eoa, get_asset_balance, get_owners
 from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_safe
+from operate.utils.gnosis import transfer_erc20_from_eoa, transfer_erc20_from_safe
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 
@@ -112,8 +113,44 @@ class FundingManager:
         self.logger.info(
             f"Draining service agents {service.name} ({service_config_id=})"
         )
+        tokens = {
+            WRAPPED_NATIVE_ASSET[chain],
+            OLAS[chain],
+            USDC[chain],
+            USDC_E.get(chain, ZERO_ADDRESS),
+        } | service.chain_configs[
+            chain.value
+        ].chain_data.user_params.fund_requirements.keys()
+        tokens.discard(ZERO_ADDRESS)
+
         for agent_address in service.agent_addresses:
             ethereum_crypto = self.keys_manager.get_crypto_instance(agent_address)
+
+            for token_address in tokens:
+                token_balance = get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=token_address,
+                    address=agent_address,
+                )
+                token_name = get_asset_name(chain, token_address)
+
+                if token_balance == 0:
+                    self.logger.info(
+                        f"No {token_name} to drain from {agent_address} (agent EOA)"
+                    )
+                    continue
+
+                self.logger.info(
+                    f"Draining {token_balance} {token_name} from {agent_address} (agent EOA) to {withdrawal_address}"
+                )
+                transfer_erc20_from_eoa(
+                    ledger_api=ledger_api,
+                    crypto=ethereum_crypto,
+                    token=token_address,
+                    to=withdrawal_address,
+                    amount=token_balance,
+                )
+
             balance = ledger_api.get_balance(agent_address)
             self.logger.info(
                 f"Draining {balance} (approx) {get_currency_denom(chain)} from {agent_address} (agent) to {withdrawal_address}"
@@ -155,6 +192,7 @@ class FundingManager:
             WRAPPED_NATIVE_ASSET[chain],
             OLAS[chain],
             USDC[chain],
+            USDC_E.get(chain, ZERO_ADDRESS),
         } | service.chain_configs[
             chain.value
         ].chain_data.user_params.fund_requirements.keys()
