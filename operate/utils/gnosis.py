@@ -46,7 +46,6 @@ from operate.ledger import (
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 
-
 logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1
 SENTINEL_OWNERS = "0x0000000000000000000000000000000000000001"

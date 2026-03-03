@@ -19,7 +19,6 @@
 # ------------------------------------------------------------------------------
 """LI.FI provider."""
 
-
 import enum
 import time
 import typing as t
@@ -40,7 +39,6 @@ from operate.bridge.providers.provider import (
 from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER, ZERO_ADDRESS
 from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.operate_types import Chain
-
 
 LIFI_DEFAULT_ETA = 5 * 60
 

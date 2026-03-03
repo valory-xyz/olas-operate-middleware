@@ -23,7 +23,6 @@ from pathlib import Path
 
 from operate.serialization import BigInt
 
-
 OPERATE = ".operate"
 OPERATE_HOME = Path.cwd() / OPERATE
 SERVICES_DIR = "services"

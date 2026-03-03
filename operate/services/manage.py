@@ -99,7 +99,6 @@ from operate.utils.gnosis import (
 )
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
-
 # pylint: disable=redefined-builtin
 
 # At the moment, we only support running one agent per service locally on a machine.

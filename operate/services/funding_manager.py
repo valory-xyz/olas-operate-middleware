@@ -19,7 +19,6 @@
 
 """Funding manager"""
 
-
 # pylint: disable=too-many-locals,too-many-statements
 
 import asyncio
@@ -71,7 +70,6 @@ from operate.utils.gnosis import drain_eoa, get_asset_balance, get_owners
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_eoa, transfer_erc20_from_safe
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
-
 
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import

@@ -19,7 +19,6 @@
 
 """Tests for services.funding module."""
 
-
 # pylint: disable=too-many-locals
 
 import random

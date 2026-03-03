@@ -19,7 +19,6 @@
 
 """Test for wallet.master module."""
 
-
 # pylint: disable=too-many-locals
 
 import random

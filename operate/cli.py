@@ -18,6 +18,7 @@
 # ------------------------------------------------------------------------------
 
 """Operate app CLI module."""
+
 import asyncio
 import atexit
 import enum
@@ -105,7 +106,6 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
 )
-
 
 # TODO Backport to Open Autonomy
 autonomy.chain.tx.ERRORS_TO_RETRY |= {"replacement transaction underpriced"}

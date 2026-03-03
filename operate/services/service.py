@@ -110,7 +110,6 @@ from operate.utils import secure_copy_private_key, unrecoverable_delete
 from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
-
 # pylint: disable=no-member,redefined-builtin,too-many-instance-attributes,too-many-locals
 
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"

@@ -19,7 +19,6 @@
 
 """Tests for bridge.bridge_manager module."""
 
-
 import time
 import typing as t
 from pathlib import Path
@@ -47,7 +46,6 @@ from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 
 from tests.constants import OPERATE_TEST
-
 
 COINGECKO_PLATFORM_IDS = {
     "ethereum": "ethereum",
@@ -781,7 +779,7 @@ class TestBridgeManager:
             overpaid_usd = max(quoted_from_cost_usd - expected_to_cost_usd, 0)
             overpaid_percent = (overpaid_usd / expected_to_cost_usd) * 100
             print(
-                f"Overpaid {overpaid_usd:.2f} USD ({overpaid_percent:.2f}% < {margin*100:.2f}%)"
+                f"Overpaid {overpaid_usd:.2f} USD ({overpaid_percent:.2f}% < {margin * 100:.2f}%)"
             )
 
             assert quoted_from_cost_usd <= expected_to_cost_usd * (

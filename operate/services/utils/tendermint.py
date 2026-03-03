@@ -18,6 +18,7 @@
 # ------------------------------------------------------------------------------
 
 """Tendermint manager."""
+
 import contextlib
 import json
 import logging
@@ -43,7 +44,6 @@ from flask import Flask, Response, jsonify, request
 from werkzeug.exceptions import InternalServerError, NotFound
 
 from operate.constants import DEFAULT_TIMEOUT
-
 
 ENCODING = "utf-8"
 DEFAULT_LOG_FILE = "com.log"
@@ -464,7 +464,7 @@ class PeriodDumper:
         self.dump_dir = Path(dump_dir or "/tm_state")
 
         if self.dump_dir.is_dir():
-            shutil.rmtree(str(self.dump_dir), onerror=self.readonly_handler)
+            shutil.rmtree(str(self.dump_dir), onexc=self.readonly_handler)
         self.dump_dir.mkdir(exist_ok=True)
 
     @staticmethod

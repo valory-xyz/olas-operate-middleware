@@ -17,6 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 """Unit tests for operate/services/protocol.py."""
+
 import typing as t
 from unittest.mock import MagicMock, PropertyMock, patch
 

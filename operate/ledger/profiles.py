@@ -39,7 +39,6 @@ from operate.ledger import (
 from operate.operate_types import Chain, ContractAddresses
 from operate.serialization import BigInt
 
-
 # TODO: Refactor, remove the usage of CONTRACTS and use CHAIN_PROFILES from Open Autonomy instead.
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {}
 for _chain in CHAINS:

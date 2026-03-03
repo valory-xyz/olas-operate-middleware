@@ -30,7 +30,6 @@ from operate.quickstart.utils import (
     print_title,
 )
 
-
 if TYPE_CHECKING:
     from operate.cli import OperateApp
 

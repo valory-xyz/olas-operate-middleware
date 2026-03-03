@@ -30,7 +30,6 @@ from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_
 
 from operate.operate_types import Chain
 
-
 CHAINS = [
     Chain.ARBITRUM_ONE,
     Chain.BASE,

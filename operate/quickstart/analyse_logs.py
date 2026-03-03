@@ -17,7 +17,6 @@
 # ------------------------------------------------------------------------------
 """Quickstart script to run log analysis."""
 
-
 import json
 import os
 import subprocess  # nosec
@@ -26,7 +25,6 @@ from pathlib import Path
 from typing import List, TYPE_CHECKING, Union
 
 from operate.constants import DEPLOYMENT_DIR
-
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp

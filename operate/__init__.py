@@ -26,7 +26,6 @@ from importlib.metadata import PackageNotFoundError, version
 
 import certifi
 
-
 try:
     # Prefer the distribution name if installed; fall back to the module name
     __version__ = version("olas-operate-middleware")

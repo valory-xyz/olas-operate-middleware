@@ -29,7 +29,6 @@ from pathlib import Path
 from operate.serialization import deserialize, serialize
 from operate.utils import safe_file_operation
 
-
 # pylint: disable=too-many-return-statements,no-member
 
 

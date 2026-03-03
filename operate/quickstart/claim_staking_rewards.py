@@ -33,7 +33,6 @@ from operate.quickstart.run_service import (
 )
 from operate.quickstart.utils import ask_yes_or_no, print_section
 
-
 if TYPE_CHECKING:
     from operate.cli import OperateApp
 

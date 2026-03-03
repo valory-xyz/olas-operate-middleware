@@ -19,7 +19,6 @@
 
 """Tests for bridge.providers.* module."""
 
-
 import time
 import typing as t
 from pathlib import Path

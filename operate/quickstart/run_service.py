@@ -67,7 +67,6 @@ from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWallet
 
-
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
@@ -161,13 +160,11 @@ def _deprecated_program_warning(program_id: str) -> bool:
     if program_id not in DEPRECATED_QS_STAKING_PROGRAMS:
         return True
 
-    print_box(
-        """
+    print_box("""
         WARNING
         The selected staking program is deprecated.
         Using it may prevent your agent from earning staking rewards.
-    """
-    )
+    """)
     return ask_yes_or_no("Do you want to proceed anyway?")
 
 
