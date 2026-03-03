@@ -464,7 +464,7 @@ class PeriodDumper:
         self.dump_dir = Path(dump_dir or "/tm_state")
 
         if self.dump_dir.is_dir():
-            shutil.rmtree(str(self.dump_dir), onexc=self.readonly_handler)
+            shutil.rmtree(str(self.dump_dir), onerror=self.readonly_handler)
         self.dump_dir.mkdir(exist_ok=True)
 
     @staticmethod
