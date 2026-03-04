@@ -240,12 +240,28 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 working_dir = self._work_directory
                 _ = self._prepare_agent_env()  # env not used in this method
 
+                # Add keys
+                # Remove existing ethereum_private_key.txt if present (may be included in agent.zip)
+                private_key_in_agent = (
+                    working_dir / "agent" / "ethereum_private_key.txt"
+                )
+
                 # Clear agent directory before each attempt to avoid partial state
                 agent_alias_name = "agent"
                 agent_dir_full_path = Path(working_dir) / agent_alias_name
                 if agent_dir_full_path.exists():
                     with suppress(Exception):
                         shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+
+                if not self._is_aea:  # pragma: no cover
+                    # copy key here
+                    # Add keys securely
+                    secure_copy_private_key(
+                        src=working_dir / "ethereum_private_key.txt",
+                        dst=private_key_in_agent,
+                    )
+                    # return cause dont need to perform all other actions in setup with aea commands
+                    return
 
                 self._run_aea_command(
                     "init",
@@ -266,11 +282,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 self.logger.info(f"Agentsource zip file is {agent_zip_path}")
                 AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
 
-                # Add keys
-                # Remove existing ethereum_private_key.txt if present (may be included in agent.zip)
-                private_key_in_agent = (
-                    working_dir / "agent" / "ethereum_private_key.txt"
-                )
                 # Ensure parent directory exists before trying to delete file
                 if private_key_in_agent.parent.exists():
                     private_key_in_agent.unlink(missing_ok=True)
