@@ -25,7 +25,6 @@ import logging
 import threading
 import time
 import typing as t
-from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from pathlib import Path
 from traceback import print_exc
@@ -256,13 +255,7 @@ class HealthChecker:
                         service_config_id=service_config_id
                     )
 
-                loop = asyncio.get_event_loop()
-                with ThreadPoolExecutor() as executor:
-                    future = loop.run_in_executor(executor, _do_restart)
-                    await future
-                    exception = future.exception()
-                    if exception is not None:  # pragma: no cover
-                        raise exception  # pragma: no cover
+                await asyncio.to_thread(_do_restart)
 
             async def _stop(
                 service_manager: ServiceManager, service_config_id: str
@@ -272,13 +265,7 @@ class HealthChecker:
                         service_config_id=service_config_id
                     )
 
-                loop = asyncio.get_event_loop()
-                with ThreadPoolExecutor() as executor:
-                    future = loop.run_in_executor(executor, _do_stop)
-                    await future
-                    exception = future.exception()
-                    if exception is not None:  # pragma: no cover
-                        raise exception  # pragma: no cover
+                await asyncio.to_thread(_do_stop)
 
             # upper cycle
             failfast_records: t.List[float] = []
