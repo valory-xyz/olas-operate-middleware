@@ -263,6 +263,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 service_dir = working_dir.parent
                 self.logger.info("Checking and downloading agent zip!")
                 agent_zip_path = Path(get_agent_code_path(service_dir))
+                self.logger.info(f"Agentsource zip file is {agent_zip_path}")
                 AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
 
                 # Add keys
@@ -359,11 +360,13 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _start(self, password: str) -> None:
         """Start the deployment."""
+        self.logger.info("Starting the deployment")
         self._setup_agent(password=password)
         if self._is_aea:
             self._start_tendermint()
 
         self._start_agent(password=password)
+        self.logger.info("Deployment: Agent process started!")
 
     def stop(self) -> None:
         """Stop the deployment."""
@@ -474,6 +477,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         service_dir = self._work_directory.parent
         self.logger.info("Checking and downloading agent runner!")
         agent_runner_bin = get_agent_runner_path(service_dir=service_dir)
+        self.logger.info(f"Got agent runner: {agent_runner_bin}")
         return str(agent_runner_bin)
 
     @property
@@ -488,12 +492,14 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
-
+        self.logger.info("Starting agent runner process")
         process = (  # pylint: disable=assignment-from-no-return
             self._start_agent_process(
                 env=env, working_dir=working_dir, password=password
             )
         )
+
+        self.logger.info(f"Started agent runner process with pid: {process.pid}")
 
         # Write PID file with validation and locking
         pid_file = working_dir / "agent.pid"

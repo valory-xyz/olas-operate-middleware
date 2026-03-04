@@ -435,6 +435,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
+        logger.info("Pause all services")
         service_manager = operate.service_manager()
         if not service_manager.validate_services():
             logger.error(
@@ -467,6 +468,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 )
             logger.info(f"Cancelling funding job for {service_config_id}")
             health_checker.stop_for_service(service_config_id=service_config_id)
+        logger.info("Services paused")
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
         logger.info("Stopping services on exit...")
@@ -1260,6 +1262,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.post("/api/v2/service/{service_config_id}")
     async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Deploy a service."""
+        logger.info("Deploy and run service")
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
@@ -1272,10 +1275,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         def _fn() -> None:
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
+            logger.info("Deploy onchain")
             manager.deploy_service_onchain_from_safe(
                 service_config_id=service_config_id
             )
+            logger.info("Deploy locally")
             manager.deploy_service_locally(service_config_id=service_config_id)
+            logger.info("Deployed")
 
         await run_in_executor(_fn)
         schedule_healthcheck_job(service_config_id=service_config_id)
