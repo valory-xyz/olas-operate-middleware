@@ -523,7 +523,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     ) -> subprocess.Popen:
         """Start agent process."""
         _ = env, working_dir, password  # Unused parameters, required by interface
-        raise NotImplementedError  # pragma: no cover  # pylint: disable=inconsistent-return-statements
+        raise NotImplementedError  # pylint: disable=inconsistent-return-statements
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
