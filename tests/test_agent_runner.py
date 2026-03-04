@@ -423,3 +423,196 @@ class TestAgentAssetManagerMethods:
         ), patch.object(AgentAssetManager, "update_agent_release_asset"):
             result = get_agent_runner_path(tmp_path)
         assert result == str(tmp_path / "runner_linux_x64")
+
+    def test_extract_agent_zip_success(self, tmp_path: Path) -> None:
+        """Test successful extraction of agent zip."""
+        zip_path = tmp_path / "agent.zip"
+        extract_dir = tmp_path / "extract"
+
+        # Create a test zip with agent/ folder structure
+        import zipfile
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("agent/file1.txt", "content1")
+            zf.writestr("agent/subdir/file2.txt", "content2")
+            zf.writestr("agent/", "")  # directory entry
+
+        AgentAssetManager.extract_agent_zip(zip_path, extract_dir)
+
+        assert (extract_dir / "file1.txt").exists()
+        assert (extract_dir / "subdir" / "file2.txt").exists()
+        assert (extract_dir / "file1.txt").read_text() == "content1"
+        assert (extract_dir / "subdir" / "file2.txt").read_text() == "content2"
+
+    def test_extract_agent_zip_raises_on_unexpected_file(self, tmp_path: Path) -> None:
+        """Test extraction raises ValueError when file not under agent/."""
+        zip_path = tmp_path / "agent.zip"
+        extract_dir = tmp_path / "extract"
+
+        import zipfile
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("agent/file1.txt", "content1")
+            zf.writestr("other/file2.txt", "content2")  # Not under agent/
+
+        with pytest.raises(ValueError, match="Unexpected file in agent.zip"):
+            AgentAssetManager.extract_agent_zip(zip_path, extract_dir)
+
+    def test_extract_agent_zip_creates_extract_dir(self, tmp_path: Path) -> None:
+        """Test extraction creates extract directory if it doesn't exist."""
+        zip_path = tmp_path / "agent.zip"
+        extract_dir = tmp_path / "extract"
+
+        import zipfile
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("agent/file.txt", "content")
+
+        AgentAssetManager.extract_agent_zip(zip_path, extract_dir)
+        assert extract_dir.exists()
+
+    def test_update_agent_release_asset_removes_target_on_exception(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that target file is removed when exception occurs in try block."""
+        target = tmp_path / "runner"
+        target.write_bytes(b"existing content")
+        mock_release = MagicMock()
+        mock_release.get_url_and_hash.return_value = (
+            "http://example.com/runner",
+            "sha256:NEW",
+        )
+
+        # Simulate hash mismatch to trigger download
+        with patch.object(
+            AgentAssetManager,
+            "get_local_file_sha256",
+            side_effect=[
+                "sha256:OLD",
+                "sha256:NEW",
+            ],  # First call for existing file, second for downloaded
+        ), patch.object(
+            AgentAssetManager,
+            "download_file",
+        ), patch(
+            "operate.services.agent_assets.shutil.copy2",
+            side_effect=Exception("Copy failed"),
+        ):
+            with pytest.raises(Exception, match="Copy failed"):
+                AgentAssetManager.update_agent_release_asset(
+                    target_path=target,
+                    agent_release_asset_name="runner",
+                    target_filename="runner",
+                    agent_release=mock_release,
+                )
+
+        # Target should be removed
+        assert not target.exists()
+
+    def test_update_agent_release_asset_handles_missing_target_on_exception(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that missing_ok=True handles case when target doesn't exist on exception."""
+        target = tmp_path / "runner"  # Does not exist
+        mock_release = MagicMock()
+        mock_release.get_url_and_hash.return_value = (
+            "http://example.com/runner",
+            "sha256:HASH",
+        )
+
+        # Simulate download failure
+        with patch.object(
+            AgentAssetManager,
+            "get_local_file_sha256",
+            return_value="sha256:HASH",
+        ), patch.object(
+            AgentAssetManager,
+            "download_file",
+            side_effect=Exception("Download failed"),
+        ):
+            with pytest.raises(Exception, match="Download failed"):
+                AgentAssetManager.update_agent_release_asset(
+                    target_path=target,
+                    agent_release_asset_name="runner",
+                    target_filename="runner",
+                    agent_release=mock_release,
+                )
+
+        # Should not raise when trying to unlink non-existent file
+        assert not target.exists()
+
+    def test_get_agent_code_path_class_method(self, tmp_path: Path) -> None:
+        """Test AgentAssetManager.get_agent_code_path returns the correct path."""
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory",
+                    "name": "repo",
+                    "version": "v1.0.0",
+                },
+            }
+        }
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        with patch.object(
+            AgentAssetManager, "update_agent_release_asset"
+        ) as mock_update:
+            result = AgentAssetManager.get_agent_code_path(tmp_path)
+
+        expected_path = tmp_path / "agent_cache" / "agent.zip"
+        assert result == str(expected_path)
+
+        # Verify update_agent_release_asset was called with correct arguments
+        mock_update.assert_called_once()
+        call_args = mock_update.call_args
+        assert call_args.kwargs["target_path"] == expected_path
+        assert call_args.kwargs["agent_release_asset_name"] == "agent.zip"
+        assert call_args.kwargs["target_filename"] == "agent.zip"
+        assert isinstance(call_args.kwargs["agent_release"], AgentRelease)
+
+    def test_get_agent_code_path_creates_agent_cache_dir(self, tmp_path: Path) -> None:
+        """Test that agent_cache directory is created if it doesn't exist."""
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory",
+                    "name": "repo",
+                    "version": "v1.0.0",
+                },
+            }
+        }
+        (tmp_path / "config.json").write_text(json.dumps(config))
+
+        # Ensure agent_cache directory doesn't exist initially
+        agent_cache_dir = tmp_path / "agent_cache"
+        assert not agent_cache_dir.exists()
+
+        with patch.object(AgentAssetManager, "update_agent_release_asset"):
+            AgentAssetManager.get_agent_code_path(tmp_path)
+
+        # Verify agent_cache directory was created
+        assert agent_cache_dir.exists()
+        assert agent_cache_dir.is_dir()
+
+    def test_get_agent_code_path_module_function(self, tmp_path: Path) -> None:
+        """Test module-level get_agent_code_path delegates correctly."""
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory",
+                    "name": "repo",
+                    "version": "v1.0.0",
+                },
+            }
+        }
+        (tmp_path / "config.json").write_text(json.dumps(config))
+
+        with patch.object(AgentAssetManager, "get_agent_code_path") as mock_method:
+            # Import the module function
+            from operate.services.agent_assets import get_agent_code_path
+
+            get_agent_code_path(tmp_path)
+
+        mock_method.assert_called_once_with(service_dir=tmp_path)

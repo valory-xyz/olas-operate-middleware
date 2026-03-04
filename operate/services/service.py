@@ -141,7 +141,7 @@ def mkdirs(build_dir: Path) -> None:
         path.mkdir()
         try:
             os.chown(path, 1000, 1000)
-        except (PermissionError, AttributeError):
+        except (PermissionError, AttributeError):  # pragma: nocover
             continue
 
 

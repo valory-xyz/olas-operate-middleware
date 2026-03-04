@@ -1469,6 +1469,135 @@ class TestHostPythonSetupAgent:
         mock_cmd.assert_called_once()
 
 
+class TestSetupAgentRuntimeErrorHandling:
+    """Tests for RuntimeError handling in _setup_agent (lines 281-282, 292-293)."""
+
+    def test_setup_agent_handles_runtime_error_on_remove_key(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that RuntimeError on remove-key is caught and logged as warning."""
+        work_dir = tmp_path / "svc" / "hash" / "build"
+        work_dir.mkdir(parents=True)
+        (work_dir / "agent.json").write_text(
+            json.dumps({"AEA_AGENT": "test"}), encoding="utf-8"
+        )
+        (work_dir / "ethereum_private_key.txt").write_text(
+            "0xdeadbeef", encoding="utf-8"
+        )
+        service_dir = work_dir.parent
+        service_dir.mkdir(parents=True, exist_ok=True)
+        _create_test_service_config(service_dir)
+
+        runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
+        runner.logger = MagicMock()
+
+        # First _run_aea_command call (init) succeeds
+        # Second _run_aea_command call (remove-key) raises RuntimeError
+        call_count = 0
+
+        def mock_run_aea_command(*args: Any, **kwargs: Any) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:  # remove-key call
+                raise RuntimeError("Failed to remove ethereum key (may not exist)")
+            return None
+
+        with patch.object(
+            runner, "_run_aea_command", side_effect=mock_run_aea_command
+        ), patch(
+            "operate.services.deployment_runner.secure_copy_private_key"
+        ), patch.object(
+            AgentAssetManager, "get_agent_code_path"
+        ) as mock_get_path, patch.object(
+            AgentAssetManager, "extract_agent_zip"
+        ):
+            mock_get_path.return_value = str(tmp_path / "dummy.zip")
+            runner._setup_agent(password="testpass")  # nosec B106
+
+        # Should log warning
+        runner.logger.warning.assert_any_call(
+            "Failed to remove ethereum key (may not exist)"
+        )
+
+    def test_setup_agent_handles_runtime_error_on_remove_connection_key(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that RuntimeError on remove-key --connection is caught and logged as warning."""
+        work_dir = tmp_path / "svc" / "hash" / "build"
+        work_dir.mkdir(parents=True)
+        (work_dir / "agent.json").write_text(
+            json.dumps({"AEA_AGENT": "test"}), encoding="utf-8"
+        )
+        (work_dir / "ethereum_private_key.txt").write_text(
+            "0xdeadbeef", encoding="utf-8"
+        )
+        service_dir = work_dir.parent
+        service_dir.mkdir(parents=True, exist_ok=True)
+        _create_test_service_config(service_dir)
+
+        runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
+        runner.logger = MagicMock()
+
+        # First _run_aea_command call (init) succeeds
+        # Second _run_aea_command call (remove-key) succeeds
+        # Third _run_aea_command call (remove-key --connection) raises RuntimeError
+        call_count = 0
+
+        def mock_run_aea_command(*args: Any, **kwargs: Any) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 3:  # remove-key --connection call
+                raise RuntimeError(
+                    "Failed to remove ethereum connection key (may not exist)"
+                )
+            return None
+
+        with patch.object(
+            runner, "_run_aea_command", side_effect=mock_run_aea_command
+        ), patch(
+            "operate.services.deployment_runner.secure_copy_private_key"
+        ), patch.object(
+            AgentAssetManager, "get_agent_code_path"
+        ) as mock_get_path, patch.object(
+            AgentAssetManager, "extract_agent_zip"
+        ):
+            mock_get_path.return_value = str(tmp_path / "dummy.zip")
+            runner._setup_agent(password="testpass")  # nosec B106
+
+        # Should log warning
+        runner.logger.warning.assert_any_call(
+            "Failed to remove ethereum connection key (may not exist)"
+        )
+
+
+class TestHostPythonSetupAgentRuntimeErrorHandling:
+    """Tests for RuntimeError handling in HostPythonHostDeploymentRunner._setup_agent (lines 852-854)."""
+
+    def test_setup_agent_handles_runtime_error_on_set_start_method(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that RuntimeError on multiprocessing.set_start_method is caught and logged as warning."""
+        runner = HostPythonHostDeploymentRunner(tmp_path, is_aea=True)
+        runner.logger = MagicMock()
+
+        with patch(
+            "operate.services.deployment_runner.multiprocessing.set_start_method",
+            side_effect=RuntimeError("start method already set"),
+        ), patch.object(runner, "_setup_venv"), patch(
+            "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
+        ), patch.object(
+            runner, "_run_cmd"
+        ):
+            runner._setup_agent(password="pw")  # nosec B106
+
+        # Should log warning
+        runner.logger.warning.assert_called_once()
+        assert (
+            "Could not set multiprocessing start method"
+            in runner.logger.warning.call_args[0][0]
+        )
+
+
 # ---------------------------------------------------------------------------
 # DeploymentManager._get_host_deployment_runner_class frozen paths
 # ---------------------------------------------------------------------------

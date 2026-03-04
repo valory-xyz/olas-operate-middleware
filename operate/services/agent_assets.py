@@ -190,7 +190,9 @@ class AgentAssetManager:
                 cls.logger.info(f"Hash verification passed: {downloaded_hash}")
                 shutil.copy2(tmp_file, target_path)
                 # Make executable only for agent runner (detect by filename pattern)
-                if os.name == "posix" and "agent_runner" in target_filename:
+                if (
+                    os.name == "posix" and "agent_runner" in target_filename
+                ):  # pragma: no cover
                     target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
         except Exception:
             # remove in case of errors
