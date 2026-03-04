@@ -593,6 +593,24 @@ class TestPeriodDumper:
         assert not existing_file.exists()
         assert dumper.resets == 0
 
+    def test_init_uses_onerror_when_onexc_unavailable(self, tmp_path: Path) -> None:
+        """Use onerror callback when shutil.rmtree signature has no onexc parameter."""
+        dump_dir = tmp_path / "tm_dump"
+        dump_dir.mkdir()
+
+        fake_signature = MagicMock()
+        fake_signature.parameters = {"path": object(), "onerror": object()}
+
+        with patch(
+            "operate.services.utils.tendermint.inspect.signature",
+            return_value=fake_signature,
+        ), patch("operate.services.utils.tendermint.shutil.rmtree") as mock_rmtree:
+            PeriodDumper(logger=self._make_logger(), dump_dir=dump_dir)
+
+        kwargs = mock_rmtree.call_args.kwargs
+        assert "onerror" in kwargs
+        assert "onexc" not in kwargs
+
     def test_readonly_handler_calls_func(self, tmp_path: Path) -> None:
         """Mock func is called after chmod."""
         target_file = tmp_path / "readonly.txt"
