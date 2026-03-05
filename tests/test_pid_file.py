@@ -373,6 +373,20 @@ class TestLockingPlatformBranches:
     @pytest.mark.skipif(
         sys.platform == "win32", reason="fcntl not available on Windows"
     )
+    def test_acquire_lock_unix_fcntl_error_raises_pid_file_locked(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that Unix flock OSError is wrapped as PIDFileLocked."""
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Linux"
+        ), patch("fcntl.flock", side_effect=OSError("flock failed")):
+            with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
+                with pytest.raises(PIDFileLocked, match="locked"):
+                    _acquire_lock(f.fileno())
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
     def test_release_lock_unix_fcntl_error_silently_ignored(
         self, tmp_path: Path
     ) -> None:

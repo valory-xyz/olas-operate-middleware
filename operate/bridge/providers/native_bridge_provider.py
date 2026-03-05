@@ -19,7 +19,6 @@
 # ------------------------------------------------------------------------------
 """Native bridge provider."""
 
-
 import logging
 import time
 import typing as t
@@ -61,7 +60,6 @@ from operate.ledger import (
 from operate.ledger.profiles import ERC20_TOKENS, EXPLORER_URL
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
-
 
 BLOCK_CHUNK_SIZE = 5000
 

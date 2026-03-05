@@ -42,7 +42,6 @@ from operate.constants import (
 from operate.resource import LocalResource
 from operate.serialization import BigInt, serialize
 
-
 LedgerType = LedgerTypeOA
 Chain = ChainType
 

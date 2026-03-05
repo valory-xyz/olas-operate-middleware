@@ -34,7 +34,6 @@ from operate.serialization import BigInt
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.wallet.master import InsufficientFundsException
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

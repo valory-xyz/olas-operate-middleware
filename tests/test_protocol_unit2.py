@@ -17,6 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 """Unit tests for operate/services/protocol.py."""
+
 import typing as t
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -34,7 +35,6 @@ from operate.services.protocol import (
 )
 from operate.services.service import NON_EXISTENT_TOKEN
 
-
 _STAKING_CONTRACT = "0xaaaa000000000000000000000000000000000001"
 _SERVICE_REGISTRY = "0xbbbb000000000000000000000000000000000002"
 _SAFE_ADDRESS = "0xcccc000000000000000000000000000000000003"
@@ -43,7 +43,7 @@ _ENCODED = "0x" + "ab" * 32
 _CONTRACTS: t.Dict[str, str] = {
     "service_manager": "0x0000000000000000000000000000000000000001",
     "service_registry": "0x0000000000000000000000000000000000000002",
-    "service_registry_token_utility": "0x0000000000000000000000000000000000000003",
+    "service_registry_token_utility": "0x0000000000000000000000000000000000000003",  # nosec
     "gnosis_safe_proxy_factory": "0x0000000000000000000000000000000000000004",
     "gnosis_safe_same_address_multisig": "0x0000000000000000000000000000000000000005",
     "safe_multisig_with_recovery_module": "0x0000000000000000000000000000000000000006",

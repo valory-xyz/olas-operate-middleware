@@ -31,7 +31,6 @@ from starlette.types import Receive, Scope, Send
 
 from operate.operate_http.exceptions import NotAllowed, ResourceException
 
-
 GenericResource = t.TypeVar("GenericResource")
 PostPayload = t.TypeVar("PostPayload")
 PostResponse = t.TypeVar("PostResponse")

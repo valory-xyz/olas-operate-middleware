@@ -44,7 +44,6 @@ from operate.data.contracts.optimism_mintable_erc20.contract import (
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.data.contracts.uniswap_v2_erc20.contract import UniswapV2ERC20Contract
 
-
 _ADDR = "0x" + "a" * 40
 _CONTRACT_ADDR = "0x" + "b" * 40
 

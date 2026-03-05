@@ -19,6 +19,7 @@
 
 """Local resource representation."""
 
+import inspect
 import json
 import os
 import platform
@@ -28,7 +29,6 @@ from pathlib import Path
 
 from operate.serialization import deserialize, serialize
 from operate.utils import safe_file_operation
-
 
 # pylint: disable=too-many-return-statements,no-member
 
@@ -45,11 +45,19 @@ class LocalResource:
         """Initialize local resource."""
         self.path = path
 
+    @classmethod
+    def _annotations(cls) -> t.Dict[str, t.Any]:
+        """Get class annotations in a Python-version-safe way."""
+        try:
+            return dict(inspect.get_annotations(cls, eval_str=False))
+        except Exception:  # pylint: disable=broad-except  # nosec
+            return dict(getattr(cls, "__annotations__", {}))
+
     @property
     def json(self) -> t.Dict:
         """To dictionary object."""
         obj = {}
-        for pname, _ in self.__annotations__.items():
+        for pname, _ in self._annotations().items():
             if pname.startswith("_") or pname == "path":
                 continue
             obj[pname] = serialize(self.__dict__[pname])
@@ -59,7 +67,7 @@ class LocalResource:
     def from_json(cls, obj: t.Dict) -> "LocalResource":
         """Load LocalResource from json."""
         kwargs = {}
-        for pname, ptype in cls.__annotations__.items():
+        for pname, ptype in cls._annotations().items():
             if pname.startswith("_"):
                 continue
             kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)

@@ -172,3 +172,15 @@ def test_store_windows_permission_error_cleanup(tmp_path: Path) -> None:
     assert any(
         "unlink" in getattr(op, "__name__", "") for op in post_replace_ops
     ), "tmp file unlink should be called after PermissionError on Windows"
+
+
+def test_annotations_fallback_when_inspect_get_annotations_fails() -> None:
+    """Test LocalResource._annotations falls back to __annotations__ when inspect fails."""
+    expected = dict(getattr(Key, "__annotations__", {}))
+    with patch(
+        "operate.resource.inspect.get_annotations",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = Key._annotations()  # pylint: disable=protected-access
+
+    assert result == expected

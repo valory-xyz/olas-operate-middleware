@@ -27,7 +27,6 @@ from aea.helpers.logging import setup_logger
 from operate.ledger import DEFAULT_RPCS
 from operate.operate_types import Chain
 
-
 LOGGER = setup_logger(name="operate-test")
 
 ROOT_PATH = Path(__file__).resolve().parent

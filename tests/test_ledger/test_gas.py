@@ -18,7 +18,6 @@
 # ------------------------------------------------------------------------------
 """Test transactions in unusual gas conditions."""
 
-
 from unittest.mock import patch
 
 import pytest

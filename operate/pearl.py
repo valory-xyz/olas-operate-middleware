@@ -18,6 +18,7 @@
 # ------------------------------------------------------------------------------
 
 """File used for pyinstaller to create a single executable file."""
+
 # pylint: disable=all
 # mypy: ignore-errors
 # flake8: noqa
@@ -27,7 +28,6 @@ import sys
 from pathlib import Path
 
 import aea.configurations.validation as validation_module
-
 
 # patch for the _CUR_DIR value
 validation_module._CUR_DIR = Path(sys._MEIPASS) / validation_module._CUR_DIR
@@ -44,7 +44,6 @@ from multiaddr.codecs.idna import to_bytes as _
 from multiaddr.codecs.uint16be import to_bytes as _
 
 from operate.cli import main
-
 
 if __name__ == "__main__":
     main()

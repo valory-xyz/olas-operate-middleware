@@ -36,7 +36,6 @@ from pathlib import Path
 from operate.constants import DEFAULT_TIMEOUT
 from operate.serialization import BigInt
 
-
 logger = logging.getLogger(__name__)
 
 

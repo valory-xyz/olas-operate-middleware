@@ -39,7 +39,6 @@ from operate.services.protocol import StakingState
 from operate.services.service import NON_EXISTENT_TOKEN
 from operate.wallet.master import InsufficientFundsException
 
-
 # ---------------------------------------------------------------------------
 # Helpers / constants
 # ---------------------------------------------------------------------------
@@ -748,7 +747,7 @@ class TestComputeProtocolBondedAssets:
             "min_staking_deposit": 50000,
             "staking_token": TOKEN_ADDR,
             "additional_staking_tokens": {},
-            "service_registry_token_utility": "0x5678",
+            "service_registry_token_utility": "0x5678",  # nosec
             "staking_contract": mock_staking_contract,
         }
         mock_staking_manager.staking_state.return_value = StakingState.UNSTAKED
@@ -817,7 +816,7 @@ class TestComputeProtocolBondedAssets:
             "min_staking_deposit": 10000,
             "staking_token": TOKEN_ADDR,
             "additional_staking_tokens": {extra_token: 500},
-            "service_registry_token_utility": "0x5678",
+            "service_registry_token_utility": "0x5678",  # nosec
             "staking_contract": mock_staking_contract,
         }
         mock_staking_manager.staking_state.return_value = StakingState.STAKED
@@ -896,7 +895,7 @@ class TestComputeProtocolBondedAssets:
             "min_staking_deposit": 10000,
             "staking_token": TOKEN_ADDR,
             "additional_staking_tokens": {},
-            "service_registry_token_utility": "0x5678",
+            "service_registry_token_utility": "0x5678",  # nosec
             "staking_contract": mock_staking_contract,
         }
         mock_staking_manager.staking_state.return_value = StakingState.UNSTAKED

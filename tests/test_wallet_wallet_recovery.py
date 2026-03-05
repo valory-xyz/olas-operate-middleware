@@ -19,7 +19,6 @@
 
 """Tests for wallet.wallet_recovery_manager module."""
 
-
 # pylint: disable=too-many-locals
 
 import typing as t

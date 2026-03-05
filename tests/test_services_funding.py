@@ -19,7 +19,6 @@
 
 """Tests for services.funding module."""
 
-
 # pylint: disable=too-many-locals
 
 import random
@@ -69,7 +68,6 @@ from tests.conftest import (
     tenderly_increase_time,
 )
 from tests.constants import LOGGER, OPERATE_TEST
-
 
 AGENT_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
 SERVICE_SAFE_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}

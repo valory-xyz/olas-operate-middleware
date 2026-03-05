@@ -79,7 +79,7 @@ def deserialize(  # pylint: disable=too-many-return-statements
     # Handle Union and Optional
     if origin is t.Union or isinstance(otype, types.UnionType):
         for arg in t.get_args(otype):
-            if arg is type(None):  # noqa: E721
+            if arg is types.NoneType:
                 continue
             try:
                 return deserialize(obj, arg)
@@ -94,7 +94,7 @@ def deserialize(  # pylint: disable=too-many-return-statements
             (atype,) = args
             return [deserialize(arg, atype) for arg in obj]
         if len(args) == 2:
-            (ktype, vtype) = args
+            ktype, vtype = args
             return {
                 deserialize(key, ktype): deserialize(val, vtype)
                 for key, val in obj.items()

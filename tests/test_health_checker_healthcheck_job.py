@@ -16,7 +16,6 @@ import pytest
 
 from operate.services.health_checker import HealthChecker
 
-
 # Save the REAL asyncio.sleep before any test patches it so nested-function
 # tests can still perform real timing waits inside a patch("asyncio.sleep") block.
 _REAL_SLEEP = asyncio.sleep

@@ -19,7 +19,6 @@
 # ------------------------------------------------------------------------------
 """Bridge manager."""
 
-
 import json
 import logging
 import time
@@ -46,7 +45,6 @@ from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
 from operate.wallet.master import MasterWalletManager
-
 
 DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60
 EXECUTED_BUNDLES_PATH = "executed"

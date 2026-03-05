@@ -45,7 +45,6 @@ from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance, get_owners
 from operate.wallet.master import MasterWalletManager
 
-
 RECOVERY_BUNDLE_PREFIX = "eb-"
 RECOVERY_NEW_OBJECTS_DIR = "new"
 RECOVERY_OLD_OBJECTS_DIR = "old"

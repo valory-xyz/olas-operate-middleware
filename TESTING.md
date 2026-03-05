@@ -351,9 +351,9 @@ pytest -m "not integration"
 
 ### Current Strategy
 - **Linter checks**: Run first, must pass
-- **Unit tests**: Run in parallel on 3 OS × 2 Python versions (3.10, 3.11), must pass
-- **Coverage**: Run on Ubuntu Python 3.10 with `--cov-fail-under=100`, must pass
-- **Integration tests**: Run in parallel on 3 OS × Python 3.10, can fail (`continue-on-error: true`)
+- **Unit tests**: Run in parallel on 3 OS × 5 Python versions (3.10, 3.11, 3.12, 3.13, 3.14), must pass
+- **Coverage**: Run on Ubuntu Python 3.14 with `--cov-fail-under=100`, must pass
+- **Integration tests**: Run in parallel on 3 OS × Python 3.14, can fail (`continue-on-error: true`)
 
 ### Platform-Specific Test Behavior
 

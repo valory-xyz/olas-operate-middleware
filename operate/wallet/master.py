@@ -49,7 +49,9 @@ from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.utils import create_backup
-from operate.utils.gnosis import add_owner
+from operate.utils.gnosis import (
+    add_owner,
+)
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
     estimate_transfer_tx_fee,
@@ -60,8 +62,9 @@ from operate.utils.gnosis import (
     swap_owner,
 )
 from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_safe
-
+from operate.utils.gnosis import (
+    transfer_erc20_from_safe,
+)
 
 logger = setup_logger(name="master_wallet")
 

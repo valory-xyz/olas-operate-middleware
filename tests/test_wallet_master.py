@@ -19,7 +19,6 @@
 
 """Test for wallet.master module."""
 
-
 # pylint: disable=too-many-locals
 
 import random
@@ -44,7 +43,6 @@ from operate.wallet.master import (
 
 from tests.conftest import OnTestnet, create_wallets, tenderly_add_balance
 from tests.constants import LOGGER, RUNNING_IN_CI
-
 
 TX_FEE_TOLERANCE = 2
 

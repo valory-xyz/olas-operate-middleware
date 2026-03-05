@@ -30,7 +30,6 @@ from operate.quickstart.run_service import (
 )
 from operate.quickstart.utils import print_section, print_title
 
-
 if TYPE_CHECKING:
     from operate.cli import OperateApp
 

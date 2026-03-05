@@ -232,7 +232,10 @@ class TestPasswordUpdate:
         """Test password update when no account exists."""
         response = client_no_account.put(
             url="/api/account",
-            json={"old_password": "some_password", "new_password": "new_password123"},
+            json={
+                "old_password": "some_password",
+                "new_password": "new_password123",
+            },  # nosec
         )
 
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -243,7 +246,10 @@ class TestPasswordUpdate:
         new_password = "new_secure_password123"  # nosec  # just for testing purpose
         response = client.put(
             url="/api/account",
-            json={"old_password": "wrong_password", "new_password": new_password},
+            json={
+                "old_password": "wrong_password",
+                "new_password": new_password,
+            },  # nosec
         )
 
         assert response.status_code == HTTPStatus.BAD_REQUEST

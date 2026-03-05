@@ -28,7 +28,6 @@ from operate.resource import LocalResource, deserialize, serialize
 from operate.serialization import BigInt
 from operate.wallet.master import MasterWalletManager
 
-
 SETTINGS_JSON_VERSION = 1
 DEFAULT_SETTINGS = {
     "version": SETTINGS_JSON_VERSION,

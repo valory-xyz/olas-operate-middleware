@@ -40,7 +40,6 @@ from operate.services.deployment_runner import (
 )
 from operate.utils.pid_file import PIDFileError, StalePIDFile
 
-
 # ---------------------------------------------------------------------------
 # Concrete subclass for testing BaseDeploymentRunner abstract methods
 # ---------------------------------------------------------------------------

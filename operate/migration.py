@@ -19,7 +19,6 @@
 
 """Utilities for format migration"""
 
-
 import json
 import logging
 import shutil
@@ -45,7 +44,6 @@ from operate.services.service import (
 )
 from operate.utils import create_backup, unrecoverable_delete
 from operate.wallet.master import LEDGER_TYPE_TO_WALLET_CLASS, MasterWalletManager
-
 
 DEFAULT_TRADER_ENV_VARS = {
     "GNOSIS_LEDGER_RPC": {

@@ -91,7 +91,6 @@ from operate.utils.gnosis import (
 )
 from operate.wallet.master import MasterWallet
 
-
 ETHEREUM_ERC20 = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
 
 

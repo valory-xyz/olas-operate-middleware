@@ -17,6 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 """Unit tests for operate/services/manage.py."""
+
 import logging
 import typing as t
 from pathlib import Path
@@ -33,7 +34,6 @@ from operate.services.service import (
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
 )
-
 
 _CHAIN = "gnosis"
 _RPC = "http://localhost:8545"
@@ -1039,7 +1039,7 @@ class TestComputeProtocolAssetRequirements:
         mock_sftxb = MagicMock()
         staking_params = {
             "min_staking_deposit": 100,
-            "staking_token": "0xOLAS",
+            "staking_token": "0xOLAS",  # nosec
             "additional_staking_tokens": {"0xExtraToken": 50},
         }
         mock_sftxb.get_staking_params.return_value = staking_params

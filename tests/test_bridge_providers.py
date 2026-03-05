@@ -19,7 +19,6 @@
 
 """Tests for bridge.providers.* module."""
 
-
 import time
 import typing as t
 from pathlib import Path
@@ -60,7 +59,6 @@ from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.serialization import BigInt
 
 from tests.constants import OPERATE_TEST
-
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
 LOGGER = setup_logger(name="test_bridge_providers")
@@ -118,12 +116,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "optimism",
                 "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
-                "token": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                "token": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",  # nosec
                 "amount": 16000000,
             },
         },
@@ -140,12 +138,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "mode",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 100000000000000,
             },
         },
@@ -162,12 +160,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "mode",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
+                "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",  # nosec
                 "amount": 1000000000000000000,
             },
         },
@@ -184,12 +182,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "mode",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0xd988097fb8612cc24eeC14542bC03424c656005f",
+                "token": "0xd988097fb8612cc24eeC14542bC03424c656005f",  # nosec
                 "amount": 1000000,
             },
         },
@@ -206,12 +204,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0xfd19fe216cf6699ebdfd8f038a74c9b24e23a7b7",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "gnosis",
                 "address": "0x87218C01bd246e99f779Bfd13d277E88C6Cb4477",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 1157062023093466,
             },
         },
@@ -228,12 +226,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "gnosis",
                 "address": "0x409D0490FB743650803B05936e78f22D273A5647",
-                "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",  # nosec
                 "amount": 27291638268124063,
             },
         },
@@ -250,12 +248,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "optimism",
                 "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "gnosis",
                 "address": "0xC5E802BFBeA76e0eeccf775eFA5b005811F96136",
-                "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",  # nosec
                 "amount": 1000000,
             },
         },
@@ -273,12 +271,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "gnosis",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 1000000000000000000,
             },
         },
@@ -296,12 +294,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0x96faf614c8228ff834a4e45d2cc0dd2675469338",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",  # nosec
             },
             "to": {
                 "chain": "gnosis",
                 "address": "0xaf59963aee4fcc92a68d9bc3cde7cd89307d4e7e",
-                "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",  # nosec
                 "amount": 5000000000000000000,
             },
         },
@@ -319,12 +317,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "gnosis",
                 "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 380000000000000,
             },
         },
@@ -342,12 +340,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 300000000000000,
             },
         },
@@ -364,12 +362,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",  # nosec
                 "amount": 100000000000000000,
             },
         },
@@ -386,12 +384,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 30750000000000000,
             },
         },
@@ -408,12 +406,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",  # nosec
                 "amount": 100000000000000000000,
             },
         },
@@ -431,12 +429,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 42,  # Wrong amount
             },
         },
@@ -453,12 +451,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",  # nosec
                 "amount": 100000000000000000,
             },
         },
@@ -475,12 +473,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0x54330d28ca3357F294334BDC454a032e7f353416",  # Wrong address
-                "token": "0x0000000000000000000000000000000000000000",
+                "token": "0x0000000000000000000000000000000000000000",  # nosec
                 "amount": 30750000000000000,
             },
         },
@@ -497,12 +495,12 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             "from": {
                 "chain": "ethereum",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",  # nosec
             },
             "to": {
                 "chain": "base",
                 "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",  # nosec
                 "amount": 100000000000000000000,
             },
         },

@@ -25,7 +25,6 @@ from operate.constants import USER_JSON
 from operate.quickstart.run_service import ask_confirm_password
 from operate.quickstart.utils import ask_or_get_from_env, print_section, print_title
 
-
 if TYPE_CHECKING:
     from operate.cli import OperateApp
 

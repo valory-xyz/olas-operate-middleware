@@ -18,7 +18,6 @@
 # ------------------------------------------------------------------------------
 """Common utilities."""
 
-
 import getpass
 import os
 from dataclasses import dataclass

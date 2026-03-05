@@ -19,7 +19,6 @@
 # ------------------------------------------------------------------------------
 """Provider."""
 
-
 import copy
 import enum
 import logging
@@ -46,7 +45,6 @@ from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.wallet.master import MasterWalletManager
-
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 PROVIDER_REQUEST_PREFIX = "r-"
@@ -517,7 +515,7 @@ class Provider(ABC):
 
         if age_seconds > HARD_TIMEOUT:
             self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} age {age_seconds//60} > HARD_TIMEOUT."
+                f"[PROVIDER] Transaction {from_tx_hash} age {age_seconds // 60} > HARD_TIMEOUT."
             )
             return True
 
@@ -546,7 +544,7 @@ class Provider(ABC):
             return True
         except TransactionNotFound:
             self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds//60} min - likely dropped."
+                f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds // 60} min - likely dropped."
             )
             return True
         except Exception as e:  # pylint: disable=broad-except
