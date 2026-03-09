@@ -154,12 +154,12 @@ class TestServiceFundingAmounts:
         eth_agent1_amount = amounts["ethereum"][
             "0x1111111111111111111111111111111111111111"
         ]["0x0000000000000000000000000000000000000000"]
-        assert eth_agent1_amount == 100000000000000000  # 0.1 ETH
+        assert eth_agent1_amount == 200000000000000000  # 0.2 ETH
 
         eth_agent2_amount = amounts["ethereum"][
             "0x2222222222222222222222222222222222222222"
         ]["0x0000000000000000000000000000000000000000"]
-        assert eth_agent2_amount == 100000000000000000  # 0.1 ETH
+        assert eth_agent2_amount == 200000000000000000  # 0.2 ETH
 
         # Check Gnosis amounts
         gnosis_safe_amount = amounts["gnosis"][SERVICE_SAFE_PLACEHOLDER][
@@ -200,7 +200,7 @@ class TestServiceFundingAmounts:
             agent_amount = eth_amounts[agent_addr][
                 "0x0000000000000000000000000000000000000000"
             ]
-            assert agent_amount == 100000000000000000  # 0.1 ETH per agent
+            assert agent_amount == 200000000000000000  # 0.2 ETH per agent
 
         # Safe should also have correct funding requirement
         safe_amount = eth_amounts[SERVICE_SAFE_PLACEHOLDER][
