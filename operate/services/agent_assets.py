@@ -18,6 +18,7 @@
 #
 # -------------------------------------------------------------
 """Source code to download agent assets from GitHub releases."""
+
 import hashlib
 import json
 import os
