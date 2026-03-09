@@ -739,7 +739,7 @@ class TestFunding(OnTestnet):
                         ZERO_ADDRESS: str(
                             MIN_AGENT_BOND
                             + MIN_SECURITY_DEPOSIT
-                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"] * 2
                             + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
                         ),
                         OLAS[chain1]: str(2 * c1_staking_bond),
@@ -758,7 +758,7 @@ class TestFunding(OnTestnet):
                         ZERO_ADDRESS: str(
                             MIN_AGENT_BOND
                             + MIN_SECURITY_DEPOSIT
-                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"] * 2
                             + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
                         ),
                         OLAS[chain1]: str(2 * c1_staking_bond),
