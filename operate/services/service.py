@@ -434,7 +434,7 @@ class Deployment(LocalResource):
             number_of_agents=len(service.agent_addresses),
         )
         unrecoverable_delete(keys_file)
-        builder.deplopyment_type = KubernetesGenerator.deployment_type
+        builder.deployment_type = KubernetesGenerator.deployment_type
         (
             KubernetesGenerator(
                 service_builder=builder,
@@ -490,7 +490,7 @@ class Deployment(LocalResource):
                 number_of_agents=len(service.agent_addresses),
             )
             unrecoverable_delete(keys_file)
-            builder.deplopyment_type = DockerComposeGenerator.deployment_type
+            builder.deployment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
             if not chain:
@@ -616,7 +616,7 @@ class Deployment(LocalResource):
                 keys_file=keys_file,
                 number_of_agents=len(service.agent_addresses),
             )
-            builder.deplopyment_type = HostDeploymentGenerator.deployment_type
+            builder.deployment_type = HostDeploymentGenerator.deployment_type
             builder.try_update_abci_connection_params()
             builder.try_update_runtime_params(
                 multisig_address=chain_data.multisig,
