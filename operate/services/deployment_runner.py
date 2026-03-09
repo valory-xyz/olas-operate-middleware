@@ -275,37 +275,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     cwd=working_dir,
                 )
 
-                # Download agent code zip and extract it. Replaces `aea fetch`
-                service_dir = working_dir.parent
-                self.logger.info("Checking and downloading agent zip!")
-                agent_zip_path = Path(get_agent_code_path(service_dir))
-                self.logger.info(f"Agentsource zip file is {agent_zip_path}")
-                AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
-
-                # Ensure parent directory exists before trying to delete file
-                if private_key_in_agent.parent.exists():
-                    private_key_in_agent.unlink(missing_ok=True)
-
-                # Remove existing ethereum keys if present (tolerant to errors)
-                try:
-                    self._run_aea_command(
-                        "-s", "remove-key", "ethereum", cwd=working_dir / "agent"
-                    )
-                except RuntimeError:
-                    self.logger.warning("Failed to remove ethereum key (may not exist)")
-
-                try:
-                    self._run_aea_command(
-                        "-s",
-                        "remove-key",
-                        "ethereum",
-                        "--connection",
-                        cwd=working_dir / "agent",
-                    )
-                except RuntimeError:
-                    self.logger.warning(
-                        "Failed to remove ethereum connection key (may not exist)"
-                    )
+                # download an unpack agent sources
+                self.prepare_agent_sources(
+                    working_dir=working_dir,
+                    agent_dir_full_path=agent_dir_full_path,
+                    private_key_in_agent=private_key_in_agent,
+                )
 
                 # Add keys securely
                 secure_copy_private_key(
@@ -356,6 +331,51 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 else:
                     self.logger.error(f"All {max_attempts} agent setup attempts failed")
                     raise
+
+    def prepare_agent_sources(
+        self, working_dir: Path, private_key_in_agent: Path, agent_dir_full_path: Path
+    ) -> None:
+        """Prepare agent sources by downloading and extracting agent zip.
+
+        This method replaces the `aea fetch` command by downloading the agent
+        code from GitHub as a zip file and extracting it to the agent directory.
+
+        Args:
+            working_dir: The working directory for the deployment
+            private_key_in_agent: Path to the private key file in the agent directory
+            agent_dir_full_path: Full path to the agent directory
+        """
+        # Download agent code zip and extract it. Replaces `aea fetch`
+        service_dir = working_dir.parent
+        self.logger.info("Checking and downloading agent zip!")
+        agent_zip_path = Path(get_agent_code_path(service_dir))
+        self.logger.info(f"Agentsource zip file is {agent_zip_path}")
+        AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
+
+        # Ensure parent directory exists before trying to delete file
+        if private_key_in_agent.parent.exists():
+            private_key_in_agent.unlink(missing_ok=True)
+
+        # Remove existing ethereum keys if present (tolerant to errors)
+        try:
+            self._run_aea_command(
+                "-s", "remove-key", "ethereum", cwd=working_dir / "agent"
+            )
+        except RuntimeError:
+            self.logger.warning("Failed to remove ethereum key (may not exist)")
+
+        try:
+            self._run_aea_command(
+                "-s",
+                "remove-key",
+                "ethereum",
+                "--connection",
+                cwd=working_dir / "agent",
+            )
+        except RuntimeError:
+            self.logger.warning(
+                "Failed to remove ethereum connection key (may not exist)"
+            )
 
     def start(self, password: str) -> None:
         """Start the deployment with retries."""

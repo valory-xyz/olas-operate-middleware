@@ -20,7 +20,6 @@
 """Integration tests for zip functionality in deployment_runner."""
 
 import json
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -149,9 +148,7 @@ class TestRealGitHubDownload:
         _create_test_service_config(service_dir, version="v0.31.3")
 
         # Act - get agent code path (will download from GitHub)
-        start_time = time.time()
         agent_zip_path = AgentAssetManager.get_agent_code_path(service_dir)
-        download_time = time.time() - start_time
 
         # Assert - file exists
         agent_zip_path_obj = Path(agent_zip_path)
@@ -160,15 +157,9 @@ class TestRealGitHubDownload:
         ), f"Agent zip not downloaded: {agent_zip_path}"
         assert agent_zip_path_obj.stat().st_size > 0, "Downloaded file is empty"
 
-        print("✅ Downloaded agent.zip from GitHub in {:.2f}s".format(download_time))
-        print("   Size: {} bytes".format(agent_zip_path_obj.stat().st_size))
-        print("   Path: {}".format(agent_zip_path))
-
         # Test extraction
         extract_dir = tmp_path / "extracted"
-        start_time = time.time()
         AgentAssetManager.extract_agent_zip(agent_zip_path_obj, extract_dir)
-        extract_time = time.time() - start_time
 
         # Assert - files extracted
         assert extract_dir.exists(), "Extraction directory not created"
@@ -177,17 +168,6 @@ class TestRealGitHubDownload:
         # Check some expected files
         aea_config = (extract_dir / "aea-config.yaml").read_text()
         assert "agent_name" in aea_config, "aea-config.yaml doesn't contain agent_name"
-
-        print("✅ Extracted agent.zip in {:.2f}s".format(extract_time))
-        print("   Files extracted to: {}".format(extract_dir))
-        print("   aea-config.yaml size: {} bytes".format(len(aea_config)))
-
-        # List some files
-        files = list(extract_dir.rglob("*"))
-        print("   Total files extracted: {}".format(len(files)))
-        for f in sorted(files)[:5]:  # Show first 5 files
-            if f.is_file():
-                print("   - {}".format(f.relative_to(extract_dir)))
 
     @pytest.mark.integration
     @pytest.mark.github
@@ -206,42 +186,21 @@ class TestRealGitHubDownload:
         original_size = agent_zip_path_obj.stat().st_size
         original_hash = AgentAssetManager.get_local_file_sha256(agent_zip_path_obj)
 
-        print("✅ First download:")
-        print("   Size: {} bytes".format(original_size))
-        print("   Hash: {}".format(original_hash))
-
         # Corrupt the file (change one byte)
         with open(agent_zip_path_obj, "r+b") as f:
             f.seek(0)
             f.write(b"X")  # Change first byte
 
-        corrupted_size = agent_zip_path_obj.stat().st_size
-        corrupted_hash = AgentAssetManager.get_local_file_sha256(agent_zip_path_obj)
-
-        print("✅ After corruption:")
-        print("   Size: {} bytes".format(corrupted_size))
-        print("   Hash: {}".format(corrupted_hash))
-        print("   Hashes match: {}".format(original_hash == corrupted_hash))
-
         # Second call should redownload
-        start_time = time.time()
         agent_zip_path2 = AgentAssetManager.get_agent_code_path(service_dir)
-        redownload_time = time.time() - start_time
 
         # Get new hash
         new_hash = AgentAssetManager.get_local_file_sha256(Path(agent_zip_path2))
         new_size = Path(agent_zip_path2).stat().st_size
 
-        print("✅ After redownload:")
-        print("   Time: {:.2f}s".format(redownload_time))
-        print("   Size: {} bytes".format(new_size))
-        print("   Hash: {}".format(new_hash))
-
         # Assert - file should be redownloaded (hash should match original)
         assert new_hash == original_hash, "File was not redownloaded after corruption"
         assert new_size == original_size, "File size doesn't match after redownload"
-
-        print("✅ SHA256 verification works: file redownloaded when corrupted")
 
     @pytest.mark.integration
     @pytest.mark.github
@@ -269,9 +228,7 @@ class TestRealGitHubDownload:
             mock_prepare_env.return_value = {"AEA_AGENT": "valory/trader:0.1.0"}
 
             # Act - this will do real GitHub download and extraction
-            start_time = time.time()
             runner._setup_agent(password="test")  # nosec B106
-            total_time = time.time() - start_time
 
             # Assert
             # 1. Check agent.zip was downloaded
@@ -312,35 +269,3 @@ class TestRealGitHubDownload:
                 if len(c[0]) > 1 and c[0][1] == "add-key"
             ]
             assert len(add_key_calls) == 2
-
-            print(
-                "✅ Full _setup_agent integration test passed in {:.2f}s".format(
-                    total_time
-                )
-            )
-            print("   agent.zip size: {} bytes".format(agent_zip_path.stat().st_size))
-            print("   Agent dir exists: {}".format(agent_dir.exists()))
-            print(
-                "   aea-config.yaml exists: {}".format(
-                    (agent_dir / "aea-config.yaml").exists()
-                )
-            )
-            print("   No aea fetch calls: {}".format(len(fetch_calls) == 0))
-
-
-if __name__ == "__main__":
-    # Quick manual test
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        service_dir = tmp_path / "service"
-        service_dir.mkdir()
-        _create_test_service_config(service_dir, version="v0.31.3")
-
-        print("Testing real GitHub download...")
-        try:
-            agent_zip_path = AgentAssetManager.get_agent_code_path(service_dir)
-            print(f"✅ Success: {agent_zip_path}")
-        except Exception as e:
-            print(f"❌ Failed: {e}")
