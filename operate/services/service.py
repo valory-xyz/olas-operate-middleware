@@ -1323,6 +1323,13 @@ class Service(LocalResource):
                 chain_amounts.setdefault(service_safe, {})[asset] = req.safe
                 for agent_address in self.agent_addresses:
                     chain_amounts.setdefault(agent_address, {})[asset] = req.agent
+                    if (
+                        service_safe == SERVICE_SAFE_PLACEHOLDER
+                        and asset == ZERO_ADDRESS
+                    ):
+                        chain_amounts[agent_address][
+                            asset
+                        ] *= 2  # double the agent requirement if service safe is not funded for native token, to ensure agents have enough for fees
 
         return amounts
 
