@@ -258,6 +258,7 @@ async def concurrent_execute_async(
             idx, outcome = await task
             if isinstance(outcome, BaseException):
                 if ignore_exceptions:
+                    logger.warning(f"Exception in concurrent task {idx}: {outcome}")
                     results[idx] = None
                 else:
                     raise outcome

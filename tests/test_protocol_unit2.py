@@ -269,6 +269,38 @@ class TestStakingManagerGetStakingParams:
 
         assert result["additional_staking_tokens"] == {}
 
+    def test_raises_when_required_field_missing(self) -> None:
+        """Raise ValueError when a required staking field cannot be retrieved."""
+        mock_dual_instance = MagicMock()
+        mock_staking_instance = MagicMock()
+
+        with patch("operate.services.protocol.get_default_ledger_api"), patch.object(
+            StakingManager, "dual_staking_ctr"
+        ) as mock_dual_ctr, patch.object(
+            StakingManager, "staking_ctr"
+        ) as mock_staking_ctr, patch(
+            "operate.services.protocol.concurrent_execute",
+            return_value=(
+                None,  # agent_ids (required field)
+                _SERVICE_REGISTRY,
+                "0xToken",
+                "0xSRTU",
+                1000,
+                "0xChecker",
+                None,
+                None,
+            ),
+        ):
+            mock_dual_ctr.get_instance.return_value = mock_dual_instance
+            mock_staking_ctr.get_instance.return_value = mock_staking_instance
+            with pytest.raises(
+                ValueError,
+                match="Failed to retrieve agent_ids",
+            ):
+                StakingManager._get_staking_params(
+                    OperateChain.GNOSIS, "0xContract_missing"
+                )
+
 
 # ---------------------------------------------------------------------------
 # tests for StakingManager.check_staking_compatibility
