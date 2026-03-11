@@ -301,6 +301,19 @@ class StakingManager:
             ignore_exceptions=True,
         )
 
+        # Validate required fields
+        required_fields = {
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+        }
+        for field_name, field_value in required_fields.items():
+            if field_value is None:
+                raise ValueError(f"Failed to retrieve {field_name} from staking contract {staking_contract}")
+
         output = {
             "staking_contract": staking_contract,
             "agent_ids": agent_ids,
