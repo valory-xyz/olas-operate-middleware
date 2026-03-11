@@ -32,6 +32,7 @@ from operate.constants import (
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
 )
+from operate.ledger.profiles import DEFAULT_EOA_TOPUPS_WITHOUT_SAFE
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.serialization import BigInt
 from operate.services.funding_manager import FundingManager
@@ -1409,6 +1410,13 @@ class TestFundingRequirements:
         manager = _make_manager()
         service = self._make_service_with_safe()
 
+        # Declare mock at method level so call_args_list is accessible after the with block.
+        mock_compute_shortfalls = MagicMock(
+            return_value=ChainAmounts(
+                {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
+            )
+        )
+
         # Override _resolve_master_safe to return MASTER_SAFE_PLACEHOLDER
         def sub_methods_with_placeholder(manager_obj: FundingManager) -> Any:
             return patch.multiple(
@@ -1435,11 +1443,7 @@ class TestFundingRequirements:
                 ),
                 _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
                 _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_PLACEHOLDER),
-                _compute_shortfalls=MagicMock(
-                    return_value=ChainAmounts(
-                        {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
-                    )
-                ),
+                _compute_shortfalls=mock_compute_shortfalls,
                 _aggregate_as_master_safe_amounts=MagicMock(
                     return_value=ChainAmounts(
                         {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
@@ -1484,8 +1488,20 @@ class TestFundingRequirements:
         ):
             result = manager.funding_requirements(service)
 
+        # Capture topups from the second _compute_shortfalls call (master EOA shortfalls).
+        # Call order: protocol → master EOA → master safe.
+        eoa_shortfalls_topups = mock_compute_shortfalls.call_args_list[1].kwargs[
+            "topups"
+        ]
+
         # Allow start agent should be False when MASTER_SAFE_PLACEHOLDER in refill_requirements
         assert result["allow_start_agent"] is False
+        # Verify DEFAULT_EOA_TOPUPS_WITHOUT_SAFE was used as the topup (shortfall basis)
+        expected_gnosis_topup = DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[Chain.GNOSIS][
+            ZERO_ADDRESS
+        ]
+        actual_master_eoa_topup = next(iter(eoa_shortfalls_topups["gnosis"].values()))
+        assert actual_master_eoa_topup[ZERO_ADDRESS] == expected_gnosis_topup
 
     def test_allow_start_agent_false_when_critical_eoa_shortfall(self) -> None:
         """allow_start_agent is False when master_eoa_critical_shortfalls > 0."""

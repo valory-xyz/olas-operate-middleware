@@ -1556,10 +1556,15 @@ class TestTerminateService:
         manager._get_on_chain_state.return_value = OnChainState.PRE_REGISTRATION
 
         template_data = {"name": "Test Service"}
-        with patch("builtins.open", mock_open(read_data=json.dumps(template_data))):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(template_data))
+        ), patch("builtins.print") as mock_print:
             terminate_service(operate, "/fake/path.json")
 
         manager.terminate_service_on_chain_from_safe.assert_called_once()
+        # PRE_REGISTRATION: service info printed (service-id message + empty line)
+        assert mock_print.call_count == 2
+        mock_section.assert_called_once_with("Test Service service terminated")
 
     @patch("operate.quickstart.terminate_on_chain_service.print_section")
     @patch("operate.quickstart.terminate_on_chain_service.ensure_enough_funds")
@@ -1600,10 +1605,15 @@ class TestTerminateService:
         manager._get_on_chain_state.return_value = OnChainState.DEPLOYED
 
         template_data = {"name": "Test Service"}
-        with patch("builtins.open", mock_open(read_data=json.dumps(template_data))):
+        with patch(
+            "builtins.open", mock_open(read_data=json.dumps(template_data))
+        ), patch("builtins.print") as mock_print:
             terminate_service(operate, "/fake/path.json")
 
         manager.terminate_service_on_chain_from_safe.assert_called_once()
+        # Non-PRE_REGISTRATION: only the trailing empty print() call, no service-info message
+        mock_print.assert_called_once_with()
+        mock_section.assert_called_once_with("Test Service service terminated")
 
 
 # ============================================================
