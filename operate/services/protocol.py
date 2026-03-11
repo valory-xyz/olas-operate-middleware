@@ -312,7 +312,9 @@ class StakingManager:
         }
         for field_name, field_value in required_fields.items():
             if field_value is None:
-                raise ValueError(f"Failed to retrieve {field_name} from staking contract {staking_contract}")
+                raise ValueError(
+                    f"Failed to retrieve {field_name} from staking contract {staking_contract}"
+                )
 
         output = {
             "staking_contract": staking_contract,
