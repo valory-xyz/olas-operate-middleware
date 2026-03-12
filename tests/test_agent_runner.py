@@ -121,11 +121,36 @@ class TestAgentAssetManagerExecutableName:
         """Test executable name for Windows x86_64."""
         with patch("platform.system", return_value="Windows"), patch(
             "platform.machine", return_value="x86_64"
+        ), patch(
+            "operate.services.agent_assets.sysconfig.get_platform",
+            return_value="win-amd64",
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert "windows" in name
         assert "x64" in name
         assert name.endswith(".exe")
+
+    def test_windows_arm64_host_with_x64_python_uses_x64_runner(self) -> None:
+        """Test Windows ARM host uses x64 runner when Python environment is x64."""
+        with patch("platform.system", return_value="Windows"), patch(
+            "platform.machine", return_value="arm64"
+        ), patch(
+            "operate.services.agent_assets.sysconfig.get_platform",
+            return_value="win-amd64",
+        ):
+            name = AgentAssetManager.get_agent_runner_executable_name()
+        assert name == "agent_runner_windows_x64.exe"
+
+    def test_windows_arm64_python_raises(self) -> None:
+        """Test that native Windows arm64 Python remains unsupported."""
+        with patch("platform.system", return_value="Windows"), patch(
+            "platform.machine", return_value="arm64"
+        ), patch(
+            "operate.services.agent_assets.sysconfig.get_platform",
+            return_value="win-arm64",
+        ):
+            with pytest.raises(ValueError, match="Windows arm64 is not supported"):
+                AgentAssetManager.get_agent_runner_executable_name()
 
     def test_unsupported_platform_raises(self) -> None:
         """Test that an unsupported platform raises ValueError."""
@@ -151,9 +176,54 @@ class TestAgentAssetManagerExecutableName:
             with pytest.raises(ValueError, match="unsupported arch"):
                 AgentAssetManager.get_agent_runner_executable_name()
 
+    def test_windows_unknown_python_platform_raises(self) -> None:
+        """Test that unknown Windows Python platform raises ValueError."""
+        with patch("platform.system", return_value="Windows"), patch(
+            "platform.machine", return_value="x86_64"
+        ), patch(
+            "operate.services.agent_assets.sysconfig.get_platform",
+            return_value="win32",
+        ):
+            with pytest.raises(ValueError, match="unsupported Windows Python platform"):
+                AgentAssetManager.get_agent_runner_executable_name()
+
 
 class TestAgentAssetManagerMethods:
     """Tests for other AgentAssetManager methods."""
+
+    def test_get_agent_runner_path_logs_environment_details_once(
+        self, tmp_path: Path
+    ) -> None:
+        """Test runner-path diagnostics are logged once per process."""
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory",
+                    "name": "my_repo",
+                    "version": "v2.0.0",
+                },
+            }
+        }
+        (tmp_path / "config.json").write_text(json.dumps(config))
+
+        AgentAssetManager._runner_environment_logged = False
+        with patch.object(
+            AgentAssetManager, "update_agent_release_asset"
+        ), patch.object(AgentAssetManager.logger, "info") as mock_info, patch(
+            "platform.system", return_value="Windows"
+        ), patch(
+            "platform.machine", return_value="arm64"
+        ), patch(
+            "operate.services.agent_assets.sysconfig.get_platform",
+            return_value="win-amd64",
+        ):
+            path = AgentAssetManager.get_agent_runner_path(tmp_path)
+            second_path = AgentAssetManager.get_agent_runner_path(tmp_path)
+
+        assert path.endswith("agent_runner_windows_x64.exe")
+        assert second_path.endswith("agent_runner_windows_x64.exe")
+        assert mock_info.call_count == 1
 
     def test_parse_agent(self) -> None:
         """Test parsing an agent public ID string."""
