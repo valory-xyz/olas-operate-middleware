@@ -25,6 +25,8 @@ import os
 import platform
 import shutil
 import stat
+import sys
+import sysconfig
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,6 +74,43 @@ class AgentAssetManager:
     """Agent Asset Manager."""
 
     logger = setup_logger(name="operate.agent_asset_manager")
+    _runner_environment_logged = False
+
+    @staticmethod
+    def get_python_environment_architecture() -> str:
+        """Get the Python environment architecture used for runner selection."""
+        if platform.system() != "Windows":
+            machine = platform.machine().lower()
+            if machine in ("x86_64", "amd64"):
+                return "x64"
+            if machine == "arm64":
+                return "arm64"
+            raise ValueError(f"unsupported arch: {platform.machine()}")
+
+        python_platform = sysconfig.get_platform().lower()
+        if python_platform == "win-amd64":
+            return "x64"
+        if python_platform == "win-arm64":
+            return "arm64"
+        raise ValueError(
+            f"unsupported Windows Python platform: {sysconfig.get_platform()}"
+        )
+
+    @classmethod
+    def log_runner_environment_details(cls) -> None:
+        """Log Python and platform details used for runner resolution."""
+        if cls._runner_environment_logged:
+            return
+
+        cls.logger.info(
+            "Resolving agent runner with system=%s machine=%s python_platform=%s sys_executable=%s python_version=%s",
+            platform.system(),
+            platform.machine(),
+            sysconfig.get_platform(),
+            sys.executable,
+            sys.version,
+        )
+        cls._runner_environment_logged = True
 
     @staticmethod
     def get_agent_runner_executable_name() -> str:
@@ -85,14 +124,9 @@ class AgentAssetManager:
         else:
             raise ValueError("Platform not supported!")
 
-        if platform.machine().lower() in ("x86_64", "amd64"):
-            arch = "x64"
-        elif platform.machine().lower() == "arm64":
-            arch = "arm64"
-            if os_name in ["windows", "linux"]:
-                raise ValueError("Windows arm64 is not supported!")
-        else:
-            raise ValueError(f"unsupported arch: {platform.machine()}")
+        arch = AgentAssetManager.get_python_environment_architecture()
+        if arch == "arm64" and os_name in ["windows", "linux"]:
+            raise ValueError(f"{platform.system()} arm64 is not supported!")
 
         exec_name = f"{AGENT_RUNNER_PREFIX}_{os_name}_{arch}"
         if platform.system() == "Windows":
@@ -204,6 +238,7 @@ class AgentAssetManager:
     @classmethod
     def get_agent_runner_path(cls, service_dir: Path) -> str:
         """Get path to the agent runner bin placed."""
+        cls.log_runner_environment_details()
         agent_runner_name = cls.get_agent_runner_executable_name()
         agent_runner_path: Path = service_dir / agent_runner_name
         agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
