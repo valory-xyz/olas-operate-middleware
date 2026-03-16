@@ -1712,8 +1712,14 @@ class TestServiceGetFundingRequests:
             type(service),
             "deployment",
             new_callable=lambda: property(lambda self: mock_deployment),
-        ), patch("operate.services.service.requests.get", return_value=mock_resp):
+        ), patch(
+            "operate.services.service.requests.get", return_value=mock_resp
+        ), patch(
+            "operate.services.service.logger"
+        ) as mock_logger:
             result = service.get_funding_requests()
 
         # Should not raise; deficit set to 0
         assert result["gnosis"][_AGENT_ADDR][ZERO_ADDRESS] == 0
+        # Warning should have been logged for the invalid deficit value
+        mock_logger.warning.assert_called_once()
