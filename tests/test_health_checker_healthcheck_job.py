@@ -439,6 +439,43 @@ class TestHealthCheckerNestedAsyncFunctions:
         )
         assert "port read failed" in warning_calls
 
+    async def test_check_health_client_connection_error_calls_print_exc(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _check_health calls print_exc when failure threshold is already met (line 221)."""
+        # Edge case: with threshold 0, first connection error enters the print_exc branch.
+        health_checker.number_of_fails = 0
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return True  # Port-ready check passes
+            raise aiohttp.ClientConnectionError("health port error")
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        with patch(
+            "operate.services.health_checker.print_exc"
+        ) as mock_print_exc, patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.1)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        mock_print_exc.assert_called_once()
+
     async def test_check_health_exhausts_fails_triggers_restart(
         self, health_checker: HealthChecker
     ) -> None:

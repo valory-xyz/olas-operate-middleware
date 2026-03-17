@@ -217,7 +217,9 @@ class HealthChecker:
                             service_config_id, service_path
                         )
                     except aiohttp.ClientConnectionError as e:
-                        print_exc()
+                        if fails >= number_of_fails:
+                            print_exc()
+
                         self.logger.warning(
                             f"[HEALTH_CHECKER] {service_config_id} port read failed. assume not healthy {e}"
                         )

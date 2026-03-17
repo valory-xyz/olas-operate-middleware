@@ -44,11 +44,10 @@ import requests
 from flask import Flask, Response, jsonify, request
 from werkzeug.exceptions import InternalServerError, NotFound
 
-from operate.constants import DEFAULT_TIMEOUT
-
 ENCODING = "utf-8"
 DEFAULT_LOG_FILE = "com.log"
 DEFAULT_TENDERMINT_LOG_FILE = "tendermint.log"
+DEFAULT_TIMEOUT = 30
 
 CONFIG_OVERRIDE = [
     ("fast_sync = true", "fast_sync = false"),
