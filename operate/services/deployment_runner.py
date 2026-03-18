@@ -815,6 +815,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
+        self._tm_log_file = self._open_tendermint_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
@@ -826,8 +827,8 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 "8080",
             ],
             cwd=working_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=self._tm_log_file,
+            stderr=self._tm_log_file,
             env={**os.environ, **env},
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
