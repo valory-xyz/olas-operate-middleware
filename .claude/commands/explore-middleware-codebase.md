@@ -66,7 +66,6 @@ Verify each applies or does not apply to this change:
 - [ ] Linting: run `tox -p -e black -e isort -e flake8 -e pylint -e mypy -e bandit` before committing
 - [ ] Type annotations: all new code requires type hints; mypy runs with `--disallow-untyped-defs` (see mypy config)
 - [ ] Thread safety: identify any shared mutable state and ensure proper locking
-- [ ] Auto-generated files: never edit contract files under `operate/data/`
 - [ ] Service lifecycle: services must be STOPPED before config updates
 - [ ] Security: no secrets in logs; follow existing encryption patterns for keys
 
