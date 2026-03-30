@@ -13,7 +13,7 @@ Your job is to produce complete, implementation-ready specs. Output must be deta
 Every change touches one or more of these layers. Identify which before proposing anything:
 
 1. **HTTP API** — FastAPI server, route handlers, request/response schemas
-2. **Services Layer** — ServiceManager, Service lifecycle, FundingManager, HealthChecker, OnChainManager, DeploymentRunner
+2. **Services Layer** — ServiceManager, Service lifecycle, FundingManager, HealthChecker, OnChainManager, DeploymentManager, deployment runners (e.g., BaseDeploymentRunner, PyInstallerHostDeploymentRunner)
 3. **Wallet / Bridge / Chain** — MasterWallet, BridgeManager, ledger profiles, on-chain interactions
 
 ---
@@ -64,7 +64,7 @@ Trace the full path from entry point to effect:
 Verify each applies or does not apply to this change:
 
 - [ ] Linting: run `tox -p -e black -e isort -e flake8 -e pylint -e mypy -e bandit` before committing
-- [ ] Type annotations: all new code requires type hints (mypy strict mode)
+- [ ] Type annotations: all new code requires type hints; mypy runs with `--disallow-untyped-defs` (see mypy config)
 - [ ] Thread safety: identify any shared mutable state and ensure proper locking
 - [ ] Auto-generated files: never edit contract files under `operate/data/`
 - [ ] Service lifecycle: services must be STOPPED before config updates
