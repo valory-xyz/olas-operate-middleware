@@ -12,7 +12,7 @@ Your job is to produce complete, implementation-ready specs. Output must be deta
 
 Every change touches one or more of these layers. Identify which before proposing anything:
 
-1. **HTTP API** — FastAPI server, route handlers, request/response schemas
+1. **HTTP API** — FastAPI server, route handlers, request/response schemas, docs
 2. **Services Layer** — ServiceManager, Service lifecycle, FundingManager, HealthChecker, OnChainManager, DeploymentManager, deployment runners (e.g., BaseDeploymentRunner, PyInstallerHostDeploymentRunner)
 3. **Wallet / Bridge / Chain** — MasterWallet, BridgeManager, ledger profiles, on-chain interactions
 
