@@ -75,7 +75,6 @@ Verify each applies or does not apply to this change:
 - Unit test or integration test (`@pytest.mark.integration`)?
 - What to mock vs what to test with real objects?
 - New fixtures needed in `tests/conftest.py`, or can existing ones be reused?
-- Run verification command: `tox -e unit-tests` or `tox -e integration-tests`
 
 ### 10. Unresolved Questions
 - List any blocking assumptions that must be resolved before implementation
