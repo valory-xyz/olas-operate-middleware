@@ -233,7 +233,7 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
    tox -p -e black -e isort
    
    # Run quality checks
-   tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+   tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy
    ```
 
 3. **Ensure relavent tests pass:**
