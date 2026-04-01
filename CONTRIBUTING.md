@@ -137,7 +137,7 @@ The project uses several tools to maintain code quality. All are configured in `
 tox -p -e black -e isort
 
 # Run all quality checks
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy
 ```
 
 **Note**: Some areas (like `operate/data`) are excluded from certain checks. Respect these exclusions.
