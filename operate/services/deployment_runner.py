@@ -34,7 +34,6 @@ from contextlib import suppress
 from enum import Enum
 from io import TextIOWrapper
 from pathlib import Path
-from traceback import print_exc
 from typing import Any, Dict, List, Type
 from venv import main as venv_cli
 
@@ -174,24 +173,19 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     @staticmethod
     def _call_aea_command(cwd: str | Path, args: List[str]) -> None:  # pragma: no cover
-        try:
-            import os  # pylint: disable=redefined-outer-name,reimported,import-outside-toplevel
+        import os  # pylint: disable=redefined-outer-name,reimported,import-outside-toplevel
 
-            os.chdir(cwd)
-            # pylint: disable-next=import-outside-toplevel
-            from aea.cli.core import cli as call_aea
+        os.chdir(cwd)
+        # pylint: disable-next=import-outside-toplevel
+        from aea.cli.core import cli as call_aea
 
-            call_aea(  # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
-                args, standalone_mode=False
-            )
-            # os._exit(0) is needed in case of run onlinux woth form subprocess method
-            # otherwise its going to perform all actions  successfully bu return code 1 to the calling coder
-            # it looks like aea+pyinstaller+multiprocessexit hooks issue on process stops
-            os._exit(0)  # pylint: disable=protected-access
-        except Exception:
-            print(f"Error on calling aea command: {args}")
-            print_exc()
-            raise
+        call_aea(  # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
+            args, standalone_mode=False
+        )
+        # os._exit(0) is needed in case of run on linux with fork subprocess method
+        # otherwise it performs all actions successfully but returns code 1 to the caller
+        # it looks like aea+pyinstaller+multiprocess exit hooks issue on process stops
+        os._exit(0)  # pylint: disable=protected-access
 
     def _run_cmd(self, args: t.List[str], cwd: t.Optional[Path] = None) -> None:
         """Run command in a subprocess."""
@@ -362,7 +356,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 "-s", "remove-key", "ethereum", cwd=working_dir / "agent"
             )
         except RuntimeError:
-            self.logger.warning("Failed to remove ethereum key (may not exist)")
+            self.logger.debug("Failed to remove ethereum key (may not exist)")
 
         try:
             self._run_aea_command(
@@ -373,7 +367,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 cwd=working_dir / "agent",
             )
         except RuntimeError:
-            self.logger.warning(
+            self.logger.debug(
                 "Failed to remove ethereum connection key (may not exist)"
             )
 
@@ -438,8 +432,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             requests.get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
         except requests.ConnectionError:
-            self.logger.error(
-                f"No Tendermint process listening on {self._get_tm_exit_url()}."
+            self.logger.debug(
+                f"No Tendermint process listening on {self._get_tm_exit_url()} (already stopped)."
             )
         except Exception:  # pylint: disable=broad-except
             self.logger.exception("Exception on tendermint stop!")

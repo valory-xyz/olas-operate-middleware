@@ -220,11 +220,14 @@ class TestServiceHelper:
         mock_config = MagicMock()
         mock_config.overrides = []
 
-        with patch(
-            "operate.services.service.load_service_config", return_value=mock_config
-        ) as mock_load, patch(
-            "operate.services.service.apply_env_variables", return_value=[]
-        ) as mock_apply:
+        with (
+            patch(
+                "operate.services.service.load_service_config", return_value=mock_config
+            ) as mock_load,
+            patch(
+                "operate.services.service.apply_env_variables", return_value=[]
+            ) as mock_apply,
+        ):
             helper = ServiceHelper(path=tmp_path)
 
         mock_load.assert_called_once_with(service_path=tmp_path)
@@ -246,11 +249,14 @@ class TestServiceHelper:
             }
         ]
 
-        with patch(
-            "operate.services.service.load_service_config", return_value=mock_config
-        ), patch(
-            "operate.services.service.apply_env_variables",
-            return_value=mock_config.overrides,
+        with (
+            patch(
+                "operate.services.service.load_service_config", return_value=mock_config
+            ),
+            patch(
+                "operate.services.service.apply_env_variables",
+                return_value=mock_config.overrides,
+            ),
         ):
             helper = ServiceHelper(path=tmp_path)
 
@@ -279,11 +285,14 @@ class TestServiceHelper:
         mock_config = MagicMock()
         mock_config.overrides = [outer_override]
 
-        with patch(
-            "operate.services.service.load_service_config", return_value=mock_config
-        ), patch(
-            "operate.services.service.apply_env_variables",
-            return_value=mock_config.overrides,
+        with (
+            patch(
+                "operate.services.service.load_service_config", return_value=mock_config
+            ),
+            patch(
+                "operate.services.service.apply_env_variables",
+                return_value=mock_config.overrides,
+            ),
         ):
             helper = ServiceHelper(path=tmp_path)
 
@@ -298,11 +307,14 @@ class TestServiceHelper:
             {"type": "skill", "public_id": "valory/abstract_round_abci:0.1.0"}
         ]
 
-        with patch(
-            "operate.services.service.load_service_config", return_value=mock_config
-        ), patch(
-            "operate.services.service.apply_env_variables",
-            return_value=mock_config.overrides,
+        with (
+            patch(
+                "operate.services.service.load_service_config", return_value=mock_config
+            ),
+            patch(
+                "operate.services.service.apply_env_variables",
+                return_value=mock_config.overrides,
+            ),
         ):
             helper = ServiceHelper(path=tmp_path)
 
@@ -315,9 +327,12 @@ class TestServiceHelper:
         mock_config.overrides = []
         mock_config.json = {"deployment": {"image": "myimage:latest"}}
 
-        with patch(
-            "operate.services.service.load_service_config", return_value=mock_config
-        ), patch("operate.services.service.apply_env_variables", return_value=[]):
+        with (
+            patch(
+                "operate.services.service.load_service_config", return_value=mock_config
+            ),
+            patch("operate.services.service.apply_env_variables", return_value=[]),
+        ):
             helper = ServiceHelper(path=tmp_path)
 
         result = helper.deployment_config()
@@ -329,9 +344,12 @@ class TestServiceHelper:
         mock_config.overrides = []
         mock_config.json = {}
 
-        with patch(
-            "operate.services.service.load_service_config", return_value=mock_config
-        ), patch("operate.services.service.apply_env_variables", return_value=[]):
+        with (
+            patch(
+                "operate.services.service.load_service_config", return_value=mock_config
+            ),
+            patch("operate.services.service.apply_env_variables", return_value=[]),
+        ):
             helper = ServiceHelper(path=tmp_path)
 
         result = helper.deployment_config()
@@ -409,9 +427,10 @@ class TestHostDeploymentGenerator:
         gen = self._make_generator(tmp_path)
         gen.build_dir.mkdir(parents=True)
 
-        with patch.object(gen, "_populate_keys") as mock_pk, patch.object(
-            gen, "_populate_keys_multiledger"
-        ) as mock_pkm:
+        with (
+            patch.object(gen, "_populate_keys") as mock_pk,
+            patch.object(gen, "_populate_keys_multiledger") as mock_pkm,
+        ):
             gen.populate_private_keys()
 
         mock_pk.assert_called_once()
@@ -424,9 +443,10 @@ class TestHostDeploymentGenerator:
         gen = self._make_generator(tmp_path)
         gen.service_builder.multiledger = True
 
-        with patch.object(gen, "_populate_keys") as mock_pk, patch.object(
-            gen, "_populate_keys_multiledger"
-        ) as mock_pkm:
+        with (
+            patch.object(gen, "_populate_keys") as mock_pk,
+            patch.object(gen, "_populate_keys_multiledger") as mock_pkm,
+        ):
             gen.populate_private_keys()
 
         mock_pkm.assert_called_once()
@@ -573,9 +593,10 @@ class TestDeploymentStop:
         """stop() returns early if status != DEPLOYED and force=False."""
         depl = _make_deployment(tmp_path, DeploymentStatus.BUILT)
 
-        with patch("operate.services.service.stop_deployment") as mock_stop, patch(
-            "operate.services.service.stop_host_deployment"
-        ) as mock_hstop:
+        with (
+            patch("operate.services.service.stop_deployment") as mock_stop,
+            patch("operate.services.service.stop_host_deployment") as mock_hstop,
+        ):
             depl.stop(force=False)
 
         mock_stop.assert_not_called()
@@ -668,16 +689,15 @@ class TestDeploymentBuild:
         mock_service = self._make_mock_service()
         mock_km = MagicMock()
 
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ), patch(
-            "operate.services.service.create_ssl_certificate",
-            return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
-        ), patch.object(
-            depl, "_build_docker"
-        ) as mock_bd, patch.object(
-            depl, "_build_kubernetes"
-        ) as mock_bk:
+        with (
+            patch("operate.services.service.Service.load", return_value=mock_service),
+            patch(
+                "operate.services.service.create_ssl_certificate",
+                return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
+            ),
+            patch.object(depl, "_build_docker") as mock_bd,
+            patch.object(depl, "_build_kubernetes") as mock_bk,
+        ):
             depl.build(keys_manager=mock_km, use_docker=True)
 
         mock_bd.assert_called_once_with(keys_manager=mock_km, force=True, chain=None)
@@ -689,16 +709,15 @@ class TestDeploymentBuild:
         mock_service = self._make_mock_service()
         mock_km = MagicMock()
 
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ), patch(
-            "operate.services.service.create_ssl_certificate",
-            return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
-        ), patch.object(
-            depl, "_build_docker"
-        ) as mock_bd, patch.object(
-            depl, "_build_kubernetes"
-        ) as mock_bk:
+        with (
+            patch("operate.services.service.Service.load", return_value=mock_service),
+            patch(
+                "operate.services.service.create_ssl_certificate",
+                return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
+            ),
+            patch.object(depl, "_build_docker") as mock_bd,
+            patch.object(depl, "_build_kubernetes") as mock_bk,
+        ):
             depl.build(keys_manager=mock_km, use_kubernetes=True)
 
         mock_bk.assert_called_once_with(keys_manager=mock_km, force=True)
@@ -713,14 +732,14 @@ class TestDeploymentBuild:
         mock_service.agent_release = {"is_aea": True}
         mock_km = MagicMock()
 
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ), patch(
-            "operate.services.service.create_ssl_certificate",
-            return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
-        ), patch.object(
-            depl, "_build_host"
-        ) as mock_bh:
+        with (
+            patch("operate.services.service.Service.load", return_value=mock_service),
+            patch(
+                "operate.services.service.create_ssl_certificate",
+                return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
+            ),
+            patch.object(depl, "_build_host") as mock_bh,
+        ):
             depl.build(keys_manager=mock_km, use_docker=False, use_kubernetes=False)
 
         mock_bh.assert_called_once_with(
@@ -736,14 +755,14 @@ class TestDeploymentBuild:
         mock_service.agent_release = {"is_aea": False}
         mock_km = MagicMock()
 
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ), patch(
-            "operate.services.service.create_ssl_certificate",
-            return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
-        ), patch.object(
-            depl, "_build_host"
-        ) as mock_bh:
+        with (
+            patch("operate.services.service.Service.load", return_value=mock_service),
+            patch(
+                "operate.services.service.create_ssl_certificate",
+                return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
+            ),
+            patch.object(depl, "_build_host") as mock_bh,
+        ):
             depl.build(keys_manager=mock_km, use_docker=False, use_kubernetes=False)
 
         mock_bh.assert_called_once_with(
@@ -759,13 +778,13 @@ class TestDeploymentBuild:
         original_key = "BUILD_TEST_VAR"
         os.environ[original_key] = "original"
 
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ), patch(
-            "operate.services.service.create_ssl_certificate",
-            return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
-        ), patch.object(
-            depl, "_build_host"
+        with (
+            patch("operate.services.service.Service.load", return_value=mock_service),
+            patch(
+                "operate.services.service.create_ssl_certificate",
+                return_value=(Path("/ssl/key.pem"), Path("/ssl/cert.pem")),
+            ),
+            patch.object(depl, "_build_host"),
         ):
             # Simulate service.consume_env_variables adding to env
             def _add_env_var() -> None:
@@ -791,9 +810,10 @@ class TestServiceHelperProperty:
         service = _make_service(tmp_path)
         mock_helper = MagicMock()
 
-        with patch(
-            "operate.services.service.ServiceHelper", return_value=mock_helper
-        ), patch.object(service, "_ensure_package_exists"):
+        with (
+            patch("operate.services.service.ServiceHelper", return_value=mock_helper),
+            patch.object(service, "_ensure_package_exists"),
+        ):
             result = service.helper
 
         assert result is mock_helper
@@ -803,9 +823,12 @@ class TestServiceHelperProperty:
         service = _make_service(tmp_path)
         mock_helper = MagicMock()
 
-        with patch(
-            "operate.services.service.ServiceHelper", return_value=mock_helper
-        ) as mock_sh_cls, patch.object(service, "_ensure_package_exists"):
+        with (
+            patch(
+                "operate.services.service.ServiceHelper", return_value=mock_helper
+            ) as mock_sh_cls,
+            patch.object(service, "_ensure_package_exists"),
+        ):
             first = service.helper
             second = service.helper
 
@@ -883,12 +906,11 @@ class TestServiceEnsurePackageExists:
         mock_ipfs_instance = MagicMock()
         mock_ipfs_instance.download.return_value = str(downloaded_dir)
 
-        with patch(
-            "operate.services.service.IPFSTool", return_value=mock_ipfs_instance
-        ), patch("operate.services.service.shutil.move"), patch.object(
-            service, "store"
-        ), patch.object(
-            service, "service_public_id", return_value="v/t:1.0.0"
+        with (
+            patch("operate.services.service.IPFSTool", return_value=mock_ipfs_instance),
+            patch("operate.services.service.shutil.move"),
+            patch.object(service, "store"),
+            patch.object(service, "service_public_id", return_value="v/t:1.0.0"),
         ):
             service._ensure_package_exists()
 
@@ -912,14 +934,12 @@ class TestServiceEnsurePackageExists:
         mock_ipfs_instance = MagicMock()
         mock_ipfs_instance.download.return_value = str(downloaded_dir)
 
-        with patch(
-            "operate.services.service.IPFSTool", return_value=mock_ipfs_instance
-        ), patch("operate.services.service.shutil.rmtree") as mock_rmtree, patch(
-            "operate.services.service.shutil.move"
-        ), patch.object(
-            service, "store"
-        ), patch.object(
-            service, "service_public_id", return_value="v/t:1.0.0"
+        with (
+            patch("operate.services.service.IPFSTool", return_value=mock_ipfs_instance),
+            patch("operate.services.service.shutil.rmtree") as mock_rmtree,
+            patch("operate.services.service.shutil.move"),
+            patch.object(service, "store"),
+            patch.object(service, "service_public_id", return_value="v/t:1.0.0"),
         ):
             service._ensure_package_exists()
 
@@ -1076,19 +1096,18 @@ class TestServiceUpdate:
         """update() raises ValueError when public IDs differ and allow=False."""
         service = _make_service(tmp_path)
 
-        with patch(
-            "operate.services.service.Service.get_service_public_id",
-            return_value="different/service:1.0.0",
-        ), patch.object(
-            service, "service_public_id", return_value=self._CURRENT_PUBLIC_ID
-        ), patch.object(
-            service, "_ensure_package_exists"
-        ), patch(
-            "operate.services.service.IPFSTool"
-        ), patch(
-            "operate.services.service.ServiceHelper"
-        ), patch.object(
-            service, "store"
+        with (
+            patch(
+                "operate.services.service.Service.get_service_public_id",
+                return_value="different/service:1.0.0",
+            ),
+            patch.object(
+                service, "service_public_id", return_value=self._CURRENT_PUBLIC_ID
+            ),
+            patch.object(service, "_ensure_package_exists"),
+            patch("operate.services.service.IPFSTool"),
+            patch("operate.services.service.ServiceHelper"),
+            patch.object(service, "store"),
         ):
             with pytest.raises(ValueError, match="different public id"):
                 service.update(
@@ -1102,23 +1121,20 @@ class TestServiceUpdate:
         """update() succeeds when allow_different_service_public_id=True."""
         service = _make_service(tmp_path)
 
-        with patch(
-            "operate.services.service.Service.get_service_public_id",
-            return_value="different/service:1.0.0",
-        ), patch.object(
-            service, "service_public_id", return_value=self._CURRENT_PUBLIC_ID
-        ), patch.object(
-            service, "_ensure_package_exists"
-        ), patch.object(
-            service, "store"
-        ), patch(
-            "operate.services.service.IPFSTool"
-        ), patch(
-            "operate.services.service.ServiceHelper"
-        ), patch(
-            "operate.services.service.shutil.rmtree"
-        ), patch(
-            "operate.services.service.shutil.move"
+        with (
+            patch(
+                "operate.services.service.Service.get_service_public_id",
+                return_value="different/service:1.0.0",
+            ),
+            patch.object(
+                service, "service_public_id", return_value=self._CURRENT_PUBLIC_ID
+            ),
+            patch.object(service, "_ensure_package_exists"),
+            patch.object(service, "store"),
+            patch("operate.services.service.IPFSTool"),
+            patch("operate.services.service.ServiceHelper"),
+            patch("operate.services.service.shutil.rmtree"),
+            patch("operate.services.service.shutil.move"),
         ):
             service.update(
                 self._base_template(service, hash="newHash123"),
@@ -1264,9 +1280,10 @@ class TestServiceUpdate:
         old_pkg_dir = service.path / service.package_path
         old_pkg_dir.mkdir(parents=True)
 
-        with self._patch_update_deps(service), patch(
-            "operate.services.service.shutil.rmtree"
-        ) as mock_rmtree:
+        with (
+            self._patch_update_deps(service),
+            patch("operate.services.service.shutil.rmtree") as mock_rmtree,
+        ):
             service.update(self._base_template(service))
 
         mock_rmtree.assert_any_call(old_pkg_dir)
@@ -1505,16 +1522,19 @@ class TestServiceGetBalances:
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.eth.get_balance.return_value = 0
 
-        with patch.object(
-            service, "get_initial_funding_amounts", return_value=mock_amounts
-        ), patch(
-            "operate.services.service.get_default_ledger_api",
-            return_value=mock_ledger_api,
-        ) as mock_default_api, patch(
-            "operate.services.service.get_asset_balance", return_value=0
-        ), patch(
-            "operate.services.service.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: "0x" + "e" * 40},
+        with (
+            patch.object(
+                service, "get_initial_funding_amounts", return_value=mock_amounts
+            ),
+            patch(
+                "operate.services.service.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ) as mock_default_api,
+            patch("operate.services.service.get_asset_balance", return_value=0),
+            patch(
+                "operate.services.service.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: "0x" + "e" * 40},
+            ),
         ):
             service.get_balances(unify_wrapped_native_tokens=False)
 
@@ -1533,16 +1553,19 @@ class TestServiceGetBalances:
 
         mock_ledger_api = MagicMock()
 
-        with patch.object(
-            service, "get_initial_funding_amounts", return_value=mock_amounts
-        ), patch(
-            "operate.services.service.make_chain_ledger_api",
-            return_value=mock_ledger_api,
-        ), patch(
-            "operate.services.service.get_asset_balance", return_value=500
-        ), patch(
-            "operate.services.service.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: wrapped_asset},
+        with (
+            patch.object(
+                service, "get_initial_funding_amounts", return_value=mock_amounts
+            ),
+            patch(
+                "operate.services.service.make_chain_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.service.get_asset_balance", return_value=500),
+            patch(
+                "operate.services.service.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: wrapped_asset},
+            ),
         ):
             result = service.get_balances(unify_wrapped_native_tokens=True)
 
@@ -1568,17 +1591,22 @@ class TestServiceGetBalances:
 
         mock_ledger_api = MagicMock()
 
-        with patch.object(
-            service, "get_initial_funding_amounts", return_value=mock_amounts
-        ), patch(
-            "operate.services.service.make_chain_ledger_api",
-            return_value=mock_ledger_api,
-        ), patch(
-            "operate.services.service.get_asset_balance",
-            side_effect=[100, 200],  # First call returns native, second wrapped
-        ), patch(
-            "operate.services.service.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: wrapped_asset},
+        with (
+            patch.object(
+                service, "get_initial_funding_amounts", return_value=mock_amounts
+            ),
+            patch(
+                "operate.services.service.make_chain_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch(
+                "operate.services.service.get_asset_balance",
+                side_effect=[100, 200],  # First call returns native, second wrapped
+            ),
+            patch(
+                "operate.services.service.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: wrapped_asset},
+            ),
         ):
             result = service.get_balances(unify_wrapped_native_tokens=True)
 
@@ -1618,13 +1646,16 @@ class TestServiceGetFundingRequests:
         mock_deployment = MagicMock()
         mock_deployment.status = DeploymentStatus.DEPLOYED
 
-        with patch.object(
-            type(service),
-            "deployment",
-            new_callable=lambda: property(lambda self: mock_deployment),
-        ), patch(
-            "operate.services.service.requests.get",
-            side_effect=ConnectionError("timeout"),
+        with (
+            patch.object(
+                type(service),
+                "deployment",
+                new_callable=lambda: property(lambda self: mock_deployment),
+            ),
+            patch(
+                "operate.services.service.requests.get",
+                side_effect=ConnectionError("timeout"),
+            ),
         ):
             result = service.get_funding_requests()
 
@@ -1643,19 +1674,22 @@ class TestServiceGetFundingRequests:
             "gnosis": {_AGENT_ADDR: {ZERO_ADDRESS: {"deficit": "5000000000000000000"}}}
         }
 
-        with patch.object(
-            type(service),
-            "deployment",
-            new_callable=lambda: property(lambda self: mock_deployment),
-        ), patch("operate.services.service.requests.get", return_value=mock_resp):
+        with (
+            patch.object(
+                type(service),
+                "deployment",
+                new_callable=lambda: property(lambda self: mock_deployment),
+            ),
+            patch("operate.services.service.requests.get", return_value=mock_resp),
+        ):
             result = service.get_funding_requests()
 
         assert "gnosis" in result
         assert _AGENT_ADDR in result["gnosis"]
         assert ZERO_ADDRESS in result["gnosis"][_AGENT_ADDR]
 
-    def test_unknown_chain_raises_value_error(self, tmp_path: Path) -> None:
-        """get_funding_requests() raises ValueError for unknown chain in response."""
+    def test_unknown_chain_logs_warning_and_skips(self, tmp_path: Path) -> None:
+        """get_funding_requests() logs a warning and skips unknown chains."""
         service = _make_service(tmp_path)
 
         mock_deployment = MagicMock()
@@ -1666,13 +1700,22 @@ class TestServiceGetFundingRequests:
             "ethereum": {_AGENT_ADDR: {ZERO_ADDRESS: {"deficit": "1000"}}}
         }
 
-        with patch.object(
-            type(service),
-            "deployment",
-            new_callable=lambda: property(lambda self: mock_deployment),
-        ), patch("operate.services.service.requests.get", return_value=mock_resp):
-            with pytest.raises(ValueError, match="unknown chain"):
-                service.get_funding_requests()
+        with (
+            patch("operate.services.service.logger") as mock_logger,
+            patch.object(
+                type(service),
+                "deployment",
+                new_callable=lambda: property(lambda self: mock_deployment),
+            ),
+            patch("operate.services.service.requests.get", return_value=mock_resp),
+        ):
+            result = service.get_funding_requests()
+
+        # No exception raised — unknown chain is skipped gracefully
+        assert result == {}
+        # Warning should mention the unknown chain name
+        warning_calls = str(mock_logger.warning.call_args_list)
+        assert "ethereum" in warning_calls
 
     def test_unknown_address_raises_value_error(self, tmp_path: Path) -> None:
         """get_funding_requests() raises ValueError for unknown address in response."""
@@ -1687,11 +1730,14 @@ class TestServiceGetFundingRequests:
             "gnosis": {unknown_addr: {ZERO_ADDRESS: {"deficit": "1000"}}}
         }
 
-        with patch.object(
-            type(service),
-            "deployment",
-            new_callable=lambda: property(lambda self: mock_deployment),
-        ), patch("operate.services.service.requests.get", return_value=mock_resp):
+        with (
+            patch.object(
+                type(service),
+                "deployment",
+                new_callable=lambda: property(lambda self: mock_deployment),
+            ),
+            patch("operate.services.service.requests.get", return_value=mock_resp),
+        ):
             with pytest.raises(ValueError, match="unknown address"):
                 service.get_funding_requests()
 
@@ -1708,15 +1754,15 @@ class TestServiceGetFundingRequests:
             "gnosis": {_AGENT_ADDR: {ZERO_ADDRESS: {"deficit": "NOT_A_NUMBER"}}}
         }
 
-        with patch.object(
-            type(service),
-            "deployment",
-            new_callable=lambda: property(lambda self: mock_deployment),
-        ), patch(
-            "operate.services.service.requests.get", return_value=mock_resp
-        ), patch(
-            "operate.services.service.logger"
-        ) as mock_logger:
+        with (
+            patch.object(
+                type(service),
+                "deployment",
+                new_callable=lambda: property(lambda self: mock_deployment),
+            ),
+            patch("operate.services.service.requests.get", return_value=mock_resp),
+            patch("operate.services.service.logger") as mock_logger,
+        ):
             result = service.get_funding_requests()
 
         # Should not raise; deficit set to 0

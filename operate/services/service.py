@@ -33,7 +33,6 @@ from copy import copy
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from traceback import print_exc
 
 import requests
 from aea.configurations.constants import (
@@ -586,9 +585,11 @@ class Deployment(LocalResource):
                 time.sleep(3)
                 self.copy_previous_agent_run_logs()
                 shutil.rmtree(build)
-            except:  # noqa  # pylint: disable=bare-except
-                # sleep and try again. exception if fails
-                print_exc()
+            except Exception:  # pylint: disable=broad-except
+                logger.debug(
+                    "Failed to remove build dir on first attempt, retrying...",
+                    exc_info=True,
+                )
                 time.sleep(3)
                 shutil.rmtree(build)
 
@@ -1410,12 +1411,15 @@ class Service(LocalResource):
             )
 
         for chain_str, addresses in agent_response.items():
-            for address, assets in addresses.items():
-                if chain_str not in self.chain_configs:
-                    raise ValueError(
-                        f"Service {self.service_config_id} asked funding for an unknown chain {chain_str}."
-                    )
+            if chain_str not in self.chain_configs:
+                logger.warning(
+                    f"[FUNDING MANAGER] Service {self.service_config_id} requested funding"
+                    f" for unknown chain '{chain_str}' — skipping."
+                    f" Known chains: {list(self.chain_configs)}"
+                )
+                continue
 
+            for address, assets in addresses.items():
                 if (
                     address not in self.agent_addresses
                     and address != self.chain_configs[chain_str].chain_data.multisig

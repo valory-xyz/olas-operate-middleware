@@ -359,9 +359,10 @@ class TestHealthCheckerNestedAsyncFunctions:
 
         health_checker.check_service_health = mock_check  # type: ignore[assignment]
 
-        with patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch("operate.services.health_checker.asyncio.sleep", _instant_sleep):
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+        ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.1)  # real wait — gives the task time to run
             task.cancel()
@@ -382,13 +383,13 @@ class TestHealthCheckerNestedAsyncFunctions:
         health_checker._service_manager.stop_service_locally = MagicMock()
         health_checker._service_manager.deploy_service_locally = MagicMock()
 
-        with patch(
-            "operate.services.health_checker.asyncio.wait_for",
-            side_effect=asyncio.TimeoutError,
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch(
+                "operate.services.health_checker.asyncio.wait_for",
+                side_effect=asyncio.TimeoutError,
+            ),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.1)
@@ -419,12 +420,10 @@ class TestHealthCheckerNestedAsyncFunctions:
         health_checker._service_manager.stop_service_locally = MagicMock()
         health_checker._service_manager.deploy_service_locally = MagicMock()
 
-        with patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.1)
@@ -439,11 +438,11 @@ class TestHealthCheckerNestedAsyncFunctions:
         )
         assert "port read failed" in warning_calls
 
-    async def test_check_health_client_connection_error_calls_print_exc(
+    async def test_check_health_client_connection_error_calls_debug_exc_info(
         self, health_checker: HealthChecker
     ) -> None:
-        """Test _check_health calls print_exc when failure threshold is already met (line 221)."""
-        # Edge case: with threshold 0, first connection error enters the print_exc branch.
+        """Test _check_health calls logger.debug with exc_info when failure threshold is met."""
+        # Edge case: with threshold 0, first connection error enters the debug branch.
         health_checker.number_of_fails = 0
         call_count = [0]
 
@@ -457,14 +456,10 @@ class TestHealthCheckerNestedAsyncFunctions:
         health_checker._service_manager.stop_service_locally = MagicMock()
         health_checker._service_manager.deploy_service_locally = MagicMock()
 
-        with patch(
-            "operate.services.health_checker.print_exc"
-        ) as mock_print_exc, patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.1)
@@ -474,7 +469,11 @@ class TestHealthCheckerNestedAsyncFunctions:
             except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
                 pass
 
-        mock_print_exc.assert_called_once()
+        # logger.debug should have been called with exc_info=True for the connection error
+        debug_calls = health_checker.logger.debug.call_args_list  # type: ignore[attr-defined]
+        assert any(
+            call.kwargs.get("exc_info") is True for call in debug_calls
+        ), "Expected logger.debug to be called with exc_info=True"
 
     async def test_check_health_exhausts_fails_triggers_restart(
         self, health_checker: HealthChecker
@@ -491,12 +490,10 @@ class TestHealthCheckerNestedAsyncFunctions:
         health_checker._service_manager.stop_service_locally = MagicMock()
         health_checker._service_manager.deploy_service_locally = MagicMock()
 
-        with patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.1)
@@ -524,12 +521,10 @@ class TestHealthCheckerNestedAsyncFunctions:
 
         health_checker.check_service_health = mock_check  # type: ignore[assignment]
 
-        with patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.2)
@@ -562,12 +557,11 @@ class TestHealthCheckerNestedAsyncFunctions:
             RuntimeError("deploy failed")
         )
 
-        with patch.object(HealthChecker, "FAILFAST_NUM", 1), patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 1),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             with pytest.raises(RuntimeError, match="deploy failed"):
                 await health_checker.healthcheck_job("test-service")
@@ -595,12 +589,11 @@ class TestHealthCheckerNestedAsyncFunctions:
         health_checker.check_service_health = mock_check  # type: ignore[assignment]
         health_checker._service_manager.deploy_service_locally.side_effect = mock_deploy
 
-        with patch.object(HealthChecker, "FAILFAST_NUM", 3), patch(
-            "operate.services.health_checker.asyncio.wait_for", _no_timeout
-        ), patch(
-            "operate.services.health_checker.asyncio.sleep", _instant_sleep
-        ), patch(
-            "operate.services.health_checker.time.time", return_value=0.0
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 3),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.2)

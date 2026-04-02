@@ -27,7 +27,6 @@ import time
 import typing as t
 from http import HTTPStatus
 from pathlib import Path
-from traceback import print_exc
 
 import aiohttp  # type: ignore
 
@@ -140,14 +139,12 @@ class HealthChecker:
         except asyncio.TimeoutError as e:
             # NOTE: Must come before OSError since TimeoutError is a subclass of OSError in Python 3.10+
             self.logger.error(
-                f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!",
-                exc_info=True,
+                f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!"
             )
             return False
         except aiohttp.ClientError as e:
             self.logger.error(
-                f"[HEALTH_CHECKER] HTTP client error during health check: {e}. set not healthy!",
-                exc_info=True,
+                f"[HEALTH_CHECKER] HTTP client error during health check: {e}. set not healthy!"
             )
             return False
         except json.JSONDecodeError as e:
@@ -218,7 +215,10 @@ class HealthChecker:
                         )
                     except aiohttp.ClientConnectionError as e:
                         if fails >= number_of_fails:
-                            print_exc()
+                            self.logger.debug(
+                                f"[HEALTH_CHECKER] Connection error detail: {e}",
+                                exc_info=True,
+                            )
 
                         self.logger.warning(
                             f"[HEALTH_CHECKER] {service_config_id} port read failed. assume not healthy {e}"
@@ -227,9 +227,10 @@ class HealthChecker:
 
                     if not healthy:
                         fails += 1
-                        self.logger.warning(
-                            f"[HEALTH_CHECKER] {service_config_id} not healthy for {fails} time in a row"
-                        )
+                        if fails == 1 or fails % 10 == 0 or fails >= number_of_fails:
+                            self.logger.warning(
+                                f"[HEALTH_CHECKER] {service_config_id} not healthy for {fails} time in a row"
+                            )
                     else:
                         self.logger.debug(
                             f"[HEALTH_CHECKER] {service_config_id} is HEALTHY"

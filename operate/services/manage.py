@@ -2165,11 +2165,10 @@ class ServiceManager:
                     min(available_balance, target_balance - safe_balance), 0
                 )
 
-                # TODO Possibly remove this logging
-                self.logger.info(f"{available_balance=}")
-                self.logger.info(f"{target_balance=}")
-                self.logger.info(f"{safe_balance=}")
-                self.logger.info(f"{to_transfer=}")
+                self.logger.debug(f"{available_balance=}")
+                self.logger.debug(f"{target_balance=}")
+                self.logger.debug(f"{safe_balance=}")
+                self.logger.debug(f"{to_transfer=}")
 
                 if to_transfer > 0:
                     self.logger.info(

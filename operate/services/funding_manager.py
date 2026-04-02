@@ -23,7 +23,6 @@
 
 import asyncio
 import threading
-import traceback
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
@@ -1071,9 +1070,7 @@ class FundingManager:
                             service_manager.claim_all_on_chain_from_safe,
                         )
                     except Exception:  # pylint: disable=broad-except
-                        self.logger.info(
-                            f"Error occured while claiming rewards\n{traceback.format_exc()}"
-                        )
+                        self.logger.exception("Error occurred while claiming rewards")
                     last_claim = time()
 
                 # fund Master EOA every hour
@@ -1084,9 +1081,7 @@ class FundingManager:
                             self.fund_master_eoa,
                         )
                     except Exception:  # pylint: disable=broad-except
-                        self.logger.info(
-                            f"Error occured while funding Master EOA\n{traceback.format_exc()}"
-                        )
+                        self.logger.exception("Error occurred while funding Master EOA")
                     last_master_eoa_funding = time()
 
                 await asyncio.sleep(60)
