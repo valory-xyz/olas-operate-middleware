@@ -118,31 +118,39 @@ class TestDrainAgentsEOAs:
         ledger_api = MagicMock()
         ledger_api.get_balance.return_value = 500
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.get_asset_balance",
-            return_value=100,
-        ), patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="USDC.e",
-        ), patch(
-            "operate.services.funding_manager.transfer_erc20_from_eoa"
-        ) as mock_transfer_erc20, patch(
-            "operate.services.funding_manager.drain_eoa"
-        ) as mock_drain_eoa, patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=100,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ) as mock_transfer_erc20,
+            patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
 
@@ -157,31 +165,39 @@ class TestDrainAgentsEOAs:
         ledger_api = MagicMock()
         ledger_api.get_balance.return_value = 500
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.get_asset_balance",
-            return_value=0,
-        ), patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="USDC.e",
-        ), patch(
-            "operate.services.funding_manager.transfer_erc20_from_eoa"
-        ) as mock_transfer_erc20, patch(
-            "operate.services.funding_manager.drain_eoa"
-        ) as mock_drain_eoa, patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=0,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ) as mock_transfer_erc20,
+            patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
 
@@ -213,32 +229,44 @@ class TestDrainServiceSafe:
         mock_token_instance = MagicMock()
         mock_token_instance.functions.balanceOf.return_value.call.return_value = 0
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch("operate.services.funding_manager.EthSafeTxBuilder"), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=[AGENT_ADDR],
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="OLAS",
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[AGENT_ADDR],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="OLAS",
+            ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             # native balance also zero
-            with patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ), patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ), patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ), patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+            with (
+                patch(
+                    "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                    {Chain.GNOSIS: TOKEN_ADDR},
+                ),
+                patch(
+                    "operate.services.funding_manager.OLAS",
+                    {Chain.GNOSIS: TOKEN_ADDR},
+                ),
+                patch(
+                    "operate.services.funding_manager.USDC",
+                    {Chain.GNOSIS: TOKEN_ADDR},
+                ),
+                patch(
+                    "operate.services.funding_manager.USDC_E",
+                    {Chain.GNOSIS: TOKEN_ADDR},
+                ),
             ):
                 ledger_api = MagicMock()
                 ledger_api.get_balance.return_value = 0
@@ -261,36 +289,46 @@ class TestDrainServiceSafe:
         ledger_api = MagicMock()
         ledger_api.get_balance.return_value = 0  # no native to drain
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch(
-            "operate.services.funding_manager.EthSafeTxBuilder"
-        ), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=[AGENT_ADDR],
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="OLAS",
-        ), patch(
-            "operate.services.funding_manager.transfer_erc20_from_safe"
-        ) as mock_transfer, patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[AGENT_ADDR],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="OLAS",
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_safe"
+            ) as mock_transfer,
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -313,35 +351,46 @@ class TestDrainServiceSafe:
         mock_tx = MagicMock()
         mock_sftxb.new_tx.return_value = mock_tx
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch(
-            "operate.services.funding_manager.EthSafeTxBuilder",
-            return_value=mock_sftxb,
-        ), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=[MASTER_SAFE_ADDR],
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="OLAS",
-        ), patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch(
+                "operate.services.funding_manager.EthSafeTxBuilder",
+                return_value=mock_sftxb,
+            ),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[MASTER_SAFE_ADDR],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="OLAS",
+            ),
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -361,35 +410,44 @@ class TestDrainServiceSafe:
         mock_registry = MagicMock()
         mock_registry.erc20.get_instance.return_value = mock_token_instance
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch(
-            "operate.services.funding_manager.EthSafeTxBuilder"
-        ), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=["0x" + "f" * 40],  # unknown owner
-        ), patch(
-            "operate.services.funding_manager.registry_contracts",
-            mock_registry,
-        ), patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="OLAS",
-        ), patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=["0x" + "f" * 40],  # unknown owner
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts",
+                mock_registry,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="OLAS",
+            ),
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             with pytest.raises(RuntimeError, match="unrecognized owner set"):
                 manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -405,39 +463,50 @@ class TestDrainServiceSafe:
         ledger_api = MagicMock()
         ledger_api.get_balance.return_value = 500
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch(
-            "operate.services.funding_manager.EthSafeTxBuilder"
-        ), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=[AGENT_ADDR],
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="ETH",
-        ), patch(
-            "operate.services.funding_manager.transfer as transfer_from_safe",
-            create=True,
-        ), patch(
-            "operate.services.funding_manager.transfer_from_safe"
-        ) as mock_transfer, patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[AGENT_ADDR],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="ETH",
+            ),
+            patch(
+                "operate.services.funding_manager.transfer as transfer_from_safe",
+                create=True,
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_from_safe"
+            ) as mock_transfer,
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -460,35 +529,46 @@ class TestDrainServiceSafe:
         mock_tx = MagicMock()
         mock_sftxb.new_tx.return_value = mock_tx
 
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch(
-            "operate.services.funding_manager.EthSafeTxBuilder",
-            return_value=mock_sftxb,
-        ), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=[MASTER_SAFE_ADDR],
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="ETH",
-        ), patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch(
+                "operate.services.funding_manager.EthSafeTxBuilder",
+                return_value=mock_sftxb,
+            ),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[MASTER_SAFE_ADDR],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="ETH",
+            ),
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -509,35 +589,44 @@ class TestDrainServiceSafe:
 
         mock_registry = MagicMock()
         mock_registry.erc20.get_instance.return_value = mock_token_instance
-        with patch(
-            "operate.services.funding_manager.make_chain_ledger_api",
-            return_value=ledger_api,
-        ), patch(
-            "operate.services.funding_manager.Web3.to_checksum_address",
-            return_value=AGENT_ADDR,
-        ), patch(
-            "operate.services.funding_manager.EthSafeTxBuilder"
-        ), patch(
-            "operate.services.funding_manager.get_owners",
-            return_value=["0x" + "f" * 40],
-        ), patch(
-            "operate.services.funding_manager.registry_contracts",
-            mock_registry,
-        ), patch(
-            "operate.services.funding_manager.get_asset_name",
-            return_value="ETH",
-        ), patch(
-            "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.OLAS",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC",
-            {Chain.GNOSIS: TOKEN_ADDR},
-        ), patch(
-            "operate.services.funding_manager.USDC_E",
-            {Chain.GNOSIS: TOKEN_ADDR},
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.Web3.to_checksum_address",
+                return_value=AGENT_ADDR,
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=["0x" + "f" * 40],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts",
+                mock_registry,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="ETH",
+            ),
+            patch(
+                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.OLAS",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
+            patch(
+                "operate.services.funding_manager.USDC_E",
+                {Chain.GNOSIS: TOKEN_ADDR},
+            ),
         ):
             with pytest.raises(RuntimeError, match="unrecognized owner set"):
                 manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
@@ -587,11 +676,14 @@ class TestComputeProtocolAssetRequirements:
             "additional_staking_tokens": {},
         }
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch(
-            "operate.services.funding_manager.StakingManager",
-            return_value=mock_staking_manager,
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch(
+                "operate.services.funding_manager.StakingManager",
+                return_value=mock_staking_manager,
+            ),
         ):
             result = manager._compute_protocol_asset_requirements(service)
 
@@ -617,11 +709,14 @@ class TestComputeProtocolAssetRequirements:
             "additional_staking_tokens": {extra_token: 200},
         }
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch(
-            "operate.services.funding_manager.StakingManager",
-            return_value=mock_staking_manager,
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch(
+                "operate.services.funding_manager.StakingManager",
+                return_value=mock_staking_manager,
+            ),
         ):
             result = manager._compute_protocol_asset_requirements(service)
 
@@ -659,8 +754,9 @@ class TestComputeProtocolBondedAssets:
         manager = _make_manager(wallet_manager=wallet_manager)
         service = _mock_service()
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.StakingManager"
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch("operate.services.funding_manager.StakingManager"),
         ):
             result = manager._compute_protocol_bonded_assets(service)
 
@@ -676,8 +772,9 @@ class TestComputeProtocolBondedAssets:
         manager = _make_manager(wallet_manager=wallet_manager)
         service = _mock_service(token=NON_EXISTENT_TOKEN)
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.StakingManager"
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch("operate.services.funding_manager.StakingManager"),
         ):
             result = manager._compute_protocol_bonded_assets(service)
 
@@ -704,17 +801,23 @@ class TestComputeProtocolBondedAssets:
 
         mock_service_registry = MagicMock()
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.StakingManager",
-            return_value=mock_staking_manager,
-        ), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(service_info, operator_balance, current_staking_program),
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.CHAIN_PROFILES",
-            {"gnosis": {"service_registry": "0x1234"}},
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch(
+                "operate.services.funding_manager.StakingManager",
+                return_value=mock_staking_manager,
+            ),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(service_info, operator_balance, current_staking_program),
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.CHAIN_PROFILES",
+                {"gnosis": {"service_registry": "0x1234"}},
+            ),
         ):
             mock_registry.service_registry.get_instance.return_value = (
                 mock_service_registry
@@ -773,17 +876,23 @@ class TestComputeProtocolBondedAssets:
                 return (service_info, operator_balance, current_staking_program)
             return second_call_result
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.StakingManager",
-            return_value=mock_staking_manager,
-        ), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            side_effect=mock_concurrent_execute,
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.CHAIN_PROFILES",
-            {"gnosis": {"service_registry": "0x1234"}},
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch(
+                "operate.services.funding_manager.StakingManager",
+                return_value=mock_staking_manager,
+            ),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                side_effect=mock_concurrent_execute,
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.CHAIN_PROFILES",
+                {"gnosis": {"service_registry": "0x1234"}},
+            ),
         ):
             mock_registry.service_registry.get_instance.return_value = (
                 mock_service_registry
@@ -842,17 +951,23 @@ class TestComputeProtocolBondedAssets:
                 return (service_info, operator_balance, current_staking_program)
             return second_call_result
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.StakingManager",
-            return_value=mock_staking_manager,
-        ), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            side_effect=mock_concurrent_execute,
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.CHAIN_PROFILES",
-            {"gnosis": {"service_registry": "0x1234"}},
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch(
+                "operate.services.funding_manager.StakingManager",
+                return_value=mock_staking_manager,
+            ),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                side_effect=mock_concurrent_execute,
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.CHAIN_PROFILES",
+                {"gnosis": {"service_registry": "0x1234"}},
+            ),
         ):
             mock_registry.service_registry.get_instance.return_value = (
                 mock_service_registry
@@ -921,17 +1036,23 @@ class TestComputeProtocolBondedAssets:
                 return (service_info, operator_balance, current_staking_program)
             return second_call_result
 
-        with patch("operate.services.funding_manager.make_chain_ledger_api"), patch(
-            "operate.services.funding_manager.StakingManager",
-            return_value=mock_staking_manager,
-        ), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            side_effect=mock_concurrent_execute,
-        ), patch(
-            "operate.services.funding_manager.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.services.funding_manager.CHAIN_PROFILES",
-            {"gnosis": {"service_registry": "0x1234"}},
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch(
+                "operate.services.funding_manager.StakingManager",
+                return_value=mock_staking_manager,
+            ),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                side_effect=mock_concurrent_execute,
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.CHAIN_PROFILES",
+                {"gnosis": {"service_registry": "0x1234"}},
+            ),
         ):
             mock_registry.service_registry.get_instance.return_value = (
                 mock_service_registry
@@ -963,13 +1084,17 @@ class TestGetMasterSafeBalances:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(100)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch(
-            "operate.services.funding_manager.make_chain_ledger_api"
-        ) as mock_make_api, patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=[BigInt(200)],
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_make_api,
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=[BigInt(200)],
+            ),
         ):
             result = manager._get_master_safe_balances(thresholds, service=service)
 
@@ -984,13 +1109,17 @@ class TestGetMasterSafeBalances:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(100)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch(
-            "operate.services.funding_manager.get_default_ledger_api"
-        ) as mock_default_api, patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=[BigInt(300)],
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch(
+                "operate.services.funding_manager.get_default_ledger_api"
+            ) as mock_default_api,
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=[BigInt(300)],
+            ),
         ):
             result = manager._get_master_safe_balances(thresholds, service=None)
 
@@ -1028,13 +1157,15 @@ class TestGetMasterEoaBalances:
             {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(100)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR
-        ), patch(
-            "operate.services.funding_manager.make_chain_ledger_api"
-        ) as mock_make_api, patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=[BigInt(150)],
+        with (
+            patch.object(manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR),
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_make_api,
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=[BigInt(150)],
+            ),
         ):
             result = manager._get_master_eoa_balances(thresholds, service=service)
 
@@ -1049,13 +1180,15 @@ class TestGetMasterEoaBalances:
             {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(100)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR
-        ), patch(
-            "operate.services.funding_manager.get_default_ledger_api"
-        ) as mock_default_api, patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=[BigInt(400)],
+        with (
+            patch.object(manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR),
+            patch(
+                "operate.services.funding_manager.get_default_ledger_api"
+            ) as mock_default_api,
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=[BigInt(400)],
+            ),
         ):
             result = manager._get_master_eoa_balances(thresholds, service=None)
 
@@ -1100,19 +1233,18 @@ class TestFundMasterEoa:
             {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR
-        ), patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch.object(
-            manager, "_get_master_eoa_balances", return_value=eoa_balance
-        ), patch.object(
-            manager, "_get_master_safe_balances", return_value=gnosis_safe_balance
-        ), patch.object(
-            manager, "_compute_shortfalls", return_value=eoa_balance
-        ), patch.object(
-            manager, "fund_chain_amounts"
-        ) as mock_fund:
+        with (
+            patch.object(manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR),
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch.object(manager, "_get_master_eoa_balances", return_value=eoa_balance),
+            patch.object(
+                manager, "_get_master_safe_balances", return_value=gnosis_safe_balance
+            ),
+            patch.object(manager, "_compute_shortfalls", return_value=eoa_balance),
+            patch.object(manager, "fund_chain_amounts") as mock_fund,
+        ):
             manager.fund_master_eoa()
 
         mock_fund.assert_called_once()
@@ -1139,19 +1271,18 @@ class TestFundMasterEoa:
             {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR
-        ), patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch.object(
-            manager, "_get_master_eoa_balances", return_value=eoa_balance
-        ), patch.object(
-            manager, "_get_master_safe_balances", return_value=safe_balance
-        ), patch.object(
-            manager, "_compute_shortfalls", return_value=eoa_shortfall
-        ), patch.object(
-            manager, "fund_chain_amounts"
-        ) as mock_fund:
+        with (
+            patch.object(manager, "_resolve_master_eoa", return_value=MASTER_EOA_ADDR),
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch.object(manager, "_get_master_eoa_balances", return_value=eoa_balance),
+            patch.object(
+                manager, "_get_master_safe_balances", return_value=safe_balance
+            ),
+            patch.object(manager, "_compute_shortfalls", return_value=eoa_shortfall),
+            patch.object(manager, "fund_chain_amounts") as mock_fund,
+        ):
             manager.fund_master_eoa()
 
         # fund_chain_amounts should be called with capped amount (3*10**17)
@@ -1182,12 +1313,16 @@ class TestFundChainAmountsTransferPath:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(200)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch.object(
-            manager, "_aggregate_as_master_safe_amounts", return_value=safe_balance
-        ), patch.object(
-            manager, "_get_master_safe_balances", return_value=safe_balance
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch.object(
+                manager, "_aggregate_as_master_safe_amounts", return_value=safe_balance
+            ),
+            patch.object(
+                manager, "_get_master_safe_balances", return_value=safe_balance
+            ),
         ):
             manager.fund_chain_amounts(amounts)
 
@@ -1212,10 +1347,13 @@ class TestFundChainAmountsTransferPath:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(200)}}}
         )
 
-        with patch.object(
-            manager, "_aggregate_as_master_safe_amounts", return_value=safe_balance
-        ), patch.object(
-            manager, "_get_master_safe_balances", return_value=safe_balance
+        with (
+            patch.object(
+                manager, "_aggregate_as_master_safe_amounts", return_value=safe_balance
+            ),
+            patch.object(
+                manager, "_get_master_safe_balances", return_value=safe_balance
+            ),
         ):
             manager.fund_chain_amounts(amounts)
 
@@ -1299,11 +1437,18 @@ class TestFundingRequirements:
         manager = _make_manager()
         service = self._make_service_with_safe()
 
-        with self._patch_all_sub_methods(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             result = manager.funding_requirements(service)
@@ -1329,11 +1474,18 @@ class TestFundingRequirements:
         # Mark funding as in progress
         manager._funding_in_progress[service.service_config_id] = True
 
-        with self._patch_all_sub_methods(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             result = manager.funding_requirements(service)
@@ -1351,11 +1503,18 @@ class TestFundingRequirements:
             time() + 9999
         )
 
-        with self._patch_all_sub_methods(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             result = manager.funding_requirements(service)
@@ -1369,16 +1528,24 @@ class TestFundingRequirements:
         manager.is_for_quickstart = True
         service = self._make_service_with_safe()
 
-        with self._patch_all_sub_methods(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
-        ), patch.object(
-            manager,
-            "compute_service_initial_shortfalls",
-            return_value=ChainAmounts(),
+            patch.object(
+                manager,
+                "compute_service_initial_shortfalls",
+                return_value=ChainAmounts(),
+            ),
         ):
             result = manager.funding_requirements(service)
 
@@ -1394,11 +1561,18 @@ class TestFundingRequirements:
         )
         service.get_funding_requests.return_value = mock_requests
 
-        with self._patch_all_sub_methods(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             manager.funding_requirements(service)
@@ -1475,14 +1649,17 @@ class TestFundingRequirements:
                 ),
             )
 
-        with sub_methods_with_placeholder(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
-                ),
-                ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
+        with (
+            sub_methods_with_placeholder(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
                 ),
             ),
         ):
@@ -1512,61 +1689,68 @@ class TestFundingRequirements:
             {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(100)}}}
         )
 
-        with patch.multiple(
-            manager,
-            _compute_protocol_asset_requirements=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _compute_protocol_bonded_assets=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _get_master_eoa_balances=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _get_master_safe_balances=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
-            _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_ADDR),
-            _compute_shortfalls=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _aggregate_as_master_safe_amounts=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _split_excess_assets_master_eoa_balances=MagicMock(
-                return_value=(
-                    ChainAmounts(),
-                    ChainAmounts(
+        with (
+            patch.multiple(
+                manager,
+                _compute_protocol_asset_requirements=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _compute_protocol_bonded_assets=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _get_master_eoa_balances=MagicMock(
+                    return_value=ChainAmounts(
                         {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                    ),
-                )
+                    )
+                ),
+                _get_master_safe_balances=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
+                _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_ADDR),
+                _compute_shortfalls=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _aggregate_as_master_safe_amounts=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _split_excess_assets_master_eoa_balances=MagicMock(
+                    return_value=(
+                        ChainAmounts(),
+                        ChainAmounts(
+                            {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                        ),
+                    )
+                ),
+                _split_critical_eoa_shortfalls=MagicMock(
+                    return_value=(
+                        critical_shortfalls,  # non-zero critical shortfalls
+                        ChainAmounts(
+                            {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                        ),
+                    )
+                ),
             ),
-            _split_critical_eoa_shortfalls=MagicMock(
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
                 return_value=(
-                    critical_shortfalls,  # non-zero critical shortfalls
                     ChainAmounts(
                         {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
                     ),
-                )
-            ),
-        ), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             result = manager.funding_requirements(service)
@@ -1582,11 +1766,18 @@ class TestFundingRequirements:
             {"gnosis": {SERVICE_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(1000)}}}
         )
 
-        with self._patch_all_sub_methods(manager), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             result = manager.funding_requirements(service)
@@ -1604,53 +1795,64 @@ class TestFundingRequirements:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(500)}}}
         )
 
-        with patch.multiple(
-            manager,
-            _compute_protocol_asset_requirements=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _compute_protocol_bonded_assets=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _get_master_eoa_balances=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}}}
-                )
-            ),
-            _get_master_safe_balances=MagicMock(
-                return_value=ChainAmounts(
-                    {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                )
-            ),
-            _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
-            _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_ADDR),
-            _compute_shortfalls=MagicMock(return_value=nonzero_shortfalls),
-            _aggregate_as_master_safe_amounts=MagicMock(
-                return_value=nonzero_shortfalls
-            ),
-            _split_excess_assets_master_eoa_balances=MagicMock(
-                return_value=(
-                    ChainAmounts(),
-                    ChainAmounts(
+        with (
+            patch.multiple(
+                manager,
+                _compute_protocol_asset_requirements=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _compute_protocol_bonded_assets=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _get_master_eoa_balances=MagicMock(
+                    return_value=ChainAmounts(
                         {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}}}
-                    ),
-                )
+                    )
+                ),
+                _get_master_safe_balances=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
+                _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_ADDR),
+                _compute_shortfalls=MagicMock(return_value=nonzero_shortfalls),
+                _aggregate_as_master_safe_amounts=MagicMock(
+                    return_value=nonzero_shortfalls
+                ),
+                _split_excess_assets_master_eoa_balances=MagicMock(
+                    return_value=(
+                        ChainAmounts(),
+                        ChainAmounts(
+                            {
+                                "gnosis": {
+                                    MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}
+                                }
+                            }
+                        ),
+                    )
+                ),
+                _split_critical_eoa_shortfalls=MagicMock(
+                    return_value=(
+                        ChainAmounts(),
+                        nonzero_shortfalls,
+                    )
+                ),
             ),
-            _split_critical_eoa_shortfalls=MagicMock(
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
                 return_value=(
-                    ChainAmounts(),
-                    nonzero_shortfalls,
-                )
-            ),
-        ), patch(
-            "operate.services.funding_manager.concurrent_execute",
-            return_value=(
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
-                ChainAmounts({"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
             ),
         ):
             result = manager.funding_requirements(service)
@@ -1680,9 +1882,12 @@ class TestFundingJob:
         mock_service_manager = MagicMock()
         mock_service_manager.claim_all_on_chain_from_safe = MagicMock()
 
-        with patch.object(manager, "fund_master_eoa") as mock_fund_eoa, patch(
-            "operate.services.funding_manager.asyncio.sleep",
-            side_effect=_instant_sleep,
+        with (
+            patch.object(manager, "fund_master_eoa") as mock_fund_eoa,
+            patch(
+                "operate.services.funding_manager.asyncio.sleep",
+                side_effect=_instant_sleep,
+            ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
             await _REAL_SLEEP(0.1)
@@ -1704,9 +1909,12 @@ class TestFundingJob:
             side_effect=RuntimeError("claim failed")
         )
 
-        with patch.object(manager, "fund_master_eoa"), patch(
-            "operate.services.funding_manager.asyncio.sleep",
-            side_effect=_instant_sleep,
+        with (
+            patch.object(manager, "fund_master_eoa"),
+            patch(
+                "operate.services.funding_manager.asyncio.sleep",
+                side_effect=_instant_sleep,
+            ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
             await _REAL_SLEEP(0.1)
@@ -1716,7 +1924,7 @@ class TestFundingJob:
             except asyncio.CancelledError:
                 pass
 
-        manager.logger.info.assert_called()  # type: ignore[attr-defined]
+        manager.logger.exception.assert_called()  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_funding_job_logs_fund_master_eoa_exception(self) -> None:
@@ -1724,11 +1932,14 @@ class TestFundingJob:
         manager = _make_manager()
         mock_service_manager = MagicMock()
 
-        with patch.object(
-            manager, "fund_master_eoa", side_effect=RuntimeError("eoa fund failed")
-        ), patch(
-            "operate.services.funding_manager.asyncio.sleep",
-            side_effect=_instant_sleep,
+        with (
+            patch.object(
+                manager, "fund_master_eoa", side_effect=RuntimeError("eoa fund failed")
+            ),
+            patch(
+                "operate.services.funding_manager.asyncio.sleep",
+                side_effect=_instant_sleep,
+            ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
             await _REAL_SLEEP(0.1)
@@ -1738,7 +1949,7 @@ class TestFundingJob:
             except asyncio.CancelledError:
                 pass
 
-        manager.logger.info.assert_called()  # type: ignore[attr-defined]
+        manager.logger.exception.assert_called()  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_funding_job_passes_loop_to_executor(self) -> None:
@@ -1775,9 +1986,12 @@ class TestFundingJob:
         manager = _make_manager()
         mock_service_manager = MagicMock()
 
-        with patch.object(manager, "fund_master_eoa"), patch(
-            "operate.services.funding_manager.asyncio.sleep",
-            side_effect=_instant_sleep,
+        with (
+            patch.object(manager, "fund_master_eoa"),
+            patch(
+                "operate.services.funding_manager.asyncio.sleep",
+                side_effect=_instant_sleep,
+            ),
         ):
             task = asyncio.create_task(
                 manager.funding_job(mock_service_manager, loop=None)
@@ -1813,12 +2027,16 @@ class TestFundChainAmountsCallArgs:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(1000)}}}
         )
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
-        ), patch.object(
-            manager, "_aggregate_as_master_safe_amounts", return_value=safe_balance
-        ), patch.object(
-            manager, "_get_master_safe_balances", return_value=safe_balance
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch.object(
+                manager, "_aggregate_as_master_safe_amounts", return_value=safe_balance
+            ),
+            patch.object(
+                manager, "_get_master_safe_balances", return_value=safe_balance
+            ),
         ):
             manager.fund_chain_amounts(amounts)
 
@@ -1845,11 +2063,13 @@ class TestFundChainAmountsCallArgs:
             {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(1000)}}}
         )
 
-        with patch.object(
-            manager, "_aggregate_as_master_safe_amounts", return_value=required
-        ), patch.object(
-            manager, "_get_master_safe_balances", return_value=insufficient_balance
-        ), pytest.raises(
-            InsufficientFundsException
+        with (
+            patch.object(
+                manager, "_aggregate_as_master_safe_amounts", return_value=required
+            ),
+            patch.object(
+                manager, "_get_master_safe_balances", return_value=insufficient_balance
+            ),
+            pytest.raises(InsufficientFundsException),
         ):
             manager.fund_chain_amounts(amounts)

@@ -16,25 +16,22 @@ class TestFundingJobExceptionHandlingBehavior:
     The funding_job method has two broad exception handlers:
 
     1. Line 1028: Catches exceptions during reward claiming
-       - Logs error as INFO (should be ERROR)
+       - Logs error via logger.exception (includes exc_info automatically)
        - Does NOT re-raise
        - Allows background job to continue
 
     2. Line 1042: Catches exceptions during Master EOA funding
-       - Logs error as INFO (should be ERROR)
+       - Logs error via logger.exception (includes exc_info automatically)
        - Does NOT re-raise
        - Allows background job to continue
 
     Both handlers swallow exceptions to keep the background job running. This is
     a semi-acceptable pattern for background jobs (you don't want one failure to
     crash the entire job), but has issues:
-    - Uses logger.info (too low severity for errors)
-    - Manually formats tracebacks (should use exc_info=True)
     - No distinction between retryable vs fatal errors
     - Could mask persistent failures
 
     Recommended improvements:
-    - Use logger.error or logger.exception with exc_info=True
     - Add specific exception handling for known errors (network, permissions)
     - Consider implementing exponential backoff for retries
     - Add metrics/alerting for repeated failures
@@ -46,14 +43,11 @@ class TestFundingJobExceptionHandlingBehavior:
 
         The exception handler:
         - Catches all exceptions during reward claiming
-        - Logs with logger.info (understates severity)
-        - Manually formats traceback using traceback.format_exc()
+        - Logs with logger.exception (correct severity, includes exc_info)
         - Does NOT re-raise (allows job to continue)
 
         This is semi-acceptable for a background job but could be improved by:
-        1. Using logger.error or logger.exception instead of logger.info
-        2. Using exc_info=True instead of manually formatting traceback
-        3. Adding specific handling for known exceptions (network, RPC errors)
+        1. Adding specific handling for known exceptions (network, RPC errors)
         """
         import inspect
 
@@ -63,8 +57,7 @@ class TestFundingJobExceptionHandlingBehavior:
 
         # Verify the pattern exists
         assert "except Exception:" in source
-        assert "Error occured while claiming rewards" in source
-        assert "traceback.format_exc()" in source
+        assert "Error occurred while claiming rewards" in source
         # Note: Does NOT re-raise after the except block
         # This allows the background job to continue running
 
@@ -73,11 +66,10 @@ class TestFundingJobExceptionHandlingBehavior:
 
         The exception handler:
         - Catches all exceptions during Master EOA funding
-        - Logs with logger.info (understates severity)
-        - Manually formats traceback using traceback.format_exc()
+        - Logs with logger.exception (correct severity, includes exc_info)
         - Does NOT re-raise (allows job to continue)
 
-        Same issues as claim_rewards handler - should use logger.error and exc_info.
+        Same issues as claim_rewards handler - could benefit from specific exception types.
         """
         import inspect
 
@@ -86,10 +78,9 @@ class TestFundingJobExceptionHandlingBehavior:
         source = inspect.getsource(FundingManager.funding_job)
 
         # Verify the pattern exists
-        assert "Error occured while funding Master EOA" in source
-        assert source.count("traceback.format_exc()") >= 2  # Both handlers use it
-        # Note: Both handlers use logger.info instead of logger.error
-        # This understates the severity of the errors
+        assert "Error occurred while funding Master EOA" in source
+        # Both handlers now use logger.exception instead of logger.info
+        assert source.count("logger.exception") >= 2
 
     def test_funding_manager_can_be_instantiated(self) -> None:
         """Verify FundingManager can be created for testing."""
@@ -112,16 +103,7 @@ class TestFundingManagerErrorHandlingImprovements:
     """Suggested improvements for funding_manager error handling.
 
     Current Issues:
-    1. Uses logger.info for errors (line 1029, 1043)
-       - Should use logger.error or logger.exception
-       - Understates severity, makes filtering logs difficult
-
-    2. Manually formats tracebacks (line 1030, 1044)
-       - Uses traceback.format_exc() as string
-       - Should use exc_info=True for structured logging
-       - Loses exception context
-
-    3. No specific exception handling
+    1. No specific exception handling
        - Catches all exceptions equally
        - Should distinguish between:
          * Network errors (retryable with backoff)
@@ -129,7 +111,7 @@ class TestFundingManagerErrorHandlingImprovements:
          * Insufficient funds (alert, but expected in some cases)
          * RPC errors (retryable, maybe switch RPC)
 
-    4. No failure tracking
+    2. No failure tracking
        - No metrics on repeated failures
        - Could mask persistent issues
        - Should alert if same error occurs repeatedly

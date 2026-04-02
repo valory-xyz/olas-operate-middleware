@@ -80,10 +80,15 @@ class TestKillProcessHelper:
         """When process status is DEAD, _kill_process returns without killing."""
         mock_proc = MagicMock()
         mock_proc.status.return_value = psutil.STATUS_DEAD
-        with patch(
-            "operate.services.deployment_runner.psutil.pid_exists", return_value=True
-        ), patch(
-            "operate.services.deployment_runner.psutil.Process", return_value=mock_proc
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                return_value=mock_proc,
+            ),
         ):
             _kill_process(12345)
         mock_proc.kill.assert_not_called()
@@ -92,10 +97,15 @@ class TestKillProcessHelper:
         """When process status is ZOMBIE, _kill_process returns without killing."""
         mock_proc = MagicMock()
         mock_proc.status.return_value = psutil.STATUS_ZOMBIE
-        with patch(
-            "operate.services.deployment_runner.psutil.pid_exists", return_value=True
-        ), patch(
-            "operate.services.deployment_runner.psutil.Process", return_value=mock_proc
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                return_value=mock_proc,
+            ),
         ):
             _kill_process(12345)
         mock_proc.kill.assert_not_called()
@@ -105,10 +115,15 @@ class TestKillProcessHelper:
         mock_proc = MagicMock()
         mock_proc.status.return_value = psutil.STATUS_RUNNING
         mock_proc.kill.side_effect = OSError("operation not permitted")
-        with patch(
-            "operate.services.deployment_runner.psutil.pid_exists", return_value=True
-        ), patch(
-            "operate.services.deployment_runner.psutil.Process", return_value=mock_proc
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                return_value=mock_proc,
+            ),
         ):
             _kill_process(12345)  # Should not raise
         mock_proc.kill.assert_called_once()
@@ -118,10 +133,15 @@ class TestKillProcessHelper:
         mock_proc = MagicMock()
         mock_proc.status.return_value = psutil.STATUS_RUNNING
         mock_proc.kill.side_effect = psutil.AccessDenied(pid=12345)
-        with patch(
-            "operate.services.deployment_runner.psutil.pid_exists", return_value=True
-        ), patch(
-            "operate.services.deployment_runner.psutil.Process", return_value=mock_proc
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                return_value=mock_proc,
+            ),
         ):
             _kill_process(12345)  # Should not raise
         mock_proc.kill.assert_called_once()
@@ -133,13 +153,16 @@ class TestKillProcessHelper:
         # First call: pid exists; second call: pid gone
         pid_exists_side_effects = [True, False]
 
-        with patch(
-            "operate.services.deployment_runner.psutil.pid_exists",
-            side_effect=pid_exists_side_effects,
-        ), patch(
-            "operate.services.deployment_runner.psutil.Process", return_value=mock_proc
-        ), patch(
-            "operate.services.deployment_runner.time.sleep"
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                side_effect=pid_exists_side_effects,
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                return_value=mock_proc,
+            ),
+            patch("operate.services.deployment_runner.time.sleep"),
         ):
             _kill_process(12345)
         mock_proc.kill.assert_called_once()
@@ -170,14 +193,17 @@ class TestKillProcess:
         parent_proc = MagicMock()
         parent_proc.children.return_value = [child1, child2]
 
-        with patch(
-            "operate.services.deployment_runner.psutil.pid_exists", return_value=True
-        ), patch(
-            "operate.services.deployment_runner.psutil.Process",
-            return_value=parent_proc,
-        ), patch(
-            "operate.services.deployment_runner._kill_process"
-        ) as mock_kill:
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                return_value=parent_proc,
+            ),
+            patch("operate.services.deployment_runner._kill_process") as mock_kill,
+        ):
             kill_process(99999)
 
         # Children killed first (reversed), then parent – each killed twice
@@ -271,10 +297,13 @@ class TestRunAeaCommand:
         mock_proc = MagicMock()
         mock_proc.exitcode = 1
 
-        with patch(
-            "operate.services.deployment_runner.multiprocessing.Process",
-            return_value=mock_proc,
-        ), pytest.raises(RuntimeError, match="execution failed with exit code"):
+        with (
+            patch(
+                "operate.services.deployment_runner.multiprocessing.Process",
+                return_value=mock_proc,
+            ),
+            pytest.raises(RuntimeError, match="execution failed with exit code"),
+        ):
             runner._run_aea_command("init", cwd=tmp_path)
 
     def test_password_arg_is_masked_in_log(self, tmp_path: Path) -> None:
@@ -353,10 +382,13 @@ class TestRunCmd:
         mock_result.returncode = 1
         mock_result.stderr = b"some error"
 
-        with patch(
-            "operate.services.deployment_runner.subprocess.run",
-            return_value=mock_result,
-        ), pytest.raises(RuntimeError, match="Error running"):
+        with (
+            patch(
+                "operate.services.deployment_runner.subprocess.run",
+                return_value=mock_result,
+            ),
+            pytest.raises(RuntimeError, match="Error running"),
+        ):
             runner._run_cmd(args=["false"])
 
 
@@ -459,13 +491,12 @@ class TestSetupAgent:
         work_dir = self._make_basic_work_dir(tmp_path)
         runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
 
-        with patch.object(runner, "_run_aea_command"), patch(
-            "operate.services.deployment_runner.secure_copy_private_key"
-        ), patch.object(
-            AgentAssetManager, "get_agent_code_path"
-        ) as mock_get_path, patch.object(
-            AgentAssetManager, "extract_agent_zip"
-        ) as _:
+        with (
+            patch.object(runner, "_run_aea_command"),
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+            patch.object(AgentAssetManager, "extract_agent_zip") as _,
+        ):
             mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
@@ -475,13 +506,14 @@ class TestSetupAgent:
         runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
         runner.START_TRIES = 1  # type: ignore[assignment]
 
-        with patch.object(
-            runner, "_run_aea_command", side_effect=RuntimeError("cmd failed")
-        ), patch("operate.services.deployment_runner.time.sleep"), patch.object(
-            AgentAssetManager, "get_agent_code_path"
-        ) as mock_get_path, patch.object(
-            AgentAssetManager, "extract_agent_zip"
-        ) as _:
+        with (
+            patch.object(
+                runner, "_run_aea_command", side_effect=RuntimeError("cmd failed")
+            ),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+            patch.object(AgentAssetManager, "extract_agent_zip") as _,
+        ):
             mock_get_path.return_value = str(tmp_path / "dummy.zip")
             with pytest.raises(RuntimeError, match="cmd failed"):
                 runner._setup_agent(password="testpass")  # nosec B106
@@ -498,17 +530,15 @@ class TestSetupAgent:
             if call_count < 3:
                 raise RuntimeError("transient failure")
 
-        with patch.object(
-            runner, "_run_aea_command", side_effect=maybe_fail
-        ) as mock_run, patch(
-            "operate.services.deployment_runner.secure_copy_private_key"
-        ), patch(
-            "operate.services.deployment_runner.time.sleep"
-        ), patch.object(
-            AgentAssetManager, "get_agent_code_path"
-        ) as mock_get_path, patch.object(
-            AgentAssetManager, "extract_agent_zip"
-        ) as _:
+        with (
+            patch.object(
+                runner, "_run_aea_command", side_effect=maybe_fail
+            ) as mock_run,
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+            patch.object(AgentAssetManager, "extract_agent_zip") as _,
+        ):
             mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
@@ -532,17 +562,14 @@ class TestSetupAgent:
             if call_count < 3:
                 raise RuntimeError("fail once")
 
-        with patch.object(
-            runner, "_run_aea_command", side_effect=succeed_on_second
-        ), patch("operate.services.deployment_runner.secure_copy_private_key"), patch(
-            "operate.services.deployment_runner.time.sleep"
-        ), patch(
-            "operate.services.deployment_runner.shutil.rmtree"
-        ) as mock_rmtree, patch.object(
-            AgentAssetManager, "get_agent_code_path"
-        ) as mock_get_path, patch.object(
-            AgentAssetManager, "extract_agent_zip"
-        ) as _:
+        with (
+            patch.object(runner, "_run_aea_command", side_effect=succeed_on_second),
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch("operate.services.deployment_runner.shutil.rmtree") as mock_rmtree,
+            patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+            patch.object(AgentAssetManager, "extract_agent_zip") as _,
+        ):
             mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
@@ -568,17 +595,20 @@ class TestStart:
     def test_start_raises_after_all_attempts_fail(self, tmp_path: Path) -> None:
         """start() raises RuntimeError after START_TRIES failures."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        with patch.object(
-            runner, "_start", side_effect=RuntimeError("boom")
-        ), pytest.raises(RuntimeError, match="Failed to start"):
+        with (
+            patch.object(runner, "_start", side_effect=RuntimeError("boom")),
+            pytest.raises(RuntimeError, match="Failed to start"),
+        ):
             runner.start(password="testpass")  # nosec B106
 
     def test_internal_start_calls_tendermint_when_is_aea(self, tmp_path: Path) -> None:
         """_start calls _start_tendermint when is_aea=True."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        with patch.object(runner, "_setup_agent"), patch.object(
-            runner, "_start_tendermint"
-        ) as mock_tm, patch.object(runner, "_start_agent"):
+        with (
+            patch.object(runner, "_setup_agent"),
+            patch.object(runner, "_start_tendermint") as mock_tm,
+            patch.object(runner, "_start_agent"),
+        ):
             runner._start(password="testpass")  # nosec B106
         mock_tm.assert_called_once()
 
@@ -587,9 +617,11 @@ class TestStart:
     ) -> None:
         """_start skips _start_tendermint when is_aea=False."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
-        with patch.object(runner, "_setup_agent"), patch.object(
-            runner, "_start_tendermint"
-        ) as mock_tm, patch.object(runner, "_start_agent"):
+        with (
+            patch.object(runner, "_setup_agent"),
+            patch.object(runner, "_start_tendermint") as mock_tm,
+            patch.object(runner, "_start_agent"),
+        ):
             runner._start(password="testpass")  # nosec B106
         mock_tm.assert_not_called()
 
@@ -605,18 +637,20 @@ class TestStop:
     def test_stop_calls_stop_tendermint_when_is_aea(self, tmp_path: Path) -> None:
         """stop() calls _stop_tendermint when is_aea=True."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        with patch.object(runner, "_stop_agent"), patch.object(
-            runner, "_stop_tendermint"
-        ) as mock_tm:
+        with (
+            patch.object(runner, "_stop_agent"),
+            patch.object(runner, "_stop_tendermint") as mock_tm,
+        ):
             runner.stop()
         mock_tm.assert_called_once()
 
     def test_stop_skips_tendermint_when_not_is_aea(self, tmp_path: Path) -> None:
         """stop() does not call _stop_tendermint when is_aea=False."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
-        with patch.object(runner, "_stop_agent"), patch.object(
-            runner, "_stop_tendermint"
-        ) as mock_tm:
+        with (
+            patch.object(runner, "_stop_agent"),
+            patch.object(runner, "_stop_tendermint") as mock_tm,
+        ):
             runner.stop()
         mock_tm.assert_not_called()
 
@@ -683,10 +717,12 @@ class TestStopAgent:
         pid_file.write_text("12345", encoding="utf-8")
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
 
-        with patch(
-            "operate.services.deployment_runner.read_pid_file", return_value=12345
-        ), patch("operate.services.deployment_runner.kill_process") as mock_kill, patch(
-            "operate.services.deployment_runner.remove_pid_file"
+        with (
+            patch(
+                "operate.services.deployment_runner.read_pid_file", return_value=12345
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
         ):
             runner._stop_agent()
 
@@ -699,10 +735,13 @@ class TestStopAgent:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch(
-            "operate.services.deployment_runner.read_pid_file",
-            side_effect=FileNotFoundError("not found"),
-        ), patch("operate.services.deployment_runner.kill_process") as mock_kill:
+        with (
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=FileNotFoundError("not found"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
             runner._stop_agent()
 
         mock_kill.assert_not_called()
@@ -715,10 +754,13 @@ class TestStopAgent:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch(
-            "operate.services.deployment_runner.read_pid_file",
-            side_effect=StalePIDFile("stale"),
-        ), patch("operate.services.deployment_runner.kill_process") as mock_kill:
+        with (
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=StalePIDFile("stale"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
             runner._stop_agent()
 
         mock_kill.assert_not_called()
@@ -731,10 +773,13 @@ class TestStopAgent:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch(
-            "operate.services.deployment_runner.read_pid_file",
-            side_effect=PIDFileError("bad pid"),
-        ), patch("operate.services.deployment_runner.remove_pid_file") as mock_remove:
+        with (
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=PIDFileError("bad pid"),
+            ),
+            patch("operate.services.deployment_runner.remove_pid_file") as mock_remove,
+        ):
             runner._stop_agent()
 
         runner.logger.error.assert_called()
@@ -767,14 +812,15 @@ class TestStopTendermint:
     def test_requests_get_succeeds_and_no_pid_file(self, tmp_path: Path) -> None:
         """_stop_tendermint calls requests.get and returns if no pid file."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        with patch(
-            "operate.services.deployment_runner.requests.get"
-        ) as mock_get, patch("operate.services.deployment_runner.time.sleep"):
+        with (
+            patch("operate.services.deployment_runner.requests.get") as mock_get,
+            patch("operate.services.deployment_runner.time.sleep"),
+        ):
             runner._stop_tendermint()
         mock_get.assert_called_once()
 
     def test_connection_error_logged(self, tmp_path: Path) -> None:
-        """_stop_tendermint logs error when ConnectionError raised."""
+        """_stop_tendermint logs debug when ConnectionError raised (already stopped)."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
@@ -784,7 +830,7 @@ class TestStopTendermint:
         ):
             runner._stop_tendermint()
 
-        runner.logger.error.assert_called()
+        runner.logger.debug.assert_called()
 
     def test_generic_exception_logged(self, tmp_path: Path) -> None:
         """_stop_tendermint logs exception for non-ConnectionError exceptions."""
@@ -805,14 +851,14 @@ class TestStopTendermint:
         pid_file.write_text("55555", encoding="utf-8")
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
 
-        with patch("operate.services.deployment_runner.requests.get"), patch(
-            "operate.services.deployment_runner.time.sleep"
-        ), patch(
-            "operate.services.deployment_runner.read_pid_file", return_value=55555
-        ), patch(
-            "operate.services.deployment_runner.kill_process"
-        ) as mock_kill, patch(
-            "operate.services.deployment_runner.remove_pid_file"
+        with (
+            patch("operate.services.deployment_runner.requests.get"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch(
+                "operate.services.deployment_runner.read_pid_file", return_value=55555
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
         ):
             runner._stop_tendermint()
 
@@ -825,11 +871,13 @@ class TestStopTendermint:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch("operate.services.deployment_runner.requests.get"), patch(
-            "operate.services.deployment_runner.time.sleep"
-        ), patch(
-            "operate.services.deployment_runner.read_pid_file",
-            side_effect=StalePIDFile("stale"),
+        with (
+            patch("operate.services.deployment_runner.requests.get"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=StalePIDFile("stale"),
+            ),
         ):
             runner._stop_tendermint()
 
@@ -842,14 +890,15 @@ class TestStopTendermint:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch("operate.services.deployment_runner.requests.get"), patch(
-            "operate.services.deployment_runner.time.sleep"
-        ), patch(
-            "operate.services.deployment_runner.read_pid_file",
-            side_effect=PIDFileError("bad"),
-        ), patch(
-            "operate.services.deployment_runner.remove_pid_file"
-        ) as mock_remove:
+        with (
+            patch("operate.services.deployment_runner.requests.get"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=PIDFileError("bad"),
+            ),
+            patch("operate.services.deployment_runner.remove_pid_file") as mock_remove,
+        ):
             runner._stop_tendermint()
 
         runner.logger.error.assert_called()
@@ -862,11 +911,13 @@ class TestStopTendermint:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch("operate.services.deployment_runner.requests.get"), patch(
-            "operate.services.deployment_runner.time.sleep"
-        ), patch(
-            "operate.services.deployment_runner.read_pid_file",
-            side_effect=FileNotFoundError("gone"),
+        with (
+            patch("operate.services.deployment_runner.requests.get"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=FileNotFoundError("gone"),
+            ),
         ):
             runner._stop_tendermint()
 
@@ -951,9 +1002,10 @@ class TestPyInstallerStartAgent:
         mock_process = MagicMock()
         mock_process.pid = 42
 
-        with patch.object(
-            runner, "_start_agent_process", return_value=mock_process
-        ), patch("operate.services.deployment_runner.write_pid_file") as mock_write:
+        with (
+            patch.object(runner, "_start_agent_process", return_value=mock_process),
+            patch("operate.services.deployment_runner.write_pid_file") as mock_write,
+        ):
             runner._start_agent(password="pw")  # nosec B106
 
         mock_write.assert_called_once()
@@ -966,15 +1018,14 @@ class TestPyInstallerStartAgent:
         mock_process = MagicMock()
         mock_process.pid = 42
 
-        with patch.object(
-            runner, "_start_agent_process", return_value=mock_process
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process"
-        ) as mock_kill, pytest.raises(
-            PIDFileError
+        with (
+            patch.object(runner, "_start_agent_process", return_value=mock_process),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            pytest.raises(PIDFileError),
         ):
             runner._start_agent(password="pw")  # nosec B106
 
@@ -990,16 +1041,17 @@ class TestPyInstallerStartAgent:
         mock_process = MagicMock()
         mock_process.pid = 42
 
-        with patch.object(
-            runner, "_start_agent_process", return_value=mock_process
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process",
-            side_effect=OSError("kill failed"),
-        ), pytest.raises(
-            PIDFileError
+        with (
+            patch.object(runner, "_start_agent_process", return_value=mock_process),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch(
+                "operate.services.deployment_runner.kill_process",
+                side_effect=OSError("kill failed"),
+            ),
+            pytest.raises(PIDFileError),
         ):
             runner._start_agent(password="pw")  # nosec B106
 
@@ -1026,9 +1078,12 @@ class TestPyInstallerStartTendermint:
         mock_process = MagicMock()
         mock_process.pid = 99
 
-        with patch.object(
-            runner, "_start_tendermint_process", return_value=mock_process
-        ), patch("operate.services.deployment_runner.write_pid_file") as mock_write:
+        with (
+            patch.object(
+                runner, "_start_tendermint_process", return_value=mock_process
+            ),
+            patch("operate.services.deployment_runner.write_pid_file") as mock_write,
+        ):
             runner._start_tendermint()
 
         mock_write.assert_called_once()
@@ -1043,15 +1098,16 @@ class TestPyInstallerStartTendermint:
         mock_process = MagicMock()
         mock_process.pid = 99
 
-        with patch.object(
-            runner, "_start_tendermint_process", return_value=mock_process
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process"
-        ) as mock_kill, pytest.raises(
-            PIDFileError
+        with (
+            patch.object(
+                runner, "_start_tendermint_process", return_value=mock_process
+            ),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            pytest.raises(PIDFileError),
         ):
             runner._start_tendermint()
 
@@ -1067,16 +1123,19 @@ class TestPyInstallerStartTendermint:
         mock_process = MagicMock()
         mock_process.pid = 99
 
-        with patch.object(
-            runner, "_start_tendermint_process", return_value=mock_process
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process",
-            side_effect=OSError("kill failed"),
-        ), pytest.raises(
-            PIDFileError
+        with (
+            patch.object(
+                runner, "_start_tendermint_process", return_value=mock_process
+            ),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch(
+                "operate.services.deployment_runner.kill_process",
+                side_effect=OSError("kill failed"),
+            ),
+            pytest.raises(PIDFileError),
         ):
             runner._start_tendermint()
 
@@ -1103,18 +1162,24 @@ class TestPyInstallerMacStartProcessMethods:
         mock_popen = MagicMock(spec=subprocess.Popen)
         mock_log_file = MagicMock()
 
-        with patch.object(
-            runner, "_open_agent_runner_log_file", return_value=mock_log_file
-        ), patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_popen,
-        ) as mock_popen_cls, patch.object(
-            runner,
-            "get_agent_start_args",
-            return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+        with (
+            patch.object(
+                runner, "_open_agent_runner_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_popen,
+            ) as mock_popen_cls,
+            patch.object(
+                runner,
+                "get_agent_start_args",
+                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+            ),
         ):
             result = runner._start_agent_process(
-                env={"VAR": "val"}, working_dir=build_dir, password="pw"  # nosec B106
+                env={"VAR": "val"},
+                working_dir=build_dir,
+                password="pw",  # nosec B106
             )
 
         assert result is mock_popen
@@ -1129,16 +1194,20 @@ class TestPyInstallerMacStartProcessMethods:
         mock_popen = MagicMock(spec=subprocess.Popen)
         mock_log_file = MagicMock()
 
-        with patch.object(
-            runner, "_open_tendermint_log_file", return_value=mock_log_file
-        ), patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_popen,
-        ) as mock_popen_cls, patch.object(
-            type(runner),
-            "_tendermint_bin",
-            new_callable=PropertyMock,
-            return_value="/fake/tm",
+        with (
+            patch.object(
+                runner, "_open_tendermint_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_popen,
+            ) as mock_popen_cls,
+            patch.object(
+                type(runner),
+                "_tendermint_bin",
+                new_callable=PropertyMock,
+                return_value="/fake/tm",
+            ),
         ):
             result = runner._start_tendermint_process(
                 env={"VAR": "val"}, working_dir=build_dir
@@ -1224,18 +1293,21 @@ class TestHostPythonStartAgent:
         mock_process.pid = 77
         mock_log_file = MagicMock()
 
-        with patch.object(
-            runner, "_open_agent_runner_log_file", return_value=mock_log_file
-        ), patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_process,
-        ), patch.object(
-            runner,
-            "get_agent_start_args",
-            return_value=["/fake/runner", "--password", "pw"],  # nosec B106
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file"
-        ) as mock_write:
+        with (
+            patch.object(
+                runner, "_open_agent_runner_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ),
+            patch.object(
+                runner,
+                "get_agent_start_args",
+                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+            ),
+            patch("operate.services.deployment_runner.write_pid_file") as mock_write,
+        ):
             runner._start_agent(password="pw")  # nosec B106
 
         mock_write.assert_called_once()
@@ -1251,22 +1323,25 @@ class TestHostPythonStartAgent:
         mock_process.pid = 77
         mock_log_file = MagicMock()
 
-        with patch.object(
-            runner, "_open_agent_runner_log_file", return_value=mock_log_file
-        ), patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_process,
-        ), patch.object(
-            runner,
-            "get_agent_start_args",
-            return_value=["/fake/runner", "--password", "pw"],  # nosec B106
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process"
-        ) as mock_kill, pytest.raises(
-            PIDFileError
+        with (
+            patch.object(
+                runner, "_open_agent_runner_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ),
+            patch.object(
+                runner,
+                "get_agent_start_args",
+                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+            ),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            pytest.raises(PIDFileError),
         ):
             runner._start_agent(password="pw")  # nosec B106
 
@@ -1285,23 +1360,28 @@ class TestHostPythonStartAgent:
         mock_process.pid = 77
         mock_log_file = MagicMock()
 
-        with patch.object(
-            runner, "_open_agent_runner_log_file", return_value=mock_log_file
-        ), patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_process,
-        ), patch.object(
-            runner,
-            "get_agent_start_args",
-            return_value=["/fake/runner", "--password", "pw"],  # nosec B106
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process",
-            side_effect=OSError("kill failed"),
-        ), pytest.raises(
-            PIDFileError
+        with (
+            patch.object(
+                runner, "_open_agent_runner_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ),
+            patch.object(
+                runner,
+                "get_agent_start_args",
+                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+            ),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch(
+                "operate.services.deployment_runner.kill_process",
+                side_effect=OSError("kill failed"),
+            ),
+            pytest.raises(PIDFileError),
         ):
             runner._start_agent(password="pw")  # nosec B106
 
@@ -1328,10 +1408,13 @@ class TestHostPythonStartTendermint:
         mock_process = MagicMock()
         mock_process.pid = 88
 
-        with patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_process,
-        ), patch("operate.services.deployment_runner.write_pid_file") as mock_write:
+        with (
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ),
+            patch("operate.services.deployment_runner.write_pid_file") as mock_write,
+        ):
             runner._start_tendermint()
 
         mock_write.assert_called_once()
@@ -1346,16 +1429,17 @@ class TestHostPythonStartTendermint:
         mock_process = MagicMock()
         mock_process.pid = 88
 
-        with patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_process,
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process"
-        ) as mock_kill, pytest.raises(
-            PIDFileError
+        with (
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            pytest.raises(PIDFileError),
         ):
             runner._start_tendermint()
 
@@ -1371,17 +1455,20 @@ class TestHostPythonStartTendermint:
         mock_process = MagicMock()
         mock_process.pid = 88
 
-        with patch(
-            "operate.services.deployment_runner.subprocess.Popen",
-            return_value=mock_process,
-        ), patch(
-            "operate.services.deployment_runner.write_pid_file",
-            side_effect=PIDFileError("write failed"),
-        ), patch(
-            "operate.services.deployment_runner.kill_process",
-            side_effect=OSError("kill failed"),
-        ), pytest.raises(
-            PIDFileError
+        with (
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ),
+            patch(
+                "operate.services.deployment_runner.write_pid_file",
+                side_effect=PIDFileError("write failed"),
+            ),
+            patch(
+                "operate.services.deployment_runner.kill_process",
+                side_effect=OSError("kill failed"),
+            ),
+            pytest.raises(PIDFileError),
         ):
             runner._start_tendermint()
 
@@ -1411,9 +1498,10 @@ class TestHostPythonSetupVenv:
     def test_setup_venv_returns_early_when_not_is_aea(self, tmp_path: Path) -> None:
         """_setup_venv returns early when is_aea=False."""
         runner = HostPythonHostDeploymentRunner(tmp_path, is_aea=False)
-        with patch(
-            "operate.services.deployment_runner.venv_cli"
-        ) as mock_venv, patch.object(runner, "_run_cmd") as mock_cmd:
+        with (
+            patch("operate.services.deployment_runner.venv_cli") as mock_venv,
+            patch.object(runner, "_run_cmd") as mock_cmd,
+        ):
             runner._setup_venv()
         mock_venv.assert_not_called()
         mock_cmd.assert_not_called()
@@ -1423,9 +1511,10 @@ class TestHostPythonSetupVenv:
     ) -> None:
         """_setup_venv calls venv_cli and _run_cmd when is_aea=True."""
         runner = HostPythonHostDeploymentRunner(tmp_path, is_aea=True)
-        with patch(
-            "operate.services.deployment_runner.venv_cli"
-        ) as mock_venv, patch.object(runner, "_run_cmd") as mock_cmd:
+        with (
+            patch("operate.services.deployment_runner.venv_cli") as mock_venv,
+            patch.object(runner, "_run_cmd") as mock_cmd,
+        ):
             runner._setup_venv()
 
         mock_venv.assert_called_once()
@@ -1443,13 +1532,16 @@ class TestHostPythonSetupAgent:
     def test_setup_agent_not_aea_returns_after_super(self, tmp_path: Path) -> None:
         """_setup_agent returns early after super() call when is_aea=False."""
         runner = HostPythonHostDeploymentRunner(tmp_path, is_aea=False)
-        with patch(
-            "operate.services.deployment_runner.multiprocessing.set_start_method"
-        ), patch.object(runner, "_setup_venv"), patch(
-            "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
-        ), patch.object(
-            runner, "_run_cmd"
-        ) as mock_cmd:
+        with (
+            patch(
+                "operate.services.deployment_runner.multiprocessing.set_start_method"
+            ),
+            patch.object(runner, "_setup_venv"),
+            patch(
+                "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
+            ),
+            patch.object(runner, "_run_cmd") as mock_cmd,
+        ):
             runner._setup_agent(password="pw")  # nosec B106
 
         mock_cmd.assert_not_called()
@@ -1457,13 +1549,16 @@ class TestHostPythonSetupAgent:
     def test_setup_agent_is_aea_calls_run_cmd(self, tmp_path: Path) -> None:
         """_setup_agent calls _run_cmd for pip install when is_aea=True."""
         runner = HostPythonHostDeploymentRunner(tmp_path, is_aea=True)
-        with patch(
-            "operate.services.deployment_runner.multiprocessing.set_start_method"
-        ), patch.object(runner, "_setup_venv"), patch(
-            "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
-        ), patch.object(
-            runner, "_run_cmd"
-        ) as mock_cmd:
+        with (
+            patch(
+                "operate.services.deployment_runner.multiprocessing.set_start_method"
+            ),
+            patch.object(runner, "_setup_venv"),
+            patch(
+                "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
+            ),
+            patch.object(runner, "_run_cmd") as mock_cmd,
+        ):
             runner._setup_agent(password="pw")  # nosec B106
 
         mock_cmd.assert_called_once()
@@ -1475,7 +1570,7 @@ class TestSetupAgentRuntimeErrorHandling:
     def test_setup_agent_handles_runtime_error_on_remove_key(
         self, tmp_path: Path
     ) -> None:
-        """Test that RuntimeError on remove-key is caught and logged as warning."""
+        """Test that RuntimeError on remove-key is caught and logged as debug."""
         work_dir = tmp_path / "svc" / "hash" / "build"
         work_dir.mkdir(parents=True)
         (work_dir / "agent.json").write_text(
@@ -1502,27 +1597,24 @@ class TestSetupAgentRuntimeErrorHandling:
                 raise RuntimeError("Failed to remove ethereum key (may not exist)")
             return None
 
-        with patch.object(
-            runner, "_run_aea_command", side_effect=mock_run_aea_command
-        ), patch(
-            "operate.services.deployment_runner.secure_copy_private_key"
-        ), patch.object(
-            AgentAssetManager, "get_agent_code_path"
-        ) as mock_get_path, patch.object(
-            AgentAssetManager, "extract_agent_zip"
+        with (
+            patch.object(runner, "_run_aea_command", side_effect=mock_run_aea_command),
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+            patch.object(AgentAssetManager, "extract_agent_zip"),
         ):
             mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
-        # Should log warning
-        runner.logger.warning.assert_any_call(
+        # Should log debug (not warning) — key removal failure is low-severity
+        runner.logger.debug.assert_any_call(
             "Failed to remove ethereum key (may not exist)"
         )
 
     def test_setup_agent_handles_runtime_error_on_remove_connection_key(
         self, tmp_path: Path
     ) -> None:
-        """Test that RuntimeError on remove-key --connection is caught and logged as warning."""
+        """Test that RuntimeError on remove-key --connection is caught and logged as debug."""
         work_dir = tmp_path / "svc" / "hash" / "build"
         work_dir.mkdir(parents=True)
         (work_dir / "agent.json").write_text(
@@ -1552,20 +1644,17 @@ class TestSetupAgentRuntimeErrorHandling:
                 )
             return None
 
-        with patch.object(
-            runner, "_run_aea_command", side_effect=mock_run_aea_command
-        ), patch(
-            "operate.services.deployment_runner.secure_copy_private_key"
-        ), patch.object(
-            AgentAssetManager, "get_agent_code_path"
-        ) as mock_get_path, patch.object(
-            AgentAssetManager, "extract_agent_zip"
+        with (
+            patch.object(runner, "_run_aea_command", side_effect=mock_run_aea_command),
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+            patch.object(AgentAssetManager, "extract_agent_zip"),
         ):
             mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
-        # Should log warning
-        runner.logger.warning.assert_any_call(
+        # Should log debug (not warning) — key removal failure is low-severity
+        runner.logger.debug.assert_any_call(
             "Failed to remove ethereum connection key (may not exist)"
         )
 
@@ -1580,13 +1669,16 @@ class TestHostPythonSetupAgentRuntimeErrorHandling:
         runner = HostPythonHostDeploymentRunner(tmp_path, is_aea=True)
         runner.logger = MagicMock()
 
-        with patch(
-            "operate.services.deployment_runner.multiprocessing.set_start_method",
-            side_effect=RuntimeError("start method already set"),
-        ), patch.object(runner, "_setup_venv"), patch(
-            "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
-        ), patch.object(
-            runner, "_run_cmd"
+        with (
+            patch(
+                "operate.services.deployment_runner.multiprocessing.set_start_method",
+                side_effect=RuntimeError("start method already set"),
+            ),
+            patch.object(runner, "_setup_venv"),
+            patch(
+                "operate.services.deployment_runner.BaseDeploymentRunner._setup_agent"
+            ),
+            patch.object(runner, "_run_cmd"),
         ):
             runner._setup_agent(password="pw")  # nosec B106
 
@@ -1608,26 +1700,31 @@ class TestDeploymentManagerFrozenPaths:
 
     def test_frozen_darwin_returns_mac_runner(self) -> None:
         """Test frozen + Darwin returns PyInstallerHostDeploymentRunnerMac."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="Darwin"):
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="Darwin"),
+        ):
             cls = DeploymentManager._get_host_deployment_runner_class()
         assert cls is PyInstallerHostDeploymentRunnerMac
 
     def test_frozen_linux_returns_linux_runner(self) -> None:
         """Test frozen + Linux returns PyInstallerHostDeploymentRunnerLinux."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="Linux"):
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="Linux"),
+        ):
             cls = DeploymentManager._get_host_deployment_runner_class()
         assert cls is PyInstallerHostDeploymentRunnerLinux
 
     def test_frozen_unsupported_platform_raises_value_error(self) -> None:
         """Test frozen + unsupported platform raises ValueError."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="FreeBSD"), pytest.raises(
-            ValueError, match="Platform is not supported"
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="FreeBSD"),
+            pytest.raises(ValueError, match="Platform is not supported"),
         ):
             DeploymentManager._get_host_deployment_runner_class()
 

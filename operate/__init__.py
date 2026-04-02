@@ -39,6 +39,7 @@ except PackageNotFoundError:
 
 logging.getLogger("aea").setLevel(logging.ERROR)
 logging.getLogger("aea.ledger_apis.ethereum").setLevel(logging.WARNING)
+logging.getLogger("autonomy.deploy.base").setLevel(logging.ERROR)
 
 
 # Ensure CA bundle is available for requests
