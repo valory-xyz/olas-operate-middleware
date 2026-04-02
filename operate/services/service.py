@@ -1411,15 +1411,15 @@ class Service(LocalResource):
             )
 
         for chain_str, addresses in agent_response.items():
-            for address, assets in addresses.items():
-                if chain_str not in self.chain_configs:
-                    logger.warning(
-                        f"[FUNDING MANAGER] Service {self.service_config_id} requested funding"
-                        f" for unknown chain '{chain_str}' — skipping."
-                        f" Known chains: {list(self.chain_configs)}"
-                    )
-                    continue
+            if chain_str not in self.chain_configs:
+                logger.warning(
+                    f"[FUNDING MANAGER] Service {self.service_config_id} requested funding"
+                    f" for unknown chain '{chain_str}' — skipping."
+                    f" Known chains: {list(self.chain_configs)}"
+                )
+                continue
 
+            for address, assets in addresses.items():
                 if (
                     address not in self.agent_addresses
                     and address != self.chain_configs[chain_str].chain_data.multisig
