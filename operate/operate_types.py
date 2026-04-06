@@ -32,7 +32,7 @@ from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
-from pydantic import AfterValidator, BaseModel
+from pydantic import AfterValidator, BaseModel, ConfigDict
 from typing_extensions import Annotated, TypedDict
 from web3 import Web3
 
@@ -521,7 +521,9 @@ def _validate_evm_destination_address(v: str) -> str:
 
 
 #: Annotated type for a validated, non-zero EVM destination address.
-EVMDestinationAddress = Annotated[str, AfterValidator(_validate_evm_destination_address)]
+EVMDestinationAddress = Annotated[
+    str, AfterValidator(_validate_evm_destination_address)
+]
 
 
 class GasWarningEntry(BaseModel):
@@ -549,6 +551,8 @@ class RecoveredServiceInfo(BaseModel):
 class FundRecoveryScanResponse(BaseModel):
     """Response body for POST /api/fund_recovery/scan."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     master_eoa_address: str
     balances: ChainAmounts
     services: t.List[RecoveredServiceInfo]
@@ -564,6 +568,8 @@ class FundRecoveryExecuteRequest(BaseModel):
 
 class FundRecoveryExecuteResponse(BaseModel):
     """Response body for POST /api/fund_recovery/execute."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     success: bool
     partial_failure: bool

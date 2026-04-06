@@ -32,7 +32,6 @@ import typing as t
 from pathlib import Path
 
 from aea.helpers.logging import setup_logger
-from aea_ledger_ethereum.ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
@@ -163,14 +162,10 @@ def _enumerate_owned_services(
                         "address": Web3.to_checksum_address(service_registry_address),
                         "topics": [
                             # Transfer(address,address,uint256) — topic0
-                            Web3.keccak(
-                                text="Transfer(address,address,uint256)"
-                            ).hex(),
+                            Web3.keccak(text="Transfer(address,address,uint256)").hex(),
                             None,  # from: any
                             # to: padded owner address
-                            "0x"
-                            + "0" * 24
-                            + owner_checksum[2:].lower(),
+                            "0x" + "0" * 24 + owner_checksum[2:].lower(),
                         ],
                         "fromBlock": hex(from_block),
                         "toBlock": hex(to_block),
@@ -462,9 +457,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     # permission-restricted temp file and immediately performs an
                     # unrecoverable delete.
                     with tempfile.TemporaryDirectory() as _tmp_dir:
-                        _km = KeysManager(
-                            path=Path(_tmp_dir), logger=self._logger
-                        )
+                        _km = KeysManager(path=Path(_tmp_dir), logger=self._logger)
                         crypto = _km.private_key_to_crypto(private_key, password=None)
 
                     # ── Step 1-3: Handle owned services ──────────────────────────
@@ -498,7 +491,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         eoa_address=eoa_address,
                                     )
                                 except Exception as exc:  # pylint: disable=broad-except
-                                    logger.warning(f"chain={chain_id} service={svc_id} recovery failed: {exc}")
+                                    logger.warning(
+                                        f"chain={chain_id} service={svc_id} recovery failed: {exc}"
+                                    )
                                     errors.append(
                                         f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
                                     )
@@ -527,7 +522,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                     int(prev) + amount
                                 )
                         except Exception as exc:  # pylint: disable=broad-except
-                            logger.warning(f"chain={chain_id} drain_safe={safe_addr} failed: {exc}")
+                            logger.warning(
+                                f"chain={chain_id} drain_safe={safe_addr} failed: {exc}"
+                            )
                             errors.append(
                                 f"chain={chain_id} drain_safe={safe_addr}: {type(exc).__name__}"
                             )
@@ -548,17 +545,20 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 .get(eoa_address, {})
                                 .get(token, BigInt(0))
                             )
-                            total_funds_moved.setdefault(
-                                chain_id_str, {}
-                            ).setdefault(eoa_address, {})[token] = BigInt(
-                                int(prev) + amount
-                            )
+                            total_funds_moved.setdefault(chain_id_str, {}).setdefault(
+                                eoa_address, {}
+                            )[token] = BigInt(int(prev) + amount)
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.warning(f"chain={chain_id} drain_eoa failed: {exc}")
-                        errors.append(f"chain={chain_id} drain_eoa: {type(exc).__name__}")
+                        errors.append(
+                            f"chain={chain_id} drain_eoa: {type(exc).__name__}"
+                        )
 
                 except Exception as exc:  # pylint: disable=broad-except
                     errors.append(f"chain={chain_id}: {type(exc).__name__}")
+
+        except Exception as exc:  # pylint: disable=broad-except
+            errors.append(f"fatal: {type(exc).__name__}: {exc}")
 
         success = len(errors) == 0
         partial_failure = not success and bool(total_funds_moved)
@@ -879,9 +879,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     )
                     moved[token_addr] = int(bal)
                 except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning(
-                        f"ERC-20 EOA drain failed token={token_addr}: {exc}"
-                    )
+                    logger.warning(f"ERC-20 EOA drain failed token={token_addr}: {exc}")
 
         # Native (last, since it pays gas)
         try:

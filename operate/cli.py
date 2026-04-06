@@ -42,10 +42,10 @@ from clea import group, params, run
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
-from web3 import Web3
 
 from operate import __version__, services
 from operate.account.user import UserAccount
@@ -80,7 +80,6 @@ from operate.ledger.profiles import (
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
-from pydantic import ValidationError
 from operate.operate_types import (
     Chain,
     ChainAmounts,
@@ -1799,7 +1798,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             data = await request.json()
             req = FundRecoveryScanRequest(**data)
         except ValidationError as ve:
-            first_msg = ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            first_msg = (
+                ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            )
             return JSONResponse(
                 content={"error": first_msg},
                 status_code=HTTPStatus.BAD_REQUEST,
@@ -1811,7 +1812,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         mnemonic = req.mnemonic.strip().lower()
-        destination = req.destination_address.strip()
 
         # Validate mnemonic using BIP-39 word-list derivation check
         if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
@@ -1855,7 +1855,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             data = await request.json()
             req = FundRecoveryExecuteRequest(**data)
         except ValidationError as ve:
-            first_msg = ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            first_msg = (
+                ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            )
             return JSONResponse(
                 content={"error": first_msg},
                 status_code=HTTPStatus.BAD_REQUEST,

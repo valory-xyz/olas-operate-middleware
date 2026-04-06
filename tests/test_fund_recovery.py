@@ -22,15 +22,14 @@
 from http import HTTPStatus
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import (
+    ChainAmounts,
     FundRecoveryExecuteResponse,
     FundRecoveryScanResponse,
 )
-
 
 # A syntactically valid BIP-39 test mnemonic (never commit a real mnemonic)
 _VALID_MNEMONIC = (
@@ -103,7 +102,7 @@ class TestFundRecoveryScanValidation:
         """Happy path: valid mnemonic + destination → 200 with scan result."""
         scan_result = FundRecoveryScanResponse(
             master_eoa_address=_VALID_DESTINATION,
-            balances={},
+            balances=ChainAmounts(),
             services=[],
             gas_warning={},
         )
@@ -185,7 +184,7 @@ class TestFundRecoveryExecuteValidation:
         execute_result = FundRecoveryExecuteResponse(
             success=True,
             partial_failure=False,
-            total_funds_moved={},
+            total_funds_moved=ChainAmounts(),
             errors=[],
         )
         with patch(
