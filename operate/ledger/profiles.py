@@ -229,6 +229,15 @@ ERC20_TOKENS = {
     "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
 }
 
+#: ERC-20 token addresses indexed by chain ID, derived from ERC20_TOKENS.
+#: Used by fund_recovery_manager to scan/transfer ERC-20 assets without
+#: symbol-based lookups.
+ERC20_TOKENS_BY_CHAIN_ID: t.Dict[int, t.Dict[str, str]] = {}
+for _symbol, _chain_map in ERC20_TOKENS.items():
+    for _chain, _addr in _chain_map.items():
+        if hasattr(_chain, "id"):
+            ERC20_TOKENS_BY_CHAIN_ID.setdefault(_chain.id, {})[_addr] = _addr
+
 DUST = {
     Chain.ARBITRUM_ONE: int(1e14),
     Chain.BASE: int(1e14),

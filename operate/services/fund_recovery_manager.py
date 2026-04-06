@@ -39,6 +39,11 @@ from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
+from operate.ledger.profiles import (
+    DEFAULT_EOA_THRESHOLD,
+    DEFAULT_EOA_TOPUPS,
+    ERC20_TOKENS_BY_CHAIN_ID,
+)
 from operate.operate_types import (
     Chain,
     FundRecoveryExecuteResponse,
@@ -77,26 +82,14 @@ SAFE_SERVICE_HOSTS: t.Dict[int, str] = {
     10: "safe-transaction-optimism.safe.global",
 }
 
-#: Minimum native balance (in wei) to warn the user about insufficient gas
+#: Minimum native balance (in wei) to warn the user about insufficient gas.
+#: Built from DEFAULT_EOA_TOPUPS * DEFAULT_EOA_THRESHOLD so the threshold
+#: stays in sync with the funding-manager formula used across the codebase.
 GAS_WARN_THRESHOLDS: t.Dict[int, int] = {
-    137: int(1e18),  # 1 POL
-    100: int(1e17),  # 0.1 xDAI
-    8453: int(5e15),  # 0.005 ETH
-    10: int(5e15),  # 0.005 ETH
+    chain.id: int(amounts[ZERO_ADDRESS] * DEFAULT_EOA_THRESHOLD)
+    for chain, amounts in DEFAULT_EOA_TOPUPS.items()
+    if hasattr(chain, "id") and ZERO_ADDRESS in amounts
 }
-
-#: ERC-20 tokens to scan per chain (symbol → address)
-_ERC20_TOKENS_BY_CHAIN_ID: t.Dict[int, t.Dict[str, str]] = {}
-try:
-    # Lazy-import to avoid circular dependency issues at module load time
-    from operate.ledger.profiles import ERC20_TOKENS
-
-    for _symbol, _chain_map in ERC20_TOKENS.items():
-        for _chain, _addr in _chain_map.items():
-            if hasattr(_chain, "id"):
-                _ERC20_TOKENS_BY_CHAIN_ID.setdefault(_chain.id, {})[_symbol] = _addr
-except ImportError:  # pragma: no cover
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +389,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 }
 
                 # --- ERC-20 balances for EOA ---
-                tokens = _ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, {})
+                tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, {})
                 for token_addr in tokens.values():
                     bal = get_asset_balance(
                         ledger_api=ledger_api,
@@ -544,7 +537,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
             from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
                 CONTRACTS,
-                ERC20_TOKENS,
             )
 
             destination_checksum = Web3.to_checksum_address(destination_address)
@@ -621,13 +613,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                     )
 
                     # ── Step 5: Drain Master Safe(s) ─────────────────────────────
-                    # Token addresses as keys and values; aligns with ChainAmounts format.
-                    erc20_tokens = {
-                        addr: addr
-                        for chain_map in ERC20_TOKENS.values()
-                        for addr in [chain_map.get(chain)]
-                        if addr
-                    }
+                    # Token addresses as keys; aligns with ChainAmounts format.
+                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, {})
                     for safe_addr in safe_addresses:
                         try:
                             moved = self._drain_safe(
@@ -715,7 +702,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
     ) -> None:
         """Run the per-service portion of the recovery sequence (steps 1–4)."""
         from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
-            ERC20_TOKENS,
             STAKING,
         )
 
@@ -892,12 +878,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     )
 
                     # Drain Agent Safe; token addresses as keys per ChainAmounts.
-                    erc20_tokens = {
-                        addr: addr
-                        for chain_map in ERC20_TOKENS.values()
-                        for addr in [chain_map.get(chain)]
-                        if addr
-                    }
+                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, {})
                     moved = self._drain_safe(
                         ledger_api=ledger_api,
                         crypto=crypto,
