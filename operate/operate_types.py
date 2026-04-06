@@ -32,6 +32,7 @@ from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from operate.constants import (
@@ -501,3 +502,55 @@ class EncryptedData(LocalResource):
     def load(cls, path: Path) -> "EncryptedData":
         """Load EncryptedData."""
         return cast(EncryptedData, super().load(path))
+
+
+# ---------------------------------------------------------------------------
+# Fund recovery Pydantic models
+# ---------------------------------------------------------------------------
+
+
+class GasWarningEntry(BaseModel):
+    """Gas warning entry for a single chain."""
+
+    insufficient: bool
+
+
+class FundRecoveryScanRequest(BaseModel):
+    """Request body for POST /api/fund_recovery/scan."""
+
+    mnemonic: str
+    destination_address: str
+
+
+class RecoveredServiceInfo(BaseModel):
+    """Info about a discovered on-chain service."""
+
+    chain_id: int
+    service_id: int
+    state: str
+    can_unstake: bool
+
+
+class FundRecoveryScanResponse(BaseModel):
+    """Response body for POST /api/fund_recovery/scan."""
+
+    master_eoa_address: str
+    balances: t.Dict[str, t.Dict[str, t.Dict[str, str]]]
+    services: t.List[RecoveredServiceInfo]
+    gas_warning: t.Dict[str, GasWarningEntry]
+
+
+class FundRecoveryExecuteRequest(BaseModel):
+    """Request body for POST /api/fund_recovery/execute."""
+
+    mnemonic: str
+    destination_address: str
+
+
+class FundRecoveryExecuteResponse(BaseModel):
+    """Response body for POST /api/fund_recovery/execute."""
+
+    success: bool
+    partial_failure: bool
+    total_funds_moved: t.Dict[str, t.Dict[str, t.Dict[str, str]]]
+    errors: t.List[str]
