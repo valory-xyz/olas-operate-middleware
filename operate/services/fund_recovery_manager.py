@@ -25,26 +25,32 @@ Security constraints:
 - Both endpoints that use this manager are intentionally unauthenticated.
 """
 
-import json
 import logging
 import tempfile
 import time
 import typing as t
+from pathlib import Path
 
 from aea.helpers.logging import setup_logger
+from aea_ledger_ethereum.ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
+from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import (
+    CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     ERC20_TOKENS_BY_CHAIN_ID,
+    STAKING,
 )
 from operate.operate_types import (
     Chain,
+    ChainAmounts,
     FundRecoveryExecuteResponse,
     FundRecoveryScanResponse,
     GasWarningEntry,
@@ -57,6 +63,7 @@ from operate.utils.gnosis import (
     fetch_safes_for_owner,
     get_asset_balance,
     transfer,
+    transfer_erc20_from_eoa,
     transfer_erc20_from_safe,
 )
 
@@ -83,60 +90,6 @@ GAS_WARN_THRESHOLDS: t.Dict[int, int] = {
     if hasattr(chain, "id") and ZERO_ADDRESS in amounts
 }
 
-
-# ---------------------------------------------------------------------------
-# Staking contract minimal ABI
-# ---------------------------------------------------------------------------
-
-_STAKING_ABI = [
-    {
-        "name": "getStakingState",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [{"name": "", "type": "uint8"}],
-        "stateMutability": "view",
-    },
-    {
-        "name": "isServiceStaked",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [{"name": "", "type": "bool"}],
-        "stateMutability": "view",
-    },
-    {
-        "name": "minStakingDuration",
-        "type": "function",
-        "inputs": [],
-        "outputs": [{"name": "", "type": "uint256"}],
-        "stateMutability": "view",
-    },
-    {
-        "name": "getServiceInfo",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "components": [
-                    {"name": "bond", "type": "uint256"},
-                    {"name": "nonce", "type": "uint256"},
-                    {"name": "tsStart", "type": "uint256"},
-                    {"name": "multisig", "type": "address"},
-                    {"name": "availableRewards", "type": "uint256"},
-                ],
-            }
-        ],
-        "stateMutability": "view",
-    },
-    {
-        "name": "unstake",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-    },
-]
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -321,10 +274,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         -------
         FundRecoveryScanResponse
         """
-        from operate.operate_types import (  # pylint: disable=import-outside-toplevel
-            ChainAmounts,
-        )
-
         eoa_address = _mnemonic_to_address(mnemonic)
 
         balances: ChainAmounts = ChainAmounts()
@@ -388,10 +337,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 # Services are owned by the master safes (not the master EOA
                 # directly); the master safes are in turn owned by the master EOA.
                 try:
-                    from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
-                        CONTRACTS,
-                    )
-
                     contract_addresses = CONTRACTS.get(chain)
                     if contract_addresses:
                         service_registry_addr = contract_addresses.get(
@@ -484,22 +429,10 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         private_key = _mnemonic_to_private_key(mnemonic)
         eoa_address = _mnemonic_to_address(mnemonic)
 
-        from operate.operate_types import (  # pylint: disable=import-outside-toplevel
-            ChainAmounts,
-        )
-
         errors: t.List[str] = []
         total_funds_moved: ChainAmounts = ChainAmounts()
 
         try:
-            from aea_ledger_ethereum.ethereum import (  # pylint: disable=import-outside-toplevel
-                EthereumCrypto,
-            )
-
-            from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
-                CONTRACTS,
-            )
-
             destination_checksum = Web3.to_checksum_address(destination_address)
 
             for chain in RECOVERY_CHAINS:
@@ -524,19 +457,15 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         else ""
                     )
 
-                    # Build a temporary EthereumCrypto from the in-memory private key
-                    with tempfile.NamedTemporaryFile(
-                        mode="w", suffix=".json", delete=True
-                    ) as key_file:
-                        # Write a minimal keystore (unencrypted — in /tmp, deleted immediately)
-                        account = Web3().eth.account.from_key(private_key)
-                        keystore = account.encrypt(password="")  # nosec B106
-                        json.dump(keystore, key_file)
-                        key_file.flush()
-
-                        crypto = EthereumCrypto(
-                            private_key_path=key_file.name, password=""  # nosec B106
+                    # Build a temporary EthereumCrypto from the in-memory private key.
+                    # KeysManager.private_key_to_crypto writes the key to a
+                    # permission-restricted temp file and immediately performs an
+                    # unrecoverable delete.
+                    with tempfile.TemporaryDirectory() as _tmp_dir:
+                        _km = KeysManager(
+                            path=Path(_tmp_dir), logger=self._logger
                         )
+                        crypto = _km.private_key_to_crypto(private_key, password=None)
 
                     # ── Step 1-3: Handle owned services ──────────────────────────
                     # Services are owned by the master safes (not the master EOA
@@ -569,8 +498,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         eoa_address=eoa_address,
                                     )
                                 except Exception as exc:  # pylint: disable=broad-except
+                                    logger.warning(f"chain={chain_id} service={svc_id} recovery failed: {exc}")
                                     errors.append(
-                                        f"chain={chain_id} service={svc_id}: {exc}"
+                                        f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
                                     )
 
                     # ── Step 5: Drain Master Safe(s) ─────────────────────────────
@@ -597,8 +527,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                     int(prev) + amount
                                 )
                         except Exception as exc:  # pylint: disable=broad-except
+                            logger.warning(f"chain={chain_id} drain_safe={safe_addr} failed: {exc}")
                             errors.append(
-                                f"chain={chain_id} drain_safe={safe_addr}: {exc}"
+                                f"chain={chain_id} drain_safe={safe_addr}: {type(exc).__name__}"
                             )
 
                     # ── Step 6: Drain Master EOA ──────────────────────────────────
@@ -623,15 +554,11 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 int(prev) + amount
                             )
                     except Exception as exc:  # pylint: disable=broad-except
-                        errors.append(f"chain={chain_id} drain_eoa: {exc}")
+                        logger.warning(f"chain={chain_id} drain_eoa failed: {exc}")
+                        errors.append(f"chain={chain_id} drain_eoa: {type(exc).__name__}")
 
                 except Exception as exc:  # pylint: disable=broad-except
-                    errors.append(f"chain={chain_id}: {exc}")
-
-        finally:
-            # Explicitly zero-out the private key from local scope
-            private_key = "0" * len(private_key)  # nosec B105
-            del private_key
+                    errors.append(f"chain={chain_id}: {type(exc).__name__}")
 
         success = len(errors) == 0
         partial_failure = not success and bool(total_funds_moved)
@@ -662,10 +589,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         eoa_address: str,
     ) -> None:
         """Run the per-service portion of the recovery sequence (steps 1–4)."""
-        from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
-            STAKING,
-        )
-
         state = _get_service_state(
             ledger_api=ledger_api,
             service_registry_address=service_registry_addr,
@@ -679,21 +602,25 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             if not staking_addr:
                 continue
             try:
-                staking_contract = ledger_api.api.eth.contract(
-                    address=Web3.to_checksum_address(staking_addr),
-                    abi=_STAKING_ABI,
-                )
-                is_staked = staking_contract.functions.isServiceStaked(
-                    service_id
-                ).call()
-                if not is_staked:
+                # Use StakingTokenContract wrapper instead of raw ABI
+                staking_state = StakingTokenContract.get_service_staking_state(
+                    ledger_api=ledger_api,
+                    contract_address=Web3.to_checksum_address(staking_addr),
+                    service_id=service_id,
+                )["data"]
+                if staking_state == 0:  # UNSTAKED
                     continue
                 # Check minimum staking duration to avoid revert on early unstake
                 try:
-                    min_duration = staking_contract.functions.minStakingDuration().call()
-                    service_info = staking_contract.functions.getServiceInfo(
-                        service_id
-                    ).call()
+                    min_duration = StakingTokenContract.get_min_staking_duration(
+                        ledger_api=ledger_api,
+                        contract_address=Web3.to_checksum_address(staking_addr),
+                    )["data"]
+                    service_info = StakingTokenContract.get_service_info(
+                        ledger_api=ledger_api,
+                        contract_address=Web3.to_checksum_address(staking_addr),
+                        service_id=service_id,
+                    )["data"]
                     ts_start = service_info[2]  # tsStart field
                     elapsed = int(time.time()) - ts_start
                     if elapsed < min_duration:
@@ -707,7 +634,13 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 except Exception:  # pylint: disable=broad-except
                     pass  # proceed to unstake if we can't determine duration
 
-                tx = staking_contract.functions.unstake(service_id).build_transaction(
+                staking_contract_instance = StakingTokenContract.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=Web3.to_checksum_address(staking_addr),
+                )
+                tx = staking_contract_instance.functions.unstake(
+                    service_id
+                ).build_transaction(
                     {
                         "from": crypto.address,
                         "nonce": ledger_api.api.eth.get_transaction_count(
@@ -925,10 +858,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         erc20_tokens: t.List[str],
     ) -> t.Dict[str, int]:
         """Drain all native and ERC-20 assets from the Master EOA to ``destination``."""
-        from operate.utils.gnosis import (  # pylint: disable=import-outside-toplevel
-            transfer_erc20_from_eoa,
-        )
-
         moved: t.Dict[str, int] = {}
 
         # ERC-20 first; erc20_tokens contains token addresses per ChainAmounts convention.

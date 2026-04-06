@@ -32,13 +32,15 @@ from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
-from pydantic import BaseModel
-from typing_extensions import TypedDict
+from pydantic import AfterValidator, BaseModel
+from typing_extensions import Annotated, TypedDict
+from web3 import Web3
 
 from operate.constants import (
     ACHIEVEMENTS_NOTIFICATIONS_JSON,
     FERNET_KEY_LENGTH,
     NO_STAKING_PROGRAM_ID,
+    ZERO_ADDRESS,
 )
 from operate.resource import LocalResource
 from operate.serialization import BigInt, serialize
@@ -509,6 +511,19 @@ class EncryptedData(LocalResource):
 # ---------------------------------------------------------------------------
 
 
+def _validate_evm_destination_address(v: str) -> str:
+    """Validate an EVM address, rejecting the zero address."""
+    if not Web3.is_address(v):
+        raise ValueError("Invalid EVM address")
+    if Web3.to_checksum_address(v) == Web3.to_checksum_address(ZERO_ADDRESS):
+        raise ValueError("Destination address must not be the zero address")
+    return v
+
+
+#: Annotated type for a validated, non-zero EVM destination address.
+EVMDestinationAddress = Annotated[str, AfterValidator(_validate_evm_destination_address)]
+
+
 class GasWarningEntry(BaseModel):
     """Gas warning entry for a single chain."""
 
@@ -519,7 +534,7 @@ class FundRecoveryScanRequest(BaseModel):
     """Request body for POST /api/fund_recovery/scan."""
 
     mnemonic: str
-    destination_address: str
+    destination_address: EVMDestinationAddress
 
 
 class RecoveredServiceInfo(BaseModel):
@@ -544,7 +559,7 @@ class FundRecoveryExecuteRequest(BaseModel):
     """Request body for POST /api/fund_recovery/execute."""
 
     mnemonic: str
-    destination_address: str
+    destination_address: EVMDestinationAddress
 
 
 class FundRecoveryExecuteResponse(BaseModel):

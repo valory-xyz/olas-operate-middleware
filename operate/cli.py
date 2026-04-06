@@ -80,6 +80,7 @@ from operate.ledger.profiles import (
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
+from pydantic import ValidationError
 from operate.operate_types import (
     Chain,
     ChainAmounts,
@@ -1797,6 +1798,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         try:
             data = await request.json()
             req = FundRecoveryScanRequest(**data)
+        except ValidationError as ve:
+            first_msg = ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            return JSONResponse(
+                content={"error": first_msg},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except Exception:  # pylint: disable=broad-except
             return JSONResponse(
                 content={"error": "Invalid request body."},
@@ -1810,21 +1817,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
             return JSONResponse(
                 content={"error": "Invalid mnemonic"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-
-        # Validate destination address; reject the zero address explicitly to
-        # prevent irrecoverable fund loss to the burn address.
-        if not Web3.is_address(destination):
-            return JSONResponse(
-                content={"error": "Invalid destination address"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-        if Web3.to_checksum_address(destination) == Web3.to_checksum_address(
-            ZERO_ADDRESS
-        ):
-            return JSONResponse(
-                content={"error": "Destination address must not be the zero address"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -1862,6 +1854,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         try:
             data = await request.json()
             req = FundRecoveryExecuteRequest(**data)
+        except ValidationError as ve:
+            first_msg = ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            return JSONResponse(
+                content={"error": first_msg},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except Exception:  # pylint: disable=broad-except
             return JSONResponse(
                 content={"error": "Invalid request body."},
@@ -1875,21 +1873,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
             return JSONResponse(
                 content={"error": "Invalid mnemonic"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-
-        # Validate destination address; reject the zero address explicitly to
-        # prevent irrecoverable fund loss to the burn address.
-        if not Web3.is_address(destination):
-            return JSONResponse(
-                content={"error": "Invalid destination address"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-        if Web3.to_checksum_address(destination) == Web3.to_checksum_address(
-            ZERO_ADDRESS
-        ):
-            return JSONResponse(
-                content={"error": "Destination address must not be the zero address"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 

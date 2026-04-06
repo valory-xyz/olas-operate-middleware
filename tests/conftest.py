@@ -46,7 +46,7 @@ from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
 from operate.cli import OperateApp, create_app
-from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, ZERO_ADDRESS
+from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, OPERATE, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
@@ -687,6 +687,13 @@ def test_operate(tmp_path: Path, password: str) -> OperateApp:
     operate.password = password
     operate.wallet_manager.setup()
     return operate
+
+
+@pytest.fixture
+def client_no_account(tmp_path: Path) -> TestClient:
+    """Create a test client for the FastAPI app without an account."""
+    app = create_app(home=tmp_path / OPERATE)
+    return TestClient(app)
 
 
 @pytest.fixture
