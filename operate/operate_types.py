@@ -527,7 +527,7 @@ class RecoveredServiceInfo(BaseModel):
 
     chain_id: int
     service_id: int
-    state: str
+    state: OnChainState
     can_unstake: bool
 
 
@@ -535,7 +535,7 @@ class FundRecoveryScanResponse(BaseModel):
     """Response body for POST /api/fund_recovery/scan."""
 
     master_eoa_address: str
-    balances: t.Dict[str, t.Dict[str, t.Dict[str, str]]]
+    balances: ChainAmounts
     services: t.List[RecoveredServiceInfo]
     gas_warning: t.Dict[str, GasWarningEntry]
 
@@ -552,5 +552,5 @@ class FundRecoveryExecuteResponse(BaseModel):
 
     success: bool
     partial_failure: bool
-    total_funds_moved: t.Dict[str, t.Dict[str, t.Dict[str, str]]]
+    total_funds_moved: ChainAmounts
     errors: t.List[str]

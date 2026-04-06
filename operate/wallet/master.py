@@ -1012,6 +1012,22 @@ class MasterWalletManager:
 
         self.password = new_password
 
+    @staticmethod
+    def is_valid_bip39_mnemonic(mnemonic: str) -> bool:
+        """Check that *mnemonic* is a syntactically valid BIP-39 phrase.
+
+        This validates only word count and derivability — it does NOT cross-check
+        against an existing stored key.  Use this for the fund-recovery flow where
+        no Pearl account may exist on the current device.
+        """
+        try:
+            w3 = Web3()
+            w3.eth.account.enable_unaudited_hdwallet_features()
+            w3.eth.account.from_mnemonic(mnemonic)
+            return True
+        except Exception:  # pylint: disable=broad-except
+            return False
+
     def is_mnemonic_valid(self, mnemonic: str) -> bool:
         """Verifies if the provided BIP-39 mnemonic is valid."""
         for wallet in self:

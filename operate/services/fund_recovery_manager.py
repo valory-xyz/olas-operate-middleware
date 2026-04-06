@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2024 Valory AG
+#   Copyright 2026 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -27,10 +27,12 @@ Security constraints:
 
 import json
 import logging
+import tempfile
 import typing as t
 import urllib.request
 
 from aea.helpers.logging import setup_logger
+from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
@@ -40,6 +42,7 @@ from operate.operate_types import (
     FundRecoveryExecuteResponse,
     FundRecoveryScanResponse,
     GasWarningEntry,
+    OnChainState,
     RecoveredServiceInfo,
 )
 from operate.serialization import BigInt
@@ -137,17 +140,6 @@ _SERVICE_REGISTRY_ABI = [
         "stateMutability": "view",
     },
 ]
-
-#: On-chain service states as string names (index → name)
-_SERVICE_STATE_NAMES: t.Dict[int, str] = {
-    0: "NON_EXISTENT",
-    1: "PRE_REGISTRATION",
-    2: "ACTIVE_REGISTRATION",
-    3: "FINISHED_REGISTRATION",
-    4: "DEPLOYED",
-    5: "TERMINATED_BONDED",
-    6: "UNBONDED",
-}
 
 # ---------------------------------------------------------------------------
 # Staking contract minimal ABI
@@ -300,18 +292,59 @@ def _enumerate_owned_services(
     Enumerate service IDs owned by *owner_address* by scanning Transfer events.
 
     ServiceRegistryL2 does NOT expose ``getServicesOfOwner``.  Instead we scan
-    all Transfer events where ``to == owner_address``, then filter via
-    ``ownerOf(tokenId)`` to skip transferred-away NFTs.
+    Transfer events where ``to == owner_address`` in bounded chunks, then filter
+    via ``ownerOf(tokenId)`` to skip transferred-away NFTs.
+
+    Scanning from genesis (fromBlock=0) is avoided because many RPC providers
+    (including those used on Polygon) enforce a maximum block range of 10k–50k
+    blocks and will return an error or time out on unbounded log queries.
     """
+    # Maximum blocks per eth_getLogs call; most RPC providers allow at least this.
+    _BLOCK_CHUNK = 10_000
+
     contract = _get_service_registry_contract(ledger_api, service_registry_address)
     try:
+        latest_block = ledger_api.api.eth.block_number
         owner_checksum = Web3.to_checksum_address(owner_address)
-        transfer_filter = contract.events.Transfer.create_filter(  # type: ignore[attr-defined]
-            fromBlock=0,
-            argument_filters={"to": owner_checksum},
-        )
-        events = transfer_filter.get_all_entries()
-        token_ids = {e["args"]["tokenId"] for e in events}
+
+        token_ids: t.Set[int] = set()
+        # Scan backwards in chunks from latest to genesis (stop early if possible)
+        from_block = max(0, latest_block - _BLOCK_CHUNK)
+        to_block = latest_block
+
+        while to_block >= 0:
+            try:
+                logs = ledger_api.api.eth.get_logs(
+                    {
+                        "address": Web3.to_checksum_address(service_registry_address),
+                        "topics": [
+                            # Transfer(address,address,uint256) — topic0
+                            Web3.keccak(
+                                text="Transfer(address,address,uint256)"
+                            ).hex(),
+                            None,  # from: any
+                            # to: padded owner address
+                            "0x"
+                            + "0" * 24
+                            + owner_checksum[2:].lower(),
+                        ],
+                        "fromBlock": hex(from_block),
+                        "toBlock": hex(to_block),
+                    }
+                )
+                for log in logs:
+                    # tokenId is the third indexed topic (topics[3])
+                    if len(log["topics"]) >= 4:
+                        token_ids.add(int(log["topics"][3].hex(), 16))
+            except Exception as chunk_exc:  # pylint: disable=broad-except
+                logger.warning(
+                    f"Log chunk [{from_block},{to_block}] failed: {chunk_exc}"
+                )
+
+            if from_block == 0:
+                break
+            to_block = from_block - 1
+            from_block = max(0, to_block - _BLOCK_CHUNK)
 
         owned = []
         for token_id in token_ids:
@@ -332,17 +365,16 @@ def _get_service_state(
     ledger_api: t.Any,
     service_registry_address: str,
     service_id: int,
-) -> t.Tuple[int, str]:
-    """Return (state_int, state_name) for a service."""
+) -> OnChainState:
+    """Return the on-chain state for a service."""
     contract = _get_service_registry_contract(ledger_api, service_registry_address)
     try:
         info = contract.functions.getService(service_id).call()
         # state is the last field (index 6)
         state_int = info[6]
-        state_name = _SERVICE_STATE_NAMES.get(state_int, f"UNKNOWN_{state_int}")
-        return state_int, state_name
+        return OnChainState(state_int)
     except Exception:  # pylint: disable=broad-except
-        return 0, "NON_EXISTENT"
+        return OnChainState.NON_EXISTENT
 
 
 def _check_gas_warning(
@@ -400,9 +432,13 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         -------
         FundRecoveryScanResponse
         """
+        from operate.operate_types import (  # pylint: disable=import-outside-toplevel
+            ChainAmounts,
+        )
+
         eoa_address = _mnemonic_to_address(mnemonic)
 
-        balances: t.Dict[str, t.Dict[str, t.Dict[str, str]]] = {}
+        balances: ChainAmounts = ChainAmounts()
         services: t.List[RecoveredServiceInfo] = []
         gas_warning: t.Dict[str, GasWarningEntry] = {}
 
@@ -421,12 +457,12 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     raise_on_invalid_address=False,
                 )
                 balances.setdefault(chain_id_str, {})[eoa_address] = {
-                    "native": str(eoa_native)
+                    ZERO_ADDRESS: BigInt(eoa_native)
                 }
 
                 # --- ERC-20 balances for EOA ---
                 tokens = _ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, {})
-                for symbol, token_addr in tokens.items():
+                for token_addr in tokens.values():
                     bal = get_asset_balance(
                         ledger_api=ledger_api,
                         asset_address=token_addr,
@@ -434,7 +470,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         raise_on_invalid_address=False,
                     )
                     if bal > 0:
-                        balances[chain_id_str][eoa_address][symbol] = str(bal)
+                        balances[chain_id_str][eoa_address][token_addr] = BigInt(bal)
 
                 # --- Master Safe discovery ---
                 safe_addresses = _fetch_safes_for_owner(chain_id, eoa_address)
@@ -445,9 +481,11 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         address=safe_addr,
                         raise_on_invalid_address=False,
                     )
-                    balances[chain_id_str][safe_addr] = {"native": str(safe_native)}
+                    balances[chain_id_str][safe_addr] = {
+                        ZERO_ADDRESS: BigInt(safe_native)
+                    }
 
-                    for symbol, token_addr in tokens.items():
+                    for token_addr in tokens.values():
                         bal = get_asset_balance(
                             ledger_api=ledger_api,
                             asset_address=token_addr,
@@ -455,7 +493,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             raise_on_invalid_address=False,
                         )
                         if bal > 0:
-                            balances[chain_id_str][safe_addr][symbol] = str(bal)
+                            balances[chain_id_str][safe_addr][token_addr] = BigInt(bal)
 
                 # --- Service enumeration ---
                 try:
@@ -475,20 +513,20 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 owner_address=eoa_address,
                             )
                             for svc_id in owned_service_ids:
-                                state_int, state_name = _get_service_state(
+                                state = _get_service_state(
                                     ledger_api=ledger_api,
                                     service_registry_address=service_registry_addr,
                                     service_id=svc_id,
                                 )
-                                can_unstake = state_int in (
-                                    4,
-                                    5,
-                                )  # DEPLOYED, TERMINATED_BONDED
+                                can_unstake = state in (
+                                    OnChainState.DEPLOYED,
+                                    OnChainState.TERMINATED_BONDED,
+                                )
                                 services.append(
                                     RecoveredServiceInfo(
                                         chain_id=chain_id,
                                         service_id=svc_id,
-                                        state=state_name,
+                                        state=state,
                                         can_unstake=can_unstake,
                                     )
                                 )
@@ -549,13 +587,14 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         private_key = _mnemonic_to_private_key(mnemonic)
         eoa_address = _mnemonic_to_address(mnemonic)
 
+        from operate.operate_types import (  # pylint: disable=import-outside-toplevel
+            ChainAmounts,
+        )
+
         errors: t.List[str] = []
-        total_funds_moved: t.Dict[str, t.Dict[str, t.Dict[str, str]]] = {}
+        total_funds_moved: ChainAmounts = ChainAmounts()
 
         try:
-            import json as _json  # pylint: disable=import-outside-toplevel
-            import tempfile  # pylint: disable=import-outside-toplevel
-
             from aea_ledger_ethereum.ethereum import (  # pylint: disable=import-outside-toplevel
                 EthereumCrypto,
             )
@@ -574,16 +613,15 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 try:
                     ledger_api = get_default_ledger_api(chain)
                     contract_addresses = CONTRACTS.get(chain, {})
+                    chain_profile = CHAIN_PROFILES.get(chain.value, {})
                     service_registry_addr = (
                         contract_addresses.get("service_registry", "")
                         if contract_addresses
                         else ""
                     )
-                    service_manager_addr = (
-                        contract_addresses.get("service_manager", "")
-                        if contract_addresses
-                        else ""
-                    )
+                    # service_manager is sourced from CHAIN_PROFILES because the
+                    # CONTRACTS dict built in profiles.py does not include it.
+                    service_manager_addr = chain_profile.get("service_manager", "")
                     recovery_module_addr = (
                         contract_addresses.get("recovery_module", "")
                         if contract_addresses
@@ -597,7 +635,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         # Write a minimal keystore (unencrypted — only in /tmp, deleted immediately)
                         account = Web3().eth.account.from_key(private_key)
                         keystore = account.encrypt(password="")  # nosec B106
-                        _json.dump(keystore, key_file)
+                        json.dump(keystore, key_file)
                         key_file.flush()
 
                         crypto = EthereumCrypto(
@@ -633,10 +671,12 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
                     # ── Step 5: Drain Master Safe(s) ─────────────────────────────
                     safe_addresses = _fetch_safes_for_owner(chain_id, eoa_address)
+                    # Token addresses as keys and values; aligns with ChainAmounts format.
                     erc20_tokens = {
-                        sym: addrs[chain]
-                        for sym, addrs in ERC20_TOKENS.items()
-                        if chain in addrs
+                        addr: addr
+                        for chain_map in ERC20_TOKENS.values()
+                        for addr in [chain_map.get(chain)]
+                        if addr
                     }
                     for safe_addr in safe_addresses:
                         try:
@@ -648,17 +688,15 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 erc20_tokens=erc20_tokens,
                             )
                             for token, amount in moved.items():
+                                prev = (
+                                    total_funds_moved.get(chain_id_str, {})
+                                    .get(safe_addr, {})
+                                    .get(token, BigInt(0))
+                                )
                                 total_funds_moved.setdefault(
                                     chain_id_str, {}
-                                ).setdefault(safe_addr, {})[token] = str(
-                                    BigInt(
-                                        int(
-                                            total_funds_moved.get(chain_id_str, {})
-                                            .get(safe_addr, {})
-                                            .get(token, "0")
-                                        )
-                                        + amount
-                                    )
+                                ).setdefault(safe_addr, {})[token] = BigInt(
+                                    int(prev) + amount
                                 )
                         except Exception as exc:  # pylint: disable=broad-except
                             errors.append(
@@ -676,17 +714,15 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             erc20_tokens=erc20_tokens,
                         )
                         for token, amount in _moved.items():
-                            total_funds_moved.setdefault(chain_id_str, {}).setdefault(
-                                eoa_address, {}
-                            )[token] = str(
-                                BigInt(
-                                    int(
-                                        total_funds_moved.get(chain_id_str, {})
-                                        .get(eoa_address, {})
-                                        .get(token, "0")
-                                    )
-                                    + amount
-                                )
+                            prev = (
+                                total_funds_moved.get(chain_id_str, {})
+                                .get(eoa_address, {})
+                                .get(token, BigInt(0))
+                            )
+                            total_funds_moved.setdefault(
+                                chain_id_str, {}
+                            ).setdefault(eoa_address, {})[token] = BigInt(
+                                int(prev) + amount
                             )
                     except Exception as exc:  # pylint: disable=broad-except
                         errors.append(f"chain={chain_id} drain_eoa: {exc}")
@@ -732,7 +768,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             ERC20_TOKENS,
         )
 
-        state_int, state_name = _get_service_state(
+        state = _get_service_state(
             ledger_api=ledger_api,
             service_registry_address=service_registry_addr,
             service_id=service_id,
@@ -742,8 +778,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         # enumerating all staking programs; TODO: enumerate STAKING contracts)
         # TODO: Iterate over STAKING[chain] contracts, check isServiceStaked, then unstake.
 
-        # Step 2: Terminate if DEPLOYED or ACTIVE_REGISTRATION
-        if state_int in (4,):  # DEPLOYED
+        # Step 2: Terminate if DEPLOYED
+        if state in (OnChainState.DEPLOYED,):
             try:
                 if service_manager_addr:
                     sm_contract = ledger_api.api.eth.contract(
@@ -761,14 +797,20 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     signed = ledger_api.api.eth.account.sign_transaction(
                         tx, crypto.private_key
                     )
-                    ledger_api.api.eth.send_raw_transaction(signed.raw_transaction)
+                    tx_hash = ledger_api.api.eth.send_raw_transaction(
+                        signed.raw_transaction
+                    )
+                    # Wait for the transaction to be mined before proceeding to
+                    # unbond; without confirmation the on-chain state has not yet
+                    # changed and the unbond call would revert.
+                    ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
                     logger.info(f"Terminated service {service_id} on chain {chain.id}")
-                    state_int = 5  # TERMINATED_BONDED
+                    state = OnChainState.TERMINATED_BONDED
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(f"Terminate failed for service {service_id}: {exc}")
 
         # Step 3: Unbond if TERMINATED_BONDED
-        if state_int in (5,):  # TERMINATED_BONDED
+        if state in (OnChainState.TERMINATED_BONDED,):
             try:
                 if service_manager_addr:
                     sm_contract = ledger_api.api.eth.contract(
@@ -786,7 +828,11 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     signed = ledger_api.api.eth.account.sign_transaction(
                         tx, crypto.private_key
                     )
-                    ledger_api.api.eth.send_raw_transaction(signed.raw_transaction)
+                    tx_hash = ledger_api.api.eth.send_raw_transaction(
+                        signed.raw_transaction
+                    )
+                    # Wait for unbond to be mined before proceeding to recoverAccess.
+                    ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
                     logger.info(f"Unbonded service {service_id} on chain {chain.id}")
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(f"Unbond failed for service {service_id}: {exc}")
@@ -821,16 +867,22 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     signed = ledger_api.api.eth.account.sign_transaction(
                         tx, crypto.private_key
                     )
-                    ledger_api.api.eth.send_raw_transaction(signed.raw_transaction)
+                    tx_hash = ledger_api.api.eth.send_raw_transaction(
+                        signed.raw_transaction
+                    )
+                    # Wait for recoverAccess to be mined before draining the
+                    # Agent Safe; the Safe must be accessible first.
+                    ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
                     logger.info(
                         f"recoverAccess called for agent safe {agent_safe_addr}"
                     )
 
-                    # Drain Agent Safe
+                    # Drain Agent Safe; token addresses as keys per ChainAmounts.
                     erc20_tokens = {
-                        sym: addrs[chain]
-                        for sym, addrs in ERC20_TOKENS.items()
-                        if chain in addrs
+                        addr: addr
+                        for chain_map in ERC20_TOKENS.values()
+                        for addr in [chain_map.get(chain)]
+                        if addr
                     }
                     moved = self._drain_safe(
                         ledger_api=ledger_api,
@@ -842,7 +894,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     for token, amount in moved.items():
                         total_funds_moved.setdefault(chain_id_str, {}).setdefault(
                             agent_safe_addr, {}
-                        )[token] = str(amount)
+                        )[token] = BigInt(amount)
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(
                     f"recoverAccess/drain agent safe failed for service "
@@ -860,8 +912,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         """Drain all native and ERC-20 assets from a Safe to ``destination``."""
         moved: t.Dict[str, int] = {}
 
-        # ERC-20 first (so we still have native for gas)
-        for symbol, token_addr in erc20_tokens.items():
+        # ERC-20 first (so we still have native for gas);
+        # erc20_tokens keys are token addresses per ChainAmounts convention.
+        for token_addr in erc20_tokens:
             bal = get_asset_balance(
                 ledger_api=ledger_api,
                 asset_address=token_addr,
@@ -878,10 +931,10 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         to=destination,
                         amount=int(bal),
                     )
-                    moved[symbol] = int(bal)
+                    moved[token_addr] = int(bal)
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning(
-                        f"ERC-20 drain failed for safe={safe_addr} token={symbol}: {exc}"
+                        f"ERC-20 drain failed for safe={safe_addr} token={token_addr}: {exc}"
                     )
 
         # Native
@@ -900,7 +953,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     to=destination,
                     amount=int(native_bal),
                 )
-                moved["native"] = int(native_bal)
+                moved[ZERO_ADDRESS] = int(native_bal)
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(f"Native drain failed for safe={safe_addr}: {exc}")
 
@@ -922,8 +975,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
         moved: t.Dict[str, int] = {}
 
-        # ERC-20 first
-        for symbol, token_addr in erc20_tokens.items():
+        # ERC-20 first; erc20_tokens keys are token addresses per ChainAmounts convention.
+        for token_addr in erc20_tokens:
             bal = get_asset_balance(
                 ledger_api=ledger_api,
                 asset_address=token_addr,
@@ -939,9 +992,11 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         to=destination,
                         amount=int(bal),
                     )
-                    moved[symbol] = int(bal)
+                    moved[token_addr] = int(bal)
                 except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning(f"ERC-20 EOA drain failed token={symbol}: {exc}")
+                    logger.warning(
+                        f"ERC-20 EOA drain failed token={token_addr}: {exc}"
+                    )
 
         # Native (last, since it pays gas)
         try:
@@ -953,7 +1008,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             )
             if tx_hash:
                 # Record approximate amount (balance minus gas already drained)
-                moved["native"] = int(
+                moved[ZERO_ADDRESS] = int(
                     get_asset_balance(
                         ledger_api=ledger_api,
                         asset_address=ZERO_ADDRESS,

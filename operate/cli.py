@@ -45,6 +45,7 @@ from fastapi.responses import JSONResponse
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
+from web3 import Web3
 
 from operate import __version__, services
 from operate.account.user import UserAccount
@@ -1805,23 +1806,25 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         mnemonic = req.mnemonic.strip().lower()
         destination = req.destination_address.strip()
 
-        # Validate mnemonic (BIP-39: 12 or 24 space-separated words)
-        word_count = len(mnemonic.split())
-        if word_count not in (12, 15, 18, 21, 24):
+        # Validate mnemonic using BIP-39 word-list derivation check
+        if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
             return JSONResponse(
                 content={"error": "Invalid mnemonic"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        # Validate destination address
-        try:
-            from web3 import Web3 as _Web3  # pylint: disable=import-outside-toplevel
-
-            if not _Web3.is_address(destination):
-                raise ValueError("bad address")
-        except Exception:  # pylint: disable=broad-except
+        # Validate destination address; reject the zero address explicitly to
+        # prevent irrecoverable fund loss to the burn address.
+        if not Web3.is_address(destination):
             return JSONResponse(
                 content={"error": "Invalid destination address"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        if Web3.to_checksum_address(destination) == Web3.to_checksum_address(
+            ZERO_ADDRESS
+        ):
+            return JSONResponse(
+                content={"error": "Destination address must not be the zero address"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -1830,7 +1833,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             result = await run_in_executor(manager.scan, mnemonic, destination)
             return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"fund_recovery_scan error: {e}\n{traceback.format_exc()}")
+            # Log only the exception message — never the traceback, which may
+            # capture local variables (including the mnemonic) in some
+            # environments (e.g. cgitb, structured-logging handlers).
+            logger.error(f"fund_recovery_scan error: {e}")
             return JSONResponse(
                 content={"error": "Fund recovery scan failed. Please check the logs."},
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -1865,23 +1871,25 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         mnemonic = req.mnemonic.strip().lower()
         destination = req.destination_address.strip()
 
-        # Validate mnemonic
-        word_count = len(mnemonic.split())
-        if word_count not in (12, 15, 18, 21, 24):
+        # Validate mnemonic using BIP-39 word-list derivation check
+        if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
             return JSONResponse(
                 content={"error": "Invalid mnemonic"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        # Validate destination address
-        try:
-            from web3 import Web3 as _Web3  # pylint: disable=import-outside-toplevel
-
-            if not _Web3.is_address(destination):
-                raise ValueError("bad address")
-        except Exception:  # pylint: disable=broad-except
+        # Validate destination address; reject the zero address explicitly to
+        # prevent irrecoverable fund loss to the burn address.
+        if not Web3.is_address(destination):
             return JSONResponse(
                 content={"error": "Invalid destination address"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        if Web3.to_checksum_address(destination) == Web3.to_checksum_address(
+            ZERO_ADDRESS
+        ):
+            return JSONResponse(
+                content={"error": "Destination address must not be the zero address"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -1890,7 +1898,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             result = await run_in_executor(manager.execute, mnemonic, destination)
             return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"fund_recovery_execute error: {e}\n{traceback.format_exc()}")
+            # Log only the exception message — never the traceback, which may
+            # capture local variables (including the mnemonic) in some
+            # environments (e.g. cgitb, structured-logging handlers).
+            logger.error(f"fund_recovery_execute error: {e}")
             return JSONResponse(
                 content={
                     "error": "Fund recovery execution failed. Please check the logs."
