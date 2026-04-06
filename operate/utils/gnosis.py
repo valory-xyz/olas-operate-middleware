@@ -21,8 +21,10 @@
 
 import binascii
 import itertools
+import json
 import secrets
 import typing as t
+import urllib.request
 from enum import Enum
 
 from aea.crypto.base import Crypto, LedgerApi
@@ -692,3 +694,33 @@ def get_assets_balances(
         )
 
     return output
+
+
+#: Safe Transaction Service hosts, keyed by chain_id.
+#: Used to enumerate Safe addresses owned by a given EOA.
+SAFE_TX_SERVICE_HOSTS: t.Dict[int, str] = {
+    137: "safe-transaction-polygon.safe.global",
+    100: "safe-transaction-gnosis-chain.safe.global",
+    8453: "safe-transaction-base.safe.global",
+    10: "safe-transaction-optimism.safe.global",
+}
+
+
+def fetch_safes_for_owner(chain_id: int, owner_address: str) -> t.List[str]:
+    """Fetch Safe addresses owned by *owner_address* via the Safe Transaction Service API.
+
+    Returns an empty list if the chain is not supported or the query fails.
+    """
+    host = SAFE_TX_SERVICE_HOSTS.get(chain_id)
+    if not host:
+        return []
+
+    url = f"https://{host}/api/v1/owners/{owner_address}/safes/"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "olas-operate/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("safes", [])
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning(f"Safe TX service query failed for chain={chain_id}: {exc}")
+        return []

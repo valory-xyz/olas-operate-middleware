@@ -30,7 +30,6 @@ import logging
 import tempfile
 import time
 import typing as t
-import urllib.request
 
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
@@ -55,6 +54,7 @@ from operate.operate_types import (
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
     drain_eoa,
+    fetch_safes_for_owner,
     get_asset_balance,
     transfer,
     transfer_erc20_from_safe,
@@ -73,14 +73,6 @@ RECOVERY_CHAINS: t.List[Chain] = [
     Chain.BASE,
     Chain.OPTIMISM,
 ]
-
-#: Safe Transaction Service hosts, keyed by chain_id
-SAFE_SERVICE_HOSTS: t.Dict[int, str] = {
-    137: "safe-transaction-polygon.safe.global",
-    100: "safe-transaction-gnosis-chain.safe.global",
-    8453: "safe-transaction-base.safe.global",
-    10: "safe-transaction-optimism.safe.global",
-}
 
 #: Minimum native balance (in wei) to warn the user about insufficient gas.
 #: Built from DEFAULT_EOA_TOPUPS * DEFAULT_EOA_THRESHOLD so the threshold
@@ -147,20 +139,6 @@ _STAKING_ABI = [
 ]
 
 # ---------------------------------------------------------------------------
-# RecoveryModule ABI (recoverAccess)
-# ---------------------------------------------------------------------------
-
-_RECOVERY_MODULE_ABI = [
-    {
-        "name": "recoverAccess",
-        "type": "function",
-        "inputs": [{"name": "safe", "type": "address"}],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-    },
-]
-
-# ---------------------------------------------------------------------------
 # Helper utilities
 # ---------------------------------------------------------------------------
 
@@ -183,23 +161,6 @@ def _mnemonic_to_private_key(mnemonic: str) -> str:
     w3.eth.account.enable_unaudited_hdwallet_features()
     account = w3.eth.account.from_mnemonic(mnemonic)
     return account._private_key.hex()  # pylint: disable=protected-access
-
-
-def _fetch_safes_for_owner(chain_id: int, owner_address: str) -> t.List[str]:
-    """Fetch Master Safe addresses via Gnosis Safe Transaction Service API."""
-    host = SAFE_SERVICE_HOSTS.get(chain_id)
-    if not host:
-        return []
-
-    url = f"https://{host}/api/v1/owners/{owner_address}/safes/"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "olas-operate/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("safes", [])
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.warning(f"Safe TX service query failed for chain={chain_id}: {exc}")
-        return []
 
 
 def _get_service_registry_contract(
@@ -389,8 +350,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 }
 
                 # --- ERC-20 balances for EOA ---
-                tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, {})
-                for token_addr in tokens.values():
+                tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, [])
+                for token_addr in tokens:
                     bal = get_asset_balance(
                         ledger_api=ledger_api,
                         asset_address=token_addr,
@@ -401,7 +362,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         balances[chain_id_str][eoa_address][token_addr] = BigInt(bal)
 
                 # --- Master Safe discovery ---
-                safe_addresses = _fetch_safes_for_owner(chain_id, eoa_address)
+                safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
                 for safe_addr in safe_addresses:
                     safe_native = get_asset_balance(
                         ledger_api=ledger_api,
@@ -413,7 +374,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         ZERO_ADDRESS: BigInt(safe_native)
                     }
 
-                    for token_addr in tokens.values():
+                    for token_addr in tokens:
                         bal = get_asset_balance(
                             ledger_api=ledger_api,
                             asset_address=token_addr,
@@ -580,7 +541,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     # ── Step 1-3: Handle owned services ──────────────────────────
                     # Services are owned by the master safes (not the master EOA
                     # directly); the master safes are in turn owned by the master EOA.
-                    safe_addresses = _fetch_safes_for_owner(chain_id, eoa_address)
+                    safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
                     if service_registry_addr:
                         seen_service_ids: t.Set[int] = set()
                         for safe_addr in safe_addresses:
@@ -614,7 +575,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
                     # ── Step 5: Drain Master Safe(s) ─────────────────────────────
                     # Token addresses as keys; aligns with ChainAmounts format.
-                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, {})
+                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, [])
                     for safe_addr in safe_addresses:
                         try:
                             moved = self._drain_safe(
@@ -850,9 +811,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 agent_safe_addr = service_info[1]  # multisig field
 
                 if agent_safe_addr and agent_safe_addr != ZERO_ADDRESS:
-                    rm_contract = ledger_api.api.eth.contract(
-                        address=Web3.to_checksum_address(recovery_module_addr),
-                        abi=_RECOVERY_MODULE_ABI,
+                    rm_contract = registry_contracts.recovery_module.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=Web3.to_checksum_address(recovery_module_addr),
                     )
                     tx = rm_contract.functions.recoverAccess(
                         agent_safe_addr
@@ -877,8 +838,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         f"recoverAccess called for agent safe {agent_safe_addr}"
                     )
 
-                    # Drain Agent Safe; token addresses as keys per ChainAmounts.
-                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, {})
+                    # Drain Agent Safe; token addresses as a list per ChainAmounts.
+                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, [])
                     moved = self._drain_safe(
                         ledger_api=ledger_api,
                         crypto=crypto,
@@ -902,13 +863,13 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         crypto: t.Any,
         safe_addr: str,
         destination: str,
-        erc20_tokens: t.Dict[str, str],
+        erc20_tokens: t.List[str],
     ) -> t.Dict[str, int]:
         """Drain all native and ERC-20 assets from a Safe to ``destination``."""
         moved: t.Dict[str, int] = {}
 
         # ERC-20 first (so we still have native for gas);
-        # erc20_tokens keys are token addresses per ChainAmounts convention.
+        # erc20_tokens contains token addresses per ChainAmounts convention.
         for token_addr in erc20_tokens:
             bal = get_asset_balance(
                 ledger_api=ledger_api,
@@ -961,7 +922,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         crypto: t.Any,
         eoa_address: str,
         destination: str,
-        erc20_tokens: t.Dict[str, str],
+        erc20_tokens: t.List[str],
     ) -> t.Dict[str, int]:
         """Drain all native and ERC-20 assets from the Master EOA to ``destination``."""
         from operate.utils.gnosis import (  # pylint: disable=import-outside-toplevel
@@ -970,7 +931,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
         moved: t.Dict[str, int] = {}
 
-        # ERC-20 first; erc20_tokens keys are token addresses per ChainAmounts convention.
+        # ERC-20 first; erc20_tokens contains token addresses per ChainAmounts convention.
         for token_addr in erc20_tokens:
             bal = get_asset_balance(
                 ledger_api=ledger_api,

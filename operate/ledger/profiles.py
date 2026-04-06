@@ -232,11 +232,15 @@ ERC20_TOKENS = {
 #: ERC-20 token addresses indexed by chain ID, derived from ERC20_TOKENS.
 #: Used by fund_recovery_manager to scan/transfer ERC-20 assets without
 #: symbol-based lookups.
-ERC20_TOKENS_BY_CHAIN_ID: t.Dict[int, t.Dict[str, str]] = {}
+ERC20_TOKENS_BY_CHAIN_ID: t.Dict[int, t.List[str]] = {}
 for _symbol, _chain_map in ERC20_TOKENS.items():
     for _chain, _addr in _chain_map.items():
         if hasattr(_chain, "id"):
-            ERC20_TOKENS_BY_CHAIN_ID.setdefault(_chain.id, {})[_addr] = _addr
+            chain_id_key = _chain.id
+            if chain_id_key not in ERC20_TOKENS_BY_CHAIN_ID:
+                ERC20_TOKENS_BY_CHAIN_ID[chain_id_key] = []
+            if _addr not in ERC20_TOKENS_BY_CHAIN_ID[chain_id_key]:
+                ERC20_TOKENS_BY_CHAIN_ID[chain_id_key].append(_addr)
 
 DUST = {
     Chain.ARBITRUM_ONE: int(1e14),
