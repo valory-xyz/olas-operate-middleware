@@ -28,10 +28,12 @@ Security constraints:
 import json
 import logging
 import tempfile
+import time
 import typing as t
 import urllib.request
 
 from aea.helpers.logging import setup_logger
+from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
@@ -98,50 +100,6 @@ except ImportError:  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
-# ServiceRegistryL2 minimal ABI (only what we need)
-# ---------------------------------------------------------------------------
-
-_SERVICE_REGISTRY_ABI = [
-    {
-        "name": "Transfer",
-        "type": "event",
-        "inputs": [
-            {"name": "from", "type": "address", "indexed": True},
-            {"name": "to", "type": "address", "indexed": True},
-            {"name": "tokenId", "type": "uint256", "indexed": True},
-        ],
-    },
-    {
-        "name": "ownerOf",
-        "type": "function",
-        "inputs": [{"name": "tokenId", "type": "uint256"}],
-        "outputs": [{"name": "", "type": "address"}],
-        "stateMutability": "view",
-    },
-    {
-        "name": "getService",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [
-            {
-                "name": "",
-                "type": "tuple",
-                "components": [
-                    {"name": "securityDeposit", "type": "uint96"},
-                    {"name": "multisig", "type": "address"},
-                    {"name": "configHash", "type": "bytes32"},
-                    {"name": "threshold", "type": "uint32"},
-                    {"name": "maxNumAgentInstances", "type": "uint32"},
-                    {"name": "numAgentInstances", "type": "uint32"},
-                    {"name": "state", "type": "uint8"},
-                ],
-            }
-        ],
-        "stateMutability": "view",
-    },
-]
-
-# ---------------------------------------------------------------------------
 # Staking contract minimal ABI
 # ---------------------------------------------------------------------------
 
@@ -188,27 +146,6 @@ _STAKING_ABI = [
     },
     {
         "name": "unstake",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-    },
-]
-
-# ---------------------------------------------------------------------------
-# ServiceManager minimal ABI  (terminate + unbond)
-# ---------------------------------------------------------------------------
-
-_SERVICE_MANAGER_ABI = [
-    {
-        "name": "terminate",
-        "type": "function",
-        "inputs": [{"name": "serviceId", "type": "uint256"}],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-    },
-    {
-        "name": "unbond",
         "type": "function",
         "inputs": [{"name": "serviceId", "type": "uint256"}],
         "outputs": [],
@@ -276,10 +213,10 @@ def _get_service_registry_contract(
     ledger_api: t.Any,
     service_registry_address: str,
 ) -> t.Any:
-    """Return a web3 contract instance for ServiceRegistryL2."""
-    return ledger_api.api.eth.contract(
-        address=Web3.to_checksum_address(service_registry_address),
-        abi=_SERVICE_REGISTRY_ABI,
+    """Return a contract instance for ServiceRegistryL2 via registry_contracts."""
+    return registry_contracts.service_registry.get_instance(
+        ledger_api=ledger_api,
+        contract_address=service_registry_address,
     )
 
 
@@ -416,7 +353,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
     def scan(
         self,
         mnemonic: str,
-        destination_address: str,
     ) -> FundRecoveryScanResponse:
         """
         Discover all on-chain funds controlled by the derived Master EOA.
@@ -424,9 +360,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         Parameters
         ----------
         mnemonic:
-            BIP-39 seed phrase (12 or 24 words).  Never logged or stored.
-        destination_address:
-            The EVM address to which funds will be sent during execution.
+            BIP-39 seed phrase (12, 15, 18, 21, or 24 words).  Never logged or
+            stored.
 
         Returns
         -------
@@ -496,6 +431,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             balances[chain_id_str][safe_addr][token_addr] = BigInt(bal)
 
                 # --- Service enumeration ---
+                # Services are owned by the master safes (not the master EOA
+                # directly); the master safes are in turn owned by the master EOA.
                 try:
                     from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
                         CONTRACTS,
@@ -507,29 +444,35 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             "service_registry", ""
                         )
                         if service_registry_addr:
-                            owned_service_ids = _enumerate_owned_services(
-                                ledger_api=ledger_api,
-                                service_registry_address=service_registry_addr,
-                                owner_address=eoa_address,
-                            )
-                            for svc_id in owned_service_ids:
-                                state = _get_service_state(
+                            seen_service_ids: t.Set[int] = set()
+                            # Enumerate services owned by each master safe
+                            for safe_addr in safe_addresses:
+                                safe_owned_ids = _enumerate_owned_services(
                                     ledger_api=ledger_api,
                                     service_registry_address=service_registry_addr,
-                                    service_id=svc_id,
+                                    owner_address=safe_addr,
                                 )
-                                can_unstake = state in (
-                                    OnChainState.DEPLOYED,
-                                    OnChainState.TERMINATED_BONDED,
-                                )
-                                services.append(
-                                    RecoveredServiceInfo(
-                                        chain_id=chain_id,
+                                for svc_id in safe_owned_ids:
+                                    if svc_id in seen_service_ids:
+                                        continue
+                                    seen_service_ids.add(svc_id)
+                                    state = _get_service_state(
+                                        ledger_api=ledger_api,
+                                        service_registry_address=service_registry_addr,
                                         service_id=svc_id,
-                                        state=state,
-                                        can_unstake=can_unstake,
                                     )
-                                )
+                                    can_unstake = state in (
+                                        OnChainState.DEPLOYED,
+                                        OnChainState.TERMINATED_BONDED,
+                                    )
+                                    services.append(
+                                        RecoveredServiceInfo(
+                                            chain_id=chain_id,
+                                            service_id=svc_id,
+                                            state=state,
+                                            can_unstake=can_unstake,
+                                        )
+                                    )
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning(
                         f"Service enumeration failed for chain {chain_id}: {exc}"
@@ -632,7 +575,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     with tempfile.NamedTemporaryFile(
                         mode="w", suffix=".json", delete=True
                     ) as key_file:
-                        # Write a minimal keystore (unencrypted — only in /tmp, deleted immediately)
+                        # Write a minimal keystore (unencrypted — in /tmp, deleted immediately)
                         account = Web3().eth.account.from_key(private_key)
                         keystore = account.encrypt(password="")  # nosec B106
                         json.dump(keystore, key_file)
@@ -643,34 +586,41 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         )
 
                     # ── Step 1-3: Handle owned services ──────────────────────────
+                    # Services are owned by the master safes (not the master EOA
+                    # directly); the master safes are in turn owned by the master EOA.
+                    safe_addresses = _fetch_safes_for_owner(chain_id, eoa_address)
                     if service_registry_addr:
-                        owned_ids = _enumerate_owned_services(
-                            ledger_api=ledger_api,
-                            service_registry_address=service_registry_addr,
-                            owner_address=eoa_address,
-                        )
-                        for svc_id in owned_ids:
-                            try:
-                                self._recover_service(
-                                    chain=chain,
-                                    ledger_api=ledger_api,
-                                    crypto=crypto,
-                                    service_id=svc_id,
-                                    service_registry_addr=service_registry_addr,
-                                    service_manager_addr=service_manager_addr,
-                                    recovery_module_addr=recovery_module_addr,
-                                    destination_address=destination_checksum,
-                                    total_funds_moved=total_funds_moved,
-                                    chain_id_str=chain_id_str,
-                                    eoa_address=eoa_address,
-                                )
-                            except Exception as exc:  # pylint: disable=broad-except
-                                errors.append(
-                                    f"chain={chain_id} service={svc_id}: {exc}"
-                                )
+                        seen_service_ids: t.Set[int] = set()
+                        for safe_addr in safe_addresses:
+                            safe_owned_ids = _enumerate_owned_services(
+                                ledger_api=ledger_api,
+                                service_registry_address=service_registry_addr,
+                                owner_address=safe_addr,
+                            )
+                            for svc_id in safe_owned_ids:
+                                if svc_id in seen_service_ids:
+                                    continue
+                                seen_service_ids.add(svc_id)
+                                try:
+                                    self._recover_service(
+                                        chain=chain,
+                                        ledger_api=ledger_api,
+                                        crypto=crypto,
+                                        service_id=svc_id,
+                                        service_registry_addr=service_registry_addr,
+                                        service_manager_addr=service_manager_addr,
+                                        recovery_module_addr=recovery_module_addr,
+                                        destination_address=destination_checksum,
+                                        total_funds_moved=total_funds_moved,
+                                        chain_id_str=chain_id_str,
+                                        eoa_address=eoa_address,
+                                    )
+                                except Exception as exc:  # pylint: disable=broad-except
+                                    errors.append(
+                                        f"chain={chain_id} service={svc_id}: {exc}"
+                                    )
 
                     # ── Step 5: Drain Master Safe(s) ─────────────────────────────
-                    safe_addresses = _fetch_safes_for_owner(chain_id, eoa_address)
                     # Token addresses as keys and values; aligns with ChainAmounts format.
                     erc20_tokens = {
                         addr: addr
@@ -766,6 +716,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         """Run the per-service portion of the recovery sequence (steps 1–4)."""
         from operate.ledger.profiles import (  # pylint: disable=import-outside-toplevel
             ERC20_TOKENS,
+            STAKING,
         )
 
         state = _get_service_state(
@@ -774,17 +725,81 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             service_id=service_id,
         )
 
-        # Step 1: Unstake if staked (best-effort — staking contract unknown without
-        # enumerating all staking programs; TODO: enumerate STAKING contracts)
-        # TODO: Iterate over STAKING[chain] contracts, check isServiceStaked, then unstake.
+        # Step 1: Unstake if the service is staked in any known staking program.
+        # Iterate over STAKING[chain] contracts to find and call unstake.
+        staking_contracts = STAKING.get(chain, {})
+        for staking_program_id, staking_addr in staking_contracts.items():
+            if not staking_addr:
+                continue
+            try:
+                staking_contract = ledger_api.api.eth.contract(
+                    address=Web3.to_checksum_address(staking_addr),
+                    abi=_STAKING_ABI,
+                )
+                is_staked = staking_contract.functions.isServiceStaked(
+                    service_id
+                ).call()
+                if not is_staked:
+                    continue
+                # Check minimum staking duration to avoid revert on early unstake
+                try:
+                    min_duration = staking_contract.functions.minStakingDuration().call()
+                    service_info = staking_contract.functions.getServiceInfo(
+                        service_id
+                    ).call()
+                    ts_start = service_info[2]  # tsStart field
+                    elapsed = int(time.time()) - ts_start
+                    if elapsed < min_duration:
+                        raise ValueError(
+                            f"Cannot unstake service {service_id} from "
+                            f"{staking_program_id}: minimum staking duration "
+                            f"not elapsed ({elapsed}s < {min_duration}s)"
+                        )
+                except ValueError:
+                    raise
+                except Exception:  # pylint: disable=broad-except
+                    pass  # proceed to unstake if we can't determine duration
+
+                tx = staking_contract.functions.unstake(service_id).build_transaction(
+                    {
+                        "from": crypto.address,
+                        "nonce": ledger_api.api.eth.get_transaction_count(
+                            crypto.address
+                        ),
+                    }
+                )
+                signed = ledger_api.api.eth.account.sign_transaction(
+                    tx, crypto.private_key
+                )
+                tx_hash = ledger_api.api.eth.send_raw_transaction(
+                    signed.raw_transaction
+                )
+                ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
+                logger.info(
+                    f"Unstaked service {service_id} from {staking_program_id} "
+                    f"on chain {chain.id}"
+                )
+                break  # service can only be staked in one program at a time
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    f"Unstake check/attempt failed for service {service_id} "
+                    f"program={staking_program_id}: {exc}"
+                )
+
+        # Refresh state after potential unstake
+        state = _get_service_state(
+            ledger_api=ledger_api,
+            service_registry_address=service_registry_addr,
+            service_id=service_id,
+        )
 
         # Step 2: Terminate if DEPLOYED
         if state in (OnChainState.DEPLOYED,):
             try:
                 if service_manager_addr:
-                    sm_contract = ledger_api.api.eth.contract(
-                        address=Web3.to_checksum_address(service_manager_addr),
-                        abi=_SERVICE_MANAGER_ABI,
+                    sm_contract = registry_contracts.service_manager.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=service_manager_addr,
                     )
                     tx = sm_contract.functions.terminate(service_id).build_transaction(
                         {
@@ -813,9 +828,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         if state in (OnChainState.TERMINATED_BONDED,):
             try:
                 if service_manager_addr:
-                    sm_contract = ledger_api.api.eth.contract(
-                        address=Web3.to_checksum_address(service_manager_addr),
-                        abi=_SERVICE_MANAGER_ABI,
+                    sm_contract = registry_contracts.service_manager.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=service_manager_addr,
                     )
                     tx = sm_contract.functions.unbond(service_id).build_transaction(
                         {
@@ -838,9 +853,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                 logger.warning(f"Unbond failed for service {service_id}: {exc}")
 
         # Step 4: recoverAccess on RecoveryModule for Agent Safe
-        # TODO: Retrieve Agent Safe multisig address from service info, then call
-        #       recoverAccess on the RecoveryModule, followed by draining the Agent Safe.
-        # This requires knowing the Agent Safe address (from getService().multisig).
+        # Retrieve the Agent Safe multisig address from service info, call
+        # recoverAccess on the RecoveryModule, then drain the Agent Safe.
         if recovery_module_addr:
             try:
                 registry_contract = _get_service_registry_contract(

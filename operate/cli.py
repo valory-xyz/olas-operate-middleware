@@ -1830,7 +1830,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             manager = FundRecoveryManager()
-            result = await run_in_executor(manager.scan, mnemonic, destination)
+            result = await run_in_executor(manager.scan, mnemonic)
             return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
         except Exception as e:  # pylint: disable=broad-except
             # Log only the exception message — never the traceback, which may
