@@ -83,6 +83,8 @@ from operate.operate_types import (
     Chain,
     ChainAmounts,
     DeploymentStatus,
+    FundRecoveryExecuteRequest,
+    FundRecoveryScanRequest,
     LedgerType,
     Version,
 )
@@ -95,6 +97,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.fund_recovery_manager import FundRecoveryManager
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
@@ -1775,6 +1778,129 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
+
+    # ---------------------------------------------------------------------------
+    # Fund recovery endpoints (unauthenticated — user has no Pearl account)
+    # ---------------------------------------------------------------------------
+
+    @app.post("/api/fund_recovery/scan")
+    async def _fund_recovery_scan(request: Request) -> JSONResponse:
+        """Scan for on-chain funds recoverable from a BIP-39 mnemonic.
+
+        This endpoint is intentionally unauthenticated: the user has lost their
+        .operate folder and has no Pearl account on this device.
+
+        Security: the mnemonic is NEVER logged, persisted, or transmitted beyond
+        the lifetime of this request.
+        """
+        try:
+            data = await request.json()
+            req = FundRecoveryScanRequest(**data)
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid request body."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        mnemonic = req.mnemonic.strip().lower()
+        destination = req.destination_address.strip()
+
+        # Validate mnemonic (BIP-39: 12 or 24 space-separated words)
+        word_count = len(mnemonic.split())
+        if word_count not in (12, 15, 18, 21, 24):
+            return JSONResponse(
+                content={"error": "Invalid mnemonic"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        # Validate destination address
+        try:
+            from web3 import Web3 as _Web3  # pylint: disable=import-outside-toplevel
+
+            if not _Web3.is_address(destination):
+                raise ValueError("bad address")
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid destination address"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            manager = FundRecoveryManager()
+            result = await run_in_executor(manager.scan, mnemonic, destination)
+            return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"fund_recovery_scan error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={"error": "Fund recovery scan failed. Please check the logs."},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            # Explicitly delete the mnemonic string from local scope
+            mnemonic = ""
+            del mnemonic
+
+    @app.post("/api/fund_recovery/execute")
+    async def _fund_recovery_execute(request: Request) -> JSONResponse:
+        """Execute the full fund recovery sequence from a BIP-39 mnemonic.
+
+        This endpoint is intentionally unauthenticated: the user has lost their
+        .operate folder and has no Pearl account on this device.
+
+        Security: the mnemonic and derived private key are NEVER logged,
+        persisted, or transmitted beyond the lifetime of this request.
+
+        Returns HTTP 200 even on partial failure so the frontend can render
+        total_funds_moved and offer a retry CTA.
+        """
+        try:
+            data = await request.json()
+            req = FundRecoveryExecuteRequest(**data)
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid request body."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        mnemonic = req.mnemonic.strip().lower()
+        destination = req.destination_address.strip()
+
+        # Validate mnemonic
+        word_count = len(mnemonic.split())
+        if word_count not in (12, 15, 18, 21, 24):
+            return JSONResponse(
+                content={"error": "Invalid mnemonic"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        # Validate destination address
+        try:
+            from web3 import Web3 as _Web3  # pylint: disable=import-outside-toplevel
+
+            if not _Web3.is_address(destination):
+                raise ValueError("bad address")
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid destination address"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            manager = FundRecoveryManager()
+            result = await run_in_executor(manager.execute, mnemonic, destination)
+            return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"fund_recovery_execute error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Fund recovery execution failed. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            # Explicitly delete the mnemonic string from local scope
+            mnemonic = ""
+            del mnemonic
 
     return app
 
