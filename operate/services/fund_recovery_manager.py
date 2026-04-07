@@ -126,7 +126,7 @@ def _get_service_registry_contract(
     )
 
 
-def _enumerate_owned_services(
+def _enumerate_owned_services(  # pylint: disable=too-many-locals
     ledger_api: t.Any,
     service_registry_address: str,
     owner_address: str,
@@ -148,7 +148,7 @@ def _enumerate_owned_services(
     contract = _get_service_registry_contract(ledger_api, service_registry_address)
     try:
         latest_block = ledger_api.api.eth.block_number
-        owner_checksum = Web3.to_checksum_address(owner_address)
+        owner_checksum: str = str(Web3.to_checksum_address(owner_address))
 
         token_ids: t.Set[int] = set()
         # Scan backwards in chunks from latest to genesis (stop early if possible)
@@ -252,7 +252,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
     # Public API
     # ------------------------------------------------------------------
 
-    def scan(
+    def scan(  # pylint: disable=too-many-locals,too-many-nested-blocks
         self,
         mnemonic: str,
     ) -> FundRecoveryScanResponse:
@@ -391,7 +391,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             gas_warning=gas_warning,
         )
 
-    def execute(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    def execute(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks
         self,
         mnemonic: str,
         destination_address: str,
@@ -574,7 +574,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _recover_service(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def _recover_service(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-statements,unused-argument
         self,
         chain: Chain,
         ledger_api: t.Any,
@@ -848,7 +848,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
         return moved
 
-    def _drain_eoa_assets(
+    def _drain_eoa_assets(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         chain: Chain,
         ledger_api: t.Any,
