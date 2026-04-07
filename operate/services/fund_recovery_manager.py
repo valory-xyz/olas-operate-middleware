@@ -191,7 +191,7 @@ def _enumerate_owned_services(  # pylint: disable=too-many-locals
                 current_owner = contract.functions.ownerOf(token_id).call()
                 if current_owner.lower() == owner_address.lower():
                     owned.append(token_id)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:  # pylint: disable=broad-except  # nosec B110
                 pass  # token may not exist or call failed
 
         return owned
@@ -631,7 +631,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         )
                 except ValueError:
                     raise
-                except Exception:  # pylint: disable=broad-except
+                except Exception:  # pylint: disable=broad-except  # nosec B110
                     pass  # proceed to unstake if we can't determine duration
 
                 staking_contract_instance = StakingTokenContract.get_instance(
