@@ -143,7 +143,7 @@ def _enumerate_owned_services(  # pylint: disable=too-many-locals
     blocks and will return an error or time out on unbounded log queries.
     """
     # Maximum blocks per eth_getLogs call; most RPC providers allow at least this.
-    _BLOCK_CHUNK = 10_000
+    _BLOCK_CHUNK = 5_000
 
     contract = _get_service_registry_contract(ledger_api, service_registry_address)
     try:
