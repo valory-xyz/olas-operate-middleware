@@ -4,7 +4,7 @@
 
 echo "Running pre-push linting checks..."
 
-poetry install && poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black -e isort -e bandit -e safety -e mypy -e safety
+poetry install && poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
 RESULT=$?
 
 if [ $RESULT -ne 0 ]; then
