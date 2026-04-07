@@ -135,13 +135,13 @@ poetry shell
 git commit -m "message"
 
 # Step 3: Run ALL quality checks (REQUIRED before committing)
-tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy
+tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 
 # Step 4: Verify tests pass
 tox -e unit-tests
 
 # Optional: Full CI check (includes safety, takes longer)
-tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy -e safety
+tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
 
 # Quick check during development (core linters only)
 tox -p -e black-check -e flake8 -e mypy
