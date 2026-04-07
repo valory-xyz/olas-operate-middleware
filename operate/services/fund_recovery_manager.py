@@ -25,6 +25,7 @@ Security constraints:
 - Both endpoints that use this manager are intentionally unauthenticated.
 """
 
+import concurrent.futures
 import logging
 import tempfile
 import time
@@ -277,9 +278,16 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         services: t.List[RecoveredServiceInfo] = []
         gas_warning: t.Dict[str, GasWarningEntry] = {}
 
-        for chain in RECOVERY_CHAINS:
+        def _scan_chain(
+            chain: t.Any,
+        ) -> t.Tuple[
+            str, t.Dict[str, t.Any], t.List[RecoveredServiceInfo], GasWarningEntry
+        ]:
             chain_id = chain.id
             chain_id_str = str(chain_id)
+            chain_balances: t.Dict[str, t.Any] = {}
+            chain_services: t.List[RecoveredServiceInfo] = []
+            chain_gas_warning: GasWarningEntry = GasWarningEntry(insufficient=True)
 
             try:
                 ledger_api = get_default_ledger_api(chain)
@@ -291,9 +299,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     address=eoa_address,
                     raise_on_invalid_address=False,
                 )
-                balances.setdefault(chain_id_str, {})[eoa_address] = {
-                    ZERO_ADDRESS: BigInt(eoa_native)
-                }
+                chain_balances[eoa_address] = {ZERO_ADDRESS: BigInt(eoa_native)}
 
                 # --- ERC-20 balances for EOA ---
                 tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, [])
@@ -305,7 +311,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         raise_on_invalid_address=False,
                     )
                     if bal > 0:
-                        balances[chain_id_str][eoa_address][token_addr] = BigInt(bal)
+                        chain_balances[eoa_address][token_addr] = BigInt(bal)
 
                 # --- Master Safe discovery ---
                 safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
@@ -316,9 +322,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         address=safe_addr,
                         raise_on_invalid_address=False,
                     )
-                    balances[chain_id_str][safe_addr] = {
-                        ZERO_ADDRESS: BigInt(safe_native)
-                    }
+                    chain_balances[safe_addr] = {ZERO_ADDRESS: BigInt(safe_native)}
 
                     for token_addr in tokens:
                         bal = get_asset_balance(
@@ -328,11 +332,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             raise_on_invalid_address=False,
                         )
                         if bal > 0:
-                            balances[chain_id_str][safe_addr][token_addr] = BigInt(bal)
+                            chain_balances[safe_addr][token_addr] = BigInt(bal)
 
                 # --- Service enumeration ---
-                # Services are owned by the master safes (not the master EOA
-                # directly); the master safes are in turn owned by the master EOA.
                 try:
                     contract_addresses = CONTRACTS.get(chain)
                     if contract_addresses:
@@ -361,7 +363,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         OnChainState.DEPLOYED,
                                         OnChainState.TERMINATED_BONDED,
                                     )
-                                    services.append(
+                                    chain_services.append(
                                         RecoveredServiceInfo(
                                             chain_id=chain_id,
                                             service_id=svc_id,
@@ -375,7 +377,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     )
 
                 # --- Gas warning ---
-                gas_warning[chain_id_str] = _check_gas_warning(
+                chain_gas_warning = _check_gas_warning(
                     chain_id=chain_id,
                     eoa_address=eoa_address,
                     ledger_api=ledger_api,
@@ -383,8 +385,20 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(f"Scan failed for chain {chain_id}: {exc}")
-                balances.setdefault(chain_id_str, {})
-                gas_warning[chain_id_str] = GasWarningEntry(insufficient=True)
+
+            return chain_id_str, chain_balances, chain_services, chain_gas_warning
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(RECOVERY_CHAINS)
+        ) as executor:
+            futures = [executor.submit(_scan_chain, chain) for chain in RECOVERY_CHAINS]
+            for future in concurrent.futures.as_completed(futures):
+                chain_id_str, chain_balances, chain_services, chain_gas_warning = (
+                    future.result()
+                )
+                balances[chain_id_str] = chain_balances
+                services.extend(chain_services)
+                gas_warning[chain_id_str] = chain_gas_warning
 
         return FundRecoveryScanResponse(
             master_eoa_address=eoa_address,
