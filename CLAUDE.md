@@ -118,23 +118,30 @@ poetry shell
 
 **CRITICAL**: Always run ALL linters before committing changes. CI runs all checks, so local verification prevents CI failures.
 
+**Git hooks**: Enable with `git config core.hooksPath .githooks`.
+- **pre-commit hook** (`.githooks/pre-commit`): Automatically formats staged Python files with black/isort
+- **pre-push hook** (`.githooks/pre-push`): Runs full linting suite before every push
+
 **Required workflow before every commit:**
-1. Format code: `tox -p -e black -e isort`
-2. Run ALL linters: `tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit`
-3. Verify tests pass: `tox -e unit-tests`
+1. Make your changes
+2. Commit (hook auto-formats staged files): `git commit -m "message"`
+3. Run ALL linters: `tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy`
+4. Verify tests pass: `tox -e unit-tests`
 
 ```bash
-# Step 1: Format code automatically
-tox -p -e black -e isort
+# Step 1: Make changes...
 
-# Step 2: Run ALL quality checks (REQUIRED before committing)
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit
+# Step 2: Commit (hook auto-formats staged files)
+git commit -m "message"
 
-# Step 3: Verify tests pass
+# Step 3: Run ALL quality checks (REQUIRED before committing)
+tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+
+# Step 4: Verify tests pass
 tox -e unit-tests
 
 # Optional: Full CI check (includes safety, takes longer)
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
 
 # Quick check during development (core linters only)
 tox -p -e black-check -e flake8 -e mypy

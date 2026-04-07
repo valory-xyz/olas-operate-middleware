@@ -50,6 +50,12 @@ Handles cross-chain token transfers via bridge providers
 
 ## Development Workflow
 
+### Clone the repository:
+```bash
+git clone -c core.hooksPath=.githooks git@github.com:valory-xyz/olas-operate-middleware.git
+```
+
+
 ### Creating a Feature Branch
 
 1. **Start from the main branch:**
@@ -133,12 +139,13 @@ The project uses several tools to maintain code quality. All are configured in `
 ### Running All Checks
 
 ```bash
-# Format code
-tox -p -e black -e isort
-
 # Run all quality checks
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
 ```
+
+**Git hooks**: Enable with `git config core.hooksPath .githooks`.
+- **pre-commit hook** (`.githooks/pre-commit`): Automatically formats staged Python files with black/isort
+- **pre-push hook** (`.githooks/pre-push`): Runs full linting suite before every push
 
 **Note**: Some areas (like `operate/data`) are excluded from certain checks. Respect these exclusions.
 
@@ -235,6 +242,8 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
    # Run quality checks
    tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
    ```
+   
+   **Note**: The pre-push hook will automatically run these checks when you push, blocking the push if any checks fail. Running locally first is recommended to avoid CI failures.
 
 3. **Ensure relavent tests pass:**
    ```bash
