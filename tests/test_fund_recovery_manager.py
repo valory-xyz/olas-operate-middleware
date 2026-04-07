@@ -240,6 +240,7 @@ class TestEnumerateOwnedServices:
         mock_ledger.api.eth.block_number = 100
         mock_ledger.api.eth.get_transaction_count.return_value = 0
         mock_ledger.api.eth.call.return_value = b""
+        mock_ledger.api.eth.get_code.return_value = b""
         mock_ledger.api.eth.get_logs.return_value = [self._make_log(7)]
         contract_mock = MagicMock()
         contract_mock.functions.ownerOf.return_value.call.return_value = (
@@ -261,6 +262,7 @@ class TestEnumerateOwnedServices:
         mock_ledger.api.eth.block_number = 100
         mock_ledger.api.eth.get_transaction_count.return_value = 0
         mock_ledger.api.eth.call.return_value = b""
+        mock_ledger.api.eth.get_code.return_value = b""
         mock_ledger.api.eth.get_logs.return_value = [self._make_log(5)]
         contract_mock = MagicMock()
         # ownerOf returns a *different* address
@@ -307,6 +309,7 @@ class TestEnumerateOwnedServices:
         mock_ledger.api.eth.block_number = 100
         mock_ledger.api.eth.get_transaction_count.return_value = 0
         mock_ledger.api.eth.call.return_value = b""
+        mock_ledger.api.eth.get_code.return_value = b""
         mock_ledger.api.eth.get_logs.return_value = [self._make_log(3)]
         contract_mock = MagicMock()
         contract_mock.functions.ownerOf.return_value.call.side_effect = Exception(
@@ -329,6 +332,7 @@ class TestEnumerateOwnedServices:
         mock_ledger.api.eth.block_number = 15_000
         mock_ledger.api.eth.get_transaction_count.return_value = 0
         mock_ledger.api.eth.call.return_value = b""
+        mock_ledger.api.eth.get_code.return_value = b""
         call_count = 0
 
         def _side_effect(*_a, **_kw):  # type: ignore[no-untyped-def]
@@ -1208,8 +1212,7 @@ class TestRecoverService:
                 service_manager_addr=_SERVICE_MANAGER,
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1237,8 +1240,7 @@ class TestRecoverService:
                 service_manager_addr=_SERVICE_MANAGER,
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1269,8 +1271,7 @@ class TestRecoverService:
                 service_manager_addr=_SERVICE_MANAGER,
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1296,8 +1297,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1340,8 +1340,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr=_RECOVERY_MODULE,
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1381,8 +1380,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr=_RECOVERY_MODULE,
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1414,8 +1412,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1454,8 +1451,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
             # No unstake should have been issued
@@ -1490,8 +1486,7 @@ class TestRecoverService:
                 service_manager_addr=_SERVICE_MANAGER,
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1523,8 +1518,7 @@ class TestRecoverService:
                 service_manager_addr=_SERVICE_MANAGER,
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1556,8 +1550,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr=_RECOVERY_MODULE,
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1585,8 +1578,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1625,8 +1617,7 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr="",
                 destination_address=_DEST_ADDR,
-                total_funds_moved={},
-                chain_id_str="100",
+                chain_funds_moved={},
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
@@ -1674,16 +1665,14 @@ class TestRecoverService:
                 service_manager_addr="",
                 recovery_module_addr=_RECOVERY_MODULE,
                 destination_address=_DEST_ADDR,
-                total_funds_moved=total_funds_moved,
-                chain_id_str="100",
+                chain_funds_moved=total_funds_moved,
                 eoa_address=_TEST_EOA_ADDRESS,
             )
 
-        # Line 784: total_funds_moved must contain the drained amount
-        assert "100" in total_funds_moved
-        assert agent_safe in total_funds_moved["100"]
-        assert ZERO_ADDRESS in total_funds_moved["100"][agent_safe]
-        assert int(total_funds_moved["100"][agent_safe][ZERO_ADDRESS]) == 1234
+        # Line 784: chain_funds_moved must contain the drained amount
+        assert agent_safe in total_funds_moved
+        assert ZERO_ADDRESS in total_funds_moved[agent_safe]
+        assert total_funds_moved[agent_safe][ZERO_ADDRESS] == 1234
 
 
 # ---------------------------------------------------------------------------
@@ -1774,3 +1763,109 @@ class TestDrainEoaErc20Failure:
 
         # Token must not be in moved because the transfer failed
         assert _TOKEN_ADDR not in moved
+
+
+class TestGetSafeDeployAndLastTxBlock:
+    """Test the _get_safe_deploy_and_last_tx_block function."""
+
+    def test_finds_deploy_block_and_last_tx_block(self) -> None:
+        """Test happy path finding deploy and last tx block."""
+        from unittest.mock import MagicMock
+
+        from operate.services.fund_recovery_manager import (
+            _get_safe_deploy_and_last_tx_block,
+        )
+
+        w3 = MagicMock()
+        w3.to_checksum_address.return_value = "0xSafe"
+
+        def mock_get_code(addr: str, block_identifier: int) -> bytes:
+            if block_identifier >= 5:
+                return b"123"
+            return b""
+
+        def mock_call(params: dict, block_identifier: int) -> bytes:
+            if block_identifier == 10:
+                return (42).to_bytes(32, "big")
+            if block_identifier >= 8:
+                return (42).to_bytes(32, "big")
+            return (40).to_bytes(32, "big")
+
+        w3.eth.get_code.side_effect = mock_get_code
+        w3.eth.call.side_effect = mock_call
+
+        deploy_block, last_tx = _get_safe_deploy_and_last_tx_block(w3, "0xSafe", 10)
+        assert deploy_block == 5
+        assert last_tx == 8
+
+    def test_handles_exceptions_gracefully(self) -> None:
+        """Test outer exceptions are handled gracefully."""
+        from unittest.mock import MagicMock
+
+        from operate.services.fund_recovery_manager import (
+            _get_safe_deploy_and_last_tx_block,
+        )
+
+        w3 = MagicMock()
+        w3.to_checksum_address.return_value = "0xSafe"
+        w3.eth.get_code.side_effect = Exception("get_code fail")
+        w3.eth.call.side_effect = Exception("call fail")
+
+        deploy_block, last_tx = _get_safe_deploy_and_last_tx_block(w3, "0xSafe", 10)
+        assert deploy_block == 10
+        assert last_tx == 10
+
+    def test_inner_search_exception(self) -> None:
+        """Test inner search loop exceptions are handled."""
+        from unittest.mock import MagicMock
+
+        from operate.services.fund_recovery_manager import (
+            _get_safe_deploy_and_last_tx_block,
+        )
+
+        w3 = MagicMock()
+        w3.to_checksum_address.return_value = "0xSafe"
+
+        def mock_get_code(addr: str, block_identifier: int) -> bytes:
+            if block_identifier >= 5:
+                return b"123"
+            return b""
+
+        def mock_call(params: dict, block_identifier: int) -> bytes:
+            if block_identifier == 10:
+                return (42).to_bytes(32, "big")
+            if block_identifier == 7:
+                raise ValueError("Inner search fail")
+            if block_identifier > 7:
+                return (42).to_bytes(32, "big")
+            return (40).to_bytes(32, "big")
+
+        w3.eth.get_code.side_effect = mock_get_code
+        w3.eth.call.side_effect = mock_call
+
+        deploy_block, last_tx = _get_safe_deploy_and_last_tx_block(w3, "0xSafe", 10)
+        assert deploy_block == 5
+        assert last_tx == 8
+
+
+class TestFetchLogsInChunks:
+    """Test the _fetch_logs_in_chunks function."""
+
+    def test_chunk_size_reduces_and_warns_on_min_size(self) -> None:
+        """Test chunk size reduces and warns on min size."""
+        from unittest.mock import MagicMock
+
+        from operate.services.fund_recovery_manager import _fetch_logs_in_chunks
+
+        w3 = MagicMock()
+        w3.to_checksum_address.return_value = "0xRegistry"
+
+        def mock_get_logs(params: dict) -> list:
+            # Fail every time
+            raise Exception("Log failure")
+
+        w3.eth.get_logs.side_effect = mock_get_logs
+
+        # Will fail down to chunk_size=1, then warn and skip
+        token_ids = _fetch_logs_in_chunks(w3, "0xRegistry", 0, 2, [None])
+        assert token_ids == set()

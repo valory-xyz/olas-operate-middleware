@@ -127,6 +127,109 @@ def _get_service_registry_contract(
     )
 
 
+def _get_safe_deploy_and_last_tx_block(
+    w3: "Web3", safe: str, current_block: int
+) -> t.Tuple[int, int]:
+    """Find the block when the Safe was deployed and the block of its last transaction."""
+    safe_checksum = w3.to_checksum_address(safe)
+
+    # 1. Binary search for deployment block
+    low = 0
+    high = current_block
+    deploy_block = current_block
+
+    while low <= high:
+        mid = (low + high) // 2
+        try:
+            code = w3.eth.get_code(safe_checksum, block_identifier=mid)
+            if len(code) > 2:
+                deploy_block = mid
+                high = mid - 1
+            else:
+                low = mid + 1
+        except Exception:  # pylint: disable=broad-except
+            low = mid + 1
+
+    # 2. Binary search for last transaction block
+    try:
+        # Keccak of "nonce()"
+        nonce_data = Web3.keccak(text="nonce()")[:4].hex()
+        res = w3.eth.call(
+            {"to": safe_checksum, "data": nonce_data}, block_identifier=current_block
+        )
+        current_nonce = int.from_bytes(res, "big") if res else 0
+    except Exception:  # pylint: disable=broad-except
+        current_nonce = 0
+
+    last_tx_block = current_block
+    if current_nonce > 0:
+        low = deploy_block
+        high = current_block
+        last_tx_block = current_block
+
+        while low <= high:
+            mid = (low + high) // 2
+            try:
+                res = w3.eth.call(
+                    {"to": safe_checksum, "data": nonce_data}, block_identifier=mid
+                )
+                mid_nonce = int.from_bytes(res, "big") if res else 0
+
+                if mid_nonce == current_nonce:
+                    last_tx_block = mid
+                    high = mid - 1
+                else:
+                    low = mid + 1
+            except Exception:  # pylint: disable=broad-except
+                low = mid + 1
+
+    return deploy_block, last_tx_block
+
+
+def _fetch_logs_in_chunks(
+    w3: "Web3",
+    registry: str,
+    start_block: int,
+    end_block: int,
+    topics: t.List[t.Optional[str]],
+) -> t.Set[int]:
+    """Fetch logs dynamically adjusting chunk sizes on failure."""
+    token_ids: t.Set[int] = set()
+    current_start = start_block
+    chunk_size = 100_000
+    registry_checksum = w3.to_checksum_address(registry)
+
+    while current_start <= end_block:
+        chunk_end = min(current_start + chunk_size - 1, end_block)
+        try:
+            logs = w3.eth.get_logs(
+                {
+                    "address": registry_checksum,
+                    "topics": topics,
+                    "fromBlock": hex(current_start),
+                    "toBlock": hex(chunk_end),
+                }
+            )
+            for log in logs:
+                if len(log["topics"]) >= 4:
+                    token_ids.add(int(log["topics"][3].hex(), 16))
+
+            current_start = chunk_end + 1
+            # Grow chunk size on success up to max
+            chunk_size = min(100_000, chunk_size * 2)
+
+        except Exception as e:  # pylint: disable=broad-except
+            if chunk_size <= 1:
+                logger.warning(
+                    f"Log chunk [{current_start},{chunk_end}] failed at minimum size: {e}"
+                )
+                current_start = chunk_end + 1
+            else:
+                chunk_size = max(1, chunk_size // 2)
+
+    return token_ids
+
+
 def _enumerate_owned_services(  # pylint: disable=too-many-locals
     ledger_api: t.Any,
     service_registry_address: str,
@@ -138,55 +241,29 @@ def _enumerate_owned_services(  # pylint: disable=too-many-locals
     ServiceRegistryL2 does NOT expose ``getServicesOfOwner``.  Instead we scan
     Transfer events where ``to == owner_address`` in bounded chunks, then filter
     via ``ownerOf(tokenId)`` to skip transferred-away NFTs.
-
-    Scanning from genesis (fromBlock=0) is avoided because many RPC providers
-    (including those used on Polygon) enforce a maximum block range of 10k–50k
-    blocks and will return an error or time out on unbounded log queries.
     """
-    # Maximum blocks per eth_getLogs call; most RPC providers allow at least this.
-    _BLOCK_CHUNK = 5_000
-
     contract = _get_service_registry_contract(ledger_api, service_registry_address)
     try:
         latest_block = ledger_api.api.eth.block_number
         owner_checksum: str = str(Web3.to_checksum_address(owner_address))
 
-        token_ids: t.Set[int] = set()
-        # Scan backwards in chunks from latest to genesis (stop early if possible)
-        from_block = max(0, latest_block - _BLOCK_CHUNK)
-        to_block = latest_block
+        deploy_block, last_tx_block = _get_safe_deploy_and_last_tx_block(
+            ledger_api.api, owner_checksum, latest_block
+        )
 
-        while to_block >= 0:
-            try:
-                logs = ledger_api.api.eth.get_logs(
-                    {
-                        "address": Web3.to_checksum_address(service_registry_address),
-                        "topics": [
-                            # Transfer(address,address,uint256) — topic0
-                            Web3.keccak(
-                                text="Transfer(address,address,uint256)"
-                            ).to_0x_hex(),
-                            None,  # from: any
-                            # to: padded owner address
-                            "0x" + "0" * 24 + owner_checksum[2:].lower(),
-                        ],
-                        "fromBlock": hex(from_block),
-                        "toBlock": hex(to_block),
-                    }
-                )
-                for log in logs:
-                    # tokenId is the third indexed topic (topics[3])
-                    if len(log["topics"]) >= 4:
-                        token_ids.add(int(log["topics"][3].hex(), 16))
-            except Exception as chunk_exc:  # pylint: disable=broad-except
-                logger.warning(
-                    f"Log chunk [{from_block},{to_block}] failed: {chunk_exc}"
-                )
+        topics: t.List[t.Optional[str]] = [
+            Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex(),
+            None,
+            "0x" + "0" * 24 + owner_checksum[2:].lower(),
+        ]
 
-            if from_block == 0:
-                break
-            to_block = from_block - 1
-            from_block = max(0, to_block - _BLOCK_CHUNK)
+        token_ids = _fetch_logs_in_chunks(
+            ledger_api.api,
+            service_registry_address,
+            deploy_block,
+            last_tx_block,
+            topics,
+        )
 
         owned = []
         for token_id in token_ids:
@@ -446,9 +523,13 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         try:
             destination_checksum = Web3.to_checksum_address(destination_address)
 
-            for chain in RECOVERY_CHAINS:
+            def _execute_chain(
+                chain: t.Any,
+            ) -> t.Tuple[t.List[str], str, t.Dict[str, t.Dict[str, BigInt]]]:
                 chain_id = chain.id
                 chain_id_str = str(chain_id)
+                chain_errors: t.List[str] = []
+                chain_funds_moved: t.Dict[str, t.Dict[str, BigInt]] = {}
 
                 try:
                     ledger_api = get_default_ledger_api(chain)
@@ -502,15 +583,14 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         service_manager_addr=service_manager_addr,
                                         recovery_module_addr=recovery_module_addr,
                                         destination_address=destination_checksum,
-                                        total_funds_moved=total_funds_moved,
-                                        chain_id_str=chain_id_str,
+                                        chain_funds_moved=chain_funds_moved,
                                         eoa_address=eoa_address,
                                     )
                                 except Exception as exc:  # pylint: disable=broad-except
                                     logger.warning(
                                         f"chain={chain_id} service={svc_id} recovery failed: {exc}"
                                     )
-                                    errors.append(
+                                    chain_errors.append(
                                         f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
                                     )
 
@@ -527,10 +607,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 erc20_tokens=erc20_tokens,
                             )
                             for token, amount in moved.items():
-                                prev = (
-                                    total_funds_moved.get(chain_id_str, {})
-                                    .get(safe_addr, {})
-                                    .get(token, BigInt(0))
+                                prev = chain_funds_moved.get(safe_addr, {}).get(
+                                    token, BigInt(0)
                                 )
                                 total_funds_moved.setdefault(
                                     chain_id_str, {}
@@ -541,7 +619,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             logger.warning(
                                 f"chain={chain_id} drain_safe={safe_addr} failed: {exc}"
                             )
-                            errors.append(
+                            chain_errors.append(
                                 f"chain={chain_id} drain_safe={safe_addr}: {type(exc).__name__}"
                             )
 
@@ -556,22 +634,34 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             erc20_tokens=erc20_tokens,
                         )
                         for token, amount in _moved.items():
-                            prev = (
-                                total_funds_moved.get(chain_id_str, {})
-                                .get(eoa_address, {})
-                                .get(token, BigInt(0))
+                            prev = chain_funds_moved.get(eoa_address, {}).get(
+                                token, BigInt(0)
                             )
-                            total_funds_moved.setdefault(chain_id_str, {}).setdefault(
-                                eoa_address, {}
-                            )[token] = BigInt(int(prev) + amount)
+                            chain_funds_moved.setdefault(eoa_address, {})[token] = (
+                                BigInt(int(prev) + amount)
+                            )
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.warning(f"chain={chain_id} drain_eoa failed: {exc}")
-                        errors.append(
+                        chain_errors.append(
                             f"chain={chain_id} drain_eoa: {type(exc).__name__}"
                         )
 
                 except Exception as exc:  # pylint: disable=broad-except
-                    errors.append(f"chain={chain_id}: {type(exc).__name__}")
+                    chain_errors.append(f"chain={chain_id}: {type(exc).__name__}")
+
+                return chain_errors, chain_id_str, chain_funds_moved
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(RECOVERY_CHAINS)
+            ) as executor:
+                futures = [
+                    executor.submit(_execute_chain, chain) for chain in RECOVERY_CHAINS
+                ]
+                for future in concurrent.futures.as_completed(futures):
+                    chain_errs, chain_id_str, chain_moved = future.result()
+                    errors.extend(chain_errs)
+                    if chain_moved:
+                        total_funds_moved[chain_id_str] = chain_moved
 
         except Exception as exc:  # pylint: disable=broad-except
             errors.append(f"fatal: {type(exc).__name__}: {exc}")
@@ -600,8 +690,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
         service_manager_addr: str,
         recovery_module_addr: str,
         destination_address: str,
-        total_funds_moved: t.Dict,
-        chain_id_str: str,
+        chain_funds_moved: t.Dict,
         eoa_address: str,
     ) -> None:
         """Run the per-service portion of the recovery sequence (steps 1–4)."""
@@ -797,9 +886,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         erc20_tokens=erc20_tokens,
                     )
                     for token, amount in moved.items():
-                        total_funds_moved.setdefault(chain_id_str, {}).setdefault(
-                            agent_safe_addr, {}
-                        )[token] = BigInt(amount)
+                        chain_funds_moved.setdefault(agent_safe_addr, {})[token] = (
+                            BigInt(amount)
+                        )
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(
                     f"recoverAccess/drain agent safe failed for service "
