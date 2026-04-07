@@ -50,6 +50,12 @@ Handles cross-chain token transfers via bridge providers
 
 ## Development Workflow
 
+### Clone the repository:
+```bash
+git clone -c core.hooksPath=.githooks git@github.com:valory-xyz/olas-operate-middleware.git
+```
+
+
 ### Creating a Feature Branch
 
 1. **Start from the main branch:**
@@ -144,7 +150,6 @@ tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e my
 ```bash
 git config core.hooksPath .githooks
 ```
-For cloning: `git clone -c core.hooksPath=.githooks <repo-url>`
 
 **Note**: Some areas (like `operate/data`) are excluded from certain checks. Respect these exclusions.
 
