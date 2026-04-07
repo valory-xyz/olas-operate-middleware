@@ -1547,6 +1547,58 @@ class TestRecoverService:
         # Unstake was still attempted despite the duration-check failure
         mock_staking.functions.unstake.assert_called_with(16)
 
+    def test_drain_agent_safe_funds_recorded_in_total_funds_moved(self) -> None:
+        """Funds returned by _drain_safe are recorded in total_funds_moved (line 784)."""
+        manager = _make_manager()
+        from operate.operate_types import Chain
+
+        agent_safe = "0x" + "5" * 40
+        mock_reg_contract = MagicMock()
+        mock_reg_contract.functions.getService.return_value.call.return_value = [
+            0,
+            agent_safe,
+            0,
+            0,
+            0,
+            0,
+            int(OnChainState.UNBONDED),
+        ]
+        mock_rm = MagicMock()
+        mock_rm.functions.recoverAccess.return_value.build_transaction.return_value = {}
+
+        total_funds_moved: t.Dict[str, t.Any] = {}
+        drain_result = {ZERO_ADDRESS: 1234}
+
+        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
+            f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED
+        ), patch(f"{_MODULE}.registry_contracts") as mock_reg, patch.object(
+            manager, "_drain_safe", return_value=drain_result
+        ), patch(
+            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}
+        ):
+            mock_reg.service_registry.get_instance.return_value = mock_reg_contract
+            mock_reg.recovery_module.get_instance.return_value = mock_rm
+
+            manager._recover_service(
+                chain=Chain.GNOSIS,
+                ledger_api=self._make_ledger(),
+                crypto=self._make_crypto(),
+                service_id=17,
+                service_registry_addr=_SERVICE_REGISTRY,
+                service_manager_addr="",
+                recovery_module_addr=_RECOVERY_MODULE,
+                destination_address=_DEST_ADDR,
+                total_funds_moved=total_funds_moved,
+                chain_id_str="100",
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+
+        # Line 784: total_funds_moved must contain the drained amount
+        assert "100" in total_funds_moved
+        assert agent_safe in total_funds_moved["100"]
+        assert ZERO_ADDRESS in total_funds_moved["100"][agent_safe]
+        assert int(total_funds_moved["100"][agent_safe][ZERO_ADDRESS]) == 1234
+
 
 # ---------------------------------------------------------------------------
 # FundRecoveryManager.scan – safe ERC-20 balance branch (line 329)
