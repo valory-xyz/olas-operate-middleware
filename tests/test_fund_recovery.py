@@ -121,6 +121,34 @@ class TestFundRecoveryScanValidation:
         body = resp.json()
         assert "master_eoa_address" in body
 
+    def test_non_json_body_returns_bad_request(
+        self, client_no_account: TestClient
+    ) -> None:
+        """Non-JSON body triggers the broad except clause → 400."""
+        resp = client_no_account.post(
+            "/api/fund_recovery/scan",
+            content=b"not-json!!!",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert resp.json()["error"] == "Invalid request body."
+
+    def test_manager_exception_returns_500(self, client_no_account: TestClient) -> None:
+        """When FundRecoveryManager.scan() raises, the endpoint returns 500."""
+        with patch(
+            "operate.services.fund_recovery_manager.FundRecoveryManager.scan",
+            side_effect=RuntimeError("scan boom"),
+        ):
+            resp = client_no_account.post(
+                "/api/fund_recovery/scan",
+                json={
+                    "mnemonic": _VALID_MNEMONIC,
+                    "destination_address": _VALID_DESTINATION,
+                },
+            )
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert "error" in resp.json()
+
 
 # ---------------------------------------------------------------------------
 # /api/fund_recovery/execute
@@ -202,3 +230,31 @@ class TestFundRecoveryExecuteValidation:
         body = resp.json()
         assert body["success"] is True
         assert body["errors"] == []
+
+    def test_non_json_body_returns_bad_request(
+        self, client_no_account: TestClient
+    ) -> None:
+        """Non-JSON body triggers the broad except clause → 400."""
+        resp = client_no_account.post(
+            "/api/fund_recovery/execute",
+            content=b"not-json!!!",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert resp.json()["error"] == "Invalid request body."
+
+    def test_manager_exception_returns_500(self, client_no_account: TestClient) -> None:
+        """When FundRecoveryManager.execute() raises, the endpoint returns 500."""
+        with patch(
+            "operate.services.fund_recovery_manager.FundRecoveryManager.execute",
+            side_effect=RuntimeError("unexpected boom"),
+        ):
+            resp = client_no_account.post(
+                "/api/fund_recovery/execute",
+                json={
+                    "mnemonic": _VALID_MNEMONIC,
+                    "destination_address": _VALID_DESTINATION,
+                },
+            )
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert "error" in resp.json()

@@ -1384,3 +1384,250 @@ class TestRecoverService:
             )
             # No unstake should have been issued
             mock_stc.get_instance.assert_not_called()
+
+    def test_terminate_failure_warning_logged(self) -> None:
+        """When terminate() raises, the warning is logged and execution continues."""
+        manager = _make_manager()
+        from operate.operate_types import Chain
+
+        mock_sm = MagicMock()
+        mock_sm.functions.terminate.return_value.build_transaction.side_effect = (
+            RuntimeError("terminate exploded")
+        )
+
+        # Both calls to _get_service_state: first returns DEPLOYED (triggers terminate),
+        # second (after failed terminate) still returns DEPLOYED (no unbond needed).
+        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
+            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
+        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+            mock_reg.service_manager.get_instance.return_value = mock_sm
+            mock_reg.service_registry.get_instance.return_value = MagicMock()
+            # Should NOT raise; the except clause logs and continues
+            manager._recover_service(
+                chain=Chain.GNOSIS,
+                ledger_api=self._make_ledger(),
+                crypto=self._make_crypto(),
+                service_id=12,
+                service_registry_addr=_SERVICE_REGISTRY,
+                service_manager_addr=_SERVICE_MANAGER,
+                recovery_module_addr="",
+                destination_address=_DEST_ADDR,
+                total_funds_moved={},
+                chain_id_str="100",
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+
+    def test_unbond_failure_warning_logged(self) -> None:
+        """When unbond() raises, the warning is logged and execution continues."""
+        manager = _make_manager()
+        from operate.operate_types import Chain
+
+        mock_sm = MagicMock()
+        mock_sm.functions.unbond.return_value.build_transaction.side_effect = (
+            RuntimeError("unbond exploded")
+        )
+
+        states = [OnChainState.TERMINATED_BONDED, OnChainState.TERMINATED_BONDED]
+        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
+            f"{_MODULE}._get_service_state", side_effect=states
+        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+            mock_reg.service_manager.get_instance.return_value = mock_sm
+            mock_reg.service_registry.get_instance.return_value = MagicMock()
+            # Should NOT raise; the except clause logs and continues
+            manager._recover_service(
+                chain=Chain.GNOSIS,
+                ledger_api=self._make_ledger(),
+                crypto=self._make_crypto(),
+                service_id=13,
+                service_registry_addr=_SERVICE_REGISTRY,
+                service_manager_addr=_SERVICE_MANAGER,
+                recovery_module_addr="",
+                destination_address=_DEST_ADDR,
+                total_funds_moved={},
+                chain_id_str="100",
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+
+    def test_recover_access_exception_warning_logged(self) -> None:
+        """When recoverAccess() raises, the warning is logged and execution continues."""
+        manager = _make_manager()
+        from operate.operate_types import Chain
+
+        mock_reg_contract = MagicMock()
+        mock_reg_contract.functions.getService.return_value.call.side_effect = (
+            RuntimeError("getService failed")
+        )
+        mock_rm = MagicMock()
+
+        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
+            f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED
+        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+            mock_reg.service_registry.get_instance.return_value = mock_reg_contract
+            mock_reg.recovery_module.get_instance.return_value = mock_rm
+            # Should NOT raise
+            manager._recover_service(
+                chain=Chain.GNOSIS,
+                ledger_api=self._make_ledger(),
+                crypto=self._make_crypto(),
+                service_id=14,
+                service_registry_addr=_SERVICE_REGISTRY,
+                service_manager_addr="",
+                recovery_module_addr=_RECOVERY_MODULE,
+                destination_address=_DEST_ADDR,
+                total_funds_moved={},
+                chain_id_str="100",
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+
+        mock_rm.functions.recoverAccess.assert_not_called()
+
+    def test_empty_staking_addr_is_skipped(self) -> None:
+        """A falsy staking_addr entry (line 603 continue) is silently skipped."""
+        manager = _make_manager()
+        from operate.operate_types import Chain
+
+        # STAKING dict has one entry with an empty/falsy address
+        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": ""}}), patch(
+            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+        ), patch(f"{_MODULE}.StakingTokenContract") as mock_stc:
+            manager._recover_service(
+                chain=Chain.GNOSIS,
+                ledger_api=self._make_ledger(),
+                crypto=self._make_crypto(),
+                service_id=15,
+                service_registry_addr=_SERVICE_REGISTRY,
+                service_manager_addr="",
+                recovery_module_addr="",
+                destination_address=_DEST_ADDR,
+                total_funds_moved={},
+                chain_id_str="100",
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+
+        # The falsy address was skipped; staking state was never queried
+        mock_stc.get_service_staking_state.assert_not_called()
+
+    def test_min_duration_check_non_value_error_swallowed(self) -> None:
+        """Non-ValueError from get_min_staking_duration is swallowed (lines 634-635)."""
+        manager = _make_manager()
+        from operate.operate_types import Chain
+
+        staking_addr = "0x" + "9" * 40
+        mock_staking = MagicMock()
+        mock_staking.functions.unstake.return_value.build_transaction.return_value = {}
+
+        with patch(
+            f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}
+        ), patch(
+            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+        ), patch(
+            f"{_MODULE}.StakingTokenContract"
+        ) as mock_stc:
+            mock_stc.get_service_staking_state.return_value = {"data": 1}  # STAKED
+            # get_min_staking_duration raises a generic (non-ValueError) exception,
+            # which must be swallowed so unstaking proceeds.
+            mock_stc.get_min_staking_duration.side_effect = RuntimeError(
+                "contract read failed"
+            )
+            mock_stc.get_instance.return_value = mock_staking
+            manager._recover_service(
+                chain=Chain.GNOSIS,
+                ledger_api=self._make_ledger(),
+                crypto=self._make_crypto(),
+                service_id=16,
+                service_registry_addr=_SERVICE_REGISTRY,
+                service_manager_addr="",
+                recovery_module_addr="",
+                destination_address=_DEST_ADDR,
+                total_funds_moved={},
+                chain_id_str="100",
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+
+        # Unstake was still attempted despite the duration-check failure
+        mock_staking.functions.unstake.assert_called_with(16)
+
+
+# ---------------------------------------------------------------------------
+# FundRecoveryManager.scan – safe ERC-20 balance branch (line 329)
+# ---------------------------------------------------------------------------
+
+
+class TestScanSafeErc20Balance:
+    """Extra coverage: safe ERC-20 balance > 0 recorded (line 329)."""
+
+    def test_scan_records_safe_erc20_balance_when_nonzero(self) -> None:
+        """Non-zero ERC-20 balance for a safe is included in scan results."""
+        manager = _make_manager()
+        safe = _SAFE_ADDR
+
+        def _bal(  # type: ignore[no-untyped-def]
+            *, ledger_api, asset_address, address, **kw
+        ):
+            # Only return a balance for the safe + token combination
+            if address == safe and asset_address == _TOKEN_ADDR:
+                return 777
+            return 0
+
+        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
+            f"{_MODULE}.get_asset_balance", side_effect=_bal
+        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]), patch(
+            f"{_MODULE}._enumerate_owned_services", return_value=[]
+        ), patch(
+            f"{_MODULE}._check_gas_warning",
+            return_value=GasWarningEntry(insufficient=False),
+        ), patch(
+            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
+            {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        token_found = False
+        for _chain_id_str, addresses in result.balances.items():
+            if safe in addresses and _TOKEN_ADDR in addresses[safe]:
+                if int(addresses[safe][_TOKEN_ADDR]) == 777:
+                    token_found = True
+                    break
+        assert (
+            token_found
+        ), f"Safe ERC-20 balance not recorded; balances={result.balances}"
+
+
+# ---------------------------------------------------------------------------
+# FundRecoveryManager._drain_eoa_assets – ERC-20 failure branch (line 881-882)
+# ---------------------------------------------------------------------------
+
+
+class TestDrainEoaErc20Failure:
+    """Extra coverage: ERC-20 EOA drain failure is swallowed (lines 881-882)."""
+
+    def test_erc20_eoa_drain_failure_swallowed(self) -> None:
+        """transfer_erc20_from_eoa raises → warning logged, token omitted from moved."""
+        manager = _make_manager()
+
+        def _bal(  # type: ignore[no-untyped-def]
+            *, ledger_api, asset_address, address, **kw
+        ):
+            if asset_address == _TOKEN_ADDR:
+                return 999
+            return 0
+
+        with patch(f"{_MODULE}.get_asset_balance", side_effect=_bal), patch(
+            f"{_MODULE}.drain_eoa", return_value=None
+        ), patch(
+            f"{_MODULE}.transfer_erc20_from_eoa",
+            side_effect=Exception("erc20 eoa fail"),
+        ):
+            from operate.operate_types import Chain
+
+            moved = manager._drain_eoa_assets(
+                chain=Chain.GNOSIS,
+                ledger_api=MagicMock(),
+                crypto=MagicMock(),
+                eoa_address=_TEST_EOA_ADDRESS,
+                destination=_DEST_ADDR,
+                erc20_tokens=[_TOKEN_ADDR],
+            )
+
+        # Token must not be in moved because the transfer failed
+        assert _TOKEN_ADDR not in moved

@@ -30,6 +30,7 @@ from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
     MultiSendOperation,
+    SAFE_TX_SERVICE_HOSTS,
     SENTINEL_OWNERS,
     SafeOperation,
     _get_nonce,
@@ -37,6 +38,7 @@ from operate.utils.gnosis import (
     create_safe,
     drain_eoa,
     estimate_transfer_tx_fee,
+    fetch_safes_for_owner,
     gas_fees_spent_in_tx,
     get_asset_balance,
     get_assets_balances,
@@ -1217,3 +1219,89 @@ class TestDrainEoaBuildClosure:
         assert result == "0xdrainsuccess"
         mock_ledger.get_transfer_transaction.assert_called_once()
         mock_ledger.update_with_gas_estimate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# fetch_safes_for_owner (lines 714-726)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchSafesForOwner:
+    """Tests for fetch_safes_for_owner."""
+
+    def test_unsupported_chain_returns_empty_list(self) -> None:
+        """When chain_id has no entry in SAFE_TX_SERVICE_HOSTS, return []."""
+        # Use a chain_id that is guaranteed to be absent from the mapping
+        unknown_chain_id = 999999
+        assert unknown_chain_id not in SAFE_TX_SERVICE_HOSTS
+        result = fetch_safes_for_owner(unknown_chain_id, "0x" + "a" * 40)
+        assert result == []
+
+    def test_successful_request_returns_safe_list(self) -> None:
+        """A successful HTTP response is parsed and the safes list is returned."""
+        import json as json_mod
+        from unittest.mock import MagicMock, patch
+
+        # Pick a supported chain id
+        if not SAFE_TX_SERVICE_HOSTS:
+            import pytest
+
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_HOSTS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_HOSTS))
+        owner = "0x" + "a" * 40
+        safes = ["0x" + "b" * 40, "0x" + "c" * 40]
+
+        fake_response_data = json_mod.dumps({"safes": safes}).encode("utf-8")
+
+        fake_resp = MagicMock()
+        fake_resp.read.return_value = fake_response_data
+        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
+        fake_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == safes
+
+    def test_request_exception_returns_empty_list(self) -> None:
+        """When the HTTP request raises, an empty list is returned (no propagation)."""
+        from unittest.mock import patch
+
+        if not SAFE_TX_SERVICE_HOSTS:
+            import pytest
+
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_HOSTS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_HOSTS))
+        owner = "0x" + "a" * 40
+
+        with patch("urllib.request.urlopen", side_effect=Exception("network error")):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+
+    def test_missing_safes_key_returns_empty_list(self) -> None:
+        """When the JSON response lacks the 'safes' key, return []."""
+        import json as json_mod
+        from unittest.mock import MagicMock, patch
+
+        if not SAFE_TX_SERVICE_HOSTS:
+            import pytest
+
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_HOSTS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_HOSTS))
+        owner = "0x" + "a" * 40
+
+        fake_response_data = json_mod.dumps({"other_key": []}).encode("utf-8")
+
+        fake_resp = MagicMock()
+        fake_resp.read.return_value = fake_response_data
+        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
+        fake_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
