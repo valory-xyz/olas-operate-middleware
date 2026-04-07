@@ -137,8 +137,14 @@ The project uses several tools to maintain code quality. All are configured in `
 tox -p -e black -e isort
 
 # Run all quality checks
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy -e safety
 ```
+
+**Pre-push hook**: A git pre-push hook (`.githooks/pre-push`) automatically runs the full linting suite. Enable with:
+```bash
+git config core.hooksPath .githooks
+```
+For cloning: `git clone -c core.hooksPath=.githooks <repo-url>`
 
 **Note**: Some areas (like `operate/data`) are excluded from certain checks. Respect these exclusions.
 
@@ -235,6 +241,8 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
    # Run quality checks
    tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
    ```
+   
+   **Note**: The pre-push hook will automatically run these checks when you push, blocking the push if any checks fail. Running locally first is recommended to avoid CI failures.
 
 3. **Ensure relavent tests pass:**
    ```bash

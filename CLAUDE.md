@@ -118,9 +118,11 @@ poetry shell
 
 **CRITICAL**: Always run ALL linters before committing changes. CI runs all checks, so local verification prevents CI failures.
 
+**Pre-push hook**: A git pre-push hook (`.githooks/pre-push`) automatically runs the full linting suite before every push. Enable it with `git config core.hooksPath .githooks`.
+
 **Required workflow before every commit:**
 1. Format code: `tox -p -e black -e isort`
-2. Run ALL linters: `tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit`
+2. Run ALL linters: `tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy`
 3. Verify tests pass: `tox -e unit-tests`
 
 ```bash
@@ -128,13 +130,13 @@ poetry shell
 tox -p -e black -e isort
 
 # Step 2: Run ALL quality checks (REQUIRED before committing)
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit
+tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy
 
 # Step 3: Verify tests pass
 tox -e unit-tests
 
 # Optional: Full CI check (includes safety, takes longer)
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy -e safety
 
 # Quick check during development (core linters only)
 tox -p -e black-check -e flake8 -e mypy
