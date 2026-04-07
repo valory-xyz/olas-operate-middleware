@@ -139,17 +139,13 @@ The project uses several tools to maintain code quality. All are configured in `
 ### Running All Checks
 
 ```bash
-# Format code
-tox -p -e black -e isort
-
 # Run all quality checks
 tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy -e safety
 ```
 
-**Pre-push hook**: A git pre-push hook (`.githooks/pre-push`) automatically runs the full linting suite. Enable with:
-```bash
-git config core.hooksPath .githooks
-```
+**Git hooks**: Enable with `git config core.hooksPath .githooks`.
+- **pre-commit hook** (`.githooks/pre-commit`): Automatically formats staged Python files with black/isort
+- **pre-push hook** (`.githooks/pre-push`): Runs full linting suite before every push
 
 **Note**: Some areas (like `operate/data`) are excluded from certain checks. Respect these exclusions.
 
