@@ -162,7 +162,9 @@ def _enumerate_owned_services(  # pylint: disable=too-many-locals
                         "address": Web3.to_checksum_address(service_registry_address),
                         "topics": [
                             # Transfer(address,address,uint256) — topic0
-                            Web3.keccak(text="Transfer(address,address,uint256)").hex(),
+                            Web3.keccak(
+                                text="Transfer(address,address,uint256)"
+                            ).to_0x_hex(),
                             None,  # from: any
                             # to: padded owner address
                             "0x" + "0" * 24 + owner_checksum[2:].lower(),
