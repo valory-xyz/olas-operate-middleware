@@ -63,43 +63,15 @@ class TestFundRecoveryScanValidation:
             "/api/fund_recovery/scan",
             json={
                 "mnemonic": "not a valid mnemonic phrase at all zzz",
-                "destination_address": _VALID_DESTINATION,
             },
         )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
         assert "mnemonic" in resp.json()["error"].lower()
 
-    def test_invalid_destination_address_returns_bad_request(
-        self, client_no_account: TestClient
-    ) -> None:
-        """A non-EVM destination address is rejected with 400."""
-        resp = client_no_account.post(
-            "/api/fund_recovery/scan",
-            json={
-                "mnemonic": _VALID_MNEMONIC,
-                "destination_address": "not-an-address",
-            },
-        )
-        assert resp.status_code == HTTPStatus.BAD_REQUEST
-
-    def test_zero_address_destination_returns_bad_request(
-        self, client_no_account: TestClient
-    ) -> None:
-        """The zero address is rejected with 400 to prevent fund loss."""
-        resp = client_no_account.post(
-            "/api/fund_recovery/scan",
-            json={
-                "mnemonic": _VALID_MNEMONIC,
-                "destination_address": _ZERO_DESTINATION,
-            },
-        )
-        assert resp.status_code == HTTPStatus.BAD_REQUEST
-        assert "zero" in resp.json()["error"].lower()
-
     def test_valid_request_calls_manager_and_returns_200(
         self, client_no_account: TestClient
     ) -> None:
-        """Happy path: valid mnemonic + destination → 200 with scan result."""
+        """Happy path: valid mnemonic → 200 with scan result."""
         scan_result = FundRecoveryScanResponse(
             master_eoa_address=_VALID_DESTINATION,
             balances=ChainAmounts(),
@@ -114,7 +86,6 @@ class TestFundRecoveryScanValidation:
                 "/api/fund_recovery/scan",
                 json={
                     "mnemonic": _VALID_MNEMONIC,
-                    "destination_address": _VALID_DESTINATION,
                 },
             )
         assert resp.status_code == HTTPStatus.OK
@@ -143,7 +114,6 @@ class TestFundRecoveryScanValidation:
                 "/api/fund_recovery/scan",
                 json={
                     "mnemonic": _VALID_MNEMONIC,
-                    "destination_address": _VALID_DESTINATION,
                 },
             )
         assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR

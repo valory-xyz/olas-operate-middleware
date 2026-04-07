@@ -536,7 +536,6 @@ class FundRecoveryScanRequest(BaseModel):
     """Request body for POST /api/fund_recovery/scan."""
 
     mnemonic: str
-    destination_address: EVMDestinationAddress
 
 
 class RecoveredServiceInfo(BaseModel):
