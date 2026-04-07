@@ -238,6 +238,8 @@ class TestEnumerateOwnedServices:
         """Returns IDs where ownerOf matches the given owner."""
         mock_ledger = MagicMock()
         mock_ledger.api.eth.block_number = 100
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+        mock_ledger.api.eth.call.return_value = b""
         mock_ledger.api.eth.get_logs.return_value = [self._make_log(7)]
         contract_mock = MagicMock()
         contract_mock.functions.ownerOf.return_value.call.return_value = (
@@ -257,6 +259,8 @@ class TestEnumerateOwnedServices:
         """Skips IDs where ownerOf returns a different address."""
         mock_ledger = MagicMock()
         mock_ledger.api.eth.block_number = 100
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+        mock_ledger.api.eth.call.return_value = b""
         mock_ledger.api.eth.get_logs.return_value = [self._make_log(5)]
         contract_mock = MagicMock()
         # ownerOf returns a *different* address
@@ -301,6 +305,8 @@ class TestEnumerateOwnedServices:
         """Silently skips a token when ownerOf raises."""
         mock_ledger = MagicMock()
         mock_ledger.api.eth.block_number = 100
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+        mock_ledger.api.eth.call.return_value = b""
         mock_ledger.api.eth.get_logs.return_value = [self._make_log(3)]
         contract_mock = MagicMock()
         contract_mock.functions.ownerOf.return_value.call.side_effect = Exception(
@@ -321,6 +327,8 @@ class TestEnumerateOwnedServices:
         mock_ledger = MagicMock()
         # block_number > chunk to force multiple iterations
         mock_ledger.api.eth.block_number = 15_000
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+        mock_ledger.api.eth.call.return_value = b""
         call_count = 0
 
         def _side_effect(*_a, **_kw):  # type: ignore[no-untyped-def]
@@ -356,11 +364,14 @@ class TestFundRecoveryManagerScan:
     def test_scan_returns_correct_type(self) -> None:
         """scan() always returns FundRecoveryScanResponse."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
         assert isinstance(result, FundRecoveryScanResponse)
@@ -368,11 +379,14 @@ class TestFundRecoveryManagerScan:
     def test_scan_derives_eoa_address_from_mnemonic(self) -> None:
         """The master_eoa_address in the response matches the derived address."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
         assert result.master_eoa_address.lower() == _TEST_EOA_ADDRESS.lower()
@@ -380,14 +394,19 @@ class TestFundRecoveryManagerScan:
     def test_scan_records_eoa_native_balance(self) -> None:
         """Non-zero EOA native balance is recorded in the response."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance",
-            side_effect=lambda *, ledger_api, asset_address, address, **kw: (
-                1000 if asset_address == ZERO_ADDRESS else 0
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(
+                f"{_MODULE}.get_asset_balance",
+                side_effect=lambda *, ledger_api, asset_address, address, **kw: (
+                    1000 if asset_address == ZERO_ADDRESS else 0
+                ),
             ),
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -410,14 +429,18 @@ class TestFundRecoveryManagerScan:
                 return 0
             return 500
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", side_effect=_bal
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
-        ), patch(
-            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
-            {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(
+                f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -433,14 +456,18 @@ class TestFundRecoveryManagerScan:
         """ERC-20 balances of 0 are NOT included in the response."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
-        ), patch(
-            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
-            {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(
+                f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -458,13 +485,15 @@ class TestFundRecoveryManagerScan:
                 return 9999
             return 0
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", side_effect=_bal
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[]
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -480,15 +509,16 @@ class TestFundRecoveryManagerScan:
         """Services owned by safes are returned in the services list."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[42]
-        ), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -499,18 +529,19 @@ class TestFundRecoveryManagerScan:
         """Same service_id seen from two safes is only reported once."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(
-            f"{_MODULE}.fetch_safes_for_owner",
-            return_value=[_SAFE_ADDR, "0x" + "3" * 40],
-        ), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[7]
-        ), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}.fetch_safes_for_owner",
+                return_value=[_SAFE_ADDR, "0x" + "3" * 40],
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[7]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -525,15 +556,16 @@ class TestFundRecoveryManagerScan:
         """Services in DEPLOYED state have can_unstake=True."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[1]
-        ), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[1]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -545,16 +577,19 @@ class TestFundRecoveryManagerScan:
         """Services in TERMINATED_BONDED have can_unstake=True."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[2]
-        ), patch(
-            f"{_MODULE}._get_service_state",
-            return_value=OnChainState.TERMINATED_BONDED,
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[2]),
+            patch(
+                f"{_MODULE}._get_service_state",
+                return_value=OnChainState.TERMINATED_BONDED,
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -566,16 +601,19 @@ class TestFundRecoveryManagerScan:
         """Services in PRE_REGISTRATION have can_unstake=False."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[3]
-        ), patch(
-            f"{_MODULE}._get_service_state",
-            return_value=OnChainState.PRE_REGISTRATION,
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[3]),
+            patch(
+                f"{_MODULE}._get_service_state",
+                return_value=OnChainState.PRE_REGISTRATION,
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -587,11 +625,14 @@ class TestFundRecoveryManagerScan:
         """gas_warning dict is keyed by chain_id string for every RECOVERY_CHAIN."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=True),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=True),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -616,13 +657,15 @@ class TestFundRecoveryManagerScan:
         """When CONTRACTS has no service_registry for a chain, no services returned."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
-        ), patch(
-            f"{_MODULE}.CONTRACTS", {}
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.CONTRACTS", {}),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -632,14 +675,18 @@ class TestFundRecoveryManagerScan:
         """Exceptions in the service-enumeration block don't crash scan()."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", return_value=0
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]), patch(
-            f"{_MODULE}._enumerate_owned_services",
-            side_effect=RuntimeError("boom"),
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._enumerate_owned_services",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -661,15 +708,14 @@ class TestFundRecoveryManagerExecute:
     def test_execute_returns_correct_type(self) -> None:
         """execute() always returns FundRecoveryExecuteResponse."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", return_value={}
-        ), patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(manager, "_drain_eoa_assets", return_value={}),
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
         assert isinstance(result, FundRecoveryExecuteResponse)
@@ -677,15 +723,14 @@ class TestFundRecoveryManagerExecute:
     def test_execute_success_no_errors(self) -> None:
         """Happy path with no services and no funds produces success=True, errors=[]."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", return_value={}
-        ), patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(manager, "_drain_eoa_assets", return_value={}),
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -696,15 +741,16 @@ class TestFundRecoveryManagerExecute:
     def test_execute_records_moved_funds_from_eoa(self) -> None:
         """Funds moved from EOA drain are recorded in total_funds_moved."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 5000}
-        ), patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(
+                manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 5000}
+            ),
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -719,15 +765,14 @@ class TestFundRecoveryManagerExecute:
     def test_execute_records_moved_funds_from_safe(self) -> None:
         """Funds moved from Safe drain are recorded in total_funds_moved."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", return_value={}
-        ), patch.object(
-            manager, "_drain_safe", return_value={ZERO_ADDRESS: 8000}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(manager, "_drain_eoa_assets", return_value={}),
+            patch.object(manager, "_drain_safe", return_value={ZERO_ADDRESS: 8000}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -756,15 +801,16 @@ class TestFundRecoveryManagerExecute:
     def test_execute_drain_eoa_error_recorded(self) -> None:
         """An exception from _drain_eoa_assets is recorded in errors."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", side_effect=RuntimeError("drain fail")
-        ), patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(
+                manager, "_drain_eoa_assets", side_effect=RuntimeError("drain fail")
+            ),
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -774,15 +820,16 @@ class TestFundRecoveryManagerExecute:
     def test_execute_drain_safe_error_recorded(self) -> None:
         """An exception from _drain_safe is recorded in errors."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", return_value={}
-        ), patch.object(
-            manager, "_drain_safe", side_effect=RuntimeError("safe drain fail")
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(manager, "_drain_eoa_assets", return_value={}),
+            patch.object(
+                manager, "_drain_safe", side_effect=RuntimeError("safe drain fail")
+            ),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -792,19 +839,17 @@ class TestFundRecoveryManagerExecute:
     def test_execute_service_recovery_error_recorded(self) -> None:
         """A service recovery failure is recorded in errors."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]
-        ), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[42]
-        ), patch.object(
-            manager, "_recover_service", side_effect=RuntimeError("svc fail")
-        ), patch.object(
-            manager, "_drain_eoa_assets", return_value={}
-        ), patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
+            patch.object(
+                manager, "_recover_service", side_effect=RuntimeError("svc fail")
+            ),
+            patch.object(manager, "_drain_eoa_assets", return_value={}),
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -814,17 +859,18 @@ class TestFundRecoveryManagerExecute:
     def test_execute_partial_failure_when_some_funds_moved(self) -> None:
         """partial_failure=True when errors exist and some funds were moved."""
         manager = _make_manager()
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]
-        ), patch(f"{_MODULE}._enumerate_owned_services", return_value=[]), patch.object(
-            manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 1}
-        ), patch.object(
-            manager,
-            "_drain_safe",
-            side_effect=RuntimeError("safe drain fail"),
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 1}),
+            patch.object(
+                manager,
+                "_drain_safe",
+                side_effect=RuntimeError("safe drain fail"),
+            ),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -838,20 +884,18 @@ class TestFundRecoveryManagerExecute:
         def _recover(*, service_id, **kwargs):  # type: ignore[no-untyped-def]
             recover_calls.append(service_id)
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.fetch_safes_for_owner",
-            return_value=[_SAFE_ADDR, "0x" + "4" * 40],
-        ), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[99]
-        ), patch.object(
-            manager, "_recover_service", side_effect=_recover
-        ), patch.object(
-            manager, "_drain_eoa_assets", return_value={}
-        ), patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.KeysManager"
-        ) as mock_km:
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(
+                f"{_MODULE}.fetch_safes_for_owner",
+                return_value=[_SAFE_ADDR, "0x" + "4" * 40],
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[99]),
+            patch.object(manager, "_recover_service", side_effect=_recover),
+            patch.object(manager, "_drain_eoa_assets", return_value={}),
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
             mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -885,10 +929,13 @@ class TestDrainSafe:
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
 
-        with patch(
-            f"{_MODULE}.get_asset_balance",
-            return_value=1000,
-        ), patch(f"{_MODULE}.transfer") as mock_transfer:
+        with (
+            patch(
+                f"{_MODULE}.get_asset_balance",
+                return_value=1000,
+            ),
+            patch(f"{_MODULE}.transfer") as mock_transfer,
+        ):
             moved = manager._drain_safe(
                 ledger_api=mock_ledger,
                 crypto=mock_crypto,
@@ -905,10 +952,13 @@ class TestDrainSafe:
         """transfer() is NOT called when native balance == 0."""
         manager = _make_manager()
 
-        with patch(
-            f"{_MODULE}.get_asset_balance",
-            return_value=0,
-        ), patch(f"{_MODULE}.transfer") as mock_transfer:
+        with (
+            patch(
+                f"{_MODULE}.get_asset_balance",
+                return_value=0,
+            ),
+            patch(f"{_MODULE}.transfer") as mock_transfer,
+        ):
             moved = manager._drain_safe(
                 ledger_api=MagicMock(),
                 crypto=MagicMock(),
@@ -929,9 +979,11 @@ class TestDrainSafe:
                 return 200
             return 0
 
-        with patch(f"{_MODULE}.get_asset_balance", side_effect=_bal), patch(
-            f"{_MODULE}.transfer"
-        ), patch(f"{_MODULE}.transfer_erc20_from_safe") as mock_erc20:
+        with (
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.transfer"),
+            patch(f"{_MODULE}.transfer_erc20_from_safe") as mock_erc20,
+        ):
             moved = manager._drain_safe(
                 ledger_api=MagicMock(),
                 crypto=MagicMock(),
@@ -948,9 +1000,10 @@ class TestDrainSafe:
         """transfer_erc20_from_safe() is NOT called for zero ERC-20 balance."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_asset_balance", return_value=0), patch(
-            f"{_MODULE}.transfer_erc20_from_safe"
-        ) as mock_erc20:
+        with (
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.transfer_erc20_from_safe") as mock_erc20,
+        ):
             moved = manager._drain_safe(
                 ledger_api=MagicMock(),
                 crypto=MagicMock(),
@@ -969,10 +1022,13 @@ class TestDrainSafe:
         def _bal(*, ledger_api, asset_address, address, **kw):  # type: ignore[no-untyped-def]
             return 100
 
-        with patch(f"{_MODULE}.get_asset_balance", side_effect=_bal), patch(
-            f"{_MODULE}.transfer"
-        ), patch(
-            f"{_MODULE}.transfer_erc20_from_safe", side_effect=Exception("erc20 fail")
+        with (
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.transfer"),
+            patch(
+                f"{_MODULE}.transfer_erc20_from_safe",
+                side_effect=Exception("erc20 fail"),
+            ),
         ):
             moved = manager._drain_safe(
                 ledger_api=MagicMock(),
@@ -988,9 +1044,11 @@ class TestDrainSafe:
         """Native transfer failure does not propagate; native omitted from moved."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_asset_balance", return_value=500), patch(
-            f"{_MODULE}.transfer", side_effect=Exception("transfer fail")
-        ), patch(f"{_MODULE}.transfer_erc20_from_safe"):
+        with (
+            patch(f"{_MODULE}.get_asset_balance", return_value=500),
+            patch(f"{_MODULE}.transfer", side_effect=Exception("transfer fail")),
+            patch(f"{_MODULE}.transfer_erc20_from_safe"),
+        ):
             moved = manager._drain_safe(
                 ledger_api=MagicMock(),
                 crypto=MagicMock(),
@@ -1014,9 +1072,11 @@ class TestDrainEoaAssets:
         """drain_eoa() is called for native balance; tx hash triggers balance recording."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_asset_balance", return_value=3000), patch(
-            f"{_MODULE}.drain_eoa", return_value=b"0x" + b"a" * 64
-        ), patch(f"{_MODULE}.transfer_erc20_from_eoa"):
+        with (
+            patch(f"{_MODULE}.get_asset_balance", return_value=3000),
+            patch(f"{_MODULE}.drain_eoa", return_value=b"0x" + b"a" * 64),
+            patch(f"{_MODULE}.transfer_erc20_from_eoa"),
+        ):
             from operate.operate_types import Chain
 
             moved = manager._drain_eoa_assets(
@@ -1034,8 +1094,9 @@ class TestDrainEoaAssets:
         """When drain_eoa returns falsy, ZERO_ADDRESS is not in moved."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_asset_balance", return_value=0), patch(
-            f"{_MODULE}.drain_eoa", return_value=None
+        with (
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.drain_eoa", return_value=None),
         ):
             from operate.operate_types import Chain
 
@@ -1059,9 +1120,11 @@ class TestDrainEoaAssets:
                 return 750
             return 0
 
-        with patch(f"{_MODULE}.get_asset_balance", side_effect=_bal), patch(
-            f"{_MODULE}.drain_eoa", return_value=None
-        ), patch(f"{_MODULE}.transfer_erc20_from_eoa") as mock_t:
+        with (
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.drain_eoa", return_value=None),
+            patch(f"{_MODULE}.transfer_erc20_from_eoa") as mock_t,
+        ):
             from operate.operate_types import Chain
 
             moved = manager._drain_eoa_assets(
@@ -1081,8 +1144,9 @@ class TestDrainEoaAssets:
         """Exception from drain_eoa does not propagate."""
         manager = _make_manager()
 
-        with patch(f"{_MODULE}.get_asset_balance", return_value=0), patch(
-            f"{_MODULE}.drain_eoa", side_effect=Exception("drain error")
+        with (
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(f"{_MODULE}.drain_eoa", side_effect=Exception("drain error")),
         ):
             from operate.operate_types import Chain
 
@@ -1127,9 +1191,13 @@ class TestRecoverService:
         manager = _make_manager()
         from operate.operate_types import Chain
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-        ), patch.object(manager, "_drain_safe", return_value={}):
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+            ),
+            patch.object(manager, "_drain_safe", return_value={}),
+        ):
             # Should not raise
             manager._recover_service(
                 chain=Chain.GNOSIS,
@@ -1153,9 +1221,11 @@ class TestRecoverService:
         mock_sm = MagicMock()
         mock_sm.functions.terminate.return_value.build_transaction.return_value = {}
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+        ):
             mock_reg.service_manager.get_instance.return_value = mock_sm
             mock_reg.service_registry.get_instance.return_value = MagicMock()
             manager._recover_service(
@@ -1183,9 +1253,11 @@ class TestRecoverService:
         mock_sm.functions.unbond.return_value.build_transaction.return_value = {}
 
         states = [OnChainState.TERMINATED_BONDED, OnChainState.TERMINATED_BONDED]
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", side_effect=states
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", side_effect=states),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+        ):
             mock_reg.service_manager.get_instance.return_value = mock_sm
             mock_reg.service_registry.get_instance.return_value = MagicMock()
             manager._recover_service(
@@ -1209,9 +1281,11 @@ class TestRecoverService:
         manager = _make_manager()
         from operate.operate_types import Chain
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
-        ), patch(f"{_MODULE}.registry_contracts"):
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(f"{_MODULE}.registry_contracts"),
+        ):
             # Should not raise even without service_manager_addr
             manager._recover_service(
                 chain=Chain.GNOSIS,
@@ -1247,12 +1321,12 @@ class TestRecoverService:
         mock_rm = MagicMock()
         mock_rm.functions.recoverAccess.return_value.build_transaction.return_value = {}
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg, patch.object(
-            manager, "_drain_safe", return_value={}
-        ), patch(
-            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+            patch.object(manager, "_drain_safe", return_value={}),
+            patch(f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}),
         ):
             mock_reg.service_registry.get_instance.return_value = mock_reg_contract
             mock_reg.recovery_module.get_instance.return_value = mock_rm
@@ -1290,9 +1364,11 @@ class TestRecoverService:
         ]
         mock_rm = MagicMock()
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+        ):
             mock_reg.service_registry.get_instance.return_value = mock_reg_contract
             mock_reg.recovery_module.get_instance.return_value = mock_rm
 
@@ -1320,13 +1396,13 @@ class TestRecoverService:
         staking_addr = "0x" + "7" * 40
         mock_staking = MagicMock()
 
-        with patch(
-            f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}
-        ), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-        ), patch(
-            f"{_MODULE}.StakingTokenContract"
-        ) as mock_stc:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+            ),
+            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
+        ):
             mock_stc.get_service_staking_state.return_value = {"data": 0}  # UNSTAKED
             mock_stc.get_instance.return_value = mock_staking
             manager._recover_service(
@@ -1353,13 +1429,13 @@ class TestRecoverService:
         staking_addr = "0x" + "8" * 40
         ts_start = int(time.time()) - 10  # only 10 seconds elapsed
 
-        with patch(
-            f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}
-        ), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-        ), patch(
-            f"{_MODULE}.StakingTokenContract"
-        ) as mock_stc:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+            ),
+            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
+        ):
             mock_stc.get_service_staking_state.return_value = {"data": 1}  # STAKED
             mock_stc.get_min_staking_duration.return_value = {
                 "data": 86400
@@ -1397,9 +1473,11 @@ class TestRecoverService:
 
         # Both calls to _get_service_state: first returns DEPLOYED (triggers terminate),
         # second (after failed terminate) still returns DEPLOYED (no unbond needed).
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+        ):
             mock_reg.service_manager.get_instance.return_value = mock_sm
             mock_reg.service_registry.get_instance.return_value = MagicMock()
             # Should NOT raise; the except clause logs and continues
@@ -1428,9 +1506,11 @@ class TestRecoverService:
         )
 
         states = [OnChainState.TERMINATED_BONDED, OnChainState.TERMINATED_BONDED]
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", side_effect=states
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", side_effect=states),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+        ):
             mock_reg.service_manager.get_instance.return_value = mock_sm
             mock_reg.service_registry.get_instance.return_value = MagicMock()
             # Should NOT raise; the except clause logs and continues
@@ -1459,9 +1539,11 @@ class TestRecoverService:
         )
         mock_rm = MagicMock()
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+        ):
             mock_reg.service_registry.get_instance.return_value = mock_reg_contract
             mock_reg.recovery_module.get_instance.return_value = mock_rm
             # Should NOT raise
@@ -1487,9 +1569,13 @@ class TestRecoverService:
         from operate.operate_types import Chain
 
         # STAKING dict has one entry with an empty/falsy address
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": ""}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-        ), patch(f"{_MODULE}.StakingTokenContract") as mock_stc:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": ""}}),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+            ),
+            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
+        ):
             manager._recover_service(
                 chain=Chain.GNOSIS,
                 ledger_api=self._make_ledger(),
@@ -1516,13 +1602,13 @@ class TestRecoverService:
         mock_staking = MagicMock()
         mock_staking.functions.unstake.return_value.build_transaction.return_value = {}
 
-        with patch(
-            f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}
-        ), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-        ), patch(
-            f"{_MODULE}.StakingTokenContract"
-        ) as mock_stc:
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
+            ),
+            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
+        ):
             mock_stc.get_service_staking_state.return_value = {"data": 1}  # STAKED
             # get_min_staking_duration raises a generic (non-ValueError) exception,
             # which must be swallowed so unstaking proceeds.
@@ -1569,12 +1655,12 @@ class TestRecoverService:
         total_funds_moved: t.Dict[str, t.Any] = {}
         drain_result = {ZERO_ADDRESS: 1234}
 
-        with patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}), patch(
-            f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED
-        ), patch(f"{_MODULE}.registry_contracts") as mock_reg, patch.object(
-            manager, "_drain_safe", return_value=drain_result
-        ), patch(
-            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}
+        with (
+            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
+            patch(f"{_MODULE}.registry_contracts") as mock_reg,
+            patch.object(manager, "_drain_safe", return_value=drain_result),
+            patch(f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}),
         ):
             mock_reg.service_registry.get_instance.return_value = mock_reg_contract
             mock_reg.recovery_module.get_instance.return_value = mock_rm
@@ -1621,16 +1707,19 @@ class TestScanSafeErc20Balance:
                 return 777
             return 0
 
-        with patch(f"{_MODULE}.get_default_ledger_api"), patch(
-            f"{_MODULE}.get_asset_balance", side_effect=_bal
-        ), patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]), patch(
-            f"{_MODULE}._enumerate_owned_services", return_value=[]
-        ), patch(
-            f"{_MODULE}._check_gas_warning",
-            return_value=GasWarningEntry(insufficient=False),
-        ), patch(
-            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
-            {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(
+                f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+            ),
         ):
             result = manager.scan(_TEST_MNEMONIC)
 
@@ -1664,11 +1753,13 @@ class TestDrainEoaErc20Failure:
                 return 999
             return 0
 
-        with patch(f"{_MODULE}.get_asset_balance", side_effect=_bal), patch(
-            f"{_MODULE}.drain_eoa", return_value=None
-        ), patch(
-            f"{_MODULE}.transfer_erc20_from_eoa",
-            side_effect=Exception("erc20 eoa fail"),
+        with (
+            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+            patch(f"{_MODULE}.drain_eoa", return_value=None),
+            patch(
+                f"{_MODULE}.transfer_erc20_from_eoa",
+                side_effect=Exception("erc20 eoa fail"),
+            ),
         ):
             from operate.operate_types import Chain
 
