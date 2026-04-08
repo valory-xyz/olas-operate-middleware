@@ -32,7 +32,7 @@ from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, field_serializer
 from typing_extensions import Annotated, TypedDict
 from web3 import Web3
 
@@ -557,6 +557,11 @@ class FundRecoveryScanResponse(BaseModel):
     services: t.List[RecoveredServiceInfo]
     gas_warning: t.Dict[str, GasWarningEntry]
 
+    @field_serializer("balances")
+    def serialize_balances(self, balances: ChainAmounts) -> dict:
+        """Serialize balances using ChainAmounts.json property."""
+        return balances.json
+
 
 class FundRecoveryExecuteRequest(BaseModel):
     """Request body for POST /api/fund_recovery/execute."""
@@ -574,3 +579,8 @@ class FundRecoveryExecuteResponse(BaseModel):
     partial_failure: bool
     total_funds_moved: ChainAmounts
     errors: t.List[str]
+
+    @field_serializer("total_funds_moved")
+    def serialize_total_funds_moved(self, total_funds_moved: ChainAmounts) -> dict:
+        """Serialize total_funds_moved using ChainAmounts.json property."""
+        return total_funds_moved.json
