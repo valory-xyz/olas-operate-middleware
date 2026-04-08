@@ -552,7 +552,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # --- Pearl Store API ---
     # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
-    _pearl_store_path = operate._path / "pearl_store.json"  # pylint: disable=protected-access
+    _pearl_store_path = (
+        operate._path / "pearl_store.json"
+    )  # pylint: disable=protected-access
     _pearl_store_lock = __import__("threading").Lock()
 
     def _read_pearl_store() -> t.Dict:
@@ -560,7 +562,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not _pearl_store_path.exists():
             return {}
         try:
-            return __import__("json").loads(_pearl_store_path.read_text(encoding="utf-8"))
+            return __import__("json").loads(
+                _pearl_store_path.read_text(encoding="utf-8")
+            )
         except Exception:  # pylint: disable=broad-except
             return {}
 
