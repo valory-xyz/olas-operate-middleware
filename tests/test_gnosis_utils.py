@@ -1272,7 +1272,6 @@ class TestFetchSafesForOwner:
 
     def test_successful_request_returns_safe_list(self) -> None:
         """A successful HTTP response is parsed and the safes list is returned."""
-        import json as json_mod
         from unittest.mock import MagicMock, patch
 
         # Pick a supported chain id
@@ -1285,14 +1284,11 @@ class TestFetchSafesForOwner:
         owner = "0x" + "a" * 40
         safes = ["0x" + "b" * 40, "0x" + "c" * 40]
 
-        fake_response_data = json_mod.dumps({"safes": safes}).encode("utf-8")
-
         fake_resp = MagicMock()
-        fake_resp.read.return_value = fake_response_data
-        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
-        fake_resp.__exit__ = MagicMock(return_value=False)
+        fake_resp.json.return_value = {"safes": safes}
+        fake_resp.raise_for_status = MagicMock()
 
-        with patch("urllib.request.urlopen", return_value=fake_resp):
+        with patch("requests.get", return_value=fake_resp):
             result = fetch_safes_for_owner(chain_id, owner)
 
         assert result == safes
@@ -1309,14 +1305,13 @@ class TestFetchSafesForOwner:
         chain_id = next(iter(SAFE_TX_SERVICE_URLS))
         owner = "0x" + "a" * 40
 
-        with patch("urllib.request.urlopen", side_effect=Exception("network error")):
+        with patch("requests.get", side_effect=Exception("network error")):
             result = fetch_safes_for_owner(chain_id, owner)
 
         assert result == []
 
     def test_missing_safes_key_returns_empty_list(self) -> None:
         """When the JSON response lacks the 'safes' key, return []."""
-        import json as json_mod
         from unittest.mock import MagicMock, patch
 
         if not SAFE_TX_SERVICE_URLS:
@@ -1327,14 +1322,11 @@ class TestFetchSafesForOwner:
         chain_id = next(iter(SAFE_TX_SERVICE_URLS))
         owner = "0x" + "a" * 40
 
-        fake_response_data = json_mod.dumps({"other_key": []}).encode("utf-8")
-
         fake_resp = MagicMock()
-        fake_resp.read.return_value = fake_response_data
-        fake_resp.__enter__ = MagicMock(return_value=fake_resp)
-        fake_resp.__exit__ = MagicMock(return_value=False)
+        fake_resp.json.return_value = {"other_key": []}
+        fake_resp.raise_for_status = MagicMock()
 
-        with patch("urllib.request.urlopen", return_value=fake_resp):
+        with patch("requests.get", return_value=fake_resp):
             result = fetch_safes_for_owner(chain_id, owner)
 
         assert result == []

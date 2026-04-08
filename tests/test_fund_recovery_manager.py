@@ -830,6 +830,38 @@ class TestFundRecoveryManagerExecute:
                 found = True
         assert found
 
+    def test_execute_records_moved_funds_from_both_safe_and_eoa(self) -> None:
+        """Funds moved from both Safe and EOA drain are recorded in total_funds_moved."""
+        manager = _make_manager()
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch.object(
+                manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 5000}
+            ),
+            patch.object(manager, "_drain_safe", return_value={ZERO_ADDRESS: 8000}),
+            patch(f"{_MODULE}.KeysManager") as mock_km,
+        ):
+            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
+            result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+        eoa_found = False
+        safe_found = False
+        for _chain_id_str, addresses in result.total_funds_moved.items():
+            eoa = _mnemonic_to_address(_TEST_MNEMONIC)
+            if eoa in addresses and ZERO_ADDRESS in addresses[eoa]:
+                eoa_found = True
+            if _SAFE_ADDR in addresses and ZERO_ADDRESS in addresses[_SAFE_ADDR]:
+                safe_found = True
+
+        assert eoa_found, "EOA funds were not recorded"
+        assert safe_found, "Safe funds were not recorded"
+
     # ------------------------------------------------------------------
     # Error paths
     # ------------------------------------------------------------------

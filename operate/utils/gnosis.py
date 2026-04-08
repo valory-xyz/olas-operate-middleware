@@ -21,12 +21,11 @@
 
 import binascii
 import itertools
-import json
 import secrets
 import typing as t
-import urllib.request
 from enum import Enum
 
+import requests
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
@@ -717,10 +716,10 @@ def fetch_safes_for_owner(chain_id: int, owner_address: str) -> t.List[str]:
 
     url = f"{base_url}/api/v1/owners/{owner_address}/safes/"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "olas-operate/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("safes", [])
+        resp = requests.get(url, headers={"User-Agent": "olas-operate/1.0"}, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("safes", [])
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(f"Safe TX service query failed for chain={chain_id}: {exc}")
         return []

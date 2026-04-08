@@ -678,10 +678,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 prev = chain_funds_moved.get(safe_addr, {}).get(
                                     token, BigInt(0)
                                 )
-                                total_funds_moved.setdefault(
-                                    chain_id_str, {}
-                                ).setdefault(safe_addr, {})[token] = BigInt(
-                                    int(prev) + amount
+                                chain_funds_moved.setdefault(safe_addr, {})[token] = (
+                                    BigInt(int(prev) + amount)
                                 )
                         except Exception as exc:  # pylint: disable=broad-except
                             logger.warning(
