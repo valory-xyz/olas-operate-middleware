@@ -32,6 +32,7 @@ import time
 import typing as t
 from pathlib import Path
 
+import requests
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
@@ -88,6 +89,14 @@ GAS_WARN_THRESHOLDS: t.Dict[int, int] = {
     chain.id: int(amounts[ZERO_ADDRESS] * DEFAULT_EOA_THRESHOLD)
     for chain, amounts in DEFAULT_EOA_TOPUPS.items()
     if hasattr(chain, "id") and ZERO_ADDRESS in amounts
+}
+
+#: Subgraph URLs for fast service enumeration
+SUBGRAPH_URLS: t.Dict[Chain, str] = {
+    Chain.GNOSIS: "https://api.subgraph.autonolas.tech/api/proxy/service-registry-gnosis",
+    Chain.OPTIMISM: "https://placeholder.url/optimism",
+    Chain.POLYGON: "https://placeholder.url/polygon",
+    Chain.BASE: "https://placeholder.url/base",
 }
 
 
@@ -296,6 +305,23 @@ def _get_service_state(
         return OnChainState.NON_EXISTENT
 
 
+def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
+    """Fetch service IDs created by the Master EOA from the given subgraph URL."""
+    payload = {
+        "query": f'{{ services(where: {{creator_: {{id: "{eoa_address.lower()}"}}}}) {{ id }} }}'
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        services = data.get("data", {}).get("services", [])
+        return [int(s["id"]) for s in services]
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning(f"Subgraph query failed for {url}: {exc}")
+        raise
+
+
 def _check_gas_warning(
     chain_id: int,
     eoa_address: str,
@@ -332,7 +358,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
     # Public API
     # ------------------------------------------------------------------
 
-    def scan(  # pylint: disable=too-many-locals,too-many-nested-blocks
+    def scan(  # pylint: disable=too-many-locals,too-many-nested-blocks,too-many-statements
         self,
         mnemonic: str,
     ) -> FundRecoveryScanResponse:
@@ -420,34 +446,48 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         )
                         if service_registry_addr:
                             seen_service_ids: t.Set[int] = set()
-                            # Enumerate services owned by each master safe
-                            for safe_addr in safe_addresses:
-                                safe_owned_ids = _enumerate_owned_services(
-                                    ledger_api=ledger_api,
-                                    service_registry_address=service_registry_addr,
-                                    owner_address=safe_addr,
-                                )
-                                for svc_id in safe_owned_ids:
-                                    if svc_id in seen_service_ids:
-                                        continue
-                                    seen_service_ids.add(svc_id)
-                                    state = _get_service_state(
+                            all_service_ids: t.List[int] = []
+
+                            subgraph_url = SUBGRAPH_URLS.get(chain)
+                            if subgraph_url:
+                                try:
+                                    all_service_ids = _fetch_services_from_subgraph(
+                                        subgraph_url, eoa_address
+                                    )
+                                except Exception:  # pylint: disable=broad-except
+                                    subgraph_url = None  # trigger fallback
+
+                            if not subgraph_url:
+                                # Fallback: Enumerate services owned by each master safe
+                                for safe_addr in safe_addresses:
+                                    safe_owned_ids = _enumerate_owned_services(
                                         ledger_api=ledger_api,
                                         service_registry_address=service_registry_addr,
+                                        owner_address=safe_addr,
+                                    )
+                                    all_service_ids.extend(safe_owned_ids)
+
+                            for svc_id in all_service_ids:
+                                if svc_id in seen_service_ids:
+                                    continue
+                                seen_service_ids.add(svc_id)
+                                state = _get_service_state(
+                                    ledger_api=ledger_api,
+                                    service_registry_address=service_registry_addr,
+                                    service_id=svc_id,
+                                )
+                                can_unstake = state in (
+                                    OnChainState.DEPLOYED,
+                                    OnChainState.TERMINATED_BONDED,
+                                )
+                                chain_services.append(
+                                    RecoveredServiceInfo(
+                                        chain_id=chain_id,
                                         service_id=svc_id,
+                                        state=state,
+                                        can_unstake=can_unstake,
                                     )
-                                    can_unstake = state in (
-                                        OnChainState.DEPLOYED,
-                                        OnChainState.TERMINATED_BONDED,
-                                    )
-                                    chain_services.append(
-                                        RecoveredServiceInfo(
-                                            chain_id=chain_id,
-                                            service_id=svc_id,
-                                            state=state,
-                                            can_unstake=can_unstake,
-                                        )
-                                    )
+                                )
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning(
                         f"Service enumeration failed for chain {chain_id}: {exc}"
@@ -563,36 +603,51 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
                     if service_registry_addr:
                         seen_service_ids: t.Set[int] = set()
-                        for safe_addr in safe_addresses:
-                            safe_owned_ids = _enumerate_owned_services(
-                                ledger_api=ledger_api,
-                                service_registry_address=service_registry_addr,
-                                owner_address=safe_addr,
-                            )
-                            for svc_id in safe_owned_ids:
-                                if svc_id in seen_service_ids:
-                                    continue
-                                seen_service_ids.add(svc_id)
-                                try:
-                                    self._recover_service(
-                                        chain=chain,
-                                        ledger_api=ledger_api,
-                                        crypto=crypto,
-                                        service_id=svc_id,
-                                        service_registry_addr=service_registry_addr,
-                                        service_manager_addr=service_manager_addr,
-                                        recovery_module_addr=recovery_module_addr,
-                                        destination_address=destination_checksum,
-                                        chain_funds_moved=chain_funds_moved,
-                                        eoa_address=eoa_address,
-                                    )
-                                except Exception as exc:  # pylint: disable=broad-except
-                                    logger.warning(
-                                        f"chain={chain_id} service={svc_id} recovery failed: {exc}"
-                                    )
-                                    chain_errors.append(
-                                        f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
-                                    )
+                        all_service_ids: t.List[int] = []
+
+                        subgraph_url = SUBGRAPH_URLS.get(chain)
+                        if subgraph_url:
+                            try:
+                                all_service_ids = _fetch_services_from_subgraph(
+                                    subgraph_url, eoa_address
+                                )
+                            except Exception:  # pylint: disable=broad-except
+                                subgraph_url = None  # trigger fallback
+
+                        if not subgraph_url:
+                            # Fallback: Enumerate services owned by each master safe
+                            for safe_addr in safe_addresses:
+                                safe_owned_ids = _enumerate_owned_services(
+                                    ledger_api=ledger_api,
+                                    service_registry_address=service_registry_addr,
+                                    owner_address=safe_addr,
+                                )
+                                all_service_ids.extend(safe_owned_ids)
+
+                        for svc_id in all_service_ids:
+                            if svc_id in seen_service_ids:
+                                continue
+                            seen_service_ids.add(svc_id)
+                            try:
+                                self._recover_service(
+                                    chain=chain,
+                                    ledger_api=ledger_api,
+                                    crypto=crypto,
+                                    service_id=svc_id,
+                                    service_registry_addr=service_registry_addr,
+                                    service_manager_addr=service_manager_addr,
+                                    recovery_module_addr=recovery_module_addr,
+                                    destination_address=destination_checksum,
+                                    chain_funds_moved=chain_funds_moved,
+                                    eoa_address=eoa_address,
+                                )
+                            except Exception as exc:  # pylint: disable=broad-except
+                                logger.warning(
+                                    f"chain={chain_id} service={svc_id} recovery failed: {exc}"
+                                )
+                                chain_errors.append(
+                                    f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
+                                )
 
                     # ── Step 5: Drain Master Safe(s) ─────────────────────────────
                     # Token addresses as keys; aligns with ChainAmounts format.

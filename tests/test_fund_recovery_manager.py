@@ -493,6 +493,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
@@ -517,6 +521,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
             patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
             patch(
@@ -539,6 +547,10 @@ class TestFundRecoveryManagerScan:
             patch(
                 f"{_MODULE}.fetch_safes_for_owner",
                 return_value=[_SAFE_ADDR, "0x" + "3" * 40],
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
             ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[7]),
             patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
@@ -564,6 +576,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[1]),
             patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
             patch(
@@ -585,6 +601,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[2]),
             patch(
                 f"{_MODULE}._get_service_state",
@@ -609,6 +629,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[3]),
             patch(
                 f"{_MODULE}._get_service_state",
@@ -715,6 +739,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(manager, "_drain_eoa_assets", return_value={}),
             patch.object(manager, "_drain_safe", return_value={}),
@@ -730,6 +758,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(manager, "_drain_eoa_assets", return_value={}),
             patch.object(manager, "_drain_safe", return_value={}),
@@ -748,6 +780,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(
                 manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 5000}
@@ -772,6 +808,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(manager, "_drain_eoa_assets", return_value={}),
             patch.object(manager, "_drain_safe", return_value={ZERO_ADDRESS: 8000}),
@@ -808,6 +848,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(
                 manager, "_drain_eoa_assets", side_effect=RuntimeError("drain fail")
@@ -827,6 +871,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(manager, "_drain_eoa_assets", return_value={}),
             patch.object(
@@ -846,6 +894,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
             patch.object(
                 manager, "_recover_service", side_effect=RuntimeError("svc fail")
@@ -866,6 +918,10 @@ class TestFundRecoveryManagerExecute:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch.object(manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 1}),
             patch.object(
@@ -893,6 +949,10 @@ class TestFundRecoveryManagerExecute:
             patch(
                 f"{_MODULE}.fetch_safes_for_owner",
                 return_value=[_SAFE_ADDR, "0x" + "4" * 40],
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
             ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[99]),
             patch.object(manager, "_recover_service", side_effect=_recover),
@@ -1700,6 +1760,10 @@ class TestScanSafeErc20Balance:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
