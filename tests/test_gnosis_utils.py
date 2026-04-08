@@ -1330,3 +1330,20 @@ class TestFetchSafesForOwner:
             result = fetch_safes_for_owner(chain_id, owner)
 
         assert result == []
+
+
+@pytest.mark.integration
+class TestSafeApiSanity:
+    """Integration checks for Safe Transaction Service API."""
+
+    def test_fetch_safes_for_owner_real_api(self) -> None:
+        """Test that the Safe Transaction API is reachable and correctly parsed."""
+        # Test Gnosis Chain (100) Safe API
+        chain_id = 100
+        owner_address = "0x0000000000000000000000000000000000000000"
+
+        try:
+            safes = fetch_safes_for_owner(chain_id, owner_address)
+            assert isinstance(safes, list), "fetch_safes_for_owner should return a list"
+        except Exception as e:
+            pytest.fail(f"Real Safe API call failed: {e}")
