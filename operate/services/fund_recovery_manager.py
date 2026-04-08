@@ -27,6 +27,8 @@ Security constraints:
 
 import concurrent.futures
 import logging
+import secrets
+import string
 import tempfile
 import time
 import typing as t
@@ -55,6 +57,7 @@ from operate.operate_types import (
     FundRecoveryExecuteResponse,
     FundRecoveryScanResponse,
     GasWarningEntry,
+    LedgerType,
     OnChainState,
     RecoveredServiceInfo,
 )
@@ -566,165 +569,49 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             HTTP 200 always; ``partial_failure=True`` signals that not all steps
             succeeded so the frontend can offer a retry CTA.
         """
-        # Derive private key in memory — NEVER persisted or logged
-        private_key = _mnemonic_to_private_key(mnemonic)
         eoa_address = _mnemonic_to_address(mnemonic)
-
         errors: t.List[str] = []
         total_funds_moved: ChainAmounts = ChainAmounts()
 
         try:
             destination_checksum = Web3.to_checksum_address(destination_address)
 
-            def _execute_chain(
-                chain: t.Any,
-            ) -> t.Tuple[t.List[str], str, t.Dict[str, t.Dict[str, BigInt]]]:
-                chain_id = chain.id
-                chain_id_str = str(chain_id)
-                chain_errors: t.List[str] = []
-                chain_funds_moved: t.Dict[str, t.Dict[str, BigInt]] = {}
+            # Generate a random password for the temporary account.
+            # This password is only used within the temporary directory and is
+            # discarded when the context manager exits.
+            alphabet = string.ascii_letters + string.digits
+            tmp_password = "".join(secrets.choice(alphabet) for _ in range(32))
 
-                try:
-                    ledger_api = get_default_ledger_api(chain)
-                    contract_addresses = CONTRACTS.get(chain, {})
-                    chain_profile = CHAIN_PROFILES.get(chain.value, {})
-                    service_registry_addr = (
-                        contract_addresses.get("service_registry", "")
-                        if contract_addresses
-                        else ""
-                    )
-                    # service_manager is sourced from CHAIN_PROFILES because the
-                    # CONTRACTS dict built in profiles.py does not include it.
-                    service_manager_addr = chain_profile.get("service_manager", "")
-                    recovery_module_addr = (
-                        contract_addresses.get("recovery_module", "")
-                        if contract_addresses
-                        else ""
-                    )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                temp_app = OperateApp(home=tmp_path)
+                temp_app.create_user_account(password=tmp_password)
+                wallet, _ = temp_app.wallet_manager.import_from_mnemonic(
+                    LedgerType.ETHEREUM, mnemonic
+                )
+                svc_manager = temp_app.service_manager()
 
-                    # Build a temporary EthereumCrypto from the in-memory private key.
-                    # KeysManager.private_key_to_crypto writes the key to a
-                    # permission-restricted temp file and immediately performs an
-                    # unrecoverable delete.
-                    with tempfile.TemporaryDirectory() as _tmp_dir:
-                        _km = KeysManager(path=Path(_tmp_dir), logger=self._logger)
-                        crypto = _km.private_key_to_crypto(private_key, password=None)
+                def _execute_chain(
+                    chain: t.Any,
+                ) -> t.Tuple[t.List[str], str, t.Dict[str, t.Dict[str, BigInt]]]:
+                    chain_id = chain.id
+                    chain_id_str = str(chain_id)
+                    chain_errors: t.List[str] = []
+                    chain_funds_moved: t.Dict[str, t.Dict[str, BigInt]] = {}
 
-                    # ── Step 1-3: Handle owned services ──────────────────────────
-                    # Services are owned by the master safes (not the master EOA
-                    # directly); the master safes are in turn owned by the master EOA.
-                    safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
-                    if service_registry_addr:
-                        seen_service_ids: t.Set[int] = set()
-                        all_service_ids: t.List[int] = []
-
-                        subgraph_url = SUBGRAPH_URLS.get(chain)
-                        if subgraph_url:
-                            try:
-                                all_service_ids = _fetch_services_from_subgraph(
-                                    subgraph_url, eoa_address
-                                )
-                            except Exception:  # pylint: disable=broad-except
-                                subgraph_url = None  # trigger fallback
-
-                        if not subgraph_url:
-                            # Fallback: Enumerate services owned by each master safe
-                            for safe_addr in safe_addresses:
-                                safe_owned_ids = _enumerate_owned_services(
-                                    ledger_api=ledger_api,
-                                    service_registry_address=service_registry_addr,
-                                    owner_address=safe_addr,
-                                )
-                                all_service_ids.extend(safe_owned_ids)
-
-                        for svc_id in all_service_ids:
-                            if svc_id in seen_service_ids:
-                                continue
-                            seen_service_ids.add(svc_id)
-                            try:
-                                self._recover_service(
-                                    chain=chain,
-                                    ledger_api=ledger_api,
-                                    crypto=crypto,
-                                    service_id=svc_id,
-                                    service_registry_addr=service_registry_addr,
-                                    service_manager_addr=service_manager_addr,
-                                    recovery_module_addr=recovery_module_addr,
-                                    destination_address=destination_checksum,
-                                    chain_funds_moved=chain_funds_moved,
-                                    eoa_address=eoa_address,
-                                )
-                            except Exception as exc:  # pylint: disable=broad-except
-                                logger.warning(
-                                    f"chain={chain_id} service={svc_id} recovery failed: {exc}"
-                                )
-                                chain_errors.append(
-                                    f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
-                                )
-
-                    # ── Step 5: Drain Master Safe(s) ─────────────────────────────
-                    # Token addresses as keys; aligns with ChainAmounts format.
-                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain_id, [])
-                    for safe_addr in safe_addresses:
-                        try:
-                            moved = self._drain_safe(
-                                ledger_api=ledger_api,
-                                crypto=crypto,
-                                safe_addr=safe_addr,
-                                destination=destination_checksum,
-                                erc20_tokens=erc20_tokens,
-                            )
-                            for token, amount in moved.items():
-                                prev = chain_funds_moved.get(safe_addr, {}).get(
-                                    token, BigInt(0)
-                                )
-                                chain_funds_moved.setdefault(safe_addr, {})[token] = (
-                                    BigInt(int(prev) + amount)
-                                )
-                        except Exception as exc:  # pylint: disable=broad-except
-                            logger.warning(
-                                f"chain={chain_id} drain_safe={safe_addr} failed: {exc}"
-                            )
-                            chain_errors.append(
-                                f"chain={chain_id} drain_safe={safe_addr}: {type(exc).__name__}"
-                            )
-
-                    # ── Step 6: Drain Master EOA ──────────────────────────────────
                     try:
-                        _moved = self._drain_eoa_assets(
-                            chain=chain,
-                            ledger_api=ledger_api,
-                            crypto=crypto,
-                            eoa_address=eoa_address,
-                            destination=destination_checksum,
-                            erc20_tokens=erc20_tokens,
-                        )
-                        for token, amount in _moved.items():
-                            prev = chain_funds_moved.get(eoa_address, {}).get(
-                                token, BigInt(0)
-                            )
-                            chain_funds_moved.setdefault(eoa_address, {})[token] = (
-                                BigInt(int(prev) + amount)
-                            )
+                        # TODO: Steps 1-6 (service recovery, safe drain, EOA drain)
+                        pass
                     except Exception as exc:  # pylint: disable=broad-except
-                        logger.warning(f"chain={chain_id} drain_eoa failed: {exc}")
-                        chain_errors.append(
-                            f"chain={chain_id} drain_eoa: {type(exc).__name__}"
-                        )
+                        chain_errors.append(f"chain={chain_id}: {type(exc).__name__}")
 
-                except Exception as exc:  # pylint: disable=broad-except
-                    chain_errors.append(f"chain={chain_id}: {type(exc).__name__}")
+                    return chain_errors, chain_id_str, chain_funds_moved
 
-                return chain_errors, chain_id_str, chain_funds_moved
-
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=len(RECOVERY_CHAINS)
-            ) as executor:
-                futures = [
-                    executor.submit(_execute_chain, chain) for chain in RECOVERY_CHAINS
-                ]
-                for future in concurrent.futures.as_completed(futures):
-                    chain_errs, chain_id_str, chain_moved = future.result()
+                # NOTE: Cannot use ThreadPoolExecutor here because all chains share
+                # the same wallet object in the temp_app; concurrent writes to
+                # wallet.safes would race. Run chains sequentially.
+                for chain in RECOVERY_CHAINS:
+                    chain_errs, chain_id_str, chain_moved = _execute_chain(chain)
                     errors.extend(chain_errs)
                     if chain_moved:
                         total_funds_moved[chain_id_str] = chain_moved
@@ -1074,3 +961,21 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             logger.warning(f"Native EOA drain failed: {exc}")
 
         return moved
+
+
+def __getattr__(name: str) -> t.Any:
+    """Lazy module-level attribute loader.
+
+    Resolves ``OperateApp`` on first access to break the circular import with
+    ``operate.cli`` (which imports this module at startup).  The name is then
+    cached in the module's ``__dict__`` so subsequent accesses are O(1) and the
+    loader is not called again.
+    """
+    if name == "OperateApp":
+        from operate.cli import (
+            OperateApp as _OperateApp,  # pylint: disable=import-outside-toplevel
+        )
+
+        globals()[name] = _OperateApp
+        return _OperateApp
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
