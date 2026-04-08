@@ -348,6 +348,128 @@ def _check_gas_warning(
         return GasWarningEntry(insufficient=True)
 
 
+def _build_synthetic_service(
+    storage: Path,
+    chain: Chain,
+    service_id: int,
+    rpc: str,
+) -> t.Any:
+    """Build a minimal Service object for *service_id* on *chain*.
+
+    The Service is written to disk under *storage* so that
+    ``ServiceManager.load(service_config_id)`` can reload it.  No IPFS
+    download is performed — only the JSON config is written.
+
+    Parameters
+    ----------
+    storage:
+        Directory where service config directories live (``OperateApp._services``).
+    chain:
+        The chain on which the service was registered.
+    service_id:
+        The on-chain service token ID.
+    rpc:
+        RPC endpoint for the chain.
+
+    Returns
+    -------
+    Service instance (already stored on disk).
+    """
+    # Import here to avoid a module-level circular import since service.py
+    # imports from operate.ledger which imports from operate.operate_types.
+    import json as _json  # noqa: PLC0415
+
+    from operate.constants import (  # noqa: PLC0415
+        CONFIG_JSON,
+        NO_STAKING_PROGRAM_ID,
+    )
+    from operate.operate_types import (  # noqa: PLC0415
+        ChainConfig,
+        LedgerConfig,
+        OnChainData,
+        OnChainUserParams,
+    )
+    from operate.resource import LocalResource  # noqa: PLC0415
+    from operate.services.service import (  # noqa: PLC0415
+        NON_EXISTENT_MULTISIG,
+        SERVICE_CONFIG_PREFIX,
+        SERVICE_CONFIG_VERSION,
+        Service,
+    )
+
+    chain_str = chain.value
+    service_config_id = f"{SERVICE_CONFIG_PREFIX}{service_id}-{chain_str}"
+    svc_path = storage / service_config_id
+    svc_path.mkdir(exist_ok=True)
+
+    ledger_config = LedgerConfig(rpc=rpc, chain=chain)
+    user_params = OnChainUserParams(
+        staking_program_id=NO_STAKING_PROGRAM_ID,
+        nft="",
+        agent_id=1,
+        cost_of_bond=BigInt(0),
+        fund_requirements={},
+    )
+    chain_data = OnChainData(
+        instances=[],
+        token=service_id,
+        multisig=NON_EXISTENT_MULTISIG,
+        user_params=user_params,
+    )
+    chain_config = ChainConfig(ledger_config=ledger_config, chain_data=chain_data)
+
+    service = Service(
+        version=SERVICE_CONFIG_VERSION,
+        service_config_id=service_config_id,
+        name="recovery-stub",
+        description="",
+        hash="",
+        hash_history={},
+        agent_release={},
+        agent_addresses=[],
+        home_chain=chain_str,
+        chain_configs={chain_str: chain_config},
+        path=svc_path,
+        package_path=Path("."),
+        env_variables={},
+    )
+    # Write config.json directly using the base LocalResource.json property to
+    # avoid triggering the IPFS download that Service.json → service_public_id()
+    # would cause.  We do NOT call service.store() for the same reason.
+    config_file = svc_path / CONFIG_JSON
+    base_data = LocalResource.json.fget(service)  # type: ignore[attr-defined]
+    config_file.write_text(
+        _json.dumps(base_data, indent=2),
+        encoding="utf-8",
+    )
+    return service
+
+
+def _inject_safe_into_wallet(
+    wallet: t.Any,
+    chain: Chain,
+    safe_address: str,
+) -> None:
+    """Set ``wallet.safes[chain]`` to *safe_address* and persist.
+
+    The wallet is stored on disk so that ``MasterWalletManager.load()``
+    returns the updated state on subsequent calls.
+
+    Parameters
+    ----------
+    wallet:
+        An ``EthereumMasterWallet`` instance.
+    chain:
+        Chain for which to set the safe address.
+    safe_address:
+        Checksummed safe address.
+    """
+    wallet.safes[chain] = safe_address
+    if chain not in wallet.safe_chains:
+        wallet.safe_chains.append(chain)
+    wallet.store()
+
+
 # ---------------------------------------------------------------------------
 # FundRecoveryManager
 # ---------------------------------------------------------------------------

@@ -2048,6 +2048,59 @@ class TestFetchServicesFromSubgraph:
         assert result == [1, 2]
 
 
+def test_build_synthetic_service_creates_minimal_service(tmp_path):
+    """_build_synthetic_service creates a Service with correct chain_config."""
+    from operate.operate_types import Chain
+    from operate.services.fund_recovery_manager import _build_synthetic_service
+    from operate.services.service import SERVICE_CONFIG_PREFIX
+
+    svc_dir = tmp_path / "services"
+    svc_dir.mkdir()
+
+    service = _build_synthetic_service(
+        storage=svc_dir,
+        chain=Chain.GNOSIS,
+        service_id=42,
+        rpc="https://rpc.gnosis.example.com",
+    )
+
+    assert service.chain_configs[Chain.GNOSIS.value].chain_data.token == 42
+    assert (
+        service.chain_configs[Chain.GNOSIS.value].ledger_config.rpc
+        == "https://rpc.gnosis.example.com"
+    )
+    assert service.chain_configs[Chain.GNOSIS.value].ledger_config.chain == Chain.GNOSIS
+    assert service.home_chain == Chain.GNOSIS.value
+    assert service.service_config_id.startswith(SERVICE_CONFIG_PREFIX)
+    # Service JSON must be persisted so ServiceManager.load() can find it
+    from operate.constants import CONFIG_JSON
+
+    assert (svc_dir / service.service_config_id / CONFIG_JSON).exists()
+
+
+def test_inject_safe_into_wallet(tmp_path):
+    """_inject_safe_into_wallet sets wallet.safes[chain] and persists."""
+    from unittest.mock import MagicMock
+
+    from operate.operate_types import Chain
+    from operate.services.fund_recovery_manager import _inject_safe_into_wallet
+
+    mock_wallet = MagicMock()
+    mock_wallet.safes = {}
+    mock_wallet.safe_chains = []
+
+    _inject_safe_into_wallet(
+        wallet=mock_wallet,
+        chain=Chain.GNOSIS,
+        safe_address="0xDeadBeef00000000000000000000000000000001",
+    )
+
+    assert (
+        mock_wallet.safes[Chain.GNOSIS] == "0xDeadBeef00000000000000000000000000000001"
+    )
+    mock_wallet.store.assert_called_once()
+
+
 def test_execute_creates_operate_app_and_imports_wallet(tmp_path):
     """execute() should instantiate OperateApp in a tempdir and import wallet."""
     mock_wallet = MagicMock()
