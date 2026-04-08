@@ -26,6 +26,7 @@ Security constraints:
 """
 
 import concurrent.futures
+import json
 import logging
 import secrets
 import string
@@ -40,7 +41,11 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import (
+    CONFIG_JSON,
+    NO_STAKING_PROGRAM_ID,
+    ZERO_ADDRESS,
+)
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
@@ -54,14 +59,25 @@ from operate.ledger.profiles import (
 from operate.operate_types import (
     Chain,
     ChainAmounts,
+    ChainConfig,
     FundRecoveryExecuteResponse,
     FundRecoveryScanResponse,
     GasWarningEntry,
+    LedgerConfig,
     LedgerType,
+    OnChainData,
     OnChainState,
+    OnChainUserParams,
     RecoveredServiceInfo,
 )
+from operate.resource import LocalResource
 from operate.serialization import BigInt
+from operate.services.service import (
+    NON_EXISTENT_MULTISIG,
+    SERVICE_CONFIG_PREFIX,
+    SERVICE_CONFIG_VERSION,
+    Service,
+)
 from operate.utils.gnosis import (
     drain_eoa,
     fetch_safes_for_owner,
@@ -375,32 +391,10 @@ def _build_synthetic_service(
     -------
     Service instance (already stored on disk).
     """
-    # Import here to avoid a module-level circular import since service.py
-    # imports from operate.ledger which imports from operate.operate_types.
-    import json as _json  # noqa: PLC0415
-
-    from operate.constants import (  # noqa: PLC0415
-        CONFIG_JSON,
-        NO_STAKING_PROGRAM_ID,
-    )
-    from operate.operate_types import (  # noqa: PLC0415
-        ChainConfig,
-        LedgerConfig,
-        OnChainData,
-        OnChainUserParams,
-    )
-    from operate.resource import LocalResource  # noqa: PLC0415
-    from operate.services.service import (  # noqa: PLC0415
-        NON_EXISTENT_MULTISIG,
-        SERVICE_CONFIG_PREFIX,
-        SERVICE_CONFIG_VERSION,
-        Service,
-    )
-
     chain_str = chain.value
     service_config_id = f"{SERVICE_CONFIG_PREFIX}{service_id}-{chain_str}"
     svc_path = storage / service_config_id
-    svc_path.mkdir(exist_ok=True)
+    svc_path.mkdir(parents=True, exist_ok=True)
 
     ledger_config = LedgerConfig(rpc=rpc, chain=chain)
     user_params = OnChainUserParams(
@@ -430,16 +424,20 @@ def _build_synthetic_service(
         home_chain=chain_str,
         chain_configs={chain_str: chain_config},
         path=svc_path,
-        package_path=Path("."),
+        package_path=Path("."),  # placeholder — not accessed in recovery code paths
         env_variables={},
     )
-    # Write config.json directly using the base LocalResource.json property to
-    # avoid triggering the IPFS download that Service.json → service_public_id()
-    # would cause.  We do NOT call service.store() for the same reason.
+    # Use LocalResource.json.fget directly to bypass Service.json which calls
+    # service_public_id() and reads package_absolute_path (not available for
+    # synthetic recovery stubs). The ServiceManager methods used in recovery
+    # (terminate_service_on_chain_from_safe, unbond_service_on_chain,
+    # _execute_recovery_module_flow_from_safe, drain) never read service_public_id.
+    # We do NOT call service.store() for the same reason: store() calls self.json
+    # which resolves to the overridden Service.json via Python's MRO.
     config_file = svc_path / CONFIG_JSON
     base_data = LocalResource.json.fget(service)  # type: ignore[attr-defined]
     config_file.write_text(
-        _json.dumps(base_data, indent=2),
+        json.dumps(base_data, indent=2),
         encoding="utf-8",
     )
     return service

@@ -2101,6 +2101,27 @@ def test_inject_safe_into_wallet(tmp_path):
     mock_wallet.store.assert_called_once()
 
 
+def test_inject_safe_into_wallet_idempotent(tmp_path):
+    """_inject_safe_into_wallet does not duplicate chain in safe_chains."""
+    from unittest.mock import MagicMock
+
+    from operate.operate_types import Chain
+    from operate.services.fund_recovery_manager import _inject_safe_into_wallet
+
+    mock_wallet = MagicMock()
+    mock_wallet.safes = {}
+    mock_wallet.safe_chains = [Chain.GNOSIS]  # already present
+
+    _inject_safe_into_wallet(
+        wallet=mock_wallet,
+        chain=Chain.GNOSIS,
+        safe_address="0xDeadBeef00000000000000000000000000000001",
+    )
+
+    assert mock_wallet.safe_chains.count(Chain.GNOSIS) == 1
+    mock_wallet.store.assert_called_once()
+
+
 def test_execute_creates_operate_app_and_imports_wallet(tmp_path):
     """execute() should instantiate OperateApp in a tempdir and import wallet."""
     mock_wallet = MagicMock()
