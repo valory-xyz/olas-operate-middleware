@@ -30,7 +30,7 @@ from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
     MultiSendOperation,
-    SAFE_TX_SERVICE_HOSTS,
+    SAFE_TX_SERVICE_URLS,
     SENTINEL_OWNERS,
     SafeOperation,
     _get_nonce,
@@ -258,9 +258,10 @@ class TestGetAssetBalance:
         mock_instance = MagicMock()
         mock_instance.functions.balanceOf.return_value.call.return_value = 500
         token_address = "0x" + "e" * 40
-        with patch("operate.utils.gnosis.Web3.is_address", return_value=True), patch(
-            "operate.utils.gnosis.registry_contracts"
-        ) as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.Web3.is_address", return_value=True),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             result = get_asset_balance(mock_ledger, token_address, self.VALID_ADDRESS)
         assert result == BigInt(500)
@@ -385,8 +386,9 @@ class TestCreateSafe:
         settler.tx_hash = "0xtxhash"
         settler.get_events.return_value = [{"args": {"proxy": "0xNewSafe"}}]
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             safe_address, salt_nonce, tx_hash = create_safe(
                 mock_ledger, mock_crypto, salt_nonce=12345
@@ -409,9 +411,11 @@ class TestCreateSafe:
         settler.tx_hash = "0xtxhash"
         settler.get_events.return_value = [{"args": {"proxy": "0xNewSafe"}}]
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis._get_nonce", return_value=99999):
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis._get_nonce", return_value=99999),
+        ):
             safe_address, salt_nonce, tx_hash = create_safe(mock_ledger, mock_crypto)
 
         assert salt_nonce == 99999
@@ -435,8 +439,9 @@ class TestSendSafeTxs:
         )
         settler.tx_hash = "0xtxhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = send_safe_txs(
                 txd=b"\x00\x01\x02",
@@ -460,8 +465,9 @@ class TestSendSafeTxs:
         )
         settler.tx_hash = "0xanotherhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = send_safe_txs(
                 txd=b"\x00",
@@ -485,9 +491,10 @@ class TestAddOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcd"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+        ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             add_owner(mock_ledger, mock_crypto, "0xSafe", "0xNewOwner")
 
@@ -506,9 +513,10 @@ class TestAddOwner:
         # 0xdeadbeef -> bytes.fromhex("deadbeef")
         mock_instance.encode_abi.return_value = "0xdeadbeef"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+        ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             add_owner(mock_ledger, mock_crypto, "0xSafe", "0xNewOwner")
 
@@ -527,10 +535,10 @@ class TestSwapOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcd"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             swap_owner(
@@ -555,10 +563,10 @@ class TestSwapOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xcafe1234"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             swap_owner(
@@ -584,10 +592,10 @@ class TestRemoveOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcd"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             remove_owner(
@@ -612,10 +620,10 @@ class TestRemoveOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xbeef0011"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             remove_owner(
@@ -646,8 +654,9 @@ class TestTransfer:
         )
         settler.tx_hash = "0xtransferhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = transfer(
                 ledger_api=mock_ledger,
@@ -672,8 +681,9 @@ class TestTransfer:
         )
         settler.tx_hash = "0xhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = transfer(
                 ledger_api=mock_ledger,
@@ -697,9 +707,12 @@ class TestTransferErc20FromSafe:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcdef"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs", return_value="0xerc20hash"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch(
+                "operate.utils.gnosis.send_safe_txs", return_value="0xerc20hash"
+            ) as mock_send,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             result = transfer_erc20_from_safe(  # nosec B106
                 ledger_api=mock_ledger,
@@ -725,9 +738,12 @@ class TestTransferErc20FromSafe:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xaabb"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs", return_value="0xhash"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch(
+                "operate.utils.gnosis.send_safe_txs", return_value="0xhash"
+            ) as mock_send,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             transfer_erc20_from_safe(  # nosec B106
                 ledger_api=mock_ledger,
@@ -749,8 +765,9 @@ class TestTransferErc20FromSafe:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xaabb"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs", return_value="0xhash"
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs", return_value="0xhash"),
         ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             transfer_erc20_from_safe(  # nosec B106
@@ -779,8 +796,9 @@ class TestTransferErc20FromEoa:
         )
         settler.tx_hash = "0xhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             result = transfer_erc20_from_eoa(
                 ledger_api=mock_ledger,
@@ -807,15 +825,17 @@ class TestTransferErc20FromEoa:
             built_tx
         )
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.update_tx_with_gas_pricing"
-        ) as mock_update_gas_pricing, patch(
-            "operate.utils.gnosis.update_tx_with_gas_estimate"
-        ) as mock_update_gas_estimate, patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
-        ), patch(
-            "operate.utils.gnosis.TxSettler"
-        ) as mock_txsettler_cls:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch(
+                "operate.utils.gnosis.update_tx_with_gas_pricing"
+            ) as mock_update_gas_pricing,
+            patch(
+                "operate.utils.gnosis.update_tx_with_gas_estimate"
+            ) as mock_update_gas_estimate,
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.TxSettler") as mock_txsettler_cls,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
                 "0xhash"
@@ -938,8 +958,9 @@ class TestDrainEoa:
         )
         settler.tx_hash = "0xdrainhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
@@ -961,8 +982,9 @@ class TestDrainEoa:
             "No balance to drain from wallet: 0xWalletAddr"
         )
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
@@ -984,8 +1006,9 @@ class TestDrainEoa:
             "Network error"
         )
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             with pytest.raises(ChainInteractionError, match="Network error"):
                 drain_eoa(
@@ -1050,9 +1073,11 @@ class TestCreateSafeBuildClosure:
             events=[{"args": {"proxy": "0xNewSafe"}}],
         )
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.gnosis_safe.get_deploy_transaction.return_value = {
                 "contract_address": "0xFactory",
                 "data": "0xdeadbeef",
@@ -1094,9 +1119,11 @@ class TestSendSafeTxsBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xsafetxhash")
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
                 "tx_hash": "0x" + "ab" * 32  # 64 hex chars — valid for unhexlify
             }
@@ -1135,9 +1162,11 @@ class TestTransferBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xtransferhash2")
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
                 "tx_hash": "0x" + "cd" * 32
             }
@@ -1176,9 +1205,11 @@ class TestDrainEoaBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls()
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
-        ), patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100):
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
+        ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
                 crypto=mock_crypto,
@@ -1206,9 +1237,11 @@ class TestDrainEoaBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xdrainsuccess")
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
-        ), patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100):
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
+        ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
                 crypto=mock_crypto,
@@ -1230,10 +1263,10 @@ class TestFetchSafesForOwner:
     """Tests for fetch_safes_for_owner."""
 
     def test_unsupported_chain_returns_empty_list(self) -> None:
-        """When chain_id has no entry in SAFE_TX_SERVICE_HOSTS, return []."""
+        """When chain_id has no entry in SAFE_TX_SERVICE_URLS, return []."""
         # Use a chain_id that is guaranteed to be absent from the mapping
         unknown_chain_id = 999999
-        assert unknown_chain_id not in SAFE_TX_SERVICE_HOSTS
+        assert unknown_chain_id not in SAFE_TX_SERVICE_URLS
         result = fetch_safes_for_owner(unknown_chain_id, "0x" + "a" * 40)
         assert result == []
 
@@ -1243,12 +1276,12 @@ class TestFetchSafesForOwner:
         from unittest.mock import MagicMock, patch
 
         # Pick a supported chain id
-        if not SAFE_TX_SERVICE_HOSTS:
+        if not SAFE_TX_SERVICE_URLS:
             import pytest
 
-            pytest.skip("No chains configured in SAFE_TX_SERVICE_HOSTS")
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
 
-        chain_id = next(iter(SAFE_TX_SERVICE_HOSTS))
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
         owner = "0x" + "a" * 40
         safes = ["0x" + "b" * 40, "0x" + "c" * 40]
 
@@ -1268,12 +1301,12 @@ class TestFetchSafesForOwner:
         """When the HTTP request raises, an empty list is returned (no propagation)."""
         from unittest.mock import patch
 
-        if not SAFE_TX_SERVICE_HOSTS:
+        if not SAFE_TX_SERVICE_URLS:
             import pytest
 
-            pytest.skip("No chains configured in SAFE_TX_SERVICE_HOSTS")
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
 
-        chain_id = next(iter(SAFE_TX_SERVICE_HOSTS))
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
         owner = "0x" + "a" * 40
 
         with patch("urllib.request.urlopen", side_effect=Exception("network error")):
@@ -1286,12 +1319,12 @@ class TestFetchSafesForOwner:
         import json as json_mod
         from unittest.mock import MagicMock, patch
 
-        if not SAFE_TX_SERVICE_HOSTS:
+        if not SAFE_TX_SERVICE_URLS:
             import pytest
 
-            pytest.skip("No chains configured in SAFE_TX_SERVICE_HOSTS")
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
 
-        chain_id = next(iter(SAFE_TX_SERVICE_HOSTS))
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
         owner = "0x" + "a" * 40
 
         fake_response_data = json_mod.dumps({"other_key": []}).encode("utf-8")

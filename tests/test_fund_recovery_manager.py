@@ -708,6 +708,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
             patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=RuntimeError("subgraph boom"),
+            ),
+            patch(
                 f"{_MODULE}._enumerate_owned_services",
                 side_effect=RuntimeError("boom"),
             ),
@@ -1933,3 +1937,55 @@ class TestFetchLogsInChunks:
         # Will fail down to chunk_size=1, then warn and skip
         token_ids = _fetch_logs_in_chunks(w3, "0xRegistry", 0, 2, [None])
         assert token_ids == set()
+
+
+class TestFetchServicesFromSubgraph:
+    """Tests for _fetch_services_from_subgraph."""
+
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_returns_errors(self, mock_post: MagicMock) -> None:
+        """Raises ValueError if 'errors' in response."""
+        from operate.services.fund_recovery_manager import _fetch_services_from_subgraph
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"errors": [{"message": "bad query"}]}
+        mock_post.return_value = mock_response
+
+        with pytest.raises(ValueError, match="GraphQL query returned errors"):
+            _fetch_services_from_subgraph("http://url", "0xabc")
+
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_missing_data_field(self, mock_post: MagicMock) -> None:
+        """Raises ValueError if 'data' is missing."""
+        from operate.services.fund_recovery_manager import _fetch_services_from_subgraph
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"not_data": []}
+        mock_post.return_value = mock_response
+
+        with pytest.raises(ValueError, match="No 'data' field in subgraph response"):
+            _fetch_services_from_subgraph("http://url", "0xabc")
+
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_catch_all_exception(self, mock_post: MagicMock) -> None:
+        """Exceptions are caught and re-raised."""
+        from operate.services.fund_recovery_manager import _fetch_services_from_subgraph
+
+        mock_post.side_effect = Exception("network failure")
+
+        with pytest.raises(Exception, match="network failure"):
+            _fetch_services_from_subgraph("http://url", "0xabc")
+
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_success(self, mock_post: MagicMock) -> None:
+        """Returns service IDs."""
+        from operate.services.fund_recovery_manager import _fetch_services_from_subgraph
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "data": {"services": [{"id": "1"}, {"id": "2"}]}
+        }
+        mock_post.return_value = mock_response
+
+        result = _fetch_services_from_subgraph("http://url", "0xabc")
+        assert result == [1, 2]
