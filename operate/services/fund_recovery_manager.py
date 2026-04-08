@@ -94,9 +94,9 @@ GAS_WARN_THRESHOLDS: t.Dict[int, int] = {
 #: Subgraph URLs for fast service enumeration
 SUBGRAPH_URLS: t.Dict[Chain, str] = {
     Chain.GNOSIS: "https://api.subgraph.autonolas.tech/api/proxy/service-registry-gnosis",
-    Chain.OPTIMISM: "https://placeholder.url/optimism",
-    Chain.POLYGON: "https://placeholder.url/polygon",
-    Chain.BASE: "https://placeholder.url/base",
+    Chain.OPTIMISM: "https://registry-optimism.subgraph.autonolas.tech/graphql",
+    Chain.POLYGON: "https://registry-polygon.subgraph.autonolas.tech/graphql",
+    Chain.BASE: "https://registry-base.subgraph.autonolas.tech/graphql",
 }
 
 
@@ -315,7 +315,15 @@ def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
         response.raise_for_status()
         data = response.json()
 
-        services = data.get("data", {}).get("services", [])
+        if "errors" in data:
+            logger.warning(f"Subgraph returned errors for {url}: {data['errors']}")
+            raise ValueError("GraphQL query returned errors")
+
+        result_data = data.get("data")
+        if not result_data:
+            raise ValueError(f"No 'data' field in subgraph response: {data}")
+
+        services = result_data.get("services", [])
         return [int(s["id"]) for s in services]
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(f"Subgraph query failed for {url}: {exc}")
@@ -454,7 +462,12 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                     all_service_ids = _fetch_services_from_subgraph(
                                         subgraph_url, eoa_address
                                     )
-                                except Exception:  # pylint: disable=broad-except
+                                except Exception as e:  # pylint: disable=broad-except
+                                    self._logger.warning(
+                                        "Failed to fetch services from subgraph on %s: %s. Falling back to RPC.",
+                                        chain.value,
+                                        e,
+                                    )
                                     subgraph_url = None  # trigger fallback
 
                             if not subgraph_url:
