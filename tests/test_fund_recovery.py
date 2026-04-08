@@ -74,7 +74,9 @@ class TestFundRecoveryScanValidation:
         """Happy path: valid mnemonic → 200 with scan result."""
         scan_result = FundRecoveryScanResponse(
             master_eoa_address=_VALID_DESTINATION,
-            balances=ChainAmounts(),
+            balances=ChainAmounts.from_json(
+                {"ethereum": {_VALID_DESTINATION: {"OLAS": 123456789123456789}}}
+            ),
             services=[],
             gas_warning={},
         )
@@ -91,6 +93,10 @@ class TestFundRecoveryScanValidation:
         assert resp.status_code == HTTPStatus.OK
         body = resp.json()
         assert "master_eoa_address" in body
+        assert (
+            body["balances"]["ethereum"][_VALID_DESTINATION]["OLAS"]
+            == "123456789123456789"
+        )
 
     def test_non_json_body_returns_bad_request(
         self, client_no_account: TestClient
@@ -182,7 +188,9 @@ class TestFundRecoveryExecuteValidation:
         execute_result = FundRecoveryExecuteResponse(
             success=True,
             partial_failure=False,
-            total_funds_moved=ChainAmounts(),
+            total_funds_moved=ChainAmounts.from_json(
+                {"base": {_VALID_DESTINATION: {"USDC": 9876543210}}}
+            ),
             errors=[],
         )
         with patch(
@@ -200,6 +208,10 @@ class TestFundRecoveryExecuteValidation:
         body = resp.json()
         assert body["success"] is True
         assert body["errors"] == []
+        assert (
+            body["total_funds_moved"]["base"][_VALID_DESTINATION]["USDC"]
+            == "9876543210"
+        )
 
     def test_non_json_body_returns_bad_request(
         self, client_no_account: TestClient
