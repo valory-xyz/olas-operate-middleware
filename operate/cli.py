@@ -550,6 +550,91 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get settings."""
         return JSONResponse(content=operate.settings.json)
 
+    # --- Pearl Store API ---
+    # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
+    _pearl_store_path = operate._path / "pearl_store.json"  # pylint: disable=protected-access
+    _pearl_store_lock = __import__("threading").Lock()
+
+    def _read_pearl_store() -> t.Dict:
+        """Read pearl_store.json; return {} if missing or invalid."""
+        if not _pearl_store_path.exists():
+            return {}
+        try:
+            return __import__("json").loads(_pearl_store_path.read_text(encoding="utf-8"))
+        except Exception:  # pylint: disable=broad-except
+            return {}
+
+    def _write_pearl_store(data: t.Dict) -> None:
+        """Write data to pearl_store.json atomically."""
+        _pearl_store_path.write_text(
+            __import__("json").dumps(data, indent=2), encoding="utf-8"
+        )
+
+    def _set_nested(d: t.Dict, key: str, value: t.Any) -> None:
+        """Set a value at a dot-notation path, creating intermediate dicts."""
+        parts = key.split(".")
+        for part in parts[:-1]:
+            if part not in d or not isinstance(d[part], dict):
+                d[part] = {}
+            d = d[part]
+        d[parts[-1]] = value
+
+    def _delete_nested(d: t.Dict, key: str) -> None:
+        """Delete a value at a dot-notation path; no-op if path missing."""
+        parts = key.split(".")
+        for part in parts[:-1]:
+            if not isinstance(d.get(part), dict):
+                return
+            d = d[part]
+        d.pop(parts[-1], None)
+
+    @app.get("/api/store")
+    async def _get_store(request: Request) -> JSONResponse:
+        """Get the full pearl store."""
+        with _pearl_store_lock:
+            data = await run_in_executor(_read_pearl_store)
+        return JSONResponse(content={"data": data}, status_code=HTTPStatus.OK)
+
+    @app.post("/api/store")
+    async def _set_store_key(request: Request) -> JSONResponse:
+        """Set a key in the pearl store (supports dot-notation)."""
+        body = await request.json()
+        key = body.get("key")
+        if not isinstance(key, str) or not key:
+            return JSONResponse(
+                content={"error": "Missing or invalid 'key' field."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        value = body.get("value")
+
+        def _write() -> None:
+            with _pearl_store_lock:
+                data = _read_pearl_store()
+                _set_nested(data, key, value)
+                _write_pearl_store(data)
+
+        await run_in_executor(_write)
+        return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
+
+    @app.delete("/api/store/{key:path}")
+    async def _delete_store_key(request: Request) -> JSONResponse:
+        """Delete a key from the pearl store (supports dot-notation via path)."""
+        key = request.path_params.get("key", "")
+        if not key:
+            return JSONResponse(
+                content={"error": "Missing key."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        def _delete() -> None:
+            with _pearl_store_lock:
+                data = _read_pearl_store()
+                _delete_nested(data, key)
+                _write_pearl_store(data)
+
+        await run_in_executor(_delete)
+        return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
+
     @app.get("/api/account")
     async def _get_account(request: Request) -> t.Dict:
         """Get account information."""
