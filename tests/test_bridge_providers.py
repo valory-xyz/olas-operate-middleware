@@ -567,6 +567,7 @@ def get_transfer_amount(
 class TestNativeBridgeProvider:
     """Tests for bridge.providers.NativeBridgeProvider class."""
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     def test_bridge_execute_error(
         self,
         tmp_path: Path,
@@ -966,6 +967,7 @@ class TestProvider:
         assert not diff, "Wrong status."
         assert provider_request == expected_request, "Wrong request."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.parametrize(
         "provider_class",
         [

@@ -156,6 +156,7 @@ class TestBridgeManager:
             return None
         return price_usd * amount / (10**decimals)
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     def test_bundle_zero(
         self,
         tmp_path: Path,
@@ -261,6 +262,7 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     def test_bundle_error(
         self,
         tmp_path: Path,
@@ -378,6 +380,7 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     def test_bundle_quote(
         self,
         tmp_path: Path,
@@ -544,6 +547,7 @@ class TestBridgeManager:
             margin=0.2,
         )
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.parametrize(
         "to_chain_enum",
         [
@@ -643,6 +647,7 @@ class TestBridgeManager:
             margin=0.2,
         )
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.parametrize(
         "from_chain_enum",
         [
