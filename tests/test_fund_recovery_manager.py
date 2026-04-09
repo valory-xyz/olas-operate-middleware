@@ -713,6 +713,24 @@ class TestFundRecoveryManagerScan:
 # ---------------------------------------------------------------------------
 
 
+def _make_execute_mocks():  # type: ignore[no-untyped-def]
+    """Return a standard set of mocks for execute() tests (no services, no safes)."""
+    mock_wallet = MagicMock()
+    mock_wallet.drain.return_value = {}
+    mock_wallet.safes = {}
+    mock_wallet.safe_chains = []
+    mock_wallet.ledger_api.return_value = MagicMock()
+
+    mock_wm_instance = MagicMock()
+    mock_wm_instance.setup.return_value = mock_wm_instance
+    mock_wm_instance.import_from_mnemonic.return_value = (mock_wallet, [])
+
+    mock_sm_instance = MagicMock()
+    mock_sm_instance.setup.return_value = mock_sm_instance
+
+    return mock_wallet, mock_wm_instance, mock_sm_instance
+
+
 class TestFundRecoveryManagerExecute:
     """Tests for FundRecoveryManager.execute."""
 
@@ -723,16 +741,14 @@ class TestFundRecoveryManagerExecute:
     def test_execute_returns_correct_type(self) -> None:
         """execute() always returns FundRecoveryExecuteResponse."""
         manager = _make_manager()
-        mock_app = MagicMock()
-        mock_app.wallet_manager.import_from_mnemonic.return_value = (MagicMock(), [])
-        mock_app.service_manager.return_value = MagicMock()
+        mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
         with (
-            patch("operate.cli.OperateApp", return_value=mock_app),
+            patch(f"{_MODULE}.KeysManager"),
+            patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+            patch(f"{_MODULE}.FundingManager"),
+            patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                return_value=[],
-            ),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         ):
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
         assert isinstance(result, FundRecoveryExecuteResponse)
@@ -740,16 +756,14 @@ class TestFundRecoveryManagerExecute:
     def test_execute_success_no_errors(self) -> None:
         """Happy path with no services and no funds produces success=True, errors=[]."""
         manager = _make_manager()
-        mock_app = MagicMock()
-        mock_app.wallet_manager.import_from_mnemonic.return_value = (MagicMock(), [])
-        mock_app.service_manager.return_value = MagicMock()
+        mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
         with (
-            patch("operate.cli.OperateApp", return_value=mock_app),
+            patch(f"{_MODULE}.KeysManager"),
+            patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+            patch(f"{_MODULE}.FundingManager"),
+            patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                return_value=[],
-            ),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         ):
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
@@ -763,42 +777,35 @@ class TestFundRecoveryManagerExecute:
 # ---------------------------------------------------------------------------
 
 
+_AGENT_SAFE_ADDR = "0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa"
+
+
 class TestExecuteMultisigFetch:
     """Verify that chain_config.chain_data.multisig is set from on-chain data, not safe_addr."""
 
-    _AGENT_SAFE = "0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa"
+    def _make_mocks_with_service(self):  # type: ignore[no-untyped-def]
+        """Return mocks set up with a service and safe."""
+        mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
 
-    def _make_app_and_wallet(self):  # type: ignore[no-untyped-def]
-        mock_wallet = MagicMock()
-        mock_wallet.safes = {}
-        mock_wallet.safe_chains = []
-        mock_wallet.drain.return_value = {}
+        mock_chain_config = MagicMock()
+        mock_service = MagicMock()
+        mock_service.service_config_id = "test-id"
+        # chain_configs[chain_str] returns mock_chain_config automatically via MagicMock
+        mock_sm_instance.create.return_value = mock_service
 
-        mock_svc_manager = MagicMock()
-
-        mock_app = MagicMock()
-        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
-        mock_app.service_manager.return_value = mock_svc_manager
-
-        return mock_app, mock_wallet, mock_svc_manager
+        return mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config
 
     def test_multisig_set_from_on_chain_when_nonzero(self) -> None:
         """When get_service_info returns a real address at index 1, multisig is set to it (checksummed)."""
-        mock_app, _mock_wallet, mock_svc_manager = self._make_app_and_wallet()
-
-        # Build a mock service whose chain_configs can be inspected
-        mock_service = MagicMock()
-        mock_chain_config = MagicMock()
-        mock_service.chain_configs.__getitem__ = MagicMock(
-            return_value=mock_chain_config
+        mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config = (
+            self._make_mocks_with_service()
         )
-        mock_svc_manager.create.return_value = mock_service
+        # Wire up chain_configs to return our mock_chain_config
+        mock_service.chain_configs.__getitem__ = MagicMock(return_value=mock_chain_config)
 
-        # ServiceInfo tuple: (security_deposit, multisig, ipfs_hash, threshold,
-        #                     max_agents, num_agents, state, canonical_agents)
         svc_info: t.Tuple[int, str, bytes, int, int, int, int, t.List[int]] = (
             0,
-            self._AGENT_SAFE,
+            _AGENT_SAFE_ADDR,
             b"",
             1,
             1,
@@ -808,23 +815,23 @@ class TestExecuteMultisigFetch:
         )
 
         with (
-            patch("operate.cli.OperateApp", return_value=mock_app),
+            patch(f"{_MODULE}.KeysManager"),
+            patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+            patch(f"{_MODULE}.FundingManager"),
+            patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
-            patch(
-                f"{_MODULE}.fetch_safes_for_owner",
-                return_value=[_SAFE_ADDR],
-            ),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
             patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[55]),
             patch(f"{_MODULE}.get_service_info", return_value=svc_info),
         ):
             manager = FundRecoveryManager()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
-        # The multisig should have been set to the checksummed agent safe, not to _SAFE_ADDR
+        # The multisig should have been set to the checksummed agent safe
         assigned_multisig = mock_chain_config.chain_data.multisig
         from web3 import Web3
 
-        assert assigned_multisig == Web3.to_checksum_address(self._AGENT_SAFE)
+        assert assigned_multisig == Web3.to_checksum_address(_AGENT_SAFE_ADDR)
         assert assigned_multisig != _SAFE_ADDR
         assert result.success is True
 
@@ -832,16 +839,11 @@ class TestExecuteMultisigFetch:
         """When get_service_info returns ZERO_ADDRESS at index 1, multisig is NON_EXISTENT_MULTISIG."""
         from operate.services.service import NON_EXISTENT_MULTISIG
 
-        mock_app, _mock_wallet, mock_svc_manager = self._make_app_and_wallet()
-
-        mock_service = MagicMock()
-        mock_chain_config = MagicMock()
-        mock_service.chain_configs.__getitem__ = MagicMock(
-            return_value=mock_chain_config
+        mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config = (
+            self._make_mocks_with_service()
         )
-        mock_svc_manager.create.return_value = mock_service
+        mock_service.chain_configs.__getitem__ = MagicMock(return_value=mock_chain_config)
 
-        # multisig (index 1) is ZERO_ADDRESS — service not yet deployed
         svc_info: t.Tuple[int, str, bytes, int, int, int, int, t.List[int]] = (
             0,
             ZERO_ADDRESS,
@@ -854,12 +856,12 @@ class TestExecuteMultisigFetch:
         )
 
         with (
-            patch("operate.cli.OperateApp", return_value=mock_app),
+            patch(f"{_MODULE}.KeysManager"),
+            patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+            patch(f"{_MODULE}.FundingManager"),
+            patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
-            patch(
-                f"{_MODULE}.fetch_safes_for_owner",
-                return_value=[_SAFE_ADDR],
-            ),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
             patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[56]),
             patch(f"{_MODULE}.get_service_info", return_value=svc_info),
         ):
@@ -873,27 +875,20 @@ class TestExecuteMultisigFetch:
         """When get_service_info raises, multisig falls back to NON_EXISTENT_MULTISIG."""
         from operate.services.service import NON_EXISTENT_MULTISIG
 
-        mock_app, _mock_wallet, mock_svc_manager = self._make_app_and_wallet()
-
-        mock_service = MagicMock()
-        mock_chain_config = MagicMock()
-        mock_service.chain_configs.__getitem__ = MagicMock(
-            return_value=mock_chain_config
+        mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config = (
+            self._make_mocks_with_service()
         )
-        mock_svc_manager.create.return_value = mock_service
+        mock_service.chain_configs.__getitem__ = MagicMock(return_value=mock_chain_config)
 
         with (
-            patch("operate.cli.OperateApp", return_value=mock_app),
+            patch(f"{_MODULE}.KeysManager"),
+            patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+            patch(f"{_MODULE}.FundingManager"),
+            patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
-            patch(
-                f"{_MODULE}.fetch_safes_for_owner",
-                return_value=[_SAFE_ADDR],
-            ),
+            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
             patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[58]),
-            patch(
-                f"{_MODULE}.get_service_info",
-                side_effect=Exception("rpc error"),
-            ),
+            patch(f"{_MODULE}.get_service_info", side_effect=Exception("rpc error")),
         ):
             manager = FundRecoveryManager()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
@@ -1168,136 +1163,372 @@ def test_inject_safe_into_wallet_idempotent(tmp_path: Path) -> None:
     mock_wallet.store.assert_called_once()
 
 
-def test_execute_calls_service_manager_methods_for_deployed_service(
-    tmp_path: Path,
-) -> None:
-    """execute() calls terminate, unbond, recovery module, and drain for a DEPLOYED service."""
-    mock_wallet = MagicMock()
-    mock_wallet.drain.return_value = {}
-    mock_wallet.safes = {}
-    mock_wallet.safe_chains = []
+def test_execute_calls_service_manager_methods_for_deployed_service() -> None:
+    """execute() calls terminate, recovery module, and drain for a deployed service."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
 
-    mock_wallet_manager = MagicMock()
-    mock_wallet_manager.import_from_mnemonic.return_value = (mock_wallet, ["word1"])
+    mock_service = MagicMock()
+    mock_service.service_config_id = "test-id-7"
+    mock_sm_instance.create.return_value = mock_service
 
-    mock_svc_manager = MagicMock()
-
-    mock_app = MagicMock()
-    mock_app.wallet_manager = mock_wallet_manager
-    mock_app._services = tmp_path / "services"
-    mock_app._services.mkdir()
-    mock_app.service_manager.return_value = mock_svc_manager
+    svc_info = (
+        0,
+        "0xAbCdEf0000000000000000000000000000000001",
+        b"",
+        1,
+        1,
+        1,
+        4,
+        [],
+    )
 
     with (
-        patch(
-            "operate.cli.OperateApp",
-            return_value=mock_app,
-        ),
-        patch(
-            "operate.services.fund_recovery_manager.fetch_safes_for_owner",
-            return_value=["0xaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaA"],
-        ),
-        patch(
-            "operate.services.fund_recovery_manager._fetch_services_from_subgraph",
-            return_value=[7],
-        ),
-        patch(
-            "operate.services.fund_recovery_manager.get_default_ledger_api",
-            return_value=MagicMock(),
-        ),
-        patch(
-            "operate.services.fund_recovery_manager.get_default_rpc",
-            return_value="https://rpc.test",
-        ),
-        patch(
-            "operate.services.fund_recovery_manager.get_service_info",
-            return_value=(
-                0,
-                "0xAbCdEf0000000000000000000000000000000001",
-                b"",
-                1,
-                1,
-                1,
-                4,
-                [],
-            ),
-        ),
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[7]),
+        patch(f"{_MODULE}.get_service_info", return_value=svc_info),
     ):
         manager = FundRecoveryManager()
         manager.execute(
-            mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-            destination_address="0x0000000000000000000000000000000000000001",
+            mnemonic=_TEST_MNEMONIC,
+            destination_address=_DEST_ADDR,
         )
 
     # terminate → recovery module → drain should all be called
-    # (terminate_service_on_chain_from_safe handles unstake+terminate+unbond internally)
-    assert mock_svc_manager.terminate_service_on_chain_from_safe.call_count >= 1
-    assert mock_svc_manager._execute_recovery_module_flow_from_safe.call_count >= 1
-    assert mock_svc_manager.drain.call_count >= 1
-    # wallet.drain should be called for the safe and EOA on each chain
+    assert mock_sm_instance.terminate_service_on_chain_from_safe.call_count >= 1
+    assert mock_sm_instance._execute_recovery_module_flow_from_safe.call_count >= 1
+    assert mock_sm_instance.drain.call_count >= 1
+    # wallet.drain should be called for the safe and EOA
     assert mock_wallet.drain.call_count >= 1
 
 
-def test_execute_creates_operate_app_and_imports_wallet(tmp_path: Path) -> None:
-    """execute() should instantiate OperateApp in a tempdir and import wallet."""
-    mock_wallet = MagicMock()
-    mock_wallet.drain.return_value = {}
-    mock_wallet.safes = {}
+def test_execute_creates_wallet_manager_and_imports_wallet() -> None:
+    """execute() should instantiate MasterWalletManager in a tempdir and import the wallet."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
 
-    mock_wallet_manager = MagicMock()
-    mock_wallet_manager.import_from_mnemonic.return_value = (mock_wallet, ["word1"])
-
-    mock_app = MagicMock()
-    mock_app.wallet_manager = mock_wallet_manager
-    mock_app.service_manager.return_value = MagicMock()
+    mock_wm_cls = MagicMock(return_value=mock_wm_instance)
 
     with (
-        patch(
-            "operate.cli.OperateApp",
-            return_value=mock_app,
-        ) as mock_app_cls,
-        patch(
-            "operate.services.fund_recovery_manager.fetch_safes_for_owner",
-            return_value=[],
-        ),
-        patch(
-            "operate.services.fund_recovery_manager._fetch_services_from_subgraph",
-            return_value=[],
-        ),
-        patch(
-            "operate.services.fund_recovery_manager.get_service_info",
-            return_value=(
-                0,
-                "0xAbCdEf0000000000000000000000000000000001",
-                b"",
-                1,
-                1,
-                1,
-                4,
-                [],
-            ),
-        ),
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", mock_wm_cls),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
     ):
         manager = FundRecoveryManager()
         result = manager.execute(
-            mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-            destination_address="0x0000000000000000000000000000000000000001",
+            mnemonic=_TEST_MNEMONIC,
+            destination_address=_DEST_ADDR,
         )
 
-    # OperateApp was constructed with a Path inside a temp dir
-    assert mock_app_cls.call_count == 1
-    constructed_path = mock_app_cls.call_args[1]["home"]
+    # MasterWalletManager was constructed with a path argument
+    assert mock_wm_cls.call_count == 1
+    constructed_path = mock_wm_cls.call_args[1].get("path") or mock_wm_cls.call_args[0][0]
     assert isinstance(constructed_path, Path)
 
-    # User account was created
-    mock_app.create_user_account.assert_called_once()
-    password_used = mock_app.create_user_account.call_args[1]["password"]
-    assert len(password_used) >= 8
-
-    # Wallet was imported with the mnemonic
-    mock_wallet_manager.import_from_mnemonic.assert_called_once_with(
+    # import_from_mnemonic was called with LedgerType.ETHEREUM and the mnemonic
+    mock_wm_instance.import_from_mnemonic.assert_called_once_with(
         LedgerType.ETHEREUM,
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        _TEST_MNEMONIC,
     )
 
     assert result.success is True
+
+
+# ---------------------------------------------------------------------------
+# Additional execute() branch coverage tests
+# ---------------------------------------------------------------------------
+
+
+def test_execute_chain_level_exception_adds_to_errors() -> None:
+    """When wallet.ledger_api raises, the chain-level except fires and adds to errors."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    mock_wallet.ledger_api.side_effect = RuntimeError("rpc unavailable")
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    # Each of the RECOVERY_CHAINS should have added an error entry
+    assert len(result.errors) == len(RECOVERY_CHAINS)
+    assert all("RuntimeError" in e for e in result.errors)
+    assert result.success is False
+    assert result.partial_failure is False
+
+
+def test_execute_subgraph_fallback_calls_enumerate_owned_services() -> None:
+    """When _fetch_services_from_subgraph raises, _enumerate_owned_services is called."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(
+            f"{_MODULE}._fetch_services_from_subgraph",
+            side_effect=Exception("subgraph down"),
+        ),
+        patch(
+            f"{_MODULE}._enumerate_owned_services", return_value=[]
+        ) as mock_enumerate,
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    # _enumerate_owned_services must have been called as fallback
+    assert mock_enumerate.call_count >= 1
+    assert result.success is True
+
+
+def test_execute_svc_manager_create_exception_adds_to_errors() -> None:
+    """When svc_manager.create() raises, the per-service except fires."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    mock_sm_instance.create.side_effect = RuntimeError("create failed")
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert any("RuntimeError" in e for e in result.errors)
+    assert result.success is False
+
+
+def test_execute_terminate_exception_adds_to_errors() -> None:
+    """When terminate_service_on_chain_from_safe raises, errors are appended."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    mock_sm_instance.create.return_value = MagicMock(service_config_id="test-id")
+    mock_sm_instance.terminate_service_on_chain_from_safe.side_effect = RuntimeError(
+        "terminate failed"
+    )
+
+    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
+        patch(f"{_MODULE}.get_service_info", return_value=svc_info),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert any("terminate failed" in e for e in result.errors)
+    assert result.success is False
+
+
+def test_execute_recovery_module_exception_adds_to_errors() -> None:
+    """When _execute_recovery_module_flow_from_safe raises, errors are appended."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    mock_sm_instance.create.return_value = MagicMock(service_config_id="test-id")
+    mock_sm_instance._execute_recovery_module_flow_from_safe.side_effect = RuntimeError(
+        "recovery module failed"
+    )
+
+    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
+        patch(f"{_MODULE}.get_service_info", return_value=svc_info),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert any("recovery module failed" in e for e in result.errors)
+    assert result.success is False
+
+
+def test_execute_agent_safe_drain_exception_adds_to_errors() -> None:
+    """When svc_manager.drain raises, errors are appended."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    mock_sm_instance.create.return_value = MagicMock(service_config_id="test-id")
+    mock_sm_instance.drain.side_effect = RuntimeError("drain agent safe failed")
+
+    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
+        patch(f"{_MODULE}.get_service_info", return_value=svc_info),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert any("drain agent safe failed" in e for e in result.errors)
+    assert result.success is False
+
+
+def test_execute_safe_drain_exception_adds_to_errors() -> None:
+    """When wallet.drain(from_safe=True) raises, the safe-level except fires."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+
+    def _drain_side_effect(**kwargs):  # type: ignore[no-untyped-def]
+        if kwargs.get("from_safe"):
+            raise RuntimeError("safe drain failed")
+        return {}
+
+    mock_wallet.drain.side_effect = _drain_side_effect
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert any("drain_safe" in e for e in result.errors)
+    assert result.success is False
+
+
+def test_execute_eoa_drain_exception_adds_to_errors() -> None:
+    """When wallet.drain(from_safe=False) raises, the EOA drain except fires."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+
+    def _drain_side_effect(**kwargs):  # type: ignore[no-untyped-def]
+        if not kwargs.get("from_safe"):
+            raise RuntimeError("eoa drain failed")
+        return {}
+
+    mock_wallet.drain.side_effect = _drain_side_effect
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert any("drain_eoa" in e for e in result.errors)
+    assert result.success is False
+
+
+def test_execute_funds_moved_tracked_when_drain_returns_nonzero() -> None:
+    """When wallet.drain returns a non-empty dict, total_funds_moved is populated."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    # EOA drain returns a non-empty dict
+    mock_wallet.drain.return_value = {ZERO_ADDRESS: 1000}
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert result.success is True
+    # total_funds_moved should be non-empty since drain returned funds
+    assert bool(result.total_funds_moved)
+
+
+def test_execute_safe_funds_moved_tracked_when_drain_returns_nonzero() -> None:
+    """When wallet.drain(from_safe=True) returns funds, total_funds_moved is populated."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+
+    def _drain_side_effect(**kwargs):  # type: ignore[no-untyped-def]
+        return {ZERO_ADDRESS: 500}
+
+    mock_wallet.drain.side_effect = _drain_side_effect
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert result.success is True
+    assert bool(result.total_funds_moved)
+
+
+def test_execute_partial_failure_when_errors_and_funds_moved() -> None:
+    """partial_failure=True when there are errors AND funds were moved."""
+    mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
+    mock_sm_instance.create.return_value = MagicMock(service_config_id="test-id")
+    # terminate fails → error is added
+    mock_sm_instance.terminate_service_on_chain_from_safe.side_effect = RuntimeError(
+        "terminate failed"
+    )
+    # wallet.drain(from_safe=False) succeeds and returns funds
+    eoa_call_count = [0]
+
+    def _drain_side_effect(**kwargs):  # type: ignore[no-untyped-def]
+        if not kwargs.get("from_safe"):
+            eoa_call_count[0] += 1
+            return {ZERO_ADDRESS: 999}
+        return {}
+
+    mock_wallet.drain.side_effect = _drain_side_effect
+
+    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+
+    with (
+        patch(f"{_MODULE}.KeysManager"),
+        patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
+        patch(f"{_MODULE}.FundingManager"),
+        patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
+        patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
+        patch(f"{_MODULE}.get_service_info", return_value=svc_info),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
+
+    assert result.success is False
+    assert bool(result.total_funds_moved)
+    assert result.partial_failure is True
