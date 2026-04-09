@@ -162,8 +162,11 @@ class MasterWallet(LocalResource):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
-        """Drain all erc20/native assets to the given account."""
+    ) -> t.Dict[str, int]:
+        """Drain all erc20/native assets to the given account.
+
+        Returns a mapping of asset address to amount transferred.
+        """
         raise NotImplementedError()
 
     @classmethod
@@ -571,24 +574,39 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
-        """Drain all erc20/native assets to the given account."""
+    ) -> t.Dict[str, int]:
+        """Drain all erc20/native assets to the given account.
+
+        Returns a mapping of asset address to amount transferred.
+        """
         assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
             ZERO_ADDRESS
         ]
+        moved: t.Dict[str, int] = {}
         for asset in assets:
             balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
             if balance <= 0:
                 continue
 
-            self.transfer(
-                to=withdrawal_address,
-                amount=balance,
-                chain=chain,
-                asset=asset,
-                from_safe=from_safe,
-                rpc=rpc,
-            )
+            try:
+                self.transfer(
+                    to=withdrawal_address,
+                    amount=balance,
+                    chain=chain,
+                    asset=asset,
+                    from_safe=from_safe,
+                    rpc=rpc,
+                )
+                moved[asset] = int(balance)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to transfer asset %s on chain %s: %s",
+                    asset,
+                    chain,
+                    str(exc),
+                )
+
+        return moved
 
     @classmethod
     def new(
@@ -631,6 +649,58 @@ class EthereumMasterWallet(MasterWallet):
 
         # Create wallet
         wallet = EthereumMasterWallet(path=path, address=crypto.address, safe_chains=[])
+        wallet.store()
+        wallet.password = password
+        return wallet, mnemonic.split()
+
+    @classmethod
+    def import_from_mnemonic(
+        cls, mnemonic: str, password: str, path: Path
+    ) -> t.Tuple["EthereumMasterWallet", t.List[str]]:
+        """Import a wallet from a BIP-39 mnemonic.
+
+        SECURITY: The mnemonic and derived private key are never persisted beyond
+        the encrypted keystore files.  The plain-text private key only exists in
+        memory for the duration of this call.
+        """
+        eoa_wallet_path = path / cls._key
+        eoa_mnemonic_path = path / cls.mnemonic_filename()
+
+        if eoa_wallet_path.exists():
+            raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
+
+        if eoa_mnemonic_path.exists():
+            raise FileExistsError(
+                f"Mnemonic file already exists at {eoa_mnemonic_path}."
+            )
+
+        eoa_wallet_path.parent.mkdir(parents=True, exist_ok=True)
+
+        w3 = Web3()
+        w3.eth.account.enable_unaudited_hdwallet_features()
+        account = w3.eth.account.from_mnemonic(mnemonic)
+
+        encrypted_mnemonic = EncryptedData.new(
+            path=eoa_mnemonic_path,
+            password=password,
+            plaintext_bytes=mnemonic.encode(),
+        )
+        encrypted_mnemonic.store()
+
+        eoa_wallet_path.write_text(
+            data=json.dumps(
+                Account.encrypt(
+                    private_key=account._private_key,  # pylint: disable=protected-access
+                    password=password,
+                ),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        wallet = EthereumMasterWallet(
+            path=path, address=account.address, safe_chains=[]
+        )
         wallet.store()
         wallet.password = password
         return wallet, mnemonic.split()
@@ -969,6 +1039,29 @@ class MasterWalletManager:
         """
         if ledger_type == LedgerType.ETHEREUM:
             return EthereumMasterWallet.new(password=self.password, path=self.path)
+        raise ValueError(f"{ledger_type} is not supported.")
+
+    def import_from_mnemonic(
+        self, ledger_type: LedgerType, mnemonic: str
+    ) -> t.Tuple[MasterWallet, t.List[str]]:
+        """
+        Import a wallet from a BIP-39 mnemonic.
+
+        Derives the Ethereum address from *mnemonic* and writes the encrypted
+        keystores into this manager's ``path``.  The password currently set on
+        this manager is used to encrypt the key material.
+
+        :param ledger_type: Ledger type (only ``LedgerType.ETHEREUM`` supported).
+        :param mnemonic: BIP-39 seed phrase (12, 15, 18, 21, or 24 words).
+        :return: Tuple of (wallet, mnemonic word list).
+        :raises ValueError: If ledger type is not supported.
+        """
+        if ledger_type == LedgerType.ETHEREUM:
+            return EthereumMasterWallet.import_from_mnemonic(
+                mnemonic=mnemonic,
+                password=self.password,
+                path=self.path,
+            )
         raise ValueError(f"{ledger_type} is not supported.")
 
     def exists(self, ledger_type: LedgerType) -> bool:
