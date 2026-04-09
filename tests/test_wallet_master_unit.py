@@ -1309,7 +1309,9 @@ class TestMasterWalletManagerImportFromMnemonic:
 
     def test_delegates_to_ethereum_wallet(self, tmp_path: Path) -> None:
         """import_from_mnemonic with ETHEREUM delegates to EthereumMasterWallet."""
-        manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()  # nosec B106
+        manager = MasterWalletManager(
+            path=tmp_path, password="testpassword123"
+        ).setup()  # nosec B106
         wallet, words = manager.import_from_mnemonic(
             LedgerType.ETHEREUM, _TEST_MNEMONIC
         )
@@ -1318,6 +1320,8 @@ class TestMasterWalletManagerImportFromMnemonic:
 
     def test_raises_for_unsupported_ledger_type(self, tmp_path: Path) -> None:
         """import_from_mnemonic raises ValueError for unsupported ledger types."""
-        manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()  # nosec B106
+        manager = MasterWalletManager(
+            path=tmp_path, password="testpassword123"
+        ).setup()  # nosec B106
         with pytest.raises(ValueError, match="is not supported"):
             manager.import_from_mnemonic(LedgerType.SOLANA, _TEST_MNEMONIC)
