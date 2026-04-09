@@ -30,6 +30,7 @@ See https://docs.pytest.org/en/stable/reference/fixtures.html
 import json
 import os
 import random
+import re
 import string
 import tempfile
 import typing as t
@@ -287,6 +288,17 @@ def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-
         body_json = _body_to_json(getattr(request, "body", b""))
         return isinstance(body_json, dict) and body_json.get("jsonrpc") == "2.0"
 
+    # Pattern for EVM addresses (0x followed by exactly 40 hex characters).
+    # Used to normalise bridge-API request bodies before cassette matching so
+    # that cassettes recorded with one wallet address replay correctly when a
+    # different (randomly generated) wallet address is used in the test.
+    _evm_addr_re = re.compile(rb"0x[0-9a-fA-F]{40}")
+    _evm_addr_placeholder = b"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+    def _normalise_evm_addresses(body: bytes) -> bytes:
+        """Replace all EVM addresses in *body* with a fixed placeholder."""
+        return _evm_addr_re.sub(_evm_addr_placeholder, body)
+
     def rpc_body(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
         """Match JSON-RPC bodies while ignoring volatile request id field."""
         body_1 = _body_to_json(getattr(request_1, "body", b""))
@@ -307,8 +319,15 @@ def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-
                 )
                 return match, message
 
-        body_raw_1 = getattr(request_1, "body", b"")
-        body_raw_2 = getattr(request_2, "body", b"")
+        # For non-JSON-RPC requests (e.g. bridge/relay API calls) normalise
+        # EVM addresses before comparing so cassettes recorded with one wallet
+        # address still match when replayed with a different wallet address.
+        body_raw_1 = _normalise_evm_addresses(
+            getattr(request_1, "body", b"") or b""
+        )
+        body_raw_2 = _normalise_evm_addresses(
+            getattr(request_2, "body", b"") or b""
+        )
         match = body_raw_1 == body_raw_2
         message = "Body match" if match else "Body mismatch"
         return match, message
