@@ -30,6 +30,7 @@ from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
     MultiSendOperation,
+    SAFE_TX_SERVICE_URLS,
     SENTINEL_OWNERS,
     SafeOperation,
     _get_nonce,
@@ -37,6 +38,7 @@ from operate.utils.gnosis import (
     create_safe,
     drain_eoa,
     estimate_transfer_tx_fee,
+    fetch_safes_for_owner,
     gas_fees_spent_in_tx,
     get_asset_balance,
     get_assets_balances,
@@ -256,9 +258,10 @@ class TestGetAssetBalance:
         mock_instance = MagicMock()
         mock_instance.functions.balanceOf.return_value.call.return_value = 500
         token_address = "0x" + "e" * 40
-        with patch("operate.utils.gnosis.Web3.is_address", return_value=True), patch(
-            "operate.utils.gnosis.registry_contracts"
-        ) as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.Web3.is_address", return_value=True),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             result = get_asset_balance(mock_ledger, token_address, self.VALID_ADDRESS)
         assert result == BigInt(500)
@@ -383,8 +386,9 @@ class TestCreateSafe:
         settler.tx_hash = "0xtxhash"
         settler.get_events.return_value = [{"args": {"proxy": "0xNewSafe"}}]
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             safe_address, salt_nonce, tx_hash = create_safe(
                 mock_ledger, mock_crypto, salt_nonce=12345
@@ -407,9 +411,11 @@ class TestCreateSafe:
         settler.tx_hash = "0xtxhash"
         settler.get_events.return_value = [{"args": {"proxy": "0xNewSafe"}}]
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis._get_nonce", return_value=99999):
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis._get_nonce", return_value=99999),
+        ):
             safe_address, salt_nonce, tx_hash = create_safe(mock_ledger, mock_crypto)
 
         assert salt_nonce == 99999
@@ -433,8 +439,9 @@ class TestSendSafeTxs:
         )
         settler.tx_hash = "0xtxhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = send_safe_txs(
                 txd=b"\x00\x01\x02",
@@ -458,8 +465,9 @@ class TestSendSafeTxs:
         )
         settler.tx_hash = "0xanotherhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = send_safe_txs(
                 txd=b"\x00",
@@ -483,9 +491,10 @@ class TestAddOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcd"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+        ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             add_owner(mock_ledger, mock_crypto, "0xSafe", "0xNewOwner")
 
@@ -504,9 +513,10 @@ class TestAddOwner:
         # 0xdeadbeef -> bytes.fromhex("deadbeef")
         mock_instance.encode_abi.return_value = "0xdeadbeef"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+        ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             add_owner(mock_ledger, mock_crypto, "0xSafe", "0xNewOwner")
 
@@ -525,10 +535,10 @@ class TestSwapOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcd"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             swap_owner(
@@ -553,10 +563,10 @@ class TestSwapOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xcafe1234"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             swap_owner(
@@ -582,10 +592,10 @@ class TestRemoveOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcd"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             remove_owner(
@@ -610,10 +620,10 @@ class TestRemoveOwner:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xbeef0011"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs"
-        ) as mock_send, patch(
-            "operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs") as mock_send,
+            patch("operate.utils.gnosis.get_prev_owner", return_value=SENTINEL_OWNERS),
         ):
             mock_contracts.gnosis_safe.get_instance.return_value = mock_instance
             remove_owner(
@@ -644,8 +654,9 @@ class TestTransfer:
         )
         settler.tx_hash = "0xtransferhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = transfer(
                 ledger_api=mock_ledger,
@@ -670,8 +681,9 @@ class TestTransfer:
         )
         settler.tx_hash = "0xhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
         ):
             result = transfer(
                 ledger_api=mock_ledger,
@@ -695,9 +707,12 @@ class TestTransferErc20FromSafe:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xabcdef"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs", return_value="0xerc20hash"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch(
+                "operate.utils.gnosis.send_safe_txs", return_value="0xerc20hash"
+            ) as mock_send,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             result = transfer_erc20_from_safe(  # nosec B106
                 ledger_api=mock_ledger,
@@ -723,9 +738,12 @@ class TestTransferErc20FromSafe:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xaabb"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs", return_value="0xhash"
-        ) as mock_send:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch(
+                "operate.utils.gnosis.send_safe_txs", return_value="0xhash"
+            ) as mock_send,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             transfer_erc20_from_safe(  # nosec B106
                 ledger_api=mock_ledger,
@@ -747,8 +765,9 @@ class TestTransferErc20FromSafe:
         mock_instance = MagicMock()
         mock_instance.encode_abi.return_value = "0xaabb"
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.send_safe_txs", return_value="0xhash"
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.send_safe_txs", return_value="0xhash"),
         ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             transfer_erc20_from_safe(  # nosec B106
@@ -777,8 +796,9 @@ class TestTransferErc20FromEoa:
         )
         settler.tx_hash = "0xhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             result = transfer_erc20_from_eoa(
                 ledger_api=mock_ledger,
@@ -805,15 +825,17 @@ class TestTransferErc20FromEoa:
             built_tx
         )
 
-        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts, patch(
-            "operate.utils.gnosis.update_tx_with_gas_pricing"
-        ) as mock_update_gas_pricing, patch(
-            "operate.utils.gnosis.update_tx_with_gas_estimate"
-        ) as mock_update_gas_estimate, patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
-        ), patch(
-            "operate.utils.gnosis.TxSettler"
-        ) as mock_txsettler_cls:
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch(
+                "operate.utils.gnosis.update_tx_with_gas_pricing"
+            ) as mock_update_gas_pricing,
+            patch(
+                "operate.utils.gnosis.update_tx_with_gas_estimate"
+            ) as mock_update_gas_estimate,
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.TxSettler") as mock_txsettler_cls,
+        ):
             mock_contracts.erc20.get_instance.return_value = mock_instance
             mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
                 "0xhash"
@@ -936,8 +958,9 @@ class TestDrainEoa:
         )
         settler.tx_hash = "0xdrainhash"
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
@@ -959,8 +982,9 @@ class TestDrainEoa:
             "No balance to drain from wallet: 0xWalletAddr"
         )
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
@@ -982,8 +1006,9 @@ class TestDrainEoa:
             "Network error"
         )
 
-        with patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             with pytest.raises(ChainInteractionError, match="Network error"):
                 drain_eoa(
@@ -1048,9 +1073,11 @@ class TestCreateSafeBuildClosure:
             events=[{"args": {"proxy": "0xNewSafe"}}],
         )
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.gnosis_safe.get_deploy_transaction.return_value = {
                 "contract_address": "0xFactory",
                 "data": "0xdeadbeef",
@@ -1092,9 +1119,11 @@ class TestSendSafeTxsBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xsafetxhash")
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
                 "tx_hash": "0x" + "ab" * 32  # 64 hex chars — valid for unhexlify
             }
@@ -1133,9 +1162,11 @@ class TestTransferBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xtransferhash2")
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id"
-        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
             mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
                 "tx_hash": "0x" + "cd" * 32
             }
@@ -1174,9 +1205,11 @@ class TestDrainEoaBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls()
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
-        ), patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100):
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
+        ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
                 crypto=mock_crypto,
@@ -1204,9 +1237,11 @@ class TestDrainEoaBuildClosure:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xdrainsuccess")
 
-        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
-            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
-        ), patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100):
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
+        ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
                 crypto=mock_crypto,
@@ -1217,3 +1252,272 @@ class TestDrainEoaBuildClosure:
         assert result == "0xdrainsuccess"
         mock_ledger.get_transfer_transaction.assert_called_once()
         mock_ledger.update_with_gas_estimate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# fetch_safes_for_owner (lines 714-726)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchSafesForOwner:
+    """Tests for fetch_safes_for_owner."""
+
+    def test_unsupported_chain_returns_empty_list(self) -> None:
+        """When chain_id has no entry in SAFE_TX_SERVICE_URLS, return []."""
+        # Use a chain_id that is guaranteed to be absent from the mapping
+        unknown_chain_id = 999999
+        assert unknown_chain_id not in SAFE_TX_SERVICE_URLS
+        result = fetch_safes_for_owner(unknown_chain_id, "0x" + "a" * 40)
+        assert result == []
+
+    def test_successful_request_returns_safe_list(self) -> None:
+        """A successful HTTP response is parsed and the safes list is returned."""
+        from unittest.mock import MagicMock, patch
+
+        # Pick a supported chain id
+        if not SAFE_TX_SERVICE_URLS:
+            import pytest
+
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+        safes = ["0x" + "b" * 40, "0x" + "c" * 40]
+
+        fake_resp = MagicMock()
+        fake_resp.json.return_value = {"safes": safes}
+        fake_resp.raise_for_status = MagicMock()
+
+        with patch("requests.get", return_value=fake_resp):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == safes
+
+    def test_request_exception_returns_empty_list(self) -> None:
+        """When the HTTP request raises, an empty list is returned (no propagation)."""
+        from unittest.mock import patch
+
+        if not SAFE_TX_SERVICE_URLS:
+            import pytest
+
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with patch("requests.get", side_effect=Exception("network error")):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+
+    def test_missing_safes_key_returns_empty_list(self) -> None:
+        """When the JSON response lacks the 'safes' key, return []."""
+        from unittest.mock import MagicMock, patch
+
+        if not SAFE_TX_SERVICE_URLS:
+            import pytest
+
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        fake_resp = MagicMock()
+        fake_resp.json.return_value = {"other_key": []}
+        fake_resp.raise_for_status = MagicMock()
+
+        with patch("requests.get", return_value=fake_resp):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+
+    def test_transient_failure_then_success_returns_safes(self) -> None:
+        """A transient timeout is retried and the eventual success is returned."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+        safes = ["0x" + "b" * 40]
+
+        fake_resp = MagicMock()
+        fake_resp.json.return_value = {"safes": safes}
+        fake_resp.raise_for_status = MagicMock()
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=[req.Timeout("timed out"), fake_resp],
+            ),
+            patch("time.sleep") as mock_sleep,
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == safes
+        # Exponential backoff: first sleep should have been called once
+        assert mock_sleep.call_count == 1
+
+    def test_all_attempts_exhausted_returns_empty_list(self) -> None:
+        """When all 3 attempts fail, an empty list is returned."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=req.ConnectionError("no route"),
+            ),
+            patch("time.sleep"),
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+
+    def test_exactly_three_attempts_made(self) -> None:
+        """Exactly 3 HTTP calls are made before giving up."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=req.Timeout("timed out"),
+            ) as mock_get,
+            patch("time.sleep"),
+        ):
+            fetch_safes_for_owner(chain_id, owner)
+
+        assert mock_get.call_count == 3
+
+    def test_exponential_backoff_delays(self) -> None:
+        """Sleep is called with 1s then 2s between the three attempts."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=req.ConnectionError("no route"),
+            ),
+            patch("time.sleep") as mock_sleep,
+        ):
+            fetch_safes_for_owner(chain_id, owner)
+
+        # Two sleeps for three attempts: 1s after attempt 1, 2s after attempt 2
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [1, 2]
+
+    def test_client_4xx_not_retried(self) -> None:
+        """A 4xx HTTP error (e.g. 404) is not retried – only one attempt is made."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        # Build a fake 404 HTTPError
+        fake_resp = MagicMock()
+        fake_resp.status_code = 404
+        http_err = req.HTTPError(response=fake_resp)
+        http_err.response = fake_resp
+
+        with (
+            patch("requests.get", side_effect=http_err) as mock_get,
+            patch("time.sleep") as mock_sleep,
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+        assert mock_get.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_server_5xx_is_retried(self) -> None:
+        """A 5xx HTTP error triggers retries."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        fake_resp_err = MagicMock()
+        fake_resp_err.status_code = 500
+        http_err = req.HTTPError(response=fake_resp_err)
+        http_err.response = fake_resp_err
+
+        with (
+            patch("requests.get", side_effect=http_err) as mock_get,
+            patch("time.sleep"),
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+        assert mock_get.call_count == 3
+
+    def test_429_rate_limit_is_retried(self) -> None:
+        """A 429 Too Many Requests error triggers retries."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        fake_resp_err = MagicMock()
+        fake_resp_err.status_code = 429
+        http_err = req.HTTPError(response=fake_resp_err)
+        http_err.response = fake_resp_err
+
+        safes = ["0x" + "c" * 40]
+        fake_ok = MagicMock()
+        fake_ok.json.return_value = {"safes": safes}
+        fake_ok.raise_for_status = MagicMock()
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=[http_err, fake_ok],
+            ),
+            patch("time.sleep"),
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == safes
+
+
+@pytest.mark.integration
+class TestSafeApiSanity:
+    """Integration checks for Safe Transaction Service API."""
+
+    def test_fetch_safes_for_owner_real_api(self) -> None:
+        """Test that the Safe Transaction API is reachable and correctly parsed."""
+        # Test Gnosis Chain (100) Safe API
+        chain_id = 100
+        owner_address = "0x0000000000000000000000000000000000000000"
+
+        try:
+            safes = fetch_safes_for_owner(chain_id, owner_address)
+            assert isinstance(safes, list), "fetch_safes_for_owner should return a list"
+        except Exception as e:
+            pytest.fail(f"Real Safe API call failed: {e}")

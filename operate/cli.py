@@ -42,6 +42,7 @@ from clea import group, params, run
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
@@ -83,6 +84,8 @@ from operate.operate_types import (
     Chain,
     ChainAmounts,
     DeploymentStatus,
+    FundRecoveryExecuteRequest,
+    FundRecoveryScanRequest,
     LedgerType,
     Version,
 )
@@ -95,6 +98,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.fund_recovery_manager import FundRecoveryManager
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
@@ -1775,6 +1779,124 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
+
+    # ---------------------------------------------------------------------------
+    # Fund recovery endpoints (unauthenticated — user has no Pearl account)
+    # ---------------------------------------------------------------------------
+
+    @app.post("/api/fund_recovery/scan")
+    async def _fund_recovery_scan(request: Request) -> JSONResponse:
+        """Scan for on-chain funds recoverable from a BIP-39 mnemonic.
+
+        This endpoint is intentionally unauthenticated: the user has lost their
+        .operate folder and has no Pearl account on this device.
+
+        Security: the mnemonic is NEVER logged, persisted, or transmitted beyond
+        the lifetime of this request.
+        """
+        try:
+            data = await request.json()
+            req = FundRecoveryScanRequest(**data)
+        except ValidationError as ve:
+            first_msg = (
+                ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            )
+            return JSONResponse(
+                content={"error": first_msg},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid request body."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        mnemonic = req.mnemonic.strip().lower()
+
+        # Validate mnemonic using BIP-39 word-list derivation check
+        if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
+            return JSONResponse(
+                content={"error": "Invalid mnemonic"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            manager = FundRecoveryManager()
+            result = await run_in_executor(manager.scan, mnemonic)
+            return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
+        except Exception as e:  # pylint: disable=broad-except
+            # Log only the exception message — never the traceback, which may
+            # capture local variables (including the mnemonic) in some
+            # environments (e.g. cgitb, structured-logging handlers).
+            logger.error(f"fund_recovery_scan error: {e}")
+            return JSONResponse(
+                content={"error": "Fund recovery scan failed. Please check the logs."},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            # Explicitly delete the mnemonic string from local scope
+            mnemonic = ""
+            del mnemonic
+
+    @app.post("/api/fund_recovery/execute")
+    async def _fund_recovery_execute(request: Request) -> JSONResponse:
+        """Execute the full fund recovery sequence from a BIP-39 mnemonic.
+
+        This endpoint is intentionally unauthenticated: the user has lost their
+        .operate folder and has no Pearl account on this device.
+
+        Security: the mnemonic and derived private key are NEVER logged,
+        persisted, or transmitted beyond the lifetime of this request.
+
+        Returns HTTP 200 even on partial failure so the frontend can render
+        total_funds_moved and offer a retry CTA.
+        """
+        try:
+            data = await request.json()
+            req = FundRecoveryExecuteRequest(**data)
+        except ValidationError as ve:
+            first_msg = (
+                ve.errors()[0]["msg"] if ve.errors() else "Invalid request body."
+            )
+            return JSONResponse(
+                content={"error": first_msg},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid request body."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        mnemonic = req.mnemonic.strip().lower()
+        destination = req.destination_address.strip()
+
+        # Validate mnemonic using BIP-39 word-list derivation check
+        if not MasterWalletManager.is_valid_bip39_mnemonic(mnemonic):
+            return JSONResponse(
+                content={"error": "Invalid mnemonic"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            manager = FundRecoveryManager()
+            result = await run_in_executor(manager.execute, mnemonic, destination)
+            return JSONResponse(content=result.model_dump(), status_code=HTTPStatus.OK)
+        except Exception as e:  # pylint: disable=broad-except
+            # Log only the exception message — never the traceback, which may
+            # capture local variables (including the mnemonic) in some
+            # environments (e.g. cgitb, structured-logging handlers).
+            logger.error(f"fund_recovery_execute error: {e}")
+            return JSONResponse(
+                content={
+                    "error": "Fund recovery execution failed. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            # Explicitly delete the mnemonic string from local scope
+            mnemonic = ""
+            del mnemonic
 
     return app
 

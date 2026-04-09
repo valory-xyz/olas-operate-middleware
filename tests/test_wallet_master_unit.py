@@ -1206,3 +1206,122 @@ class TestExtendedJson:
         assert result["consistent_safe_address"] is True
         # 1 owner set → consistent
         assert result["consistent_backup_owner"] is True
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – drain() transfer exception (new except block)
+# ---------------------------------------------------------------------------
+
+
+class TestEthereumDrainTransferException:
+    """Tests for the new except block in EthereumMasterWallet.drain."""
+
+    def test_drain_transfer_exception_is_swallowed(self, tmp_path: Path) -> None:
+        """When transfer raises, the exception is swallowed and the asset is excluded from moved."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
+        )
+        # balance_side_effect: first asset has 100, rest are 0
+        balance_side_effect = [100] + [0] * 20
+        with patch.object(
+            wallet, "get_balance", side_effect=balance_side_effect
+        ), patch.object(
+            wallet, "transfer", side_effect=RuntimeError("tx broadcast failed")
+        ):
+            result = wallet.drain("0xWithdrawal", Chain.GNOSIS)
+        # Nothing was moved because the transfer raised
+        assert not result
+
+    def test_drain_returns_moved_assets_on_success(self, tmp_path: Path) -> None:
+        """drain() returns a dict mapping asset address to transferred amount."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
+        )
+        balance_side_effect = [100] + [0] * 20
+        with patch.object(
+            wallet, "get_balance", side_effect=balance_side_effect
+        ), patch.object(wallet, "transfer"):
+            result = wallet.drain("0xWithdrawal", Chain.GNOSIS)
+        # The first asset with balance 100 should be in the returned dict
+        assert len(result) == 1
+        assert 100 in result.values()
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – import_from_mnemonic classmethod
+# ---------------------------------------------------------------------------
+
+_TEST_MNEMONIC = (
+    "abandon abandon abandon abandon abandon abandon "
+    "abandon abandon abandon abandon abandon about"
+)
+
+
+class TestEthereumImportFromMnemonic:
+    """Tests for EthereumMasterWallet.import_from_mnemonic."""
+
+    def test_imports_wallet_successfully(self, tmp_path: Path) -> None:
+        """Happy path: wallet and mnemonic files are created, wallet object returned."""
+        wallet, words = EthereumMasterWallet.import_from_mnemonic(
+            mnemonic=_TEST_MNEMONIC,
+            password="testpassword123",  # nosec B106
+            path=tmp_path,
+        )
+        assert wallet.address is not None
+        assert wallet.address.startswith("0x")
+        assert len(wallet.address) == 42
+        assert words == _TEST_MNEMONIC.split()
+
+    def test_raises_file_exists_when_wallet_file_exists(self, tmp_path: Path) -> None:
+        """Raises FileExistsError when the wallet key file already exists."""
+        # Create the wallet file first
+        (
+            tmp_path / EthereumMasterWallet._key
+        ).write_text(  # pylint: disable=protected-access
+            "existing", encoding="utf-8"
+        )
+        with pytest.raises(FileExistsError, match="Wallet file already exists"):
+            EthereumMasterWallet.import_from_mnemonic(
+                mnemonic=_TEST_MNEMONIC,
+                password="testpassword123",  # nosec B106
+                path=tmp_path,
+            )
+
+    def test_raises_file_exists_when_mnemonic_file_exists(self, tmp_path: Path) -> None:
+        """Raises FileExistsError when the mnemonic file already exists."""
+        mnemonic_file = EthereumMasterWallet.mnemonic_filename()
+        (tmp_path / mnemonic_file).write_text("{}", encoding="utf-8")
+        with pytest.raises(FileExistsError, match="Mnemonic file already exists"):
+            EthereumMasterWallet.import_from_mnemonic(
+                mnemonic=_TEST_MNEMONIC,
+                password="testpassword123",  # nosec B106
+                path=tmp_path,
+            )
+
+
+# ---------------------------------------------------------------------------
+# MasterWalletManager – import_from_mnemonic
+# ---------------------------------------------------------------------------
+
+
+class TestMasterWalletManagerImportFromMnemonic:
+    """Tests for MasterWalletManager.import_from_mnemonic."""
+
+    def test_delegates_to_ethereum_wallet(self, tmp_path: Path) -> None:
+        """import_from_mnemonic with ETHEREUM delegates to EthereumMasterWallet."""
+        manager = MasterWalletManager(
+            path=tmp_path, password="testpassword123"
+        ).setup()  # nosec B106
+        wallet, words = manager.import_from_mnemonic(
+            LedgerType.ETHEREUM, _TEST_MNEMONIC
+        )
+        assert isinstance(wallet, EthereumMasterWallet)
+        assert words == _TEST_MNEMONIC.split()
+
+    def test_raises_for_unsupported_ledger_type(self, tmp_path: Path) -> None:
+        """import_from_mnemonic raises ValueError for unsupported ledger types."""
+        manager = MasterWalletManager(
+            path=tmp_path, password="testpassword123"
+        ).setup()  # nosec B106
+        with pytest.raises(ValueError, match="is not supported"):
+            manager.import_from_mnemonic(LedgerType.SOLANA, _TEST_MNEMONIC)
