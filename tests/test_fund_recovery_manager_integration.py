@@ -355,6 +355,44 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
                         f"expected {pre_agent}"
                     )
 
+        # ── Step 9b: Assert staked OLAS appears in scan balances ─────────────
+        # For each service chain, the staking contract address must appear as a
+        # wallet key in chain_balances, with the OLAS token entry equal to
+        # 2 * min_staking_deposit (the amount locked for security + agent bond).
+        for chain_str, chain_config in service.chain_configs.items():
+            chain = Chain(chain_str)
+            chain_id_str = str(chain.id)
+            chain_balances = scan_result.balances.get(chain_id_str, {})
+
+            staking_program_id = chain_config.chain_data.user_params.staking_program_id
+            staking_contract = STAKING[chain].get(staking_program_id)
+            assert (
+                staking_contract is not None
+            ), f"Staking contract not found for {chain} program id {staking_program_id}"
+            staking_contract_cs = staking_contract  # already checksummed in profiles
+
+            olas_address = OLAS.get(chain)
+            assert olas_address is not None, f"No OLAS address for chain {chain}"
+
+            assert staking_contract_cs in chain_balances, (
+                f"Staking contract {staking_contract_cs} not found in scan balances "
+                f"for chain {chain}. Balances keys: {list(chain_balances.keys())}"
+            )
+            reported_staked = int(
+                chain_balances[staking_contract_cs].get(olas_address, 0)
+            )
+            expected_staked = staked_olas[chain]
+            assert reported_staked == expected_staked, (
+                f"Scan staked OLAS on {chain}: got {reported_staked}, "
+                f"expected {expected_staked} (2 * min_staking_deposit)"
+            )
+            LOGGER.info(
+                "Scan correctly reported %s staked OLAS in contract %s on %s",
+                reported_staked,
+                staking_contract_cs,
+                chain,
+            )
+
         # ── Step 10: Assert deployed service appears (Gnosis only) ────────────
         # The Trader template only configures Gnosis; Optimism has no service.
         deployed_chain_ids = {

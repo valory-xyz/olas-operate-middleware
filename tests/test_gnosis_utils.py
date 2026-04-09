@@ -1331,6 +1331,180 @@ class TestFetchSafesForOwner:
 
         assert result == []
 
+    def test_transient_failure_then_success_returns_safes(self) -> None:
+        """A transient timeout is retried and the eventual success is returned."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+        safes = ["0x" + "b" * 40]
+
+        fake_resp = MagicMock()
+        fake_resp.json.return_value = {"safes": safes}
+        fake_resp.raise_for_status = MagicMock()
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=[req.Timeout("timed out"), fake_resp],
+            ),
+            patch("time.sleep") as mock_sleep,
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == safes
+        # Exponential backoff: first sleep should have been called once
+        assert mock_sleep.call_count == 1
+
+    def test_all_attempts_exhausted_returns_empty_list(self) -> None:
+        """When all 3 attempts fail, an empty list is returned."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=req.ConnectionError("no route"),
+            ),
+            patch("time.sleep"),
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+
+    def test_exactly_three_attempts_made(self) -> None:
+        """Exactly 3 HTTP calls are made before giving up."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=req.Timeout("timed out"),
+            ) as mock_get,
+            patch("time.sleep"),
+        ):
+            fetch_safes_for_owner(chain_id, owner)
+
+        assert mock_get.call_count == 3
+
+    def test_exponential_backoff_delays(self) -> None:
+        """Sleep is called with 1s then 2s between the three attempts."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=req.ConnectionError("no route"),
+            ),
+            patch("time.sleep") as mock_sleep,
+        ):
+            fetch_safes_for_owner(chain_id, owner)
+
+        # Two sleeps for three attempts: 1s after attempt 1, 2s after attempt 2
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [1, 2]
+
+    def test_client_4xx_not_retried(self) -> None:
+        """A 4xx HTTP error (e.g. 404) is not retried – only one attempt is made."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        # Build a fake 404 HTTPError
+        fake_resp = MagicMock()
+        fake_resp.status_code = 404
+        http_err = req.HTTPError(response=fake_resp)
+        http_err.response = fake_resp
+
+        with (
+            patch("requests.get", side_effect=http_err) as mock_get,
+            patch("time.sleep") as mock_sleep,
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+        assert mock_get.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_server_5xx_is_retried(self) -> None:
+        """A 5xx HTTP error triggers retries."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        fake_resp_err = MagicMock()
+        fake_resp_err.status_code = 500
+        http_err = req.HTTPError(response=fake_resp_err)
+        http_err.response = fake_resp_err
+
+        with (
+            patch("requests.get", side_effect=http_err) as mock_get,
+            patch("time.sleep"),
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == []
+        assert mock_get.call_count == 3
+
+    def test_429_rate_limit_is_retried(self) -> None:
+        """A 429 Too Many Requests error triggers retries."""
+        import requests as req
+
+        if not SAFE_TX_SERVICE_URLS:
+            pytest.skip("No chains configured in SAFE_TX_SERVICE_URLS")
+
+        chain_id = next(iter(SAFE_TX_SERVICE_URLS))
+        owner = "0x" + "a" * 40
+
+        fake_resp_err = MagicMock()
+        fake_resp_err.status_code = 429
+        http_err = req.HTTPError(response=fake_resp_err)
+        http_err.response = fake_resp_err
+
+        safes = ["0x" + "c" * 40]
+        fake_ok = MagicMock()
+        fake_ok.json.return_value = {"safes": safes}
+        fake_ok.raise_for_status = MagicMock()
+
+        with (
+            patch(
+                "requests.get",
+                side_effect=[http_err, fake_ok],
+            ),
+            patch("time.sleep"),
+        ):
+            result = fetch_safes_for_owner(chain_id, owner)
+
+        assert result == safes
+
 
 @pytest.mark.integration
 class TestSafeApiSanity:

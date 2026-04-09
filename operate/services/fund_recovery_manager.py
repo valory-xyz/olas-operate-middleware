@@ -54,6 +54,8 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     ERC20_TOKENS_BY_CHAIN_ID,
+    OLAS,
+    STAKING,
 )
 from operate.operate_types import (
     Chain,
@@ -69,6 +71,7 @@ from operate.operate_types import (
 from operate.serialization import BigInt
 from operate.services.funding_manager import FundingManager
 from operate.services.manage import ServiceManager
+from operate.services.protocol import StakingManager
 from operate.services.service import NON_EXISTENT_MULTISIG
 from operate.utils.gnosis import (
     fetch_safes_for_owner,
@@ -531,6 +534,59 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         can_unstake=can_unstake,
                                     )
                                 )
+
+                                # Discover staked OLAS locked in a staking contract.
+                                try:
+                                    staking_manager = StakingManager(
+                                        chain=chain,
+                                        rpc=get_default_rpc(chain),
+                                    )
+                                    staking_program_id = (
+                                        staking_manager.get_current_staking_program(
+                                            svc_id
+                                        )
+                                    )
+                                    if staking_program_id is not None:
+                                        staking_contract = STAKING[chain].get(
+                                            staking_program_id
+                                        )
+                                        if staking_contract:
+                                            staking_params = (
+                                                staking_manager.get_staking_params(
+                                                    staking_contract
+                                                )
+                                            )
+                                            staked_olas = (
+                                                staking_params["min_staking_deposit"]
+                                                * 2
+                                            )
+                                            if staked_olas > 0:
+                                                olas_address = OLAS.get(chain)
+                                                if olas_address:
+                                                    staking_contract_cs = (
+                                                        Web3.to_checksum_address(
+                                                            staking_contract
+                                                        )
+                                                    )
+                                                    if (
+                                                        staking_contract_cs
+                                                        not in chain_balances
+                                                    ):
+                                                        chain_balances[
+                                                            staking_contract_cs
+                                                        ] = {}
+                                                    chain_balances[staking_contract_cs][
+                                                        olas_address
+                                                    ] = BigInt(staked_olas)
+                                except (  # pylint: disable=broad-except
+                                    Exception
+                                ) as _staking_exc:
+                                    logger.warning(
+                                        "Failed to fetch staked OLAS for service %s on chain %s: %s",
+                                        svc_id,
+                                        chain_id,
+                                        _staking_exc,
+                                    )
 
                                 # Fetch agent safe (multisig) balances so the
                                 # scan result includes all recoverable funds.

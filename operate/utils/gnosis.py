@@ -22,6 +22,7 @@
 import binascii
 import itertools
 import secrets
+import time
 import typing as t
 from enum import Enum
 
@@ -708,18 +709,54 @@ SAFE_TX_SERVICE_URLS: t.Dict[int, str] = {
 def fetch_safes_for_owner(chain_id: int, owner_address: str) -> t.List[str]:
     """Fetch Safe addresses owned by *owner_address* via the Safe Transaction Service API.
 
-    Returns an empty list if the chain is not supported or the query fails.
+    Retries up to 3 times total with exponential backoff (1 s, 2 s) on transient
+    failures: connection errors, timeouts, HTTP 5xx, and HTTP 429.
+    Non-retryable HTTP errors (e.g. 4xx other than 429) abort immediately.
+
+    Returns an empty list if the chain is not supported or all attempts fail.
     """
     base_url = SAFE_TX_SERVICE_URLS.get(chain_id)
     if not base_url:
         return []
 
     url = f"{base_url}/api/v1/owners/{owner_address}/safes/"
-    try:
-        resp = requests.get(url, headers={"User-Agent": "olas-operate/1.0"}, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("safes", [])
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.warning(f"Safe TX service query failed for chain={chain_id}: {exc}")
-        return []
+    max_attempts = 3
+
+    for attempt in range(max_attempts):
+        try:
+            resp = requests.get(
+                url, headers={"User-Agent": "olas-operate/1.0"}, timeout=30
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("safes", [])
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status is not None and status not in (429,) and status < 500:
+                # Non-retryable client error (e.g. 404)
+                logger.warning(
+                    f"Safe TX service non-retryable error for chain={chain_id}: {exc}"
+                )
+                return []
+            # 429 or 5xx: fall through to retry logic below
+            logger.warning(
+                f"Safe TX service HTTP {status} for chain={chain_id} "
+                f"(attempt {attempt + 1}/{max_attempts}): {exc}"
+            )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            logger.warning(
+                f"Safe TX service transient error for chain={chain_id} "
+                f"(attempt {attempt + 1}/{max_attempts}): {exc}"
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(f"Safe TX service query failed for chain={chain_id}: {exc}")
+            return []
+
+        if attempt < max_attempts - 1:
+            delay = 2**attempt  # 1 s, then 2 s
+            time.sleep(delay)
+
+    logger.warning(
+        f"Safe TX service query failed for chain={chain_id} after {max_attempts} attempts"
+    )
+    return []
