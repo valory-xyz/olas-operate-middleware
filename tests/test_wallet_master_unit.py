@@ -1264,7 +1264,7 @@ class TestEthereumImportFromMnemonic:
         """Happy path: wallet and mnemonic files are created, wallet object returned."""
         wallet, words = EthereumMasterWallet.import_from_mnemonic(
             mnemonic=_TEST_MNEMONIC,
-            password="testpassword123",
+            password="testpassword123",  # nosec B106
             path=tmp_path,
         )
         assert wallet.address is not None
@@ -1283,7 +1283,7 @@ class TestEthereumImportFromMnemonic:
         with pytest.raises(FileExistsError, match="Wallet file already exists"):
             EthereumMasterWallet.import_from_mnemonic(
                 mnemonic=_TEST_MNEMONIC,
-                password="testpassword123",
+                password="testpassword123",  # nosec B106
                 path=tmp_path,
             )
 
@@ -1294,7 +1294,7 @@ class TestEthereumImportFromMnemonic:
         with pytest.raises(FileExistsError, match="Mnemonic file already exists"):
             EthereumMasterWallet.import_from_mnemonic(
                 mnemonic=_TEST_MNEMONIC,
-                password="testpassword123",
+                password="testpassword123",  # nosec B106
                 path=tmp_path,
             )
 
@@ -1309,7 +1309,7 @@ class TestMasterWalletManagerImportFromMnemonic:
 
     def test_delegates_to_ethereum_wallet(self, tmp_path: Path) -> None:
         """import_from_mnemonic with ETHEREUM delegates to EthereumMasterWallet."""
-        manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()
+        manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()  # nosec B106
         wallet, words = manager.import_from_mnemonic(
             LedgerType.ETHEREUM, _TEST_MNEMONIC
         )
@@ -1318,6 +1318,6 @@ class TestMasterWalletManagerImportFromMnemonic:
 
     def test_raises_for_unsupported_ledger_type(self, tmp_path: Path) -> None:
         """import_from_mnemonic raises ValueError for unsupported ledger types."""
-        manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()
+        manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()  # nosec B106
         with pytest.raises(ValueError, match="is not supported"):
             manager.import_from_mnemonic(LedgerType.SOLANA, _TEST_MNEMONIC)
