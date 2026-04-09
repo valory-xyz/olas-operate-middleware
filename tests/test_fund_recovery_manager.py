@@ -793,15 +793,27 @@ class TestExecuteMultisigFetch:
         # chain_configs[chain_str] returns mock_chain_config automatically via MagicMock
         mock_sm_instance.create.return_value = mock_service
 
-        return mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config
+        return (
+            mock_wallet,
+            mock_wm_instance,
+            mock_sm_instance,
+            mock_service,
+            mock_chain_config,
+        )
 
     def test_multisig_set_from_on_chain_when_nonzero(self) -> None:
         """When get_service_info returns a real address at index 1, multisig is set to it (checksummed)."""
-        mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config = (
-            self._make_mocks_with_service()
-        )
+        (
+            mock_wallet,
+            mock_wm_instance,
+            mock_sm_instance,
+            mock_service,
+            mock_chain_config,
+        ) = self._make_mocks_with_service()
         # Wire up chain_configs to return our mock_chain_config
-        mock_service.chain_configs.__getitem__ = MagicMock(return_value=mock_chain_config)
+        mock_service.chain_configs.__getitem__ = MagicMock(
+            return_value=mock_chain_config
+        )
 
         svc_info: t.Tuple[int, str, bytes, int, int, int, int, t.List[int]] = (
             0,
@@ -839,10 +851,16 @@ class TestExecuteMultisigFetch:
         """When get_service_info returns ZERO_ADDRESS at index 1, multisig is NON_EXISTENT_MULTISIG."""
         from operate.services.service import NON_EXISTENT_MULTISIG
 
-        mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config = (
-            self._make_mocks_with_service()
+        (
+            mock_wallet,
+            mock_wm_instance,
+            mock_sm_instance,
+            mock_service,
+            mock_chain_config,
+        ) = self._make_mocks_with_service()
+        mock_service.chain_configs.__getitem__ = MagicMock(
+            return_value=mock_chain_config
         )
-        mock_service.chain_configs.__getitem__ = MagicMock(return_value=mock_chain_config)
 
         svc_info: t.Tuple[int, str, bytes, int, int, int, int, t.List[int]] = (
             0,
@@ -875,10 +893,16 @@ class TestExecuteMultisigFetch:
         """When get_service_info raises, multisig falls back to NON_EXISTENT_MULTISIG."""
         from operate.services.service import NON_EXISTENT_MULTISIG
 
-        mock_wallet, mock_wm_instance, mock_sm_instance, mock_service, mock_chain_config = (
-            self._make_mocks_with_service()
+        (
+            mock_wallet,
+            mock_wm_instance,
+            mock_sm_instance,
+            mock_service,
+            mock_chain_config,
+        ) = self._make_mocks_with_service()
+        mock_service.chain_configs.__getitem__ = MagicMock(
+            return_value=mock_chain_config
         )
-        mock_service.chain_configs.__getitem__ = MagicMock(return_value=mock_chain_config)
 
         with (
             patch(f"{_MODULE}.KeysManager"),
@@ -1171,7 +1195,7 @@ def test_execute_calls_service_manager_methods_for_deployed_service() -> None:
     mock_service.service_config_id = "test-id-7"
     mock_sm_instance.create.return_value = mock_service
 
-    svc_info = (
+    svc_info: t.Tuple[t.Any, ...] = (
         0,
         "0xAbCdEf0000000000000000000000000000000001",
         b"",
@@ -1228,7 +1252,9 @@ def test_execute_creates_wallet_manager_and_imports_wallet() -> None:
 
     # MasterWalletManager was constructed with a path argument
     assert mock_wm_cls.call_count == 1
-    constructed_path = mock_wm_cls.call_args[1].get("path") or mock_wm_cls.call_args[0][0]
+    constructed_path = (
+        mock_wm_cls.call_args[1].get("path") or mock_wm_cls.call_args[0][0]
+    )
     assert isinstance(constructed_path, Path)
 
     # import_from_mnemonic was called with LedgerType.ETHEREUM and the mnemonic
@@ -1324,7 +1350,7 @@ def test_execute_terminate_exception_adds_to_errors() -> None:
         "terminate failed"
     )
 
-    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+    svc_info: t.Tuple[t.Any, ...] = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
 
     with (
         patch(f"{_MODULE}.KeysManager"),
@@ -1351,7 +1377,7 @@ def test_execute_recovery_module_exception_adds_to_errors() -> None:
         "recovery module failed"
     )
 
-    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+    svc_info: t.Tuple[t.Any, ...] = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
 
     with (
         patch(f"{_MODULE}.KeysManager"),
@@ -1376,7 +1402,7 @@ def test_execute_agent_safe_drain_exception_adds_to_errors() -> None:
     mock_sm_instance.create.return_value = MagicMock(service_config_id="test-id")
     mock_sm_instance.drain.side_effect = RuntimeError("drain agent safe failed")
 
-    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+    svc_info: t.Tuple[t.Any, ...] = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
 
     with (
         patch(f"{_MODULE}.KeysManager"),
@@ -1514,7 +1540,7 @@ def test_execute_partial_failure_when_errors_and_funds_moved() -> None:
 
     mock_wallet.drain.side_effect = _drain_side_effect
 
-    svc_info = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
+    svc_info: t.Tuple[t.Any, ...] = (0, _AGENT_SAFE_ADDR, b"", 1, 1, 1, 4, [])
 
     with (
         patch(f"{_MODULE}.KeysManager"),
