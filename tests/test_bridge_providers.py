@@ -569,6 +569,10 @@ class TestNativeBridgeProvider:
     """Tests for bridge.providers.NativeBridgeProvider class."""
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain transaction calls are unreliable from macOS/Windows CI runners.",
+    )
     def test_bridge_execute_error(
         self,
         tmp_path: Path,
