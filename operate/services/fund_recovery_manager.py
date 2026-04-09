@@ -438,6 +438,8 @@ def _unstake_service(
                 chain.id,
             )
             break  # service can only be staked in one program at a time
+        except ValueError:
+            raise  # min staking duration not elapsed — propagate to caller
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(
                 "Unstake check/attempt failed for service %s program=%s: %s",
