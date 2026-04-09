@@ -969,6 +969,10 @@ class TestProvider:
         assert provider_request == expected_request, "Wrong request."
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize(
         "provider_class",
         [
