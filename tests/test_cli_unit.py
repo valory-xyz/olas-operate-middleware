@@ -2945,9 +2945,7 @@ class TestPearlStoreEndpoints:
         with stack:
             app._server = MagicMock()
             with TestClient(app) as client:
-                resp = client.post(
-                    "/api/store", json={"key": "myKey", "value": True}
-                )
+                resp = client.post("/api/store", json={"key": "myKey", "value": True})
         assert resp.status_code == HTTPStatus.OK
         assert resp.json() == {"success": True}
         store_path = tmp_path / "pearl_store.json"
@@ -2967,14 +2965,10 @@ class TestPearlStoreEndpoints:
                     json={"key": "trader.isInitialFunded", "value": True},
                 )
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads(
-            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert data["trader"]["isInitialFunded"] is True
 
-    def test_post_store_overwrites_non_dict_intermediate(
-        self, tmp_path: Path
-    ) -> None:
+    def test_post_store_overwrites_non_dict_intermediate(self, tmp_path: Path) -> None:
         """POST /api/store replaces a non-dict intermediate value with a dict."""
         (tmp_path / "pearl_store.json").write_text(
             json.dumps({"trader": "not-a-dict"}), encoding="utf-8"
@@ -2988,9 +2982,7 @@ class TestPearlStoreEndpoints:
                     json={"key": "trader.isInitialFunded", "value": True},
                 )
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads(
-            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert data["trader"]["isInitialFunded"] is True
 
     def test_delete_store_simple_key_removes_entry(self, tmp_path: Path) -> None:
@@ -3005,15 +2997,11 @@ class TestPearlStoreEndpoints:
                 resp = client.delete("/api/store/myKey")
         assert resp.status_code == HTTPStatus.OK
         assert resp.json() == {"success": True}
-        data = json.loads(
-            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert "myKey" not in data
         assert data["other"] == 1
 
-    def test_delete_store_dot_notation_removes_nested_key(
-        self, tmp_path: Path
-    ) -> None:
+    def test_delete_store_dot_notation_removes_nested_key(self, tmp_path: Path) -> None:
         """DELETE /api/store/{key} with dot-notation removes a nested key."""
         (tmp_path / "pearl_store.json").write_text(
             json.dumps({"trader": {"isInitialFunded": True, "other": "val"}}),
@@ -3025,15 +3013,11 @@ class TestPearlStoreEndpoints:
             with TestClient(app) as client:
                 resp = client.delete("/api/store/trader.isInitialFunded")
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads(
-            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert "isInitialFunded" not in data["trader"]
         assert data["trader"]["other"] == "val"
 
-    def test_delete_store_non_dict_intermediate_is_noop(
-        self, tmp_path: Path
-    ) -> None:
+    def test_delete_store_non_dict_intermediate_is_noop(self, tmp_path: Path) -> None:
         """DELETE /api/store/{key} is a no-op when an intermediate is not a dict."""
         original = {"trader": "not-a-dict"}
         (tmp_path / "pearl_store.json").write_text(
@@ -3045,7 +3029,5 @@ class TestPearlStoreEndpoints:
             with TestClient(app) as client:
                 resp = client.delete("/api/store/trader.isInitialFunded")
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads(
-            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert data == original
