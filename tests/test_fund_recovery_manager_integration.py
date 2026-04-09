@@ -26,9 +26,10 @@ import pytest
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
-from operate.ledger.profiles import DUST, OLAS
+from operate.ledger.profiles import DUST, ERC20_TOKENS_BY_CHAIN_ID, OLAS, STAKING
 from operate.operate_types import Chain, LedgerType, OnChainState
 from operate.services.fund_recovery_manager import FundRecoveryManager
+from operate.services.protocol import StakingManager
 from operate.utils.gnosis import get_asset_balance
 
 from tests.conftest import (
@@ -37,7 +38,7 @@ from tests.conftest import (
     tenderly_add_balance,
     tenderly_increase_time,
 )
-from tests.constants import CHAINS_TO_TEST, LOGGER
+from tests.constants import LOGGER
 
 # Chains that the Trader service template covers (gnosis-only).
 # CHAINS_TO_TEST includes Optimism but the template has no Optimism config,
@@ -70,11 +71,15 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
 
         This test:
         1. Deploys the service on-chain.
-        2. Funds agent addresses and service safe.
+        2. Funds agent addresses, service safe, and agent safe.
         3. Runs scan() (patched) and asserts discovered balances and service state.
-        4. Records pre-execute destination balance.
+        4. Records pre-execute balances: EOA, master safe, agent safe, destination
+           for both native and all tracked ERC-20 tokens.
         5. Runs execute() (patched) and asserts success + funds moved to destination.
-        6. Asserts EOA and Master Safe are drained on all chains.
+        6. Asserts EOA, master safe, and agent safe are drained on all chains.
+        7. Native: destination increase ≈ EOA + master safe + agent safe totals
+           (within a 5 % gas tolerance).
+        8. ERC-20: destination increase == total pre-held exactly (no gas in tokens).
         """
         # ── Setup ──────────────────────────────────────────────────────────────
         password = test_env.password
@@ -146,17 +151,17 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
 
         # ── Build known safe mapping (chain_id -> [safe_address]) ─────────────
         # The public Safe TX service cannot discover safes on Tenderly forks.
-        known_safes: t.Dict[int, t.List[str]] = {}
-        for chain in CHAINS_TO_TEST:
-            safe_addr = wallet.safes.get(chain)
-            if safe_addr:
-                known_safes[chain.id] = [safe_addr]
-                LOGGER.info(
-                    "Registered safe %s for chain %s (id=%s)",
-                    safe_addr,
-                    chain,
-                    chain.id,
-                )
+        # All tested chains must have a master safe (asserted above).
+        known_safes: t.Dict[int, t.List[str]] = {
+            chain.id: [wallet.safes[chain]] for chain in SERVICE_CHAINS
+        }
+        for chain in SERVICE_CHAINS:
+            LOGGER.info(
+                "Registered safe %s for chain %s (id=%s)",
+                wallet.safes[chain],
+                chain,
+                chain.id,
+            )
 
         def _mock_fetch_safes(chain_id: int, owner_address: str) -> t.List[str]:
             """Return pre-registered safe addresses for Tenderly fork testing."""
@@ -175,15 +180,96 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
                     return known_service_ids.get(chain.id, [])
             return []
 
-        # ── Step 6: Record pre-execute destination balances ────────────────────
+        # ── Step 6: Record pre-execute balances ───────────────────────────────
+        # Capture native + ERC-20 balances for destination, EOA, master safe,
+        # and agent safe(s) so we can verify conservation after execute().
+        #
+        # Native:  destination increase ≈ total held  (5 % gas tolerance)
+        # ERC-20:  destination increase == total held  (exact — no gas in tokens)
         dest = test_env.backup_owner
-        pre_balances: t.Dict[Chain, int] = {}
-        for chain in CHAINS_TO_TEST:
-            ledger_api = get_default_ledger_api(chain)
-            pre_balances[chain] = get_asset_balance(ledger_api, ZERO_ADDRESS, dest)
-            LOGGER.info(
-                "Pre-execute dest balance on %s: %s", chain, pre_balances[chain]
+
+        # Agent safe addresses per chain (chain_data.multisig from deployed service)
+        # Only service chains (Gnosis) have an agent safe; assert it is set.
+        agent_safes: t.Dict[Chain, str] = {}
+        for chain_str, chain_config in service.chain_configs.items():
+            chain = Chain(chain_str)
+            multisig = chain_config.chain_data.multisig
+            assert multisig is not None, f"Agent safe (multisig) not set for {chain}"
+            agent_safes[chain] = multisig
+
+        # Master-safe addresses — every tested chain must have one.
+        for chain in SERVICE_CHAINS:
+            assert chain in wallet.safes, f"No master safe for {chain}"
+
+        # Staked/bonded OLAS per service chain: the recovery flow unstakes and
+        # unbonds OLAS before draining, so these amounts flow to the destination
+        # even though they are not held by the EOA/safe/agent-safe at pre-record
+        # time.  We read min_staking_deposit from the on-chain staking contract;
+        # the service bonds (security_deposit + agent_bond) = 2 * min_staking_deposit.
+        staked_olas: t.Dict[Chain, int] = {}
+        for chain_str, chain_config in service.chain_configs.items():
+            chain = Chain(chain_str)
+            staking_program_id = chain_config.chain_data.user_params.staking_program_id
+            staking_contract = STAKING[chain].get(staking_program_id)
+            assert (
+                staking_contract is not None
+            ), f"Staking contract not found for {chain} program id {staking_program_id}"
+            staking_params = StakingManager(chain).get_staking_params(
+                staking_contract=staking_contract,
             )
+            min_deposit = staking_params["min_staking_deposit"]
+            # Total bonded: security_deposit plus agent_bond, each equal to min_staking_deposit
+            staked_olas[chain] = 2 * min_deposit
+            LOGGER.info(
+                "Staked OLAS on %s: min_deposit=%s bonded=%s",
+                chain,
+                min_deposit,
+                staked_olas[chain],
+            )
+
+        # Keyed as pre[chain][token_address][wallet_label]
+        # wallet_label is one of: "dest", "eoa", "master_safe", "agent_safe"
+        pre: t.Dict[Chain, t.Dict[str, t.Dict[str, int]]] = {}
+
+        for chain in SERVICE_CHAINS:
+            ledger_api = get_default_ledger_api(chain)
+            safe_addr = wallet.safes[chain]
+            agent_safe_addr = agent_safes[chain]
+
+            # All assets to track: native + ERC-20 tokens known on this chain
+            all_tokens = [ZERO_ADDRESS] + ERC20_TOKENS_BY_CHAIN_ID[chain.id]
+
+            pre[chain] = {}
+            for token in all_tokens:
+                pre[chain][token] = {
+                    "dest": get_asset_balance(ledger_api, token, dest),
+                    "eoa": get_asset_balance(ledger_api, token, wallet.address),
+                    "master_safe": get_asset_balance(ledger_api, token, safe_addr),
+                    "agent_safe": get_asset_balance(ledger_api, token, agent_safe_addr),
+                }
+
+            LOGGER.info(
+                "Pre-execute on %s: dest=%s eoa=%s master_safe=%s agent_safe=%s",
+                chain,
+                pre[chain][ZERO_ADDRESS]["dest"],
+                pre[chain][ZERO_ADDRESS]["eoa"],
+                pre[chain][ZERO_ADDRESS]["master_safe"],
+                pre[chain][ZERO_ADDRESS]["agent_safe"],
+            )
+            for token in ERC20_TOKENS_BY_CHAIN_ID[chain.id]:
+                if any(
+                    pre[chain][token][k] > 0
+                    for k in ("eoa", "master_safe", "agent_safe")
+                ):
+                    LOGGER.info(
+                        "Pre-execute ERC-20 %s on %s: dest=%s eoa=%s master_safe=%s agent_safe=%s",
+                        token,
+                        chain,
+                        pre[chain][token]["dest"],
+                        pre[chain][token]["eoa"],
+                        pre[chain][token]["master_safe"],
+                        pre[chain][token]["agent_safe"],
+                    )
 
         # ── Step 7: Scan (with patched safe + subgraph discovery) ──────────────
         LOGGER.info("Running FundRecoveryManager.scan()...")
@@ -203,7 +289,7 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
         )
 
         # ── Step 9: Assert non-zero balances on both chains ────────────────────
-        for chain in CHAINS_TO_TEST:
+        for chain in SERVICE_CHAINS:
             chain_id_str = str(chain.id)
             assert (
                 chain_id_str in scan_result.balances
@@ -214,21 +300,60 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
             assert (
                 wallet.address in chain_balances
             ), f"EOA {wallet.address} not in balances for chain {chain}"
-            eoa_native = int(chain_balances[wallet.address].get(ZERO_ADDRESS, 0))
+            eoa_native = int(chain_balances[wallet.address][ZERO_ADDRESS])
             assert (
                 eoa_native > 0
             ), f"EOA native balance on {chain} should be > 0, got {eoa_native}"
 
             # Master Safe balance must appear
-            safe_addr = wallet.safes.get(chain)
-            assert safe_addr is not None, f"No master safe set for {chain} in wallet"
+            safe_addr = wallet.safes[chain]
             assert (
                 safe_addr in chain_balances
             ), f"Master safe {safe_addr} not in balances for chain {chain}"
-            safe_native = int(chain_balances[safe_addr].get(ZERO_ADDRESS, 0))
+            safe_native = int(chain_balances[safe_addr][ZERO_ADDRESS])
             assert (
                 safe_native > 0
             ), f"Master safe native balance on {chain} should be > 0, got {safe_native}"
+
+            # ERC-20 balances: scan result must match pre-recorded balances exactly.
+            # Agent safe exists only on service chains (Gnosis); assert it appears
+            # in chain_balances when it holds non-zero ERC-20 tokens.
+            agent_safe_addr = agent_safes[chain]
+            for token in ERC20_TOKENS_BY_CHAIN_ID[chain.id]:
+                pre_eoa = pre[chain][token]["eoa"]
+                pre_master = pre[chain][token]["master_safe"]
+                pre_agent = pre[chain][token]["agent_safe"]
+
+                if pre_eoa > 0:
+                    assert (
+                        wallet.address in chain_balances
+                    ), f"EOA {wallet.address} not in scan balances for chain {chain}"
+                    assert int(chain_balances[wallet.address][token]) == pre_eoa, (
+                        f"Scan EOA ERC-20 {token} on {chain}: "
+                        f"got {int(chain_balances[wallet.address][token])}, "
+                        f"expected {pre_eoa}"
+                    )
+
+                if pre_master > 0:
+                    assert (
+                        safe_addr in chain_balances
+                    ), f"Master safe {safe_addr} not in scan balances for chain {chain}"
+                    assert int(chain_balances[safe_addr][token]) == pre_master, (
+                        f"Scan master safe ERC-20 {token} on {chain}: "
+                        f"got {int(chain_balances[safe_addr][token])}, "
+                        f"expected {pre_master}"
+                    )
+
+                if pre_agent > 0:
+                    assert agent_safe_addr in chain_balances, (
+                        f"Agent safe {agent_safe_addr} not in scan balances "
+                        f"for chain {chain}"
+                    )
+                    assert int(chain_balances[agent_safe_addr][token]) == pre_agent, (
+                        f"Scan agent safe ERC-20 {token} on {chain}: "
+                        f"got {int(chain_balances[agent_safe_addr][token])}, "
+                        f"expected {pre_agent}"
+                    )
 
         # ── Step 10: Assert deployed service appears (Gnosis only) ────────────
         # The Trader template only configures Gnosis; Optimism has no service.
@@ -266,43 +391,99 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
         ), "execute() returned empty total_funds_moved — no funds were moved"
 
         # ── Step 15-18: Post-execute on-chain balance assertions ───────────────
-        for chain in CHAINS_TO_TEST:
+        # Native: allow up to 5 % of total pre-execute holdings as gas tolerance.
+        # ERC-20: exact conservation — no gas is paid in tokens.
+        _GAS_TOLERANCE_BPS = 500  # 5 % in basis points
+
+        for chain in SERVICE_CHAINS:
             ledger_api = get_default_ledger_api(chain)
-            safe_addr = wallet.safes.get(chain)
-            dust_threshold = DUST.get(chain, 0)
+            safe_addr = wallet.safes[chain]
+            agent_safe_addr = agent_safes[chain]
+            dust_threshold = DUST[chain]
+            all_tokens = [ZERO_ADDRESS] + ERC20_TOKENS_BY_CHAIN_ID[chain.id]
 
-            # EOA native balance should be ≤ DUST
-            eoa_balance = get_asset_balance(ledger_api, ZERO_ADDRESS, wallet.address)
-            assert eoa_balance <= dust_threshold, (
-                f"EOA {wallet.address} on {chain} not drained: "
-                f"{eoa_balance} > dust={dust_threshold}"
-            )
+            for token in all_tokens:
+                is_native = token == ZERO_ADDRESS
 
-            if safe_addr:
-                # Master Safe native balance should be 0
-                safe_native = get_asset_balance(ledger_api, ZERO_ADDRESS, safe_addr)
-                assert (
-                    safe_native == 0
-                ), f"Master safe {safe_addr} native on {chain} not drained: {safe_native}"
-
-                # Master Safe OLAS balance should be 0
-                olas_addr = OLAS.get(chain)
-                if olas_addr:
-                    safe_olas = get_asset_balance(ledger_api, olas_addr, safe_addr)
+                # ── Source wallets must be drained ────────────────────────────
+                eoa_post = get_asset_balance(ledger_api, token, wallet.address)
+                if is_native:
+                    assert eoa_post <= dust_threshold, (
+                        f"EOA {wallet.address} native on {chain} not drained: "
+                        f"{eoa_post} > dust={dust_threshold}"
+                    )
+                else:
                     assert (
-                        safe_olas == 0
-                    ), f"Master safe {safe_addr} OLAS on {chain} not drained: {safe_olas}"
+                        eoa_post == 0
+                    ), f"EOA {wallet.address} ERC-20 {token} on {chain} not drained: {eoa_post}"
 
-            # Destination balance must have increased (funds arrived)
-            post_balance = get_asset_balance(ledger_api, ZERO_ADDRESS, dest)
-            assert post_balance > pre_balances[chain], (
-                f"Destination {dest} balance on {chain} did not increase: "
-                f"pre={pre_balances[chain]}, post={post_balance}"
-            )
-            LOGGER.info(
-                "Destination %s on %s: pre=%s, post=%s",
-                dest,
-                chain,
-                pre_balances[chain],
-                post_balance,
-            )
+                master_safe_post = get_asset_balance(ledger_api, token, safe_addr)
+                assert master_safe_post == 0, (
+                    f"Master safe {safe_addr} token={token} on {chain} not drained: "
+                    f"{master_safe_post}"
+                )
+
+                agent_safe_post = get_asset_balance(ledger_api, token, agent_safe_addr)
+                assert agent_safe_post == 0, (
+                    f"Agent safe {agent_safe_addr} token={token} on {chain} not drained: "
+                    f"{agent_safe_post}"
+                )
+
+                # ── Conservation check ────────────────────────────────────────
+                total_pre_held = (
+                    pre[chain][token]["eoa"]
+                    + pre[chain][token]["master_safe"]
+                    + pre[chain][token]["agent_safe"]
+                )
+                # For OLAS on service chains, add OLAS bonded/staked in the
+                # staking contract — the recovery flow unstakes + unbonds these
+                # before draining, so they also flow to the destination.
+                if token == OLAS.get(chain) and staked_olas.get(chain, 0) > 0:
+                    total_pre_held += staked_olas[chain]
+
+                if total_pre_held == 0:
+                    # Nothing to recover for this token on this chain
+                    continue
+
+                dest_post = get_asset_balance(ledger_api, token, dest)
+                actual_increase = dest_post - pre[chain][token]["dest"]
+
+                if is_native:
+                    # Gas is paid in native — allow tolerance
+                    gas_allowance = total_pre_held * _GAS_TOLERANCE_BPS // 10_000
+                    min_expected = total_pre_held - gas_allowance
+                    assert actual_increase >= min_expected, (
+                        f"Destination {dest} native on {chain}: increase "
+                        f"{actual_increase} < min_expected {min_expected} "
+                        f"(total_pre_held={total_pre_held}, gas_allowance={gas_allowance})"
+                    )
+                    LOGGER.info(
+                        "Destination %s native on %s: pre=%s post=%s "
+                        "increase=%s total_pre_held=%s gas_allowance=%s",
+                        dest,
+                        chain,
+                        pre[chain][token]["dest"],
+                        dest_post,
+                        actual_increase,
+                        total_pre_held,
+                        gas_allowance,
+                    )
+                else:
+                    # ERC-20 transfers cost no gas in tokens.
+                    # total_pre_held already includes staked OLAS, so we expect
+                    # exact conservation.
+                    assert actual_increase == total_pre_held, (
+                        f"Destination {dest} ERC-20 {token} on {chain}: increase "
+                        f"{actual_increase} != total_pre_held {total_pre_held}"
+                    )
+                    LOGGER.info(
+                        "Destination %s ERC-20 %s on %s: pre=%s post=%s increase=%s "
+                        "total_pre_held=%s",
+                        dest,
+                        token,
+                        chain,
+                        pre[chain][token]["dest"],
+                        dest_post,
+                        actual_increase,
+                        total_pre_held,
+                    )

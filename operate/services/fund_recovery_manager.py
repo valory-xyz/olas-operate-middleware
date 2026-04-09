@@ -82,6 +82,9 @@ logger = setup_logger(name="operate.fund_recovery_manager")
 # Chain-specific constants
 # ---------------------------------------------------------------------------
 
+# Sentinel: lower-cased zero address used to detect un-deployed agent safes.
+_ZERO_ADDRESS_LOWER = ZERO_ADDRESS.lower()
+
 #: Chains on which fund recovery is supported
 RECOVERY_CHAINS: t.List[Chain] = [
     Chain.POLYGON,
@@ -528,6 +531,54 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         can_unstake=can_unstake,
                                     )
                                 )
+
+                                # Fetch agent safe (multisig) balances so the
+                                # scan result includes all recoverable funds.
+                                try:
+                                    _svc_info = get_service_info(
+                                        ledger_api=ledger_api,
+                                        chain_type=ChainType(chain.value),
+                                        token_id=svc_id,
+                                    )
+                                    _agent_safe = _svc_info[1]
+                                except (  # pylint: disable=broad-except
+                                    Exception
+                                ) as _svc_info_exc:
+                                    logger.warning(
+                                        "Failed to fetch service info for service %s on chain %s: %s",
+                                        svc_id,
+                                        chain_id,
+                                        _svc_info_exc,
+                                    )
+                                    _agent_safe = ZERO_ADDRESS
+                                if (
+                                    _agent_safe
+                                    and _agent_safe.lower() != _ZERO_ADDRESS_LOWER
+                                    and _agent_safe not in chain_balances
+                                ):
+                                    _agent_safe_cs = Web3.to_checksum_address(
+                                        _agent_safe
+                                    )
+                                    _agent_native = get_asset_balance(
+                                        ledger_api=ledger_api,
+                                        asset_address=ZERO_ADDRESS,
+                                        address=_agent_safe_cs,
+                                        raise_on_invalid_address=False,
+                                    )
+                                    chain_balances[_agent_safe_cs] = {
+                                        ZERO_ADDRESS: BigInt(_agent_native)
+                                    }
+                                    for token_addr in tokens:
+                                        _agent_tok_bal = get_asset_balance(
+                                            ledger_api=ledger_api,
+                                            asset_address=token_addr,
+                                            address=_agent_safe_cs,
+                                            raise_on_invalid_address=False,
+                                        )
+                                        if _agent_tok_bal > 0:
+                                            chain_balances[_agent_safe_cs][
+                                                token_addr
+                                            ] = BigInt(_agent_tok_bal)
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning(
                         f"Service enumeration failed for chain {chain_id}: {exc}"

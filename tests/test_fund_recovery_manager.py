@@ -511,6 +511,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
             patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
             patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
             ),
@@ -537,6 +541,10 @@ class TestFundRecoveryManagerScan:
             ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[7]),
             patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -566,6 +574,10 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[1]),
             patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
             patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
             ),
@@ -594,6 +606,10 @@ class TestFundRecoveryManagerScan:
                 return_value=OnChainState.TERMINATED_BONDED,
             ),
             patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
             ),
@@ -620,6 +636,10 @@ class TestFundRecoveryManagerScan:
             patch(
                 f"{_MODULE}._get_service_state",
                 return_value=OnChainState.PRE_REGISTRATION,
+            ),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
             ),
             patch(
                 f"{_MODULE}._check_gas_warning",
@@ -963,6 +983,10 @@ class TestScanSafeErc20Balance:
                 side_effect=Exception("network"),
             ),
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -1558,3 +1582,152 @@ def test_execute_partial_failure_when_errors_and_funds_moved() -> None:
     assert result.success is False
     assert bool(result.total_funds_moved)
     assert result.partial_failure is True
+
+
+# ---------------------------------------------------------------------------
+# New tests for agent-safe balance scanning
+# ---------------------------------------------------------------------------
+
+_AGENT_SAFE_SCAN_ADDR = "0xCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCc"
+
+
+def test_scan_deduplicates_service_ids_via_continue() -> None:
+    """Line 515: 'continue' fires when the same service_id appears twice in all_service_ids.
+
+    This happens in the fallback path when two safes both own the same service.
+    """
+    manager = _make_manager()
+
+    # Two safes that each return service ID 99 → all_service_ids = [99, 99]
+    with (
+        patch(f"{_MODULE}.get_default_ledger_api"),
+        patch(f"{_MODULE}.get_asset_balance", return_value=0),
+        patch(
+            f"{_MODULE}.fetch_safes_for_owner",
+            return_value=[_SAFE_ADDR, "0x" + "4" * 40],
+        ),
+        patch(
+            f"{_MODULE}._fetch_services_from_subgraph",
+            side_effect=Exception("network"),
+        ),
+        # Both safes own service 99 → extend produces [99, 99]
+        patch(f"{_MODULE}._enumerate_owned_services", return_value=[99]),
+        patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+        patch(
+            f"{_MODULE}.get_service_info",
+            return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+        ),
+        patch(
+            f"{_MODULE}._check_gas_warning",
+            return_value=GasWarningEntry(insufficient=False),
+        ),
+    ):
+        result = manager.scan(_TEST_MNEMONIC)
+
+    # Service 99 must appear exactly once per chain (deduplicated via continue)
+    ids_per_chain: t.Dict[int, t.List[int]] = {}
+    for svc in result.services:
+        ids_per_chain.setdefault(svc.chain_id, []).append(svc.service_id)
+    for chain_id, ids in ids_per_chain.items():
+        assert ids.count(99) == 1, f"Duplicate service 99 on chain {chain_id}"
+
+
+def test_scan_get_service_info_raises_is_swallowed() -> None:
+    """Lines 544-551: Exception in get_service_info is caught; scan still succeeds."""
+    manager = _make_manager()
+
+    with (
+        patch(f"{_MODULE}.get_default_ledger_api"),
+        patch(f"{_MODULE}.get_asset_balance", return_value=0),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(
+            f"{_MODULE}._fetch_services_from_subgraph",
+            side_effect=Exception("network"),
+        ),
+        patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+        patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+        # Force the inner except (lines 544-551) to fire
+        patch(
+            f"{_MODULE}.get_service_info",
+            side_effect=Exception("rpc error"),
+        ),
+        patch(
+            f"{_MODULE}._check_gas_warning",
+            return_value=GasWarningEntry(insufficient=False),
+        ),
+    ):
+        result = manager.scan(_TEST_MNEMONIC)
+
+    # Exception must be swallowed; result is still valid
+    assert isinstance(result, FundRecoveryScanResponse)
+    service_ids = [s.service_id for s in result.services]
+    assert 77 in service_ids
+
+
+def test_scan_agent_safe_balance_included_when_nonzero() -> None:
+    """Lines 560-577: Agent safe balances (native + ERC-20) are fetched and recorded."""
+    manager = _make_manager()
+
+    def _bal(  # type: ignore[no-untyped-def]
+        *, ledger_api, asset_address, address, **kw
+    ):
+        # Non-zero native balance for the agent safe
+        if (
+            address.lower() == _AGENT_SAFE_SCAN_ADDR.lower()
+            and asset_address == ZERO_ADDRESS
+        ):
+            return 5000
+        # Non-zero ERC-20 balance for the agent safe
+        if (
+            address.lower() == _AGENT_SAFE_SCAN_ADDR.lower()
+            and asset_address == _TOKEN_ADDR
+        ):
+            return 2500
+        return 0
+
+    with (
+        patch(f"{_MODULE}.get_default_ledger_api"),
+        patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
+        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(
+            f"{_MODULE}._fetch_services_from_subgraph",
+            side_effect=Exception("network"),
+        ),
+        patch(f"{_MODULE}._enumerate_owned_services", return_value=[88]),
+        patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+        # Return a real (non-zero) agent safe address
+        patch(
+            f"{_MODULE}.get_service_info",
+            return_value=(0, _AGENT_SAFE_SCAN_ADDR, b"", 1, 1, 1, 4, []),
+        ),
+        patch(
+            f"{_MODULE}._check_gas_warning",
+            return_value=GasWarningEntry(insufficient=False),
+        ),
+        patch(
+            f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID",
+            {chain.id: [_TOKEN_ADDR] for chain in RECOVERY_CHAINS},
+        ),
+    ):
+        result = manager.scan(_TEST_MNEMONIC)
+
+    # Agent safe's checksummed address must appear in balances with native balance
+    from web3 import Web3
+
+    agent_safe_cs = Web3.to_checksum_address(_AGENT_SAFE_SCAN_ADDR)
+
+    native_found = False
+    token_found = False
+    for _chain_id_str, addresses in result.balances.items():
+        if agent_safe_cs in addresses:
+            if int(addresses[agent_safe_cs].get(ZERO_ADDRESS, 0)) == 5000:
+                native_found = True
+            if int(addresses[agent_safe_cs].get(_TOKEN_ADDR, 0)) == 2500:
+                token_found = True
+
+    assert (
+        native_found
+    ), f"Agent safe native balance not recorded; balances={result.balances}"
+    assert (
+        token_found
+    ), f"Agent safe ERC-20 balance not recorded; balances={result.balances}"
