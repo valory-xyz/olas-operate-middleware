@@ -1272,12 +1272,12 @@ class TestEthereumImportFromMnemonic:
         assert len(wallet.address) == 42
         assert words == _TEST_MNEMONIC.split()
 
-    def test_raises_file_exists_when_wallet_file_exists(
-        self, tmp_path: Path
-    ) -> None:
+    def test_raises_file_exists_when_wallet_file_exists(self, tmp_path: Path) -> None:
         """Raises FileExistsError when the wallet key file already exists."""
         # Create the wallet file first
-        (tmp_path / EthereumMasterWallet._key).write_text(  # pylint: disable=protected-access
+        (
+            tmp_path / EthereumMasterWallet._key
+        ).write_text(  # pylint: disable=protected-access
             "existing", encoding="utf-8"
         )
         with pytest.raises(FileExistsError, match="Wallet file already exists"):
@@ -1287,9 +1287,7 @@ class TestEthereumImportFromMnemonic:
                 path=tmp_path,
             )
 
-    def test_raises_file_exists_when_mnemonic_file_exists(
-        self, tmp_path: Path
-    ) -> None:
+    def test_raises_file_exists_when_mnemonic_file_exists(self, tmp_path: Path) -> None:
         """Raises FileExistsError when the mnemonic file already exists."""
         mnemonic_file = EthereumMasterWallet.mnemonic_filename()
         (tmp_path / mnemonic_file).write_text("{}", encoding="utf-8")
@@ -1312,7 +1310,9 @@ class TestMasterWalletManagerImportFromMnemonic:
     def test_delegates_to_ethereum_wallet(self, tmp_path: Path) -> None:
         """import_from_mnemonic with ETHEREUM delegates to EthereumMasterWallet."""
         manager = MasterWalletManager(path=tmp_path, password="testpassword123").setup()
-        wallet, words = manager.import_from_mnemonic(LedgerType.ETHEREUM, _TEST_MNEMONIC)
+        wallet, words = manager.import_from_mnemonic(
+            LedgerType.ETHEREUM, _TEST_MNEMONIC
+        )
         assert isinstance(wallet, EthereumMasterWallet)
         assert words == _TEST_MNEMONIC.split()
 

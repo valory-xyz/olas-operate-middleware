@@ -322,12 +322,8 @@ def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-
         # For non-JSON-RPC requests (e.g. bridge/relay API calls) normalise
         # EVM addresses before comparing so cassettes recorded with one wallet
         # address still match when replayed with a different wallet address.
-        body_raw_1 = _normalise_evm_addresses(
-            getattr(request_1, "body", b"") or b""
-        )
-        body_raw_2 = _normalise_evm_addresses(
-            getattr(request_2, "body", b"") or b""
-        )
+        body_raw_1 = _normalise_evm_addresses(getattr(request_1, "body", b"") or b"")
+        body_raw_2 = _normalise_evm_addresses(getattr(request_2, "body", b"") or b"")
         match = body_raw_1 == body_raw_2
         message = "Body match" if match else "Body mismatch"
         return match, message
