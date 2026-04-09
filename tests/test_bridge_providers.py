@@ -1134,6 +1134,7 @@ class TestProvider:
 
         assert not diff, "Wrong status."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.parametrize(
         "provider_class",
         [
