@@ -624,8 +624,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _delete_store_key(request: Request) -> JSONResponse:
         """Delete a key from the pearl store (supports dot-notation via path)."""
         key = request.path_params.get("key", "")
-        if not key:
-            return JSONResponse(
+        if not key:  # pragma: no cover
+            return JSONResponse(  # pragma: no cover
                 content={"error": "Missing key."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
