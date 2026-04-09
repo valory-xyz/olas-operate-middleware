@@ -48,7 +48,7 @@ from operate.constants import (
 )
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
-from operate.ledger import get_default_ledger_api
+from operate.ledger import get_default_ledger_api, get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
@@ -362,6 +362,89 @@ def _check_gas_warning(
     except Exception:  # pylint: disable=broad-except
         # If we can't check, assume warning
         return GasWarningEntry(insufficient=True)
+
+
+def _unstake_service(
+    chain: Chain,
+    ledger_api: t.Any,
+    crypto: t.Any,
+    service_id: int,
+) -> None:
+    """Unstake *service_id* from any known staking program on *chain*.
+
+    Iterates over all staking programs registered for the chain in ``STAKING``
+    and calls ``unstake()`` on the first contract that reports the service as
+    staked.  This uses direct EOA-based transactions rather than the Safe
+    because the unstake call only requires the operator key (the Master EOA).
+
+    Raises are swallowed per-program with a warning; if no program matches,
+    the function is a no-op.
+    """
+    staking_contracts = STAKING.get(chain, {})
+    for staking_program_id, staking_addr in staking_contracts.items():
+        if not staking_addr:
+            continue
+        try:
+            staking_state = StakingTokenContract.get_service_staking_state(
+                ledger_api=ledger_api,
+                contract_address=Web3.to_checksum_address(staking_addr),
+                service_id=service_id,
+            )["data"]
+            if staking_state == 0:  # UNSTAKED
+                continue
+            # Check minimum staking duration to avoid revert on early unstake
+            try:
+                min_duration = StakingTokenContract.get_min_staking_duration(
+                    ledger_api=ledger_api,
+                    contract_address=Web3.to_checksum_address(staking_addr),
+                )["data"]
+                service_info = StakingTokenContract.get_service_info(
+                    ledger_api=ledger_api,
+                    contract_address=Web3.to_checksum_address(staking_addr),
+                    service_id=service_id,
+                )["data"]
+                ts_start = service_info[2]  # tsStart field
+                elapsed = int(time.time()) - ts_start
+                if elapsed < min_duration:
+                    raise ValueError(
+                        f"Cannot unstake service {service_id} from "
+                        f"{staking_program_id}: minimum staking duration "
+                        f"not elapsed ({elapsed}s < {min_duration}s)"
+                    )
+            except ValueError:
+                raise
+            except Exception:  # pylint: disable=broad-except  # nosec B110
+                pass  # proceed to unstake if we can't determine duration
+
+            staking_contract_instance = StakingTokenContract.get_instance(
+                ledger_api=ledger_api,
+                contract_address=Web3.to_checksum_address(staking_addr),
+            )
+            tx = staking_contract_instance.functions.unstake(
+                service_id
+            ).build_transaction(
+                {
+                    "from": crypto.address,
+                    "nonce": ledger_api.api.eth.get_transaction_count(crypto.address),
+                }
+            )
+            signed = ledger_api.api.eth.account.sign_transaction(tx, crypto.private_key)
+            tx_hash = ledger_api.api.eth.send_raw_transaction(signed.raw_transaction)
+            ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
+            logger.info(
+                "Unstaked service %s from %s on chain %s",
+                service_id,
+                staking_program_id,
+                chain.id,
+            )
+            break  # service can only be staked in one program at a time
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Unstake check/attempt failed for service %s program=%s: %s",
+                service_id,
+                staking_program_id,
+                exc,
+            )
 
 
 def _build_synthetic_service(
@@ -720,8 +803,255 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     chain_funds_moved: t.Dict[str, t.Dict[str, BigInt]] = {}
 
                     try:
-                        # TODO: Steps 1-6 (service recovery, safe drain, EOA drain)
-                        pass
+                        ledger_api = get_default_ledger_api(chain)
+                        contract_addresses = CONTRACTS.get(chain, {})
+                        service_registry_addr = (
+                            contract_addresses.get("service_registry", "")
+                            if contract_addresses
+                            else ""
+                        )
+
+                        safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
+
+                        # ── Steps 1–4: Service recovery ────────────────────────────────
+                        if service_registry_addr:
+                            seen_service_ids: t.Set[int] = set()
+                            all_service_ids: t.List[int] = []
+
+                            subgraph_url = SUBGRAPH_URLS.get(chain)
+                            if subgraph_url:
+                                try:
+                                    all_service_ids = _fetch_services_from_subgraph(
+                                        subgraph_url, eoa_address
+                                    )
+                                except Exception:  # pylint: disable=broad-except
+                                    subgraph_url = None  # trigger fallback
+
+                            if not subgraph_url:
+                                for safe_addr in safe_addresses:
+                                    safe_owned_ids = _enumerate_owned_services(
+                                        ledger_api=ledger_api,
+                                        service_registry_address=service_registry_addr,
+                                        owner_address=safe_addr,
+                                    )
+                                    all_service_ids.extend(safe_owned_ids)
+
+                            # Need the Master EOA's crypto for EOA-based unstake calls
+                            private_key = _mnemonic_to_private_key(mnemonic)
+                            with tempfile.TemporaryDirectory() as _km_dir:
+                                _km = KeysManager(
+                                    path=Path(_km_dir), logger=self._logger
+                                )
+                                crypto = _km.private_key_to_crypto(
+                                    private_key, password=None
+                                )
+
+                            rpc = get_default_rpc(chain)
+
+                            for svc_id in all_service_ids:
+                                if svc_id in seen_service_ids:
+                                    continue
+                                seen_service_ids.add(svc_id)
+
+                                state = _get_service_state(
+                                    ledger_api=ledger_api,
+                                    service_registry_address=service_registry_addr,
+                                    service_id=svc_id,
+                                )
+
+                                # For each Master Safe that may own this service, we need the
+                                # wallet injected with that safe before calling ServiceManager.
+                                safe_for_service = (
+                                    safe_addresses[0] if safe_addresses else None
+                                )
+
+                                try:
+                                    # Step 1: Unstake (direct EOA tx — we don't know the staking
+                                    # program ID upfront, so we can't use ServiceManager here)
+                                    _unstake_service(
+                                        chain=chain,
+                                        ledger_api=ledger_api,
+                                        crypto=crypto,
+                                        service_id=svc_id,
+                                    )
+                                    # Refresh state after potential unstake
+                                    state = _get_service_state(
+                                        ledger_api=ledger_api,
+                                        service_registry_address=service_registry_addr,
+                                        service_id=svc_id,
+                                    )
+
+                                    # Build a synthetic service for ServiceManager methods
+                                    service = _build_synthetic_service(
+                                        storage=temp_app._services,  # pylint: disable=protected-access
+                                        chain=chain,
+                                        service_id=svc_id,
+                                        rpc=rpc,
+                                    )
+                                    service_config_id = service.service_config_id
+                                    chain_str = chain.value
+
+                                    # Inject the Master Safe so EthSafeTxBuilder can find it
+                                    if safe_for_service:
+                                        _inject_safe_into_wallet(
+                                            wallet=wallet,
+                                            chain=chain,
+                                            safe_address=safe_for_service,
+                                        )
+
+                                    # Step 2: Terminate if DEPLOYED
+                                    if state in (OnChainState.DEPLOYED,):
+                                        try:
+                                            svc_manager.terminate_service_on_chain_from_safe(
+                                                service_config_id=service_config_id,
+                                                chain=chain_str,
+                                            )
+                                            state = OnChainState.TERMINATED_BONDED
+                                        except (
+                                            Exception
+                                        ) as exc:  # pylint: disable=broad-except
+                                            logger.warning(
+                                                "chain=%s service=%s terminate failed: %s",
+                                                chain_id,
+                                                svc_id,
+                                                exc,
+                                            )
+                                            chain_errors.append(
+                                                f"chain={chain_id} service={svc_id} terminate failed: {exc}"
+                                            )
+
+                                    # Step 3: Unbond if TERMINATED_BONDED
+                                    if state in (OnChainState.TERMINATED_BONDED,):
+                                        try:
+                                            svc_manager.unbond_service_on_chain(
+                                                service_config_id=service_config_id,
+                                                chain=chain_str,
+                                            )
+                                        except (
+                                            Exception
+                                        ) as exc:  # pylint: disable=broad-except
+                                            logger.warning(
+                                                "chain=%s service=%s unbond failed: %s",
+                                                chain_id,
+                                                svc_id,
+                                                exc,
+                                            )
+                                            chain_errors.append(
+                                                f"chain={chain_id} service={svc_id} unbond failed: {exc}"
+                                            )
+
+                                    # Step 4: Recovery module + drain Agent Safe
+                                    try:
+                                        svc_manager._execute_recovery_module_flow_from_safe(  # pylint: disable=protected-access
+                                            service_config_id=service_config_id,
+                                            chain=chain_str,
+                                        )
+                                    except (
+                                        Exception
+                                    ) as exc:  # pylint: disable=broad-except
+                                        logger.warning(
+                                            "chain=%s service=%s recovery module failed: %s",
+                                            chain_id,
+                                            svc_id,
+                                            exc,
+                                        )
+                                        chain_errors.append(
+                                            f"chain={chain_id} service={svc_id} recovery module failed: {exc}"
+                                        )
+
+                                    # Step 4b: Drain Agent Safe assets
+                                    try:
+                                        svc_manager.drain(
+                                            service_config_id=service_config_id,
+                                            chain_str=chain_str,
+                                            withdrawal_address=destination_checksum,
+                                        )
+                                    except (
+                                        Exception
+                                    ) as exc:  # pylint: disable=broad-except
+                                        logger.warning(
+                                            "chain=%s service=%s drain failed: %s",
+                                            chain_id,
+                                            svc_id,
+                                            exc,
+                                        )
+
+                                except Exception as exc:  # pylint: disable=broad-except
+                                    logger.warning(
+                                        "chain=%s service=%s recovery failed: %s",
+                                        chain_id,
+                                        svc_id,
+                                        exc,
+                                    )
+                                    chain_errors.append(
+                                        f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
+                                    )
+                                finally:
+                                    # Remove the injected safe so the next iteration/chain starts clean
+                                    if safe_for_service and chain in wallet.safes:
+                                        wallet.safes.pop(chain, None)
+                                        if chain in wallet.safe_chains:
+                                            wallet.safe_chains.remove(chain)
+                                        wallet.store()
+
+                        # ── Step 5: Drain Master Safe(s) ─────────────────────────────
+                        for safe_addr in safe_addresses:
+                            try:
+                                _inject_safe_into_wallet(
+                                    wallet=wallet,
+                                    chain=chain,
+                                    safe_address=safe_addr,
+                                )
+                                moved = wallet.drain(
+                                    withdrawal_address=destination_checksum,
+                                    chain=chain,
+                                    from_safe=True,
+                                )
+                                for token, amount in moved.items():
+                                    prev = chain_funds_moved.get(safe_addr, {}).get(
+                                        token, BigInt(0)
+                                    )
+                                    chain_funds_moved.setdefault(safe_addr, {})[
+                                        token
+                                    ] = BigInt(int(prev) + amount)
+                            except Exception as exc:  # pylint: disable=broad-except
+                                logger.warning(
+                                    "chain=%s drain_safe=%s failed: %s",
+                                    chain_id,
+                                    safe_addr,
+                                    exc,
+                                )
+                                chain_errors.append(
+                                    f"chain={chain_id} drain_safe={safe_addr}: {type(exc).__name__}"
+                                )
+                            finally:
+                                wallet.safes.pop(chain, None)
+                                if chain in wallet.safe_chains:
+                                    wallet.safe_chains.remove(chain)
+                                wallet.store()
+
+                        # ── Step 6: Drain Master EOA ──────────────────────────────────
+                        try:
+                            moved = wallet.drain(
+                                withdrawal_address=destination_checksum,
+                                chain=chain,
+                                from_safe=False,
+                            )
+                            for token, amount in moved.items():
+                                prev = chain_funds_moved.get(eoa_address, {}).get(
+                                    token, BigInt(0)
+                                )
+                                chain_funds_moved.setdefault(eoa_address, {})[token] = (
+                                    BigInt(int(prev) + amount)
+                                )
+                        except Exception as exc:  # pylint: disable=broad-except
+                            logger.warning(
+                                "chain=%s drain_eoa failed: %s", chain_id, exc
+                            )
+                            chain_errors.append(
+                                f"chain={chain_id} drain_eoa: {type(exc).__name__}"
+                            )
+
                     except Exception as exc:  # pylint: disable=broad-except
                         chain_errors.append(f"chain={chain_id}: {type(exc).__name__}")
 
@@ -748,339 +1078,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
             total_funds_moved=total_funds_moved,
             errors=errors,
         )
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
-    def _recover_service(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-statements,unused-argument
-        self,
-        chain: Chain,
-        ledger_api: t.Any,
-        crypto: t.Any,
-        service_id: int,
-        service_registry_addr: str,
-        service_manager_addr: str,
-        recovery_module_addr: str,
-        destination_address: str,
-        chain_funds_moved: t.Dict,
-        eoa_address: str,
-    ) -> None:
-        """Run the per-service portion of the recovery sequence (steps 1–4)."""
-        state = _get_service_state(
-            ledger_api=ledger_api,
-            service_registry_address=service_registry_addr,
-            service_id=service_id,
-        )
-
-        # Step 1: Unstake if the service is staked in any known staking program.
-        # Iterate over STAKING[chain] contracts to find and call unstake.
-        staking_contracts = STAKING.get(chain, {})
-        for staking_program_id, staking_addr in staking_contracts.items():
-            if not staking_addr:
-                continue
-            try:
-                # Use StakingTokenContract wrapper instead of raw ABI
-                staking_state = StakingTokenContract.get_service_staking_state(
-                    ledger_api=ledger_api,
-                    contract_address=Web3.to_checksum_address(staking_addr),
-                    service_id=service_id,
-                )["data"]
-                if staking_state == 0:  # UNSTAKED
-                    continue
-                # Check minimum staking duration to avoid revert on early unstake
-                try:
-                    min_duration = StakingTokenContract.get_min_staking_duration(
-                        ledger_api=ledger_api,
-                        contract_address=Web3.to_checksum_address(staking_addr),
-                    )["data"]
-                    service_info = StakingTokenContract.get_service_info(
-                        ledger_api=ledger_api,
-                        contract_address=Web3.to_checksum_address(staking_addr),
-                        service_id=service_id,
-                    )["data"]
-                    ts_start = service_info[2]  # tsStart field
-                    elapsed = int(time.time()) - ts_start
-                    if elapsed < min_duration:
-                        raise ValueError(
-                            f"Cannot unstake service {service_id} from "
-                            f"{staking_program_id}: minimum staking duration "
-                            f"not elapsed ({elapsed}s < {min_duration}s)"
-                        )
-                except ValueError:
-                    raise
-                except Exception:  # pylint: disable=broad-except  # nosec B110
-                    pass  # proceed to unstake if we can't determine duration
-
-                staking_contract_instance = StakingTokenContract.get_instance(
-                    ledger_api=ledger_api,
-                    contract_address=Web3.to_checksum_address(staking_addr),
-                )
-                tx = staking_contract_instance.functions.unstake(
-                    service_id
-                ).build_transaction(
-                    {
-                        "from": crypto.address,
-                        "nonce": ledger_api.api.eth.get_transaction_count(
-                            crypto.address
-                        ),
-                    }
-                )
-                signed = ledger_api.api.eth.account.sign_transaction(
-                    tx, crypto.private_key
-                )
-                tx_hash = ledger_api.api.eth.send_raw_transaction(
-                    signed.raw_transaction
-                )
-                ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
-                logger.info(
-                    f"Unstaked service {service_id} from {staking_program_id} "
-                    f"on chain {chain.id}"
-                )
-                break  # service can only be staked in one program at a time
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning(
-                    f"Unstake check/attempt failed for service {service_id} "
-                    f"program={staking_program_id}: {exc}"
-                )
-
-        # Refresh state after potential unstake
-        state = _get_service_state(
-            ledger_api=ledger_api,
-            service_registry_address=service_registry_addr,
-            service_id=service_id,
-        )
-
-        # Step 2: Terminate if DEPLOYED
-        if state in (OnChainState.DEPLOYED,):
-            try:
-                if service_manager_addr:
-                    sm_contract = registry_contracts.service_manager.get_instance(
-                        ledger_api=ledger_api,
-                        contract_address=service_manager_addr,
-                    )
-                    tx = sm_contract.functions.terminate(service_id).build_transaction(
-                        {
-                            "from": crypto.address,
-                            "nonce": ledger_api.api.eth.get_transaction_count(
-                                crypto.address
-                            ),
-                        }
-                    )
-                    signed = ledger_api.api.eth.account.sign_transaction(
-                        tx, crypto.private_key
-                    )
-                    tx_hash = ledger_api.api.eth.send_raw_transaction(
-                        signed.raw_transaction
-                    )
-                    # Wait for the transaction to be mined before proceeding to
-                    # unbond; without confirmation the on-chain state has not yet
-                    # changed and the unbond call would revert.
-                    ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
-                    logger.info(f"Terminated service {service_id} on chain {chain.id}")
-                    state = OnChainState.TERMINATED_BONDED
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning(f"Terminate failed for service {service_id}: {exc}")
-
-        # Step 3: Unbond if TERMINATED_BONDED
-        if state in (OnChainState.TERMINATED_BONDED,):
-            try:
-                if service_manager_addr:
-                    sm_contract = registry_contracts.service_manager.get_instance(
-                        ledger_api=ledger_api,
-                        contract_address=service_manager_addr,
-                    )
-                    tx = sm_contract.functions.unbond(service_id).build_transaction(
-                        {
-                            "from": crypto.address,
-                            "nonce": ledger_api.api.eth.get_transaction_count(
-                                crypto.address
-                            ),
-                        }
-                    )
-                    signed = ledger_api.api.eth.account.sign_transaction(
-                        tx, crypto.private_key
-                    )
-                    tx_hash = ledger_api.api.eth.send_raw_transaction(
-                        signed.raw_transaction
-                    )
-                    # Wait for unbond to be mined before proceeding to recoverAccess.
-                    ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
-                    logger.info(f"Unbonded service {service_id} on chain {chain.id}")
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning(f"Unbond failed for service {service_id}: {exc}")
-
-        # Step 4: recoverAccess on RecoveryModule for Agent Safe
-        # Retrieve the Agent Safe multisig address from service info, call
-        # recoverAccess on the RecoveryModule, then drain the Agent Safe.
-        if recovery_module_addr:
-            try:
-                registry_contract = _get_service_registry_contract(
-                    ledger_api, service_registry_addr
-                )
-                service_info = registry_contract.functions.getService(service_id).call()
-                agent_safe_addr = service_info[1]  # multisig field
-
-                if agent_safe_addr and agent_safe_addr != ZERO_ADDRESS:
-                    rm_contract = registry_contracts.recovery_module.get_instance(
-                        ledger_api=ledger_api,
-                        contract_address=Web3.to_checksum_address(recovery_module_addr),
-                    )
-                    tx = rm_contract.functions.recoverAccess(
-                        agent_safe_addr
-                    ).build_transaction(
-                        {
-                            "from": crypto.address,
-                            "nonce": ledger_api.api.eth.get_transaction_count(
-                                crypto.address
-                            ),
-                        }
-                    )
-                    signed = ledger_api.api.eth.account.sign_transaction(
-                        tx, crypto.private_key
-                    )
-                    tx_hash = ledger_api.api.eth.send_raw_transaction(
-                        signed.raw_transaction
-                    )
-                    # Wait for recoverAccess to be mined before draining the
-                    # Agent Safe; the Safe must be accessible first.
-                    ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
-                    logger.info(
-                        f"recoverAccess called for agent safe {agent_safe_addr}"
-                    )
-
-                    # Drain Agent Safe; token addresses as a list per ChainAmounts.
-                    erc20_tokens = ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, [])
-                    moved = self._drain_safe(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe_addr=agent_safe_addr,
-                        destination=destination_address,
-                        erc20_tokens=erc20_tokens,
-                    )
-                    for token, amount in moved.items():
-                        chain_funds_moved.setdefault(agent_safe_addr, {})[token] = (
-                            BigInt(amount)
-                        )
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning(
-                    f"recoverAccess/drain agent safe failed for service "
-                    f"{service_id}: {exc}"
-                )
-
-    def _drain_safe(
-        self,
-        ledger_api: t.Any,
-        crypto: t.Any,
-        safe_addr: str,
-        destination: str,
-        erc20_tokens: t.List[str],
-    ) -> t.Dict[str, int]:
-        """Drain all native and ERC-20 assets from a Safe to ``destination``."""
-        moved: t.Dict[str, int] = {}
-
-        # ERC-20 first (so we still have native for gas);
-        # erc20_tokens contains token addresses per ChainAmounts convention.
-        for token_addr in erc20_tokens:
-            bal = get_asset_balance(
-                ledger_api=ledger_api,
-                asset_address=token_addr,
-                address=safe_addr,
-                raise_on_invalid_address=False,
-            )
-            if bal > 0:
-                try:
-                    transfer_erc20_from_safe(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=safe_addr,
-                        token=token_addr,
-                        to=destination,
-                        amount=int(bal),
-                    )
-                    moved[token_addr] = int(bal)
-                except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning(
-                        f"ERC-20 drain failed for safe={safe_addr} token={token_addr}: {exc}"
-                    )
-
-        # Native
-        native_bal = get_asset_balance(
-            ledger_api=ledger_api,
-            asset_address=ZERO_ADDRESS,
-            address=safe_addr,
-            raise_on_invalid_address=False,
-        )
-        if native_bal > 0:
-            try:
-                transfer(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=safe_addr,
-                    to=destination,
-                    amount=int(native_bal),
-                )
-                moved[ZERO_ADDRESS] = int(native_bal)
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning(f"Native drain failed for safe={safe_addr}: {exc}")
-
-        return moved
-
-    def _drain_eoa_assets(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-        self,
-        chain: Chain,
-        ledger_api: t.Any,
-        crypto: t.Any,
-        eoa_address: str,
-        destination: str,
-        erc20_tokens: t.List[str],
-    ) -> t.Dict[str, int]:
-        """Drain all native and ERC-20 assets from the Master EOA to ``destination``."""
-        moved: t.Dict[str, int] = {}
-
-        # ERC-20 first; erc20_tokens contains token addresses per ChainAmounts convention.
-        for token_addr in erc20_tokens:
-            bal = get_asset_balance(
-                ledger_api=ledger_api,
-                asset_address=token_addr,
-                address=eoa_address,
-                raise_on_invalid_address=False,
-            )
-            if bal > 0:
-                try:
-                    transfer_erc20_from_eoa(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        token=token_addr,
-                        to=destination,
-                        amount=int(bal),
-                    )
-                    moved[token_addr] = int(bal)
-                except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning(f"ERC-20 EOA drain failed token={token_addr}: {exc}")
-
-        # Native (last, since it pays gas)
-        try:
-            tx_hash = drain_eoa(
-                ledger_api=ledger_api,
-                crypto=crypto,
-                withdrawal_address=destination,
-                chain_id=chain.id,
-            )
-            if tx_hash:
-                # Record approximate amount (balance minus gas already drained)
-                moved[ZERO_ADDRESS] = int(
-                    get_asset_balance(
-                        ledger_api=ledger_api,
-                        asset_address=ZERO_ADDRESS,
-                        address=destination,
-                        raise_on_invalid_address=False,
-                    )
-                )
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning(f"Native EOA drain failed: {exc}")
-
-        return moved
 
 
 def __getattr__(name: str) -> t.Any:

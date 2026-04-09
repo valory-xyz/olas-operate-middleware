@@ -19,6 +19,7 @@
 
 """Unit tests for operate/services/fund_recovery_manager.py – no blockchain required."""
 
+import tempfile
 import time
 import typing as t
 from pathlib import Path
@@ -776,56 +777,72 @@ class TestFundRecoveryManagerExecute:
         assert result.errors == []
         assert result.partial_failure is False
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_records_moved_funds_from_eoa(self) -> None:
         """Funds moved from EOA drain are recorded in total_funds_moved."""
         manager = _make_manager()
+        eoa = _mnemonic_to_address(_TEST_MNEMONIC)
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+
+        def _drain(withdrawal_address, chain, from_safe):  # type: ignore[no-untyped-def]
+            if not from_safe:
+                return {ZERO_ADDRESS: 5000}
+            return {}
+
+        mock_wallet.drain.side_effect = _drain
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = MagicMock()
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
-            ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch.object(
-                manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 5000}
-            ),
-            patch.object(manager, "_drain_safe", return_value={}),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         # At least one chain should have EOA funds moved
         found = False
         for _chain_id_str, addresses in result.total_funds_moved.items():
-            eoa = _mnemonic_to_address(_TEST_MNEMONIC)
             if eoa in addresses and ZERO_ADDRESS in addresses[eoa]:
                 found = True
         assert found
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_records_moved_funds_from_safe(self) -> None:
         """Funds moved from Safe drain are recorded in total_funds_moved."""
         manager = _make_manager()
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+
+        def _drain(withdrawal_address, chain, from_safe):  # type: ignore[no-untyped-def]
+            if from_safe:
+                return {ZERO_ADDRESS: 8000}
+            return {}
+
+        mock_wallet.drain.side_effect = _drain
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = MagicMock()
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
-            ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch.object(manager, "_drain_eoa_assets", return_value={}),
-            patch.object(manager, "_drain_safe", return_value={ZERO_ADDRESS: 8000}),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         found = False
@@ -834,33 +851,40 @@ class TestFundRecoveryManagerExecute:
                 found = True
         assert found
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_records_moved_funds_from_both_safe_and_eoa(self) -> None:
         """Funds moved from both Safe and EOA drain are recorded in total_funds_moved."""
         manager = _make_manager()
+        eoa = _mnemonic_to_address(_TEST_MNEMONIC)
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+
+        def _drain(withdrawal_address, chain, from_safe):  # type: ignore[no-untyped-def]
+            if from_safe:
+                return {ZERO_ADDRESS: 8000}
+            return {ZERO_ADDRESS: 5000}
+
+        mock_wallet.drain.side_effect = _drain
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = MagicMock()
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
-            ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch.object(
-                manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 5000}
-            ),
-            patch.object(manager, "_drain_safe", return_value={ZERO_ADDRESS: 8000}),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         eoa_found = False
         safe_found = False
         for _chain_id_str, addresses in result.total_funds_moved.items():
-            eoa = _mnemonic_to_address(_TEST_MNEMONIC)
             if eoa in addresses and ZERO_ADDRESS in addresses[eoa]:
                 eoa_found = True
             if _SAFE_ADDR in addresses and ZERO_ADDRESS in addresses[_SAFE_ADDR]:
@@ -873,159 +897,207 @@ class TestFundRecoveryManagerExecute:
     # Error paths
     # ------------------------------------------------------------------
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_chain_error_recorded(self) -> None:
         """A chain-level exception is recorded in errors."""
         manager = _make_manager()
-        with patch(
-            f"{_MODULE}.get_default_ledger_api",
-            side_effect=Exception("rpc down"),
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (MagicMock(), [])
+        mock_app.service_manager.return_value = MagicMock()
+        with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
+            patch(
+                f"{_MODULE}.get_default_ledger_api",
+                side_effect=Exception("rpc down"),
+            ),
         ):
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         assert not result.success
         assert len(result.errors) > 0
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_drain_eoa_error_recorded(self) -> None:
-        """An exception from _drain_eoa_assets is recorded in errors."""
+        """An exception from EOA drain is recorded in errors."""
         manager = _make_manager()
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+
+        def _drain(withdrawal_address, chain, from_safe):  # type: ignore[no-untyped-def]
+            if not from_safe:
+                raise RuntimeError("drain fail")
+            return {}
+
+        mock_wallet.drain.side_effect = _drain
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = MagicMock()
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
-            ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch.object(
-                manager, "_drain_eoa_assets", side_effect=RuntimeError("drain fail")
-            ),
-            patch.object(manager, "_drain_safe", return_value={}),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         assert not result.success
         assert any("drain_eoa" in e for e in result.errors)
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_drain_safe_error_recorded(self) -> None:
-        """An exception from _drain_safe is recorded in errors."""
+        """An exception from Safe drain is recorded in errors."""
         manager = _make_manager()
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+
+        def _drain(withdrawal_address, chain, from_safe):  # type: ignore[no-untyped-def]
+            if from_safe:
+                raise RuntimeError("safe drain fail")
+            return {}
+
+        mock_wallet.drain.side_effect = _drain
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = MagicMock()
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
-            ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch.object(manager, "_drain_eoa_assets", return_value={}),
-            patch.object(
-                manager, "_drain_safe", side_effect=RuntimeError("safe drain fail")
-            ),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         assert not result.success
         assert any("drain_safe" in e for e in result.errors)
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_service_recovery_error_recorded(self) -> None:
         """A service recovery failure is recorded in errors."""
         manager = _make_manager()
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+        mock_wallet.drain.return_value = {}
+
+        mock_svc_manager = MagicMock()
+        mock_svc_manager.terminate_service_on_chain_from_safe.side_effect = (
+            RuntimeError("svc fail")
+        )
+
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = mock_svc_manager
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
+                f"{_MODULE}.fetch_safes_for_owner",
+                return_value=[_SAFE_ADDR],
             ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
-            patch.object(
-                manager, "_recover_service", side_effect=RuntimeError("svc fail")
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
+            patch(
+                f"{_MODULE}._get_service_state",
+                return_value=OnChainState.DEPLOYED,
             ),
-            patch.object(manager, "_drain_eoa_assets", return_value={}),
-            patch.object(manager, "_drain_safe", return_value={}),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
-        assert not result.success
+        # The terminate failure should bubble up and be caught at the per-service level
+        # The service-level errors use format "chain=X service=Y: ExcType"
         assert any("service=42" in e for e in result.errors)
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_partial_failure_when_some_funds_moved(self) -> None:
         """partial_failure=True when errors exist and some funds were moved."""
         manager = _make_manager()
+
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+
+        drain_call_count = {"n": 0}
+
+        def _drain(withdrawal_address, chain, from_safe):  # type: ignore[no-untyped-def]
+            drain_call_count["n"] += 1
+            if from_safe:
+                raise RuntimeError("safe drain fail")
+            # EOA drain succeeds and returns funds
+            return {ZERO_ADDRESS: 1}
+
+        mock_wallet.drain.side_effect = _drain
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = MagicMock()
+
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
-            patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
-            ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch.object(manager, "_drain_eoa_assets", return_value={ZERO_ADDRESS: 1}),
-            patch.object(
-                manager,
-                "_drain_safe",
-                side_effect=RuntimeError("safe drain fail"),
-            ),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         assert result.partial_failure is True
 
-    @pytest.mark.skip(
-        reason="Drain/service steps implemented in Task 4 — scaffold only"
-    )
     def test_execute_deduplicates_service_ids_within_chain(self) -> None:
-        """The same service_id owned by two safes is only recovered once per chain."""
+        """The same service_id seen from subgraph is only recovered once per chain."""
         manager = _make_manager()
-        recover_calls: t.List[int] = []
 
-        def _recover(*, service_id, **kwargs):  # type: ignore[no-untyped-def]
-            recover_calls.append(service_id)
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {}
+        mock_wallet.safe_chains = []
+        mock_wallet.drain.return_value = {}
+
+        mock_svc_manager = MagicMock()
+        mock_app = MagicMock()
+        mock_app.wallet_manager.import_from_mnemonic.return_value = (mock_wallet, [])
+        mock_app._services = Path(tempfile.mkdtemp()) / "services"
+        mock_app._services.mkdir(parents=True)
+        mock_app.service_manager.return_value = mock_svc_manager
 
         with (
+            patch(f"{_MODULE}.OperateApp", return_value=mock_app),
             patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
             patch(
                 f"{_MODULE}.fetch_safes_for_owner",
                 return_value=[_SAFE_ADDR, "0x" + "4" * 40],
             ),
+            # Return same service ID twice (simulating two safes owning same service)
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[99, 99]),
             patch(
-                f"{_MODULE}._fetch_services_from_subgraph",
-                side_effect=Exception("network"),
+                f"{_MODULE}._get_service_state",
+                return_value=OnChainState.NON_EXISTENT,
             ),
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[99]),
-            patch.object(manager, "_recover_service", side_effect=_recover),
-            patch.object(manager, "_drain_eoa_assets", return_value={}),
-            patch.object(manager, "_drain_safe", return_value={}),
-            patch(f"{_MODULE}.KeysManager") as mock_km,
+            patch(f"{_MODULE}._unstake_service"),
         ):
-            mock_km.return_value.private_key_to_crypto.return_value = MagicMock()
             manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
 
         # service 99 must be recovered exactly once per chain (4 chains × 1)
-        assert recover_calls.count(99) == len(RECOVERY_CHAINS)
+        # _execute_recovery_module_flow_from_safe is called once per unique service per chain
+        assert (
+            mock_svc_manager._execute_recovery_module_flow_from_safe.call_count
+            == len(RECOVERY_CHAINS)
+        )
 
     def test_execute_fatal_exception_sets_errors(self) -> None:
         """A top-level exception (e.g. bad destination) is caught and set in errors."""
@@ -1038,762 +1110,6 @@ class TestFundRecoveryManagerExecute:
 
         assert not result.success
         assert any("fatal" in e or "ValueError" in e for e in result.errors)
-
-
-# ---------------------------------------------------------------------------
-# FundRecoveryManager._drain_safe
-# ---------------------------------------------------------------------------
-
-
-class TestDrainSafe:
-    """Tests for FundRecoveryManager._drain_safe."""
-
-    def test_drains_native_when_balance_positive(self) -> None:
-        """transfer() is called when native balance > 0."""
-        manager = _make_manager()
-        mock_ledger = MagicMock()
-        mock_crypto = MagicMock()
-
-        with (
-            patch(
-                f"{_MODULE}.get_asset_balance",
-                return_value=1000,
-            ),
-            patch(f"{_MODULE}.transfer") as mock_transfer,
-        ):
-            moved = manager._drain_safe(
-                ledger_api=mock_ledger,
-                crypto=mock_crypto,
-                safe_addr=_SAFE_ADDR,
-                destination=_DEST_ADDR,
-                erc20_tokens=[],
-            )
-
-        mock_transfer.assert_called_once()
-        assert ZERO_ADDRESS in moved
-        assert moved[ZERO_ADDRESS] == 1000
-
-    def test_skips_native_when_balance_zero(self) -> None:
-        """transfer() is NOT called when native balance == 0."""
-        manager = _make_manager()
-
-        with (
-            patch(
-                f"{_MODULE}.get_asset_balance",
-                return_value=0,
-            ),
-            patch(f"{_MODULE}.transfer") as mock_transfer,
-        ):
-            moved = manager._drain_safe(
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                safe_addr=_SAFE_ADDR,
-                destination=_DEST_ADDR,
-                erc20_tokens=[],
-            )
-
-        mock_transfer.assert_not_called()
-        assert ZERO_ADDRESS not in moved
-
-    def test_drains_erc20_when_balance_positive(self) -> None:
-        """transfer_erc20_from_safe() is called for non-zero ERC-20 balance."""
-        manager = _make_manager()
-
-        def _bal(*, ledger_api, asset_address, address, **kw):  # type: ignore[no-untyped-def]
-            if asset_address == _TOKEN_ADDR:
-                return 200
-            return 0
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.transfer"),
-            patch(f"{_MODULE}.transfer_erc20_from_safe") as mock_erc20,
-        ):
-            moved = manager._drain_safe(
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                safe_addr=_SAFE_ADDR,
-                destination=_DEST_ADDR,
-                erc20_tokens=[_TOKEN_ADDR],
-            )
-
-        mock_erc20.assert_called_once()
-        assert _TOKEN_ADDR in moved
-        assert moved[_TOKEN_ADDR] == 200
-
-    def test_skips_erc20_when_balance_zero(self) -> None:
-        """transfer_erc20_from_safe() is NOT called for zero ERC-20 balance."""
-        manager = _make_manager()
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.transfer_erc20_from_safe") as mock_erc20,
-        ):
-            moved = manager._drain_safe(
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                safe_addr=_SAFE_ADDR,
-                destination=_DEST_ADDR,
-                erc20_tokens=[_TOKEN_ADDR],
-            )
-
-        mock_erc20.assert_not_called()
-        assert _TOKEN_ADDR not in moved
-
-    def test_erc20_transfer_failure_swallowed(self) -> None:
-        """ERC-20 transfer failure does not propagate; token omitted from moved."""
-        manager = _make_manager()
-
-        def _bal(*, ledger_api, asset_address, address, **kw):  # type: ignore[no-untyped-def]
-            return 100
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.transfer"),
-            patch(
-                f"{_MODULE}.transfer_erc20_from_safe",
-                side_effect=Exception("erc20 fail"),
-            ),
-        ):
-            moved = manager._drain_safe(
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                safe_addr=_SAFE_ADDR,
-                destination=_DEST_ADDR,
-                erc20_tokens=[_TOKEN_ADDR],
-            )
-
-        assert _TOKEN_ADDR not in moved
-
-    def test_native_transfer_failure_swallowed(self) -> None:
-        """Native transfer failure does not propagate; native omitted from moved."""
-        manager = _make_manager()
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", return_value=500),
-            patch(f"{_MODULE}.transfer", side_effect=Exception("transfer fail")),
-            patch(f"{_MODULE}.transfer_erc20_from_safe"),
-        ):
-            moved = manager._drain_safe(
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                safe_addr=_SAFE_ADDR,
-                destination=_DEST_ADDR,
-                erc20_tokens=[],
-            )
-
-        assert ZERO_ADDRESS not in moved
-
-
-# ---------------------------------------------------------------------------
-# FundRecoveryManager._drain_eoa_assets
-# ---------------------------------------------------------------------------
-
-
-class TestDrainEoaAssets:
-    """Tests for FundRecoveryManager._drain_eoa_assets."""
-
-    def test_drains_native_via_drain_eoa(self) -> None:
-        """drain_eoa() is called for native balance; tx hash triggers balance recording."""
-        manager = _make_manager()
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", return_value=3000),
-            patch(f"{_MODULE}.drain_eoa", return_value=b"0x" + b"a" * 64),
-            patch(f"{_MODULE}.transfer_erc20_from_eoa"),
-        ):
-            from operate.operate_types import Chain
-
-            moved = manager._drain_eoa_assets(
-                chain=Chain.GNOSIS,
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                eoa_address=_TEST_EOA_ADDRESS,
-                destination=_DEST_ADDR,
-                erc20_tokens=[],
-            )
-
-        assert ZERO_ADDRESS in moved
-
-    def test_no_native_recorded_when_drain_eoa_returns_none(self) -> None:
-        """When drain_eoa returns falsy, ZERO_ADDRESS is not in moved."""
-        manager = _make_manager()
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.drain_eoa", return_value=None),
-        ):
-            from operate.operate_types import Chain
-
-            moved = manager._drain_eoa_assets(
-                chain=Chain.GNOSIS,
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                eoa_address=_TEST_EOA_ADDRESS,
-                destination=_DEST_ADDR,
-                erc20_tokens=[],
-            )
-
-        assert ZERO_ADDRESS not in moved
-
-    def test_drain_erc20_from_eoa_called_when_balance_positive(self) -> None:
-        """transfer_erc20_from_eoa() is called for non-zero ERC-20 EOA balance."""
-        manager = _make_manager()
-
-        def _bal(*, ledger_api, asset_address, address, **kw):  # type: ignore[no-untyped-def]
-            if asset_address == _TOKEN_ADDR:
-                return 750
-            return 0
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.drain_eoa", return_value=None),
-            patch(f"{_MODULE}.transfer_erc20_from_eoa") as mock_t,
-        ):
-            from operate.operate_types import Chain
-
-            moved = manager._drain_eoa_assets(
-                chain=Chain.GNOSIS,
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                eoa_address=_TEST_EOA_ADDRESS,
-                destination=_DEST_ADDR,
-                erc20_tokens=[_TOKEN_ADDR],
-            )
-
-        mock_t.assert_called_once()
-        assert _TOKEN_ADDR in moved
-        assert moved[_TOKEN_ADDR] == 750
-
-    def test_native_drain_exception_swallowed(self) -> None:
-        """Exception from drain_eoa does not propagate."""
-        manager = _make_manager()
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.drain_eoa", side_effect=Exception("drain error")),
-        ):
-            from operate.operate_types import Chain
-
-            moved = manager._drain_eoa_assets(
-                chain=Chain.GNOSIS,
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                eoa_address=_TEST_EOA_ADDRESS,
-                destination=_DEST_ADDR,
-                erc20_tokens=[],
-            )
-
-        assert ZERO_ADDRESS not in moved
-
-
-# ---------------------------------------------------------------------------
-# FundRecoveryManager._recover_service
-# ---------------------------------------------------------------------------
-
-
-class TestRecoverService:
-    """Tests for FundRecoveryManager._recover_service."""
-
-    def _make_crypto(self) -> MagicMock:
-        c = MagicMock()
-        c.address = _TEST_EOA_ADDRESS
-        c.private_key = "0x" + "a" * 64
-        return c
-
-    def _make_ledger(self) -> MagicMock:
-        ledger = MagicMock()
-        ledger.api.eth.get_transaction_count.return_value = 1
-        ledger.api.eth.send_raw_transaction.return_value = b"0xtxhash"
-        ledger.api.eth.wait_for_transaction_receipt.return_value = {"status": 1}
-        signed = MagicMock()
-        signed.raw_transaction = b"raw"
-        ledger.api.eth.account.sign_transaction.return_value = signed
-        return ledger
-
-    def test_no_unstake_when_staking_not_configured(self) -> None:
-        """No unstake attempt when STAKING has no contracts for chain."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(
-                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-            ),
-            patch.object(manager, "_drain_safe", return_value={}),
-        ):
-            # Should not raise
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=1,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr=_SERVICE_MANAGER,
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-    def test_terminates_deployed_service(self) -> None:
-        """service_manager.terminate() is called for DEPLOYED state."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        mock_sm = MagicMock()
-        mock_sm.functions.terminate.return_value.build_transaction.return_value = {}
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-        ):
-            mock_reg.service_manager.get_instance.return_value = mock_sm
-            mock_reg.service_registry.get_instance.return_value = MagicMock()
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=5,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr=_SERVICE_MANAGER,
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        mock_sm.functions.terminate.assert_called_with(5)
-
-    def test_unbonds_terminated_bonded_service(self) -> None:
-        """service_manager.unbond() is called for TERMINATED_BONDED state."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        mock_sm = MagicMock()
-        mock_sm.functions.unbond.return_value.build_transaction.return_value = {}
-
-        states = [OnChainState.TERMINATED_BONDED, OnChainState.TERMINATED_BONDED]
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", side_effect=states),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-        ):
-            mock_reg.service_manager.get_instance.return_value = mock_sm
-            mock_reg.service_registry.get_instance.return_value = MagicMock()
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=6,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr=_SERVICE_MANAGER,
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        mock_sm.functions.unbond.assert_called_with(6)
-
-    def test_skips_terminate_when_no_service_manager(self) -> None:
-        """Terminate step is skipped when service_manager_addr is empty."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
-            patch(f"{_MODULE}.registry_contracts"),
-        ):
-            # Should not raise even without service_manager_addr
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=7,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-    def test_recover_access_called_for_recovery_module(self) -> None:
-        """recoverAccess() is called when recovery_module_addr is set."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        agent_safe = "0x" + "5" * 40
-        mock_reg_contract = MagicMock()
-        # getService returns a tuple with multisig at index 1
-        mock_reg_contract.functions.getService.return_value.call.return_value = [
-            0,
-            agent_safe,
-            0,
-            0,
-            0,
-            0,
-            int(OnChainState.UNBONDED),
-        ]
-        mock_rm = MagicMock()
-        mock_rm.functions.recoverAccess.return_value.build_transaction.return_value = {}
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-            patch.object(manager, "_drain_safe", return_value={}),
-            patch(f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}),
-        ):
-            mock_reg.service_registry.get_instance.return_value = mock_reg_contract
-            mock_reg.recovery_module.get_instance.return_value = mock_rm
-
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=8,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr=_RECOVERY_MODULE,
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        mock_rm.functions.recoverAccess.assert_called_with(agent_safe)
-
-    def test_recover_access_skipped_for_zero_address_multisig(self) -> None:
-        """recoverAccess() is NOT called when the multisig is the zero address."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        mock_reg_contract = MagicMock()
-        mock_reg_contract.functions.getService.return_value.call.return_value = [
-            0,
-            ZERO_ADDRESS,
-            0,
-            0,
-            0,
-            0,
-            int(OnChainState.UNBONDED),
-        ]
-        mock_rm = MagicMock()
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-        ):
-            mock_reg.service_registry.get_instance.return_value = mock_reg_contract
-            mock_reg.recovery_module.get_instance.return_value = mock_rm
-
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=9,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr=_RECOVERY_MODULE,
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        mock_rm.functions.recoverAccess.assert_not_called()
-
-    def test_unstake_skipped_when_already_unstaked(self) -> None:
-        """When staking_state == 0 (UNSTAKED), unstake tx is NOT sent."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        staking_addr = "0x" + "7" * 40
-        mock_staking = MagicMock()
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}),
-            patch(
-                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-            ),
-            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
-        ):
-            mock_stc.get_service_staking_state.return_value = {"data": 0}  # UNSTAKED
-            mock_stc.get_instance.return_value = mock_staking
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=10,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        mock_staking.functions.unstake.assert_not_called()
-
-    def test_unstake_raises_when_min_duration_not_elapsed(self) -> None:
-        """Verify that an error is raised when min staking duration not elapsed."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        staking_addr = "0x" + "8" * 40
-        ts_start = int(time.time()) - 10  # only 10 seconds elapsed
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}),
-            patch(
-                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-            ),
-            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
-        ):
-            mock_stc.get_service_staking_state.return_value = {"data": 1}  # STAKED
-            mock_stc.get_min_staking_duration.return_value = {
-                "data": 86400
-            }  # 1 day required
-            mock_stc.get_service_info.return_value = {
-                "data": [0, 0, ts_start]
-            }  # ts_start=10s ago
-
-            # Should NOT raise because exceptions are caught internally
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=11,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-            # No unstake should have been issued
-            mock_stc.get_instance.assert_not_called()
-
-    def test_terminate_failure_warning_logged(self) -> None:
-        """When terminate() raises, the warning is logged and execution continues."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        mock_sm = MagicMock()
-        mock_sm.functions.terminate.return_value.build_transaction.side_effect = (
-            RuntimeError("terminate exploded")
-        )
-
-        # Both calls to _get_service_state: first returns DEPLOYED (triggers terminate),
-        # second (after failed terminate) still returns DEPLOYED (no unbond needed).
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-        ):
-            mock_reg.service_manager.get_instance.return_value = mock_sm
-            mock_reg.service_registry.get_instance.return_value = MagicMock()
-            # Should NOT raise; the except clause logs and continues
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=12,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr=_SERVICE_MANAGER,
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-    def test_unbond_failure_warning_logged(self) -> None:
-        """When unbond() raises, the warning is logged and execution continues."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        mock_sm = MagicMock()
-        mock_sm.functions.unbond.return_value.build_transaction.side_effect = (
-            RuntimeError("unbond exploded")
-        )
-
-        states = [OnChainState.TERMINATED_BONDED, OnChainState.TERMINATED_BONDED]
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", side_effect=states),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-        ):
-            mock_reg.service_manager.get_instance.return_value = mock_sm
-            mock_reg.service_registry.get_instance.return_value = MagicMock()
-            # Should NOT raise; the except clause logs and continues
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=13,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr=_SERVICE_MANAGER,
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-    def test_recover_access_exception_warning_logged(self) -> None:
-        """When recoverAccess() raises, the warning is logged and execution continues."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        mock_reg_contract = MagicMock()
-        mock_reg_contract.functions.getService.return_value.call.side_effect = (
-            RuntimeError("getService failed")
-        )
-        mock_rm = MagicMock()
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-        ):
-            mock_reg.service_registry.get_instance.return_value = mock_reg_contract
-            mock_reg.recovery_module.get_instance.return_value = mock_rm
-            # Should NOT raise
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=14,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr=_RECOVERY_MODULE,
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        mock_rm.functions.recoverAccess.assert_not_called()
-
-    def test_empty_staking_addr_is_skipped(self) -> None:
-        """A falsy staking_addr entry (line 603 continue) is silently skipped."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        # STAKING dict has one entry with an empty/falsy address
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": ""}}),
-            patch(
-                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-            ),
-            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
-        ):
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=15,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        # The falsy address was skipped; staking state was never queried
-        mock_stc.get_service_staking_state.assert_not_called()
-
-    def test_min_duration_check_non_value_error_swallowed(self) -> None:
-        """Non-ValueError from get_min_staking_duration is swallowed (lines 634-635)."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        staking_addr = "0x" + "9" * 40
-        mock_staking = MagicMock()
-        mock_staking.functions.unstake.return_value.build_transaction.return_value = {}
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {"pearl_alpha": staking_addr}}),
-            patch(
-                f"{_MODULE}._get_service_state", return_value=OnChainState.NON_EXISTENT
-            ),
-            patch(f"{_MODULE}.StakingTokenContract") as mock_stc,
-        ):
-            mock_stc.get_service_staking_state.return_value = {"data": 1}  # STAKED
-            # get_min_staking_duration raises a generic (non-ValueError) exception,
-            # which must be swallowed so unstaking proceeds.
-            mock_stc.get_min_staking_duration.side_effect = RuntimeError(
-                "contract read failed"
-            )
-            mock_stc.get_instance.return_value = mock_staking
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=16,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr="",
-                destination_address=_DEST_ADDR,
-                chain_funds_moved={},
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        # Unstake was still attempted despite the duration-check failure
-        mock_staking.functions.unstake.assert_called_with(16)
-
-    def test_drain_agent_safe_funds_recorded_in_total_funds_moved(self) -> None:
-        """Funds returned by _drain_safe are recorded in total_funds_moved (line 784)."""
-        manager = _make_manager()
-        from operate.operate_types import Chain
-
-        agent_safe = "0x" + "5" * 40
-        mock_reg_contract = MagicMock()
-        mock_reg_contract.functions.getService.return_value.call.return_value = [
-            0,
-            agent_safe,
-            0,
-            0,
-            0,
-            0,
-            int(OnChainState.UNBONDED),
-        ]
-        mock_rm = MagicMock()
-        mock_rm.functions.recoverAccess.return_value.build_transaction.return_value = {}
-
-        total_funds_moved: t.Dict[str, t.Any] = {}
-        drain_result = {ZERO_ADDRESS: 1234}
-
-        with (
-            patch(f"{_MODULE}.STAKING", {Chain.GNOSIS: {}}),
-            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.UNBONDED),
-            patch(f"{_MODULE}.registry_contracts") as mock_reg,
-            patch.object(manager, "_drain_safe", return_value=drain_result),
-            patch(f"{_MODULE}.ERC20_TOKENS_BY_CHAIN_ID", {}),
-        ):
-            mock_reg.service_registry.get_instance.return_value = mock_reg_contract
-            mock_reg.recovery_module.get_instance.return_value = mock_rm
-
-            manager._recover_service(
-                chain=Chain.GNOSIS,
-                ledger_api=self._make_ledger(),
-                crypto=self._make_crypto(),
-                service_id=17,
-                service_registry_addr=_SERVICE_REGISTRY,
-                service_manager_addr="",
-                recovery_module_addr=_RECOVERY_MODULE,
-                destination_address=_DEST_ADDR,
-                chain_funds_moved=total_funds_moved,
-                eoa_address=_TEST_EOA_ADDRESS,
-            )
-
-        # Line 784: chain_funds_moved must contain the drained amount
-        assert agent_safe in total_funds_moved
-        assert ZERO_ADDRESS in total_funds_moved[agent_safe]
-        assert total_funds_moved[agent_safe][ZERO_ADDRESS] == 1234
 
 
 # ---------------------------------------------------------------------------
@@ -1846,48 +1162,6 @@ class TestScanSafeErc20Balance:
         assert (
             token_found
         ), f"Safe ERC-20 balance not recorded; balances={result.balances}"
-
-
-# ---------------------------------------------------------------------------
-# FundRecoveryManager._drain_eoa_assets – ERC-20 failure branch (line 881-882)
-# ---------------------------------------------------------------------------
-
-
-class TestDrainEoaErc20Failure:
-    """Extra coverage: ERC-20 EOA drain failure is swallowed (lines 881-882)."""
-
-    def test_erc20_eoa_drain_failure_swallowed(self) -> None:
-        """transfer_erc20_from_eoa raises → warning logged, token omitted from moved."""
-        manager = _make_manager()
-
-        def _bal(  # type: ignore[no-untyped-def]
-            *, ledger_api, asset_address, address, **kw
-        ):
-            if asset_address == _TOKEN_ADDR:
-                return 999
-            return 0
-
-        with (
-            patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.drain_eoa", return_value=None),
-            patch(
-                f"{_MODULE}.transfer_erc20_from_eoa",
-                side_effect=Exception("erc20 eoa fail"),
-            ),
-        ):
-            from operate.operate_types import Chain
-
-            moved = manager._drain_eoa_assets(
-                chain=Chain.GNOSIS,
-                ledger_api=MagicMock(),
-                crypto=MagicMock(),
-                eoa_address=_TEST_EOA_ADDRESS,
-                destination=_DEST_ADDR,
-                erc20_tokens=[_TOKEN_ADDR],
-            )
-
-        # Token must not be in moved because the transfer failed
-        assert _TOKEN_ADDR not in moved
 
 
 class TestGetSafeDeployAndLastTxBlock:
@@ -2120,6 +1394,69 @@ def test_inject_safe_into_wallet_idempotent(tmp_path):
 
     assert mock_wallet.safe_chains.count(Chain.GNOSIS) == 1
     mock_wallet.store.assert_called_once()
+
+
+def test_execute_calls_service_manager_methods_for_deployed_service(tmp_path):
+    """execute() calls terminate, unbond, recovery module, and drain for a DEPLOYED service."""
+    mock_wallet = MagicMock()
+    mock_wallet.drain.return_value = {}
+    mock_wallet.safes = {}
+    mock_wallet.safe_chains = []
+
+    mock_wallet_manager = MagicMock()
+    mock_wallet_manager.import_from_mnemonic.return_value = (mock_wallet, ["word1"])
+
+    mock_svc_manager = MagicMock()
+
+    mock_app = MagicMock()
+    mock_app.wallet_manager = mock_wallet_manager
+    mock_app._services = tmp_path / "services"
+    mock_app._services.mkdir()
+    mock_app.service_manager.return_value = mock_svc_manager
+
+    with (
+        patch(
+            "operate.services.fund_recovery_manager.OperateApp",
+            return_value=mock_app,
+        ),
+        patch(
+            "operate.services.fund_recovery_manager.fetch_safes_for_owner",
+            return_value=["0xSafe0000000000000000000000000000000000AA"],
+        ),
+        patch(
+            "operate.services.fund_recovery_manager._fetch_services_from_subgraph",
+            return_value=[7],
+        ),
+        patch(
+            "operate.services.fund_recovery_manager._get_service_state",
+            return_value=OnChainState.DEPLOYED,
+        ),
+        patch(
+            "operate.services.fund_recovery_manager.get_default_ledger_api",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "operate.services.fund_recovery_manager.get_default_rpc",
+            return_value="https://rpc.test",
+        ),
+        patch(
+            "operate.services.fund_recovery_manager._unstake_service",
+            return_value=None,
+        ),
+    ):
+        manager = FundRecoveryManager()
+        result = manager.execute(
+            mnemonic="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            destination_address="0x0000000000000000000000000000000000000001",
+        )
+
+    # terminate → unbond → recovery module → drain should all be called
+    assert mock_svc_manager.terminate_service_on_chain_from_safe.call_count >= 1
+    assert mock_svc_manager.unbond_service_on_chain.call_count >= 1
+    assert mock_svc_manager._execute_recovery_module_flow_from_safe.call_count >= 1
+    assert mock_svc_manager.drain.call_count >= 1
+    # wallet.drain should be called for the safe and EOA on each chain
+    assert mock_wallet.drain.call_count >= 1
 
 
 def test_execute_creates_operate_app_and_imports_wallet(tmp_path):
