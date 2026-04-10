@@ -38,6 +38,7 @@ from operate.constants import (
     ACHIEVEMENTS_NOTIFICATIONS_JSON,
     FERNET_KEY_LENGTH,
     NO_STAKING_PROGRAM_ID,
+    PEARL_STORE_JSON,
 )
 from operate.resource import LocalResource
 from operate.serialization import BigInt, serialize
@@ -245,6 +246,39 @@ class AchievementsNotifications(LocalResource):
     notifications: t.Dict[str, AchievementNotification]
 
     _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
+
+
+@dataclass
+class PearlStore(LocalResource):
+    """Persistent key-value store backed by pearl_store.json."""
+
+    path: Path
+    data: t.Dict[str, t.Any]
+
+    _file = PEARL_STORE_JSON
+
+    @property
+    def json(self) -> t.Dict:
+        """Serialize as a flat dict (file root is the data itself)."""
+        return dict(self.data)
+
+    @classmethod
+    def from_json(cls, obj: t.Dict) -> "PearlStore":
+        """Load PearlStore from a flat dict (file root is the data itself)."""
+        path = obj.get("path")
+        data = {k: v for k, v in obj.items() if k != "path"}
+        return cls(path=path, data=data)
+
+    @classmethod
+    def load_or_create(cls, path: Path) -> "PearlStore":
+        """Load pearl store from path, or return empty store if missing/invalid."""
+        file = path / cls._file
+        if not file.exists():
+            return cls(path=path, data={})
+        try:
+            return cls.load(path)
+        except Exception:  # pylint: disable=broad-except
+            return cls(path=path, data={})
 
 
 @dataclass

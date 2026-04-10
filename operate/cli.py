@@ -84,6 +84,7 @@ from operate.operate_types import (
     ChainAmounts,
     DeploymentStatus,
     LedgerType,
+    PearlStore,
     Version,
 )
 from operate.quickstart.analyse_logs import analyse_logs
@@ -552,27 +553,18 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # --- Pearl Store API ---
     # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
-    _pearl_store_path = (
-        operate._path / "pearl_store.json"  # pylint: disable=protected-access
-    )
+    _pearl_store_dir = operate._path  # pylint: disable=protected-access
     _pearl_store_lock = __import__("threading").Lock()
 
     def _read_pearl_store() -> t.Dict:
-        """Read pearl_store.json; return {} if missing or invalid."""
-        if not _pearl_store_path.exists():
-            return {}
-        try:
-            return __import__("json").loads(
-                _pearl_store_path.read_text(encoding="utf-8")
-            )
-        except Exception:  # pylint: disable=broad-except
-            return {}
+        """Read pearl_store.json via PearlStore; return {} if missing or invalid."""
+        store = PearlStore.load_or_create(_pearl_store_dir)
+        return store.data
 
     def _write_pearl_store(data: t.Dict) -> None:
-        """Write data to pearl_store.json atomically."""
-        _pearl_store_path.write_text(
-            __import__("json").dumps(data, indent=2), encoding="utf-8"
-        )
+        """Write data to pearl_store.json via PearlStore."""
+        store = PearlStore(path=_pearl_store_dir, data=data)
+        store.store()
 
     def _set_nested(d: t.Dict, key: str, value: t.Any) -> None:
         """Set a value at a dot-notation path, creating intermediate dicts."""

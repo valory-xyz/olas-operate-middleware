@@ -138,8 +138,8 @@ def test_setup_agent_uses_zip(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    RUNNING_IN_CI and system() != "Linux",
-    reason="GitHub API download tests make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    RUNNING_IN_CI and system() == "Darwin",
+    reason="GitHub API download tests make live HTTP requests that are unreliable from macOS CI runners.",
 )
 class TestRealGitHubDownload:
     """Tests with real GitHub API and zip downloads."""
