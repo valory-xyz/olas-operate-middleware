@@ -286,6 +286,10 @@ class PearlStore(LocalResource):
     def _set_nested(d: t.Dict, key: str, value: t.Any) -> None:
         """Set a value at a dot-notation path, creating intermediate dicts."""
         parts = key.split(".")
+        if any(p == "" for p in parts):
+            raise ValueError(
+                f"Invalid key {key!r}: all dot-separated segments must be non-empty."
+            )
         for part in parts[:-1]:
             if part not in d or not isinstance(d[part], dict):
                 d[part] = {}

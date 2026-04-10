@@ -577,19 +577,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={"error": "Missing or invalid 'key' field."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
+        if any(segment == "" for segment in key.split(".")):
+            return JSONResponse(
+                content={
+                    "error": "Invalid key: segments must be non-empty "
+                    "(no leading, trailing, or consecutive dots)."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         value = body.get("value")
         await run_in_executor(_pearl_store.set_key, key, value)
         return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
 
-    @app.delete("/api/store/{key:path}")
-    async def _delete_store_key(request: Request) -> JSONResponse:
-        """Delete a key from the pearl store (supports dot-notation via path)."""
-        key = request.path_params.get("key", "")
-        if not key:  # pragma: no cover
-            return JSONResponse(  # pragma: no cover
-                content={"error": "Missing key."},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+    @app.delete("/api/store/{key}")
+    async def _delete_store_key(key: str) -> JSONResponse:
+        """Delete a key from the pearl store (supports dot-notation)."""
         await run_in_executor(_pearl_store.delete_key, key)
         return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
 
