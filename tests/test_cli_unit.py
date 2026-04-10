@@ -3028,3 +3028,18 @@ class TestPearlStoreEndpoints:
         assert resp.status_code == HTTPStatus.OK
         data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert data == original
+
+    def test_post_store_dot_notation_key_with_empty_segment_returns_400(
+        self, tmp_path: Path
+    ) -> None:
+        """POST /api/store with a key containing consecutive dots returns 400."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/store",
+                    json={"key": "a..b", "value": True},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "segments" in resp.json()["error"].lower()
