@@ -2907,9 +2907,7 @@ class TestPearlStoreEndpoints:
         assert resp.status_code == HTTPStatus.OK
         assert resp.json() == {"data": store_data}
 
-    def test_get_store_returns_500_when_file_invalid_json(
-        self, tmp_path: Path
-    ) -> None:
+    def test_get_store_returns_500_when_file_invalid_json(self, tmp_path: Path) -> None:
         """GET /api/store returns 500 when pearl_store.json has invalid JSON."""
         (tmp_path / "pearl_store.json").write_text("not valid json", encoding="utf-8")
         stack, app, _, _ = self._open_store_app(tmp_path)

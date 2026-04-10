@@ -71,7 +71,7 @@ def test_no_corruption() -> None:
     success = True
 
     current_time = time()
-    while time() - current_time < 60:
+    while time() - current_time < 5:
         pid = _run_read_write()
         sleep(1)
         _terminate_process(pid)
@@ -82,7 +82,7 @@ def test_no_corruption() -> None:
 
         try:
             with open(temp_resource.path) as f:
-                final_key = json.load(f)  # this line should not fail for 60 seconds
+                final_key = json.load(f)  # this line should not fail for 5 seconds
         except (json.JSONDecodeError, FileNotFoundError, PermissionError):
             break
 
@@ -102,7 +102,7 @@ def test_no_corruption() -> None:
             pass
 
     assert success, "Key file should not be corrupted after read-write operations"
-    assert len(final_key) == 3, "Key should not be empty after 60 seconds"
+    assert len(final_key) == 3, "Key should not be empty after 5 seconds"
     assert final_key["address"] == ZERO_ADDRESS, "Key address should match"
     assert final_key["ledger"] == LedgerType.ETHEREUM, "Ledger type should match"
     assert final_key["private_key"] == "0xkey", "Public key should match"

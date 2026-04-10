@@ -33,13 +33,16 @@ from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
-from typing_extensions import TypedDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, field_serializer
+from typing_extensions import Annotated, TypedDict
+from web3 import Web3
 
 from operate.constants import (
     ACHIEVEMENTS_NOTIFICATIONS_JSON,
     FERNET_KEY_LENGTH,
     NO_STAKING_PROGRAM_ID,
     PEARL_STORE_JSON,
+    ZERO_ADDRESS,
 )
 from operate.resource import LocalResource
 from operate.serialization import BigInt, serialize
@@ -576,3 +579,83 @@ class EncryptedData(LocalResource):
     def load(cls, path: Path) -> "EncryptedData":
         """Load EncryptedData."""
         return cast(EncryptedData, super().load(path))
+
+
+# ---------------------------------------------------------------------------
+# Fund recovery Pydantic models
+# ---------------------------------------------------------------------------
+
+
+def _validate_evm_destination_address(v: str) -> str:
+    """Validate an EVM address, rejecting the zero address."""
+    if not Web3.is_address(v):
+        raise ValueError("Invalid EVM address")
+    if Web3.to_checksum_address(v) == Web3.to_checksum_address(ZERO_ADDRESS):
+        raise ValueError("Destination address must not be the zero address")
+    return v
+
+
+#: Annotated type for a validated, non-zero EVM destination address.
+EVMDestinationAddress = Annotated[
+    str, AfterValidator(_validate_evm_destination_address)
+]
+
+
+class GasWarningEntry(BaseModel):
+    """Gas warning entry for a single chain."""
+
+    insufficient: bool
+
+
+class FundRecoveryScanRequest(BaseModel):
+    """Request body for POST /api/fund_recovery/scan."""
+
+    mnemonic: str
+
+
+class RecoveredServiceInfo(BaseModel):
+    """Info about a discovered on-chain service."""
+
+    chain_id: int
+    service_id: int
+    state: OnChainState
+    can_unstake: bool
+
+
+class FundRecoveryScanResponse(BaseModel):
+    """Response body for POST /api/fund_recovery/scan."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    master_eoa_address: str
+    balances: ChainAmounts
+    services: t.List[RecoveredServiceInfo]
+    gas_warning: t.Dict[str, GasWarningEntry]
+
+    @field_serializer("balances")
+    def serialize_balances(self, balances: ChainAmounts) -> dict:
+        """Serialize balances using ChainAmounts.json property."""
+        return balances.json
+
+
+class FundRecoveryExecuteRequest(BaseModel):
+    """Request body for POST /api/fund_recovery/execute."""
+
+    mnemonic: str
+    destination_address: EVMDestinationAddress
+
+
+class FundRecoveryExecuteResponse(BaseModel):
+    """Response body for POST /api/fund_recovery/execute."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    success: bool
+    partial_failure: bool
+    total_funds_moved: ChainAmounts
+    errors: t.List[str]
+
+    @field_serializer("total_funds_moved")
+    def serialize_total_funds_moved(self, total_funds_moved: ChainAmounts) -> dict:
+        """Serialize total_funds_moved using ChainAmounts.json property."""
+        return total_funds_moved.json
