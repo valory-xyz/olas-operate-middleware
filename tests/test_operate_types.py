@@ -24,7 +24,7 @@ import copy
 import pytest
 
 from operate.constants import NO_STAKING_PROGRAM_ID
-from operate.operate_types import ChainAmounts, OnChainUserParams, Version
+from operate.operate_types import ChainAmounts, OnChainUserParams, PearlStore, Version
 from operate.serialization import BigInt
 
 
@@ -287,3 +287,9 @@ def test_chain_amounts_lt_empty_is_vacuously_true() -> None:
     empty = ChainAmounts({})
     other = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(1)}}})
     assert (empty < other) is True
+
+
+def test_pearl_store_set_nested_raises_on_empty_segment() -> None:
+    """PearlStore._set_nested raises ValueError when key has an empty segment."""
+    with pytest.raises(ValueError, match="non-empty"):
+        PearlStore._set_nested({}, "a..b", "value")

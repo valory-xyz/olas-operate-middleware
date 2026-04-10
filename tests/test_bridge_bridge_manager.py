@@ -22,6 +22,7 @@
 import time
 import typing as t
 from pathlib import Path
+from platform import system
 
 import pytest
 import requests
@@ -45,7 +46,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 
-from tests.constants import OPERATE_TEST
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
 COINGECKO_PLATFORM_IDS = {
     "ethereum": "ethereum",
@@ -156,6 +157,7 @@ class TestBridgeManager:
             return None
         return price_usd * amount / (10**decimals)
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     def test_bundle_zero(
         self,
         tmp_path: Path,
@@ -261,6 +263,11 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     def test_bundle_error(
         self,
         tmp_path: Path,
@@ -378,6 +385,11 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     def test_bundle_quote(
         self,
         tmp_path: Path,
@@ -544,6 +556,11 @@ class TestBridgeManager:
             margin=0.2,
         )
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize(
         "to_chain_enum",
         [
@@ -605,6 +622,10 @@ class TestBridgeManager:
         )
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize(
         "to_chain_enum",
         [
@@ -643,6 +664,11 @@ class TestBridgeManager:
             margin=0.2,
         )
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize(
         "from_chain_enum",
         [

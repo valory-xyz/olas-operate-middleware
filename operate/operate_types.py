@@ -23,6 +23,7 @@ import base64
 import copy
 import enum
 import os
+import threading
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +41,7 @@ from operate.constants import (
     ACHIEVEMENTS_NOTIFICATIONS_JSON,
     FERNET_KEY_LENGTH,
     NO_STAKING_PROGRAM_ID,
+    PEARL_STORE_JSON,
     ZERO_ADDRESS,
 )
 from operate.resource import LocalResource
@@ -248,6 +250,83 @@ class AchievementsNotifications(LocalResource):
     notifications: t.Dict[str, AchievementNotification]
 
     _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
+
+
+@dataclass
+class PearlStore(LocalResource):
+    """Persistent key-value store backed by pearl_store.json."""
+
+    path: Path
+    data: t.Dict[str, t.Any]
+
+    _file = PEARL_STORE_JSON
+    _lock: t.ClassVar[threading.Lock] = threading.Lock()
+
+    @property
+    def json(self) -> t.Dict:
+        """Serialize as a flat dict (file root is the data itself)."""
+        return dict(self.data)
+
+    @classmethod
+    def from_json(cls, obj: t.Dict) -> "PearlStore":
+        """Load PearlStore from a flat dict (file root is the data itself)."""
+        path = obj.get("path")
+        data = {k: v for k, v in obj.items() if k != "path"}
+        return cls(path=path, data=data)
+
+    @classmethod
+    def load_or_create(cls, path: Path) -> "PearlStore":
+        """Load pearl store from path, or create empty store if file is missing."""
+        file = path / cls._file
+        if not file.exists():
+            return cls(path=path, data={})
+        return cls.load(path)
+
+    @staticmethod
+    def _set_nested(d: t.Dict, key: str, value: t.Any) -> None:
+        """Set a value at a dot-notation path, creating intermediate dicts."""
+        parts = key.split(".")
+        if any(p == "" for p in parts):
+            raise ValueError(
+                f"Invalid key {key!r}: all dot-separated segments must be non-empty."
+            )
+        for part in parts[:-1]:
+            if part not in d or not isinstance(d[part], dict):
+                d[part] = {}
+            d = d[part]
+        d[parts[-1]] = value
+
+    @staticmethod
+    def _delete_nested(d: t.Dict, key: str) -> None:
+        """Delete a value at a dot-notation path; no-op if path missing."""
+        parts = key.split(".")
+        for part in parts[:-1]:
+            if not isinstance(d.get(part), dict):
+                return
+            d = d[part]
+        d.pop(parts[-1], None)
+
+    def set_key(self, key: str, value: t.Any) -> None:
+        """Set a key in the store (supports dot-notation) and persist."""
+        with self._lock:
+            store = self.load_or_create(self.path)
+            self._set_nested(store.data, key, value)
+            updated = PearlStore(path=self.path, data=store.data)
+            updated.store()
+
+    def delete_key(self, key: str) -> None:
+        """Delete a key from the store (supports dot-notation) and persist."""
+        with self._lock:
+            store = self.load_or_create(self.path)
+            self._delete_nested(store.data, key)
+            updated = PearlStore(path=self.path, data=store.data)
+            updated.store()
+
+    @classmethod
+    def read(cls, path: Path) -> t.Dict[str, t.Any]:
+        """Read and return the store data; raises on corruption."""
+        with cls._lock:
+            return cls.load_or_create(path).data
 
 
 @dataclass

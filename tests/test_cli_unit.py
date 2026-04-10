@@ -20,6 +20,7 @@
 """Unit tests for operate/cli.py — covering all lines missed by existing tests."""
 
 import asyncio
+import json
 import logging
 import multiprocessing
 import os
@@ -2866,3 +2867,179 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post("/api/v2/service/svc1/achievement/ach1/acknowledge")
             assert resp.status_code == HTTPStatus.NOT_FOUND
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pearl Store API endpoints (/api/store)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPearlStoreEndpoints:
+    """Tests for /api/store GET, POST, and DELETE endpoints."""
+
+    def _open_store_app(self, tmp_path: Path) -> tuple:
+        """Open app with a real _path so pearl_store.json file I/O works."""
+        m = _make_mock_operate()
+        m._path = tmp_path
+        return _open_app(m)
+
+    def test_get_store_returns_empty_when_file_missing(self, tmp_path: Path) -> None:
+        """GET /api/store returns {"data": {}} when pearl_store.json does not exist."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/store")
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"data": {}}
+
+    def test_get_store_returns_data_when_file_exists(self, tmp_path: Path) -> None:
+        """GET /api/store returns stored data when pearl_store.json exists."""
+        store_data = {"foo": "bar", "nested": {"key": True}}
+        (tmp_path / "pearl_store.json").write_text(
+            json.dumps(store_data), encoding="utf-8"
+        )
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/store")
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"data": store_data}
+
+    def test_get_store_returns_500_when_file_invalid_json(self, tmp_path: Path) -> None:
+        """GET /api/store returns 500 when pearl_store.json has invalid JSON."""
+        (tmp_path / "pearl_store.json").write_text("not valid json", encoding="utf-8")
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app, raise_server_exceptions=False) as client:
+                resp = client.get("/api/store")
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+
+    def test_post_store_missing_key_returns_400(self, tmp_path: Path) -> None:
+        """POST /api/store without 'key' field returns 400."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post("/api/store", json={"value": "test"})
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "key" in resp.json()["error"].lower()
+
+    def test_post_store_empty_key_returns_400(self, tmp_path: Path) -> None:
+        """POST /api/store with empty 'key' string returns 400."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post("/api/store", json={"key": "", "value": "test"})
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+    def test_post_store_simple_key_creates_entry(self, tmp_path: Path) -> None:
+        """POST /api/store with a simple key writes the value to pearl_store.json."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post("/api/store", json={"key": "myKey", "value": True})
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"success": True}
+        store_path = tmp_path / "pearl_store.json"
+        assert store_path.exists()
+        assert json.loads(store_path.read_text(encoding="utf-8"))["myKey"] is True
+
+    def test_post_store_dot_notation_key_creates_nested_structure(
+        self, tmp_path: Path
+    ) -> None:
+        """POST /api/store with dot-notation key creates a nested dict."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/store",
+                    json={"key": "trader.isInitialFunded", "value": True},
+                )
+        assert resp.status_code == HTTPStatus.OK
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
+        assert data["trader"]["isInitialFunded"] is True
+
+    def test_post_store_overwrites_non_dict_intermediate(self, tmp_path: Path) -> None:
+        """POST /api/store replaces a non-dict intermediate value with a dict."""
+        (tmp_path / "pearl_store.json").write_text(
+            json.dumps({"trader": "not-a-dict"}), encoding="utf-8"
+        )
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/store",
+                    json={"key": "trader.isInitialFunded", "value": True},
+                )
+        assert resp.status_code == HTTPStatus.OK
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
+        assert data["trader"]["isInitialFunded"] is True
+
+    def test_delete_store_simple_key_removes_entry(self, tmp_path: Path) -> None:
+        """DELETE /api/store/{key} removes a top-level key."""
+        (tmp_path / "pearl_store.json").write_text(
+            json.dumps({"myKey": "value", "other": 1}), encoding="utf-8"
+        )
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.delete("/api/store/myKey")
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"success": True}
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
+        assert "myKey" not in data
+        assert data["other"] == 1
+
+    def test_delete_store_dot_notation_removes_nested_key(self, tmp_path: Path) -> None:
+        """DELETE /api/store/{key} with dot-notation removes a nested key."""
+        (tmp_path / "pearl_store.json").write_text(
+            json.dumps({"trader": {"isInitialFunded": True, "other": "val"}}),
+            encoding="utf-8",
+        )
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.delete("/api/store/trader.isInitialFunded")
+        assert resp.status_code == HTTPStatus.OK
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
+        assert "isInitialFunded" not in data["trader"]
+        assert data["trader"]["other"] == "val"
+
+    def test_delete_store_non_dict_intermediate_is_noop(self, tmp_path: Path) -> None:
+        """DELETE /api/store/{key} is a no-op when an intermediate is not a dict."""
+        original = {"trader": "not-a-dict"}
+        (tmp_path / "pearl_store.json").write_text(
+            json.dumps(original), encoding="utf-8"
+        )
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.delete("/api/store/trader.isInitialFunded")
+        assert resp.status_code == HTTPStatus.OK
+        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
+        assert data == original
+
+    def test_post_store_dot_notation_key_with_empty_segment_returns_400(
+        self, tmp_path: Path
+    ) -> None:
+        """POST /api/store with a key containing consecutive dots returns 400."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/store",
+                    json={"key": "a..b", "value": True},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "segments" in resp.json()["error"].lower()
