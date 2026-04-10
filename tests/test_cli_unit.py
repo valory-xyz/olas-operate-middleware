@@ -2907,18 +2907,17 @@ class TestPearlStoreEndpoints:
         assert resp.status_code == HTTPStatus.OK
         assert resp.json() == {"data": store_data}
 
-    def test_get_store_returns_empty_when_file_invalid_json(
+    def test_get_store_returns_500_when_file_invalid_json(
         self, tmp_path: Path
     ) -> None:
-        """GET /api/store returns {"data": {}} when pearl_store.json has invalid JSON."""
+        """GET /api/store returns 500 when pearl_store.json has invalid JSON."""
         (tmp_path / "pearl_store.json").write_text("not valid json", encoding="utf-8")
         stack, app, _, _ = self._open_store_app(tmp_path)
         with stack:
             app._server = MagicMock()
-            with TestClient(app) as client:
+            with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.get("/api/store")
-        assert resp.status_code == HTTPStatus.OK
-        assert resp.json() == {"data": {}}
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
     def test_post_store_missing_key_returns_400(self, tmp_path: Path) -> None:
         """POST /api/store without 'key' field returns 400."""
