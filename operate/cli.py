@@ -553,12 +553,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # --- Pearl Store API ---
     # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
-    _pearl_store_dir = operate._path  # pylint: disable=protected-access
+    _pearl_store = PearlStore(  # pylint: disable=protected-access
+        path=operate._path, data={}
+    )
 
     @app.get("/api/store")
     async def _get_store(request: Request) -> JSONResponse:
         """Get the full pearl store."""
-        data = await run_in_executor(PearlStore.read, _pearl_store_dir)
+        data = await run_in_executor(PearlStore.read, _pearl_store.path)
         return JSONResponse(content={"data": data}, status_code=HTTPStatus.OK)
 
     @app.post("/api/store")
@@ -572,8 +574,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         value = body.get("value")
-        store = PearlStore(path=_pearl_store_dir, data={})
-        await run_in_executor(store.set_key, key, value)
+        await run_in_executor(_pearl_store.set_key, key, value)
         return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
 
     @app.delete("/api/store/{key:path}")
@@ -585,8 +586,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={"error": "Missing key."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
-        store = PearlStore(path=_pearl_store_dir, data={})
-        await run_in_executor(store.delete_key, key)
+        await run_in_executor(_pearl_store.delete_key, key)
         return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
 
     @app.get("/api/account")
