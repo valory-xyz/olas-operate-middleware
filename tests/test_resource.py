@@ -21,6 +21,7 @@
 import json
 import os
 import platform
+import signal
 import subprocess  # nosec
 import sys
 from pathlib import Path
@@ -55,11 +56,11 @@ def _terminate_process(pid: int) -> None:
             check=False,
         )
     else:
-        # Use kill on Unix-like systems
-        subprocess.run(  # pylint: disable=subprocess-run-check # nosec
-            ["kill", str(pid)],
-            check=False,
-        )
+        # Use os.kill on Unix-like systems to avoid dependency on the kill binary
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # Process already exited
 
 
 def test_no_corruption() -> None:
