@@ -70,7 +70,9 @@ class LocalResource:
         for pname, ptype in cls._annotations().items():
             if pname.startswith("_"):
                 continue
-            kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
+            # Use None as fallback for Optional fields absent from legacy JSON
+            # (e.g. fields added by migrate_format that haven't been written yet).
+            kwargs[pname] = deserialize(obj=obj.get(pname), otype=ptype)
         return cls(**kwargs)
 
     @classmethod

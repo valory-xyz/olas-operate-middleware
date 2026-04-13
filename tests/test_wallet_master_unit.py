@@ -627,6 +627,7 @@ class TestMigrateFormat:
             "safes": {"gnosis": SAFE_ADDR},
             "safe_chains": ["gnosis"],
             "ledger_type": "ethereum",
+            "canonical_backup_owner": None,
         }
 
     def test_migrates_old_safe_key_to_safes_dict(self, tmp_path: Path) -> None:
