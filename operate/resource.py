@@ -84,9 +84,7 @@ class LocalResource:
             # Handle both typing.Union (t.Optional[X]) and types.UnionType (X | None).
             _origin = t.get_origin(ptype)
             _args = t.get_args(ptype)
-            is_optional = (
-                _origin is t.Union and type(None) in _args
-            ) or (
+            is_optional = (_origin is t.Union and type(None) in _args) or (
                 isinstance(ptype, types.UnionType) and type(None) in _args
             )
             if is_optional:
