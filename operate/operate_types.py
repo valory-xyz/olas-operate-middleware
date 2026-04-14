@@ -253,6 +253,9 @@ class AchievementsNotifications(LocalResource):
     _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
 
 
+PEARL_STORE_VERSION = 1
+
+
 @dataclass
 class PearlStore(LocalResource):
     """Persistent key-value store backed by pearl_store.json."""
@@ -265,26 +268,46 @@ class PearlStore(LocalResource):
 
     @property
     def json(self) -> t.Dict:
-        """Serialize as a flat dict (file root is the data itself)."""
-        return dict(self.data)
+        """Serialize using a wrapped versioned schema."""
+        return {"version": PEARL_STORE_VERSION, "data": dict(self.data)}
 
     @classmethod
     def from_json(cls, obj: t.Dict) -> "PearlStore":
-        """Load PearlStore from a flat dict (file root is the data itself)."""
+        """Load PearlStore from a wrapped dict."""
         path = obj.get("path")
-        data = {k: v for k, v in obj.items() if k != "path"}
+        data = obj.get("data", {})
         return cls(path=path, data=data)
 
     @classmethod
     def load(cls, path: Path) -> "PearlStore":
-        """Load PearlStore while preserving a top-level user key named 'path'."""
+        """Load PearlStore using the current wrapped schema only."""
         file = (
             path / cls._file
             if cls._file is not None and path.name != cls._file
             else path
         )
-        data = json.loads(file.read_text(encoding="utf-8"))
-        return cls(path=path, data=data)
+        raw = json.loads(file.read_text(encoding="utf-8"))
+
+        if not isinstance(raw, dict):
+            raise RuntimeError("Pearl store root must be a JSON object.")
+        if "version" not in raw:
+            raise RuntimeError(
+                "Pearl store uses a legacy format. Run MigrationManager.migrate_pearl_store() before loading it."
+            )
+
+        version = raw["version"]
+        if not isinstance(version, int):
+            raise RuntimeError("Pearl store version must be an integer.")
+        if version > PEARL_STORE_VERSION:
+            raise RuntimeError(
+                f"Pearl store in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only store versions <= {PEARL_STORE_VERSION} are supported by this version of olas-operate-middleware."
+            )
+
+        data_obj = raw.get("data", {})
+        if not isinstance(data_obj, dict):
+            raise RuntimeError("Pearl store data must be a dictionary.")
+
+        return cls(path=path, data=data_obj)
 
     @classmethod
     def load_or_create(cls, path: Path) -> "PearlStore":

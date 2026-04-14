@@ -26,9 +26,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from operate.constants import PEARL_STORE_JSON
 from operate.keys import KeysManager
 from operate.migration import MigrationManager
-from operate.operate_types import LedgerType
+from operate.operate_types import LedgerType, PEARL_STORE_VERSION
 from operate.services.service import SERVICE_CONFIG_PREFIX, SERVICE_CONFIG_VERSION
 
 
@@ -224,6 +225,95 @@ class TestMigrateServices:
 
         with pytest.raises(RuntimeError, match="bafybei"):
             manager.migrate_services(mock_service_manager)
+
+
+class TestMigratePearlStore:
+    """Tests for MigrationManager.migrate_pearl_store."""
+
+    def test_migrate_pearl_store_missing_file_is_noop(self, tmp_path: Path) -> None:
+        """migrate_pearl_store does nothing when pearl_store.json is missing."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        manager.migrate_pearl_store()
+
+        assert not (tmp_path / PEARL_STORE_JSON).exists()
+
+    def test_migrate_pearl_store_private_helper_missing_file_returns_false(
+        self, tmp_path: Path
+    ) -> None:
+        """_migrate_pearl_store returns False when the target file is missing."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        migrated = manager._migrate_pearl_store(  # pylint: disable=protected-access
+            tmp_path / PEARL_STORE_JSON
+        )
+
+        assert migrated is False
+
+    def test_migrate_pearl_store_rewrites_legacy_flat_file(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_pearl_store rewrites legacy flat PearlStore files."""
+        legacy_data = {"foo": "bar", "path": {"inner": 123}}
+        store_path = tmp_path / PEARL_STORE_JSON
+        store_path.write_text(json.dumps(legacy_data), encoding="utf-8")
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        manager.migrate_pearl_store()
+
+        assert json.loads(store_path.read_text(encoding="utf-8")) == {
+            "version": PEARL_STORE_VERSION,
+            "data": legacy_data,
+        }
+
+    def test_migrate_pearl_store_leaves_current_wrapped_file_unchanged(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_pearl_store leaves current wrapped PearlStore files unchanged."""
+        wrapped_data = {"version": PEARL_STORE_VERSION, "data": {"foo": "bar"}}
+        store_path = tmp_path / PEARL_STORE_JSON
+        original_content = json.dumps(wrapped_data)
+        store_path.write_text(original_content, encoding="utf-8")
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        manager.migrate_pearl_store()
+
+        assert store_path.read_text(encoding="utf-8") == original_content
+
+    def test_migrate_pearl_store_newer_version_raises(self, tmp_path: Path) -> None:
+        """migrate_pearl_store raises for files created with a newer version."""
+        store_path = tmp_path / PEARL_STORE_JSON
+        store_path.write_text(
+            json.dumps({"version": PEARL_STORE_VERSION + 1, "data": {}}),
+            encoding="utf-8",
+        )
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        with pytest.raises(RuntimeError, match="newer version"):
+            manager.migrate_pearl_store()
+
+    def test_migrate_pearl_store_non_dict_root_raises(self, tmp_path: Path) -> None:
+        """migrate_pearl_store raises when the root JSON value is not an object."""
+        store_path = tmp_path / PEARL_STORE_JSON
+        store_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        with pytest.raises(RuntimeError, match="JSON object"):
+            manager.migrate_pearl_store()
+
+    def test_migrate_pearl_store_non_integer_version_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_pearl_store raises when the version field is not an integer."""
+        store_path = tmp_path / PEARL_STORE_JSON
+        store_path.write_text(
+            json.dumps({"version": "1", "data": {}}),
+            encoding="utf-8",
+        )
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        with pytest.raises(RuntimeError, match="integer"):
+            manager.migrate_pearl_store()
 
 
 class TestMigrateQsConfigs:

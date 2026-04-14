@@ -196,6 +196,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self._migration_manager.migrate_services(self.service_manager())
         self._migration_manager.migrate_wallets(self.wallet_manager)
         self._migration_manager.migrate_qs_configs()
+        self._migration_manager.migrate_pearl_store()
 
     @property
     def password(self) -> t.Optional[str]:

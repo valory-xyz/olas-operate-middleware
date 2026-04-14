@@ -42,6 +42,7 @@ from operate.cli import (
     service_not_found_error,
 )
 from operate.constants import OPERATE, SERVICES_DIR
+from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus
 from operate.services.funding_manager import FundingInProgressError
 from operate.wallet.master import InsufficientFundsException
@@ -2877,10 +2878,12 @@ class TestExtraCoverageLines:
 class TestPearlStoreEndpoints:
     """Tests for /api/store GET, POST, and DELETE endpoints."""
 
-    def _open_store_app(self, tmp_path: Path) -> tuple:
+    def _open_store_app(self, tmp_path: Path, *, migrate_store: bool = True) -> tuple:
         """Open app with a real _path so pearl_store.json file I/O works."""
         m = _make_mock_operate()
         m._path = tmp_path
+        if migrate_store:
+            MigrationManager(home=tmp_path, logger=MagicMock()).migrate_pearl_store()
         return _open_app(m)
 
     def test_get_store_returns_empty_when_file_missing(self, tmp_path: Path) -> None:
@@ -2897,7 +2900,7 @@ class TestPearlStoreEndpoints:
         """GET /api/store returns stored data when pearl_store.json exists."""
         store_data = {"foo": "bar", "nested": {"key": True}}
         (tmp_path / "pearl_store.json").write_text(
-            json.dumps(store_data), encoding="utf-8"
+            json.dumps({"version": 1, "data": store_data}), encoding="utf-8"
         )
         stack, app, _, _ = self._open_store_app(tmp_path)
         with stack:
@@ -2907,10 +2910,29 @@ class TestPearlStoreEndpoints:
         assert resp.status_code == HTTPStatus.OK
         assert resp.json() == {"data": store_data}
 
+    def test_get_store_migrates_legacy_flat_file(self, tmp_path: Path) -> None:
+        """GET /api/store migrates a legacy flat file to wrapped versioned schema."""
+        legacy_store_data = {"foo": "bar", "path": {"inner": 123}}
+        store_path = tmp_path / "pearl_store.json"
+        store_path.write_text(json.dumps(legacy_store_data), encoding="utf-8")
+
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/store")
+
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"data": legacy_store_data}
+        assert json.loads(store_path.read_text(encoding="utf-8")) == {
+            "version": 1,
+            "data": legacy_store_data,
+        }
+
     def test_get_store_returns_500_when_file_invalid_json(self, tmp_path: Path) -> None:
         """GET /api/store returns 500 when pearl_store.json has invalid JSON."""
         (tmp_path / "pearl_store.json").write_text("not valid json", encoding="utf-8")
-        stack, app, _, _ = self._open_store_app(tmp_path)
+        stack, app, _, _ = self._open_store_app(tmp_path, migrate_store=False)
         with stack:
             app._server = MagicMock()
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -2947,7 +2969,10 @@ class TestPearlStoreEndpoints:
         assert resp.json() == {"success": True}
         store_path = tmp_path / "pearl_store.json"
         assert store_path.exists()
-        assert json.loads(store_path.read_text(encoding="utf-8"))["myKey"] is True
+        assert json.loads(store_path.read_text(encoding="utf-8")) == {
+            "version": 1,
+            "data": {"myKey": True},
+        }
 
     def test_post_store_dot_notation_key_creates_nested_structure(
         self, tmp_path: Path
@@ -2962,8 +2987,13 @@ class TestPearlStoreEndpoints:
                     json={"key": "trader.isInitialFunded", "value": True},
                 )
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
-        assert data["trader"]["isInitialFunded"] is True
+        persisted = json.loads(
+            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
+        )
+        assert persisted == {
+            "version": 1,
+            "data": {"trader": {"isInitialFunded": True}},
+        }
 
     def test_post_store_key_named_path_is_stored_without_localresource_collision(
         self, tmp_path: Path
@@ -2987,7 +3017,10 @@ class TestPearlStoreEndpoints:
         persisted = json.loads(
             (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
         )
-        assert persisted == {"path": {"inner": 123}}
+        assert persisted == {
+            "version": 1,
+            "data": {"path": {"inner": 123}},
+        }
 
     def test_post_store_overwrites_non_dict_intermediate(self, tmp_path: Path) -> None:
         """POST /api/store replaces a non-dict intermediate value with a dict."""
@@ -3003,8 +3036,10 @@ class TestPearlStoreEndpoints:
                     json={"key": "trader.isInitialFunded", "value": True},
                 )
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
-        assert data["trader"]["isInitialFunded"] is True
+        persisted = json.loads(
+            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
+        )
+        assert persisted["data"]["trader"]["isInitialFunded"] is True
 
     def test_delete_store_simple_key_removes_entry(self, tmp_path: Path) -> None:
         """DELETE /api/store/{key} removes a top-level key."""
@@ -3018,9 +3053,11 @@ class TestPearlStoreEndpoints:
                 resp = client.delete("/api/store/myKey")
         assert resp.status_code == HTTPStatus.OK
         assert resp.json() == {"success": True}
-        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
-        assert "myKey" not in data
-        assert data["other"] == 1
+        persisted = json.loads(
+            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
+        )
+        assert "myKey" not in persisted["data"]
+        assert persisted["data"]["other"] == 1
 
     def test_delete_store_dot_notation_removes_nested_key(self, tmp_path: Path) -> None:
         """DELETE /api/store/{key} with dot-notation removes a nested key."""
@@ -3034,12 +3071,14 @@ class TestPearlStoreEndpoints:
             with TestClient(app) as client:
                 resp = client.delete("/api/store/trader.isInitialFunded")
         assert resp.status_code == HTTPStatus.OK
-        data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
-        assert "isInitialFunded" not in data["trader"]
-        assert data["trader"]["other"] == "val"
+        persisted = json.loads(
+            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
+        )
+        assert "isInitialFunded" not in persisted["data"]["trader"]
+        assert persisted["data"]["trader"]["other"] == "val"
 
     def test_delete_store_non_dict_intermediate_is_noop(self, tmp_path: Path) -> None:
-        """DELETE /api/store/{key} is a no-op when an intermediate is not a dict."""
+        """DELETE /api/store/{key} keeps payload unchanged when an intermediate is not a dict."""
         original = {"trader": "not-a-dict"}
         (tmp_path / "pearl_store.json").write_text(
             json.dumps(original), encoding="utf-8"
@@ -3051,7 +3090,7 @@ class TestPearlStoreEndpoints:
                 resp = client.delete("/api/store/trader.isInitialFunded")
         assert resp.status_code == HTTPStatus.OK
         data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
-        assert data == original
+        assert data == {"version": 1, "data": original}
 
     def test_post_store_dot_notation_key_with_empty_segment_returns_400(
         self, tmp_path: Path
