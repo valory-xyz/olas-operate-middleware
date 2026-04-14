@@ -22,6 +22,7 @@
 import base64
 import copy
 import enum
+import json
 import os
 import threading
 import typing as t
@@ -272,6 +273,17 @@ class PearlStore(LocalResource):
         """Load PearlStore from a flat dict (file root is the data itself)."""
         path = obj.get("path")
         data = {k: v for k, v in obj.items() if k != "path"}
+        return cls(path=path, data=data)
+
+    @classmethod
+    def load(cls, path: Path) -> "PearlStore":
+        """Load PearlStore while preserving a top-level user key named 'path'."""
+        file = (
+            path / cls._file
+            if cls._file is not None and path.name != cls._file
+            else path
+        )
+        data = json.loads(file.read_text(encoding="utf-8"))
         return cls(path=path, data=data)
 
     @classmethod

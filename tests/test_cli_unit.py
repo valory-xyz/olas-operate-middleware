@@ -2965,6 +2965,30 @@ class TestPearlStoreEndpoints:
         data = json.loads((tmp_path / "pearl_store.json").read_text(encoding="utf-8"))
         assert data["trader"]["isInitialFunded"] is True
 
+    def test_post_store_key_named_path_is_stored_without_localresource_collision(
+        self, tmp_path: Path
+    ) -> None:
+        """POST /api/store with key 'path' stores a normal top-level entry."""
+        stack, app, _, _ = self._open_store_app(tmp_path)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                post_resp = client.post(
+                    "/api/store",
+                    json={"key": "path", "value": {"inner": 123}},
+                )
+                get_resp = client.get("/api/store")
+
+        assert post_resp.status_code == HTTPStatus.OK
+        assert post_resp.json() == {"success": True}
+        assert get_resp.status_code == HTTPStatus.OK
+        assert get_resp.json() == {"data": {"path": {"inner": 123}}}
+
+        persisted = json.loads(
+            (tmp_path / "pearl_store.json").read_text(encoding="utf-8")
+        )
+        assert persisted == {"path": {"inner": 123}}
+
     def test_post_store_overwrites_non_dict_intermediate(self, tmp_path: Path) -> None:
         """POST /api/store replaces a non-dict intermediate value with a dict."""
         (tmp_path / "pearl_store.json").write_text(
