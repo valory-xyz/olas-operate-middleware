@@ -24,6 +24,7 @@ import json
 import os
 import platform
 import shutil
+import types
 import typing as t
 from pathlib import Path
 
@@ -47,9 +48,15 @@ class LocalResource:
 
     @classmethod
     def _annotations(cls) -> t.Dict[str, t.Any]:
-        """Get class annotations in a Python-version-safe way."""
+        """Get class annotations in a Python-version-safe way.
+
+        Uses eval_str=True so that Python 3.14's deferred-evaluation
+        annotations (PEP 749) are resolved to actual type objects rather
+        than ForwardRef or raw strings.  Falls back to __annotations__ if
+        inspect.get_annotations is unavailable.
+        """
         try:
-            return dict(inspect.get_annotations(cls, eval_str=False))
+            return dict(inspect.get_annotations(cls, eval_str=True))
         except Exception:  # pylint: disable=broad-except  # nosec
             return dict(getattr(cls, "__annotations__", {}))
 
@@ -74,8 +81,13 @@ class LocalResource:
             # so that newly-added Optional fields (e.g. canonical_backup_owner)
             # load cleanly from legacy JSON without a value.
             # Required fields still use obj[pname] and raise KeyError if missing.
-            is_optional = t.get_origin(ptype) is t.Union and type(None) in t.get_args(
-                ptype
+            # Handle both typing.Union (t.Optional[X]) and types.UnionType (X | None).
+            _origin = t.get_origin(ptype)
+            _args = t.get_args(ptype)
+            is_optional = (
+                _origin is t.Union and type(None) in _args
+            ) or (
+                isinstance(ptype, types.UnionType) and type(None) in _args
             )
             if is_optional:
                 kwargs[pname] = deserialize(obj=obj.get(pname), otype=ptype)
