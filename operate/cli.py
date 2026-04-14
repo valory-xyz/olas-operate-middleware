@@ -979,7 +979,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             backup_owner_raw = data.get("backup_owner")
             if not backup_owner_raw:
                 return JSONResponse(
-                    content={"error": "'backup_owner' is required when chain is 'all'."},
+                    content={
+                        "error": "'backup_owner' is required when chain is 'all'."
+                    },
                     status_code=HTTPStatus.BAD_REQUEST,
                 )
 
@@ -1005,9 +1007,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
             # Use web3 from any chain ledger api to checksum the address.
-            sample_chain = (
-                next(iter(wallet.safes)) if wallet.safes else None
-            )
+            sample_chain = next(iter(wallet.safes)) if wallet.safes else None
             if sample_chain is not None:
                 ledger_api = wallet.ledger_api(chain=sample_chain)
                 backup_owner = ledger_api.api.to_checksum_address(backup_owner_raw)
@@ -1023,10 +1023,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     content={"error": "Wallet Already Linked"},
                     status_code=HTTPStatus.BAD_REQUEST,
                 )
-
-            # Persist the canonical backup owner.
-            wallet.canonical_backup_owner = backup_owner
-            wallet.store()
 
             # Apply to all chains.
             results = []
@@ -1053,6 +1049,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                         }
                     )
                     all_succeeded = False
+
+            # Persist the canonical backup owner after all transactions complete.
+            wallet.canonical_backup_owner = backup_owner
+            wallet.store()
 
             return JSONResponse(
                 content={
@@ -1097,7 +1097,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/wallet/safe/backup_owner/sync")
-    async def _sync_backup_owner(request: Request) -> JSONResponse:  # pylint: disable=unused-variable
+    async def _sync_backup_owner(
+        request: Request,
+    ) -> JSONResponse:  # pylint: disable=unused-variable
         """Sync canonical backup owner to all chains."""
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
@@ -1123,7 +1125,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=result)
 
     @app.get("/api/wallet/safe/backup_owner/status")
-    async def _backup_owner_status(request: Request) -> JSONResponse:  # pylint: disable=unused-variable
+    async def _backup_owner_status(
+        request: Request,
+    ) -> JSONResponse:  # pylint: disable=unused-variable
         """Return per-chain backup owner status."""
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR

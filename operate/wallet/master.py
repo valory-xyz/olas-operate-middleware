@@ -276,7 +276,9 @@ class EthereumMasterWallet(MasterWallet):
     safe_chains: t.List[Chain] = field(default_factory=list)
     ledger_type: LedgerType = LedgerType.ETHEREUM
     safe_nonce: t.Optional[int] = None  # For cross-chain reusability
-    canonical_backup_owner: t.Optional[str] = None  # Canonical backup owner across all chains
+    canonical_backup_owner: t.Optional[str] = (
+        None  # Canonical backup owner across all chains
+    )
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
@@ -792,9 +794,7 @@ class EthereumMasterWallet(MasterWallet):
 
         # Prefer explicitly provided backup_owner; fall back to canonical
         effective_backup_owner = (
-            backup_owner
-            if backup_owner is not None
-            else self.canonical_backup_owner
+            backup_owner if backup_owner is not None else self.canonical_backup_owner
         )
         if effective_backup_owner is not None:
             add_owner(
@@ -890,9 +890,8 @@ class EthereumMasterWallet(MasterWallet):
             ledger_api = self.ledger_api(chain=chain)
             owners = get_owners(ledger_api=ledger_api, safe=safe)
             current_owners = [o for o in owners if o != self.address]
-            current_backup = current_owners[0] if current_owners else None
 
-            if current_backup == self.canonical_backup_owner:
+            if self.canonical_backup_owner in current_owners:
                 results.append(
                     {
                         "chain": chain.value,
@@ -959,10 +958,10 @@ class EthereumMasterWallet(MasterWallet):
             backup_owners = [o for o in owners if o != self.address]
             current_backup = backup_owners[0] if backup_owners else None
 
-            synced = current_backup == self.canonical_backup_owner
+            synced = self.canonical_backup_owner in backup_owners
             if not synced:
                 all_chains_synced = False
-            if current_backup is None:
+            if not backup_owners:
                 any_backup_missing = True
 
             chains_status.append(
