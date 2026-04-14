@@ -3126,3 +3126,122 @@ class TestGetBackupOwnerStatus:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.get("/api/wallet/safe/backup_owner/status")
         assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_get_backup_owner_status_no_account(self) -> None:
+        """Returns 404 when user account does not exist (line 1135)."""
+        m = _make_mock_operate_with_wallet()
+        m.user_account = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_get_backup_owner_status_no_master_eoa(self) -> None:
+        """Returns 400 when no Ethereum wallet exists (line 1142)."""
+        m = _make_mock_operate_with_wallet(wallet_exists=False)
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "No Master EOA found" in resp.json()["error"]
+
+
+class TestPutSafeAllChainsEdgeCases:
+    """Additional edge-case tests for PUT /api/wallet/safe with chain='all'."""
+
+    def test_put_safe_all_chains_no_master_eoa(self) -> None:
+        """Returns 400 when no Ethereum wallet exists (line 1005)."""
+        m = _make_mock_operate_with_wallet(wallet_exists=False)
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "No Master EOA found" in resp.json()["error"]
+
+    def test_put_safe_all_chains_no_safes_skips_checksum(self) -> None:
+        """When wallet has no safes the raw backup_owner is used (line 1017)."""
+        m = _make_mock_operate_with_wallet(safes={})
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.canonical_backup_owner = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        # canonical_backup_owner is the raw address (no checksum call needed)
+        assert body["canonical_backup_owner"] == BACKUP_ADDR
+
+    def test_put_safe_all_chains_update_backup_owner_exception(self) -> None:
+        """Exception during update_backup_owner is captured in results (lines 1045-1053)."""
+        m = _make_mock_operate_with_wallet()
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.canonical_backup_owner = None
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        wallet_mock.update_backup_owner.side_effect = RuntimeError("tx failed")
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["all_succeeded"] is False
+        assert any(not r["updated"] for r in body["results"])
+        assert any("tx failed" in r["message"] for r in body["results"])
+
+
+class TestPostBackupOwnerSyncEdgeCases:
+    """Additional edge-case tests for POST /api/wallet/safe/backup_owner/sync."""
+
+    def test_post_backup_owner_sync_no_account(self) -> None:
+        """Returns 404 when user account does not exist (line 1107)."""
+        m = _make_mock_operate_with_wallet()
+        m.user_account = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_post_backup_owner_sync_no_master_eoa(self) -> None:
+        """Returns 400 when no Ethereum wallet exists (line 1114)."""
+        m = _make_mock_operate_with_wallet(wallet_exists=False)
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "No Master EOA found" in resp.json()["error"]
