@@ -70,9 +70,17 @@ class LocalResource:
         for pname, ptype in cls._annotations().items():
             if pname.startswith("_"):
                 continue
-            # Use None as fallback for Optional fields absent from legacy JSON
-            # (e.g. fields added by migrate_format that haven't been written yet).
-            kwargs[pname] = deserialize(obj=obj.get(pname), otype=ptype)
+            # Use obj.get() (returns None if absent) only for Optional fields,
+            # so that newly-added Optional fields (e.g. canonical_backup_owner)
+            # load cleanly from legacy JSON without a value.
+            # Required fields still use obj[pname] and raise KeyError if missing.
+            is_optional = t.get_origin(ptype) is t.Union and type(None) in t.get_args(
+                ptype
+            )
+            if is_optional:
+                kwargs[pname] = deserialize(obj=obj.get(pname), otype=ptype)
+            else:
+                kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
         return cls(**kwargs)
 
     @classmethod
