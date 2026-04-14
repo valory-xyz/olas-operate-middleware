@@ -2923,7 +2923,7 @@ class TestPutSafeAllChains:
                     json={
                         "chain": "all",
                         "backup_owner": BACKUP_ADDR,
-                        "password": "pass",  # nosec B106
+                        "password": "pass",  # nosec
                     },
                 )
         assert resp.status_code == HTTPStatus.OK
@@ -2957,7 +2957,7 @@ class TestPutSafeAllChains:
                     json={
                         "chain": "all",
                         "backup_owner": BACKUP_ADDR,
-                        "password": "wrong",  # nosec B106
+                        "password": "wrong",  # nosec
                     },
                 )
         assert resp.status_code == HTTPStatus.UNAUTHORIZED
@@ -2977,7 +2977,7 @@ class TestPutSafeAllChains:
                     json={
                         "chain": "all",
                         "backup_owner": BACKUP_ADDR,
-                        "password": "pass",  # nosec B106
+                        "password": "pass",  # nosec
                     },
                 )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
@@ -2991,7 +2991,7 @@ class TestPutSafeAllChains:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.put(
                     "/api/wallet/safe",
-                    json={"chain": "all", "password": "pass"},  # nosec B106
+                    json={"chain": "all", "password": "pass"},  # nosec
                 )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
         assert "backup_owner" in resp.json()["error"].lower()

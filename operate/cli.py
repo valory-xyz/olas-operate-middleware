@@ -953,7 +953,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.put("/api/wallet/safe")
-    async def _update_safe(request: Request) -> t.List[t.Dict]:
+    async def _update_safe(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> t.List[t.Dict]:
         """Update wallet safe — single-chain or bulk (chain == "all")."""
         # TODO: Extract login check as decorator
         if operate.user_account is None:

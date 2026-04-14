@@ -266,7 +266,9 @@ class MasterWallet(LocalResource):
 
 
 @dataclass
-class EthereumMasterWallet(MasterWallet):
+class EthereumMasterWallet(
+    MasterWallet
+):  # pylint: disable=too-many-instance-attributes
     """Master wallet manager."""
 
     path: Path

@@ -1382,9 +1382,7 @@ class TestSyncBackupOwner:
         assert synced_chain_results[Chain.GNOSIS.value]["updated"] is False
         assert synced_chain_results[Chain.BASE.value]["updated"] is True
         # update_backup_owner called exactly once (for BASE only)
-        mock_update.assert_called_once_with(
-            chain=Chain.BASE, backup_owner=BACKUP_ADDR
-        )
+        mock_update.assert_called_once_with(chain=Chain.BASE, backup_owner=BACKUP_ADDR)
 
     def test_sync_backup_owner_records_failure(self, tmp_path: Path) -> None:
         """sync_backup_owner marks all_succeeded=False when an update fails."""
@@ -1408,9 +1406,7 @@ class TestSyncBackupOwner:
 class TestBackupOwnerStatus:
     """Tests for EthereumMasterWallet.backup_owner_status."""
 
-    def test_backup_owner_status_returns_per_chain_state(
-        self, tmp_path: Path
-    ) -> None:
+    def test_backup_owner_status_returns_per_chain_state(self, tmp_path: Path) -> None:
         """backup_owner_status returns correct synced/missing state per chain."""
         wallet = _make_wallet(
             tmp_path,
@@ -1559,9 +1555,7 @@ class TestCreateSafeAutoAppliesCanonical:
 class TestMigrateFormatAddsCanonicalBackupOwner:
     """Tests for migrate_format canonical_backup_owner back-fill."""
 
-    def test_migrate_format_adds_canonical_backup_owner(
-        self, tmp_path: Path
-    ) -> None:
+    def test_migrate_format_adds_canonical_backup_owner(self, tmp_path: Path) -> None:
         """migrate_format adds canonical_backup_owner: null for legacy files."""
         data = {
             "address": EOA_ADDR,
@@ -1576,9 +1570,7 @@ class TestMigrateFormatAddsCanonicalBackupOwner:
         assert migrated is True
         import json as _json
 
-        result = _json.loads(
-            (tmp_path / "ethereum.json").read_text(encoding="utf-8")
-        )
+        result = _json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
         assert "canonical_backup_owner" in result
         assert result["canonical_backup_owner"] is None
 
