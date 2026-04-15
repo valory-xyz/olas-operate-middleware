@@ -8,13 +8,7 @@ import re
 import sys
 from typing import Any, Dict
 
-COMMIT_COMMAND_PATTERN = re.compile(
-    r"(^|[;&|()\s])"
-    r"(?:env\s+[^;&|()\s]+\s+)*"
-    r"git"
-    r"(?:\s+-[^\s]+|\s+--[^\s]+|\s+-C\s+[^\s]+|\s+--git-dir\s+[^\s]+|\s+--work-tree\s+[^\s]+)*"
-    r"\s+commit(?:[\s;|&()]|$)"
-)
+COMMIT_COMMAND_PATTERN = re.compile(r"(^|[;&|()\s])git\b[^\n]*\bcommit\b")
 
 BLOCK_MESSAGE: Dict[str, Any] = {
     "systemMessage": (
