@@ -140,7 +140,7 @@ class TestRealGitHubDownload:
 
     @pytest.mark.integration
     @pytest.mark.github
-    @pytest.mark.flaky(reruns=2, reruns_delay=5)
+    @pytest.mark.flaky(reruns=3, reruns_delay=5)
     def test_real_github_download_and_extract(self, tmp_path: Path) -> None:
         """Test real GitHub download and extraction of agent.zip."""
         # Arrange
@@ -172,7 +172,7 @@ class TestRealGitHubDownload:
 
     @pytest.mark.integration
     @pytest.mark.github
-    @pytest.mark.flaky(reruns=2, reruns_delay=5)
+    @pytest.mark.flaky(reruns=3, reruns_delay=5)
     def test_sha256_verification_and_redownload(self, tmp_path: Path) -> None:
         """Test that changing a byte triggers redownload."""
         # Arrange
@@ -206,7 +206,7 @@ class TestRealGitHubDownload:
 
     @pytest.mark.integration
     @pytest.mark.github
-    @pytest.mark.flaky(reruns=2, reruns_delay=5)
+    @pytest.mark.flaky(reruns=3, reruns_delay=5)
     @pytest.mark.slow
     def test_full_setup_agent_with_real_download(self, tmp_path: Path) -> None:
         """Full integration test with real GitHub download."""
