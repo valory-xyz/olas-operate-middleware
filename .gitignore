@@ -66,3 +66,4 @@ prof/
 .coverage
 coverage.xml
 htmlcov/
+.worktrees/

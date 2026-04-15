@@ -105,6 +105,24 @@ Service Status Updates
 
 ## Development Commands
 
+### Most Common Commands
+```bash
+# Install dependencies
+poetry install
+
+# Run the recommended local test suite
+tox -e unit-tests
+
+# Run the main verification checks before finishing code changes
+tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+```
+
+### Daily Workflow
+1. Make code changes and run focused unit tests with `tox -e unit-tests -- <test path> -v`
+2. Run `tox -e unit-tests` before considering the change complete
+3. Run the full lint/type/security suite before committing or opening a PR
+4. Only run `tox -e integration-tests -- <test path> -v` when working on RPC-dependent behavior and the required testnet environment variables are available
+
 ### Environment Setup
 ```bash
 # Install dependencies
@@ -125,7 +143,7 @@ poetry shell
 **Required workflow before every commit:**
 1. Make your changes
 2. Commit (hook auto-formats staged files): `git commit -m "message"`
-3. Run ALL linters: `tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy`
+3. Run ALL linters: `tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy`
 4. Verify tests pass: `tox -e unit-tests`
 
 ```bash
@@ -196,6 +214,12 @@ operate daemon
 ```
 
 ## Architecture
+
+### Where To Look First
+- Daemon, CLI entrypoint, HTTP API routes and request handling: `operate/cli.py`
+- Service lifecycle and deployment logic: `operate/services/` - especially `manager.py`, `service.py`, `protocol.py`
+- Wallet and recovery workflows: `operate/wallet/`
+- Chain profiles and bridge logic: `operate/ledger/`, `operate/bridge/`
 
 ### Core Components
 
