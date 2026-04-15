@@ -115,10 +115,10 @@ poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e iso
 ```
 
 ### Daily Workflow
-1. Make changes and run focused unit tests with `poetry run tox -e unit-tests -- <test path> -v`
+1. Make changes and run focused unit tests with `poetry run tox -e unit-tests -- tests/test_my_module.py -v`
 2. Run `poetry run tox -e unit-tests` before considering the change complete
 3. Run the full lint/type/security suite before committing or opening a PR
-4. Run `poetry run tox -e integration-tests -- <test path>::<test_name> -v` only for RPC-dependent behavior when testnet env vars are available
+4. Run `poetry run tox -e integration-tests -- tests/test_x.py::test_function_name -v` only for RPC-dependent behavior when testnet env vars are available
 
 ### Environment Setup
 ```bash
@@ -160,7 +160,7 @@ poetry run tox -e unit-tests -- tests/test_services_service.py::test_function_na
 ```
 
 **Important:**
-- Always use `poetry run tox -e unit-tests` locally, not `poetry run pytest`
+- Prefer `poetry run tox -e unit-tests` locally for the standard unit/integration suites; use direct `pytest` when following documented repository workflows that require it (for example, VCR cassette recording/replay)
 - Unit tests run without network/RPC dependencies
 - Integration tests are marked with `@pytest.mark.integration` and are slow; run selectively
 - For transaction-related code changes that modify or add a blockchain transaction flow, run or add a Tenderly-backed integration test for the new flow when `.env` RPC/test credentials are available

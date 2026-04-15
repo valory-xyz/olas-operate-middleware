@@ -10,7 +10,7 @@ In OLAS, staking is not just a yield toggle.
 It is a service-level operating mode that attaches protocol and economic consequences to a service.
 
 The stable pattern is:
-- a service can technically operate with or without a staking program but it's mostly staked,
+- a service can technically operate with or without a staking program, although most services are staked in practice,
 - the chosen staking program is attached to that service on a chain,
 - the staking context changes what the service must lock, hold, or fund,
 - the staking context also changes what the service can earn, claim, reset, or unstake.

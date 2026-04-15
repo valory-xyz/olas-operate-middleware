@@ -140,7 +140,7 @@ The project uses several tools to maintain code quality. All are configured in `
 
 ```bash
 # Run all quality checks
-poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
+poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 ```
 
 **Git hooks**: Enable with `git config core.hooksPath .githooks`.
