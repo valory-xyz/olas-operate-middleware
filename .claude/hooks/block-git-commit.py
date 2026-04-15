@@ -18,11 +18,9 @@ COMMIT_COMMAND_PATTERN = re.compile(
 
 BLOCK_MESSAGE: Dict[str, Any] = {
     "systemMessage": (
-        "Before committing, run the middleware-code-review skill, complete its "
-        "strict pre-commit checklist, and rerun relevant tests/checks."
-    ),
-    "continue": False,
-    "stopReason": "Run middleware-code-review and complete its checklist before git commit.",
+        "Before committing, run the middleware-code-review skill and complete its "
+        "strict pre-commit checklist."
+    )
 }
 
 
