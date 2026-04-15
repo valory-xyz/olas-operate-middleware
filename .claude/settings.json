@@ -6,11 +6,11 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash(git commit *)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "printf '{\"systemMessage\":\"Before committing, run the middleware-code-review skill, complete its strict pre-commit checklist, and rerun relevant tests/checks.\",\"continue\":false,\"stopReason\":\"Run middleware-code-review and complete its checklist before git commit.\"}'",
+            "command": "python3 .claude/hooks/block-git-commit.py",
             "timeout": 10,
             "statusMessage": "Enforcing pre-commit code review"
           }
