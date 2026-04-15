@@ -953,8 +953,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.put("/api/wallet/safe")
-    async def _update_safe(request: Request) -> t.List[t.Dict]:
-        """Update wallet safe"""
+    async def _update_safe(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> t.List[t.Dict]:
+        """Update wallet safe — single-chain or bulk (chain == "all")."""
         # TODO: Extract login check as decorator
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
@@ -970,9 +972,101 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        chain = Chain(data["chain"])
-        ledger_type = chain.ledger_type
+        # Normalise chain to a list; "all" means every chain in the wallet.
+        chain_value = data["chain"]
         manager = operate.wallet_manager
+
+        if chain_value == "all":
+            # Bulk path — requires password verification for canonicalisation.
+            backup_owner_raw = data.get("backup_owner")
+            if not backup_owner_raw:
+                return JSONResponse(
+                    content={
+                        "error": "'backup_owner' is required when chain is 'all'."
+                    },
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
+
+            password = data.get("password")
+            if not password:
+                return JSONResponse(
+                    content={"error": "'password' is required when chain is 'all'."},
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
+
+            if not operate.user_account.is_valid(password=password):
+                return JSONResponse(
+                    content={"error": MSG_INVALID_PASSWORD},
+                    status_code=HTTPStatus.UNAUTHORIZED,
+                )
+
+            # Load an Ethereum wallet to resolve checksum address.
+            if not manager.exists(ledger_type=LedgerType.ETHEREUM):
+                return JSONResponse(
+                    content={"error": "No Master EOA found."},
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
+
+            wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
+            # Use web3 from any chain ledger api to checksum the address.
+            sample_chain = next(iter(wallet.safes)) if wallet.safes else None
+            if sample_chain is not None:
+                ledger_api = wallet.ledger_api(chain=sample_chain)
+                backup_owner = ledger_api.api.to_checksum_address(backup_owner_raw)
+            else:
+                backup_owner = backup_owner_raw
+
+            # Guard: canonical already set to a *different* address means update.
+            if (
+                wallet.canonical_backup_owner is not None
+                and wallet.canonical_backup_owner == backup_owner
+            ):
+                return JSONResponse(
+                    content={"error": "Wallet Already Linked"},
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
+
+            # Apply to all chains.
+            results = []
+            all_succeeded = True
+            for chain in list(wallet.safes):
+                try:
+                    wallet.update_backup_owner(
+                        chain=chain,
+                        backup_owner=backup_owner,
+                    )
+                    results.append(
+                        {
+                            "chain": chain.value,
+                            "updated": True,
+                            "message": "Backup owner updated successfully",
+                        }
+                    )
+                except Exception as exc:  # pylint: disable=broad-except
+                    results.append(
+                        {
+                            "chain": chain.value,
+                            "updated": False,
+                            "message": f"Failed: {exc}",
+                        }
+                    )
+                    all_succeeded = False
+
+            # Persist the canonical backup owner after all transactions complete.
+            wallet.canonical_backup_owner = backup_owner
+            wallet.store()
+
+            return JSONResponse(
+                content={
+                    "canonical_backup_owner": backup_owner,
+                    "results": results,
+                    "all_succeeded": all_succeeded,
+                }
+            )
+
+        # --- Single-chain path (original behaviour) ---
+        chain = Chain(chain_value)
+        ledger_type = chain.ledger_type
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
                 content={"error": "No Master EOA found for this chain."},
@@ -1003,6 +1097,56 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 "message": message,
             }
         )
+
+    @app.post("/api/wallet/safe/backup_owner/sync")
+    async def _sync_backup_owner(
+        request: Request,
+    ) -> JSONResponse:  # pylint: disable=unused-variable
+        """Sync canonical backup owner to all chains."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        manager = operate.wallet_manager
+        if not manager.exists(ledger_type=LedgerType.ETHEREUM):
+            return JSONResponse(
+                content={"error": "No Master EOA found."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
+        if not wallet.canonical_backup_owner:
+            return JSONResponse(
+                content={"error": "No canonical backup owner is set."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        result = wallet.sync_backup_owner()
+        return JSONResponse(content=result)
+
+    @app.get("/api/wallet/safe/backup_owner/status")
+    async def _backup_owner_status(
+        request: Request,
+    ) -> JSONResponse:  # pylint: disable=unused-variable
+        """Return per-chain backup owner status."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        manager = operate.wallet_manager
+        if not manager.exists(ledger_type=LedgerType.ETHEREUM):
+            return JSONResponse(
+                content={"error": "No Master EOA found."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
+        result = wallet.backup_owner_status()
+        return JSONResponse(content=result)
 
     @app.post("/api/wallet/withdraw")
     async def _wallet_withdraw(request: Request) -> JSONResponse:

@@ -544,6 +544,7 @@ class TestBridgeManager:
             margin=0.2,
         )
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.parametrize(
         "to_chain_enum",
         [

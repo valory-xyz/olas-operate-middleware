@@ -627,6 +627,7 @@ class TestMigrateFormat:
             "safes": {"gnosis": SAFE_ADDR},
             "safe_chains": ["gnosis"],
             "ledger_type": "ethereum",
+            "canonical_backup_owner": None,
         }
 
     def test_migrates_old_safe_key_to_safes_dict(self, tmp_path: Path) -> None:
@@ -1325,3 +1326,268 @@ class TestMasterWalletManagerImportFromMnemonic:
         ).setup()  # nosec B106
         with pytest.raises(ValueError, match="is not supported"):
             manager.import_from_mnemonic(LedgerType.SOLANA, _TEST_MNEMONIC)
+
+
+# ---------------------------------------------------------------------------
+# OPE-1507: canonical_backup_owner — new wallet-layer methods
+# ---------------------------------------------------------------------------
+
+
+class TestSyncBackupOwner:
+    """Tests for EthereumMasterWallet.sync_backup_owner."""
+
+    def test_sync_backup_owner_no_canonical(self, tmp_path: Path) -> None:
+        """sync_backup_owner raises ValueError when no canonical is set."""
+        wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
+        wallet.canonical_backup_owner = None
+        with pytest.raises(ValueError, match="No canonical backup owner"):
+            wallet.sync_backup_owner()
+
+    def test_sync_backup_owner_applies_only_divergent_chains(
+        self, tmp_path: Path
+    ) -> None:
+        """sync_backup_owner updates divergent chains and skips synced ones."""
+        wallet = _make_wallet(
+            tmp_path,
+            safes={Chain.GNOSIS: SAFE_ADDR, Chain.BASE: "0x" + "e" * 40},
+            safe_chains=[Chain.GNOSIS, Chain.BASE],
+        )
+        wallet.canonical_backup_owner = BACKUP_ADDR
+
+        # GNOSIS already synced; BASE diverges (has old backup "0xfff...")
+        old_backup = "0x" + "f" * 40
+
+        def _mock_get_owners(ledger_api: t.Any, safe: str) -> t.List[str]:
+            if safe == SAFE_ADDR:
+                # already synced
+                return [EOA_ADDR, BACKUP_ADDR]
+            # divergent
+            return [EOA_ADDR, old_backup]
+
+        with patch(
+            "operate.wallet.master.get_owners", side_effect=_mock_get_owners
+        ), patch.object(
+            wallet, "update_backup_owner", return_value=True
+        ) as mock_update, patch(
+            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        ):
+            result = wallet.sync_backup_owner()
+
+        # Only BASE should have been updated.
+        assert result["canonical_backup_owner"] == BACKUP_ADDR
+        assert result["all_succeeded"] is True
+        # One synced (GNOSIS), one updated (BASE)
+        assert len(result["results"]) == 2
+        synced_chain_results = {r["chain"]: r for r in result["results"]}
+        assert synced_chain_results[Chain.GNOSIS.value]["updated"] is False
+        assert synced_chain_results[Chain.BASE.value]["updated"] is True
+        # update_backup_owner called exactly once (for BASE only)
+        mock_update.assert_called_once_with(chain=Chain.BASE, backup_owner=BACKUP_ADDR)
+
+    def test_sync_backup_owner_records_failure(self, tmp_path: Path) -> None:
+        """sync_backup_owner marks all_succeeded=False when an update fails."""
+        wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
+        wallet.canonical_backup_owner = BACKUP_ADDR
+
+        with patch(
+            "operate.wallet.master.get_owners",
+            return_value=[EOA_ADDR, "0x" + "f" * 40],  # divergent
+        ), patch.object(
+            wallet, "update_backup_owner", side_effect=RuntimeError("rpc down")
+        ), patch(
+            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        ):
+            result = wallet.sync_backup_owner()
+
+        assert result["all_succeeded"] is False
+        assert "Failed" in result["results"][0]["message"]
+
+
+class TestBackupOwnerStatus:
+    """Tests for EthereumMasterWallet.backup_owner_status."""
+
+    def test_backup_owner_status_returns_per_chain_state(self, tmp_path: Path) -> None:
+        """backup_owner_status returns correct synced/missing state per chain."""
+        wallet = _make_wallet(
+            tmp_path,
+            safes={Chain.GNOSIS: SAFE_ADDR},
+            safe_chains=[Chain.GNOSIS],
+        )
+        wallet.canonical_backup_owner = BACKUP_ADDR
+
+        with patch(
+            "operate.wallet.master.get_owners",
+            return_value=[EOA_ADDR, BACKUP_ADDR],
+        ), patch(
+            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        ):
+            status = wallet.backup_owner_status()
+
+        assert status["canonical_backup_owner"] == BACKUP_ADDR
+        assert status["all_chains_synced"] is True
+        assert status["any_backup_missing"] is False
+        assert len(status["chains"]) == 1
+        assert status["chains"][0]["synced"] is True
+        assert status["chains"][0]["current_backup_owner"] == BACKUP_ADDR
+
+    def test_backup_owner_status_no_canonical(self, tmp_path: Path) -> None:
+        """backup_owner_status with no canonical returns canonical=None and not synced."""
+        wallet = _make_wallet(
+            tmp_path,
+            safes={Chain.GNOSIS: SAFE_ADDR},
+            safe_chains=[Chain.GNOSIS],
+        )
+        wallet.canonical_backup_owner = None
+
+        with patch(
+            "operate.wallet.master.get_owners",
+            return_value=[EOA_ADDR, BACKUP_ADDR],
+        ), patch(
+            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        ):
+            status = wallet.backup_owner_status()
+
+        # canonical is None so no chain can match → not synced
+        assert status["canonical_backup_owner"] is None
+        assert status["all_chains_synced"] is False
+
+    def test_backup_owner_status_missing_backup(self, tmp_path: Path) -> None:
+        """backup_owner_status marks any_backup_missing when a Safe has no backup."""
+        wallet = _make_wallet(
+            tmp_path,
+            safes={Chain.GNOSIS: SAFE_ADDR},
+            safe_chains=[Chain.GNOSIS],
+        )
+        wallet.canonical_backup_owner = BACKUP_ADDR
+
+        with patch(
+            "operate.wallet.master.get_owners",
+            return_value=[EOA_ADDR],  # no backup owner
+        ), patch(
+            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        ):
+            status = wallet.backup_owner_status()
+
+        assert status["any_backup_missing"] is True
+        assert status["chains"][0]["current_backup_owner"] is None
+
+    def test_backup_owner_status_chains_without_safe(self, tmp_path: Path) -> None:
+        """backup_owner_status lists chains in safe_chains that have no safe yet."""
+        wallet = _make_wallet(
+            tmp_path,
+            safes={},  # no safe on any chain
+            safe_chains=[Chain.GNOSIS],
+        )
+        wallet.canonical_backup_owner = BACKUP_ADDR
+
+        status = wallet.backup_owner_status()
+
+        assert Chain.GNOSIS.value in status["chains_without_safe"]
+        assert status["chains"] == []
+
+
+class TestCreateSafeAutoAppliesCanonical:
+    """Tests that create_safe auto-applies canonical_backup_owner."""
+
+    def test_create_safe_auto_applies_canonical(self, tmp_path: Path) -> None:
+        """create_safe uses canonical_backup_owner when no backup_owner is given."""
+        wallet = _make_wallet(tmp_path, safes={}, safe_chains=[])
+        wallet.canonical_backup_owner = BACKUP_ADDR
+
+        mock_ledger_api = MagicMock()
+        mock_crypto = MagicMock()
+        wallet._crypto = mock_crypto  # pylint: disable=protected-access
+
+        with patch(
+            "operate.wallet.master.get_default_ledger_api",
+            return_value=mock_ledger_api,
+        ), patch(
+            "operate.wallet.master.create_gnosis_safe",
+            return_value=(SAFE_ADDR, 1, "0xtxhash"),
+        ), patch(
+            "operate.wallet.master.add_owner"
+        ) as mock_add_owner, patch.object(
+            wallet, "store"
+        ):
+            wallet.create_safe(chain=Chain.GNOSIS)
+
+        # canonical_backup_owner should have been passed to add_owner
+        mock_add_owner.assert_called_once_with(
+            ledger_api=mock_ledger_api,
+            crypto=mock_crypto,
+            safe=SAFE_ADDR,
+            owner=BACKUP_ADDR,
+        )
+
+    def test_create_safe_explicit_owner_overrides_canonical(
+        self, tmp_path: Path
+    ) -> None:
+        """create_safe prefers explicit backup_owner over canonical."""
+        wallet = _make_wallet(tmp_path, safes={}, safe_chains=[])
+        wallet.canonical_backup_owner = BACKUP_ADDR
+        explicit_owner = "0x" + "9" * 40
+
+        mock_ledger_api = MagicMock()
+        mock_crypto = MagicMock()
+        wallet._crypto = mock_crypto  # pylint: disable=protected-access
+
+        with patch(
+            "operate.wallet.master.get_default_ledger_api",
+            return_value=mock_ledger_api,
+        ), patch(
+            "operate.wallet.master.create_gnosis_safe",
+            return_value=(SAFE_ADDR, 1, "0xtxhash"),
+        ), patch(
+            "operate.wallet.master.add_owner"
+        ) as mock_add_owner, patch.object(
+            wallet, "store"
+        ):
+            wallet.create_safe(chain=Chain.GNOSIS, backup_owner=explicit_owner)
+
+        mock_add_owner.assert_called_once_with(
+            ledger_api=mock_ledger_api,
+            crypto=mock_crypto,
+            safe=SAFE_ADDR,
+            owner=explicit_owner,
+        )
+
+
+class TestMigrateFormatAddsCanonicalBackupOwner:
+    """Tests for migrate_format canonical_backup_owner back-fill."""
+
+    def test_migrate_format_adds_canonical_backup_owner(self, tmp_path: Path) -> None:
+        """migrate_format adds canonical_backup_owner: null for legacy files."""
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"gnosis": SAFE_ADDR},
+            "safe_chains": ["gnosis"],
+            "ledger_type": "ethereum",
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        assert migrated is True
+        import json as _json
+
+        result = _json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
+        assert "canonical_backup_owner" in result
+        assert result["canonical_backup_owner"] is None
+
+    def test_migrate_format_no_migration_when_field_present(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_format does not set migrated=True when field already exists."""
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"gnosis": SAFE_ADDR},
+            "safe_chains": ["gnosis"],
+            "ledger_type": "ethereum",
+            "canonical_backup_owner": None,
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        # No structural change → should be False
+        assert migrated is False
