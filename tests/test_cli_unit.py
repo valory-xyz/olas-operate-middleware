@@ -499,17 +499,17 @@ class TestCreateAppInfra:
 
         assert app._server.should_exit is True
 
-    # ── DISABLE_PARENT_WATCHDOG ──────────────────────────────────────────────
+    # ── ENABLE_PARENT_WATCHDOG ───────────────────────────────────────────────
 
     def test_lifespan_skips_watchdog_when_disabled(self) -> None:
-        """When DISABLE_PARENT_WATCHDOG=1 the watchdog must not be created."""
+        """When ENABLE_PARENT_WATCHDOG=0 the watchdog must not be created."""
         m = _make_mock_operate()
         ua = MagicMock()
         ua.is_valid.return_value = True
         m.user_account = ua
 
         stack, app, mock_wd, mock_wd_cls = _open_app(
-            m, env={"DISABLE_PARENT_WATCHDOG": "1"}
+            m, env={"ENABLE_PARENT_WATCHDOG": "0"}
         )
         with stack:
             with TestClient(app, raise_server_exceptions=False):
@@ -520,7 +520,7 @@ class TestCreateAppInfra:
         mock_wd.stop.assert_not_called()
 
     def test_lifespan_starts_watchdog_when_env_unset(self) -> None:
-        """When DISABLE_PARENT_WATCHDOG is absent the watchdog must start."""
+        """When ENABLE_PARENT_WATCHDOG is absent the watchdog must start."""
         m = _make_mock_operate()
         ua = MagicMock()
         ua.is_valid.return_value = True
@@ -535,15 +535,15 @@ class TestCreateAppInfra:
         mock_wd.start.assert_called()
         mock_wd.stop.assert_called()
 
-    def test_lifespan_starts_watchdog_when_env_is_zero(self) -> None:
-        """When DISABLE_PARENT_WATCHDOG=0 the watchdog must still start."""
+    def test_lifespan_starts_watchdog_when_env_is_one(self) -> None:
+        """When ENABLE_PARENT_WATCHDOG=1 the watchdog must still start."""
         m = _make_mock_operate()
         ua = MagicMock()
         ua.is_valid.return_value = True
         m.user_account = ua
 
         stack, app, mock_wd, mock_wd_cls = _open_app(
-            m, env={"DISABLE_PARENT_WATCHDOG": "0"}
+            m, env={"ENABLE_PARENT_WATCHDOG": "1"}
         )
         with stack:
             with TestClient(app, raise_server_exceptions=False):

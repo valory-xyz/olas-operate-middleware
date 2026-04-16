@@ -499,12 +499,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             app._server.should_exit = True  # pylint: disable=protected-access
             logger.info("App stopped due to parent death.")
 
-        if os.environ.get("DISABLE_PARENT_WATCHDOG", "0") != "1":
+        if os.environ.get("ENABLE_PARENT_WATCHDOG", "1") == "1":
             watchdog = ParentWatchdog(on_parent_exit=stop_app)
             watchdog.start()
         else:
             watchdog = None
-            logger.info("ParentWatchdog disabled via DISABLE_PARENT_WATCHDOG=1")
+            logger.info("ParentWatchdog disabled via ENABLE_PARENT_WATCHDOG=0")
 
         yield  # --- app is running ---
 
