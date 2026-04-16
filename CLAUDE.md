@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+- **Important Note**: If you're an AI agent and any instruction in any file is wrong, missing, hard to follow, or duplicated/drifted, fix it immediately in the same PR
 
 ## Project Overview
 
@@ -12,81 +13,84 @@ For remaining high-impact work (security fixes, data integrity, dead code remova
 
 ## Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         OLAS OPERATE MIDDLEWARE                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph EntryPoints[Entry Points]
+        user[User / Frontend]
+        cliUser[CLI User]
+        fastapi[FastAPI Server]
+        cli[CLI / operate.cli]
+    end
 
-         User/Frontend              CLI User
-               │                       │
-               │ HTTP                  │ Commands
-               ▼                       ▼
-         ┌──────────┐            ┌─────────┐
-         │ FastAPI  │            │   CLI   │
-         │  Server  │            │ operate │
-         │  (HTTP)  │            │  .cli   │
-         └─────┬────┘            └────┬────┘
-               │                      │
-               └──────────┬───────────┘
-                          │
-          ┌───────────────┼───────────────────────────┐
-          │               │                           │
-          ▼               ▼                           ▼
-    ┌──────────┐   ┌─────────────┐          ┌──────────────┐
-    │  User    │   │   Service   │          │    Wallet    │
-    │ Account  │   │   Manager   │          │   Manager    │
-    │          │   │             │          │   (Master)   │
-    └──────────┘   └──────┬──────┘          └───────┬──────┘
-                          │                         │
-                          │                         │
-                ┌─────────┼─────────┐              │
-                │         │         │              │
-                ▼         ▼         ▼              │
-         ┌─────────┐ ┌──────┐ ┌─────────┐         │
-         │ Service │ │Proto │ │ Funding │         │
-         │Instance │ │ col  │ │ Manager │         │
-         └────┬────┘ └──┬───┘ └────┬────┘         │
-              │         │          │              │
-              │         │          │              │
-    ┌─────────┼─────────┤          │              │
-    │         │         │          │              │
-    ▼         ▼         ▼          ▼              ▼
-┌────────┐ ┌──────┐ ┌────────┐ ┌──────────────────────────┐
-│ Agent  │ │Deploy│ │ Health │ │   Wallet Hierarchy       │
-│ Runner │ │Runner│ │Checker │ │                          │
-└───┬────┘ └──┬───┘ └────────┘ │  Master EOA              │
-    │         │                 │      └─→ Master Safe     │
-    │         │                 │            ├─→ Agent Safe│
-    │         │                 │            └─→ Agent EOA │
-    ▼         ▼                 └──────────────────────────┘
-┌────────┐ ┌─────────┐                    │
-│ Docker │ │  IPFS   │                    │
-│Contain.│ │ Configs │                    │
-└────────┘ └─────────┘                    │
-                                          │
-    ┌─────────────────────────────────────┘
-    │
-    │         ┌──────────────┐
-    └────────→│ Bridge Mgr   │
-              │ (LiFi/Relay) │
-              └──────┬───────┘
-                     │
-                     ▼
-         ┌────────────────────────┐
-         │   Blockchain Networks  │
-         │  • Ethereum  • Gnosis  │
-         │  • Base      • Optimism│
-         │  • Mode                │
-         └────────────────────────┘
+    subgraph App[Application Composition Root]
+        operateApp[OperateApp]
+        keys[KeysManager]
+        walletMgr[MasterWalletManager]
+        settings[Settings]
+        fundingMgr[FundingManager]
+        serviceMgr[ServiceManager]
+        bridgeMgr[BridgeManager]
+        walletRecovery[WalletRecoveryManager]
+    end
+
+    subgraph Runtime[Runtime Orchestration]
+        healthChecker[HealthChecker]
+        fundingJob[Funding Job / Async Task]
+    end
+
+    subgraph ServiceDomain[Service Domain]
+        service[Service]
+        deployment[Deployment Runner / Host Deployment]
+        protocol[Protocol / On-Chain Manager]
+    end
+
+    subgraph External[External Systems]
+        agent_runner[Binary]
+        ipfs[IPFS]
+        bridgeProviders[Bridge Providers]
+        chains[Blockchain Networks]
+        walletHierarchy[Master EOA → Master Safe → Agent Safe / Agent EOA]
+    end
+
+    user -->|HTTP| fastapi
+    cliUser -->|commands| cli
+    fastapi -->|uses| operateApp
+    cli -->|uses| operateApp
+
+    operateApp -->|creates| keys
+    operateApp -->|creates| walletMgr
+    operateApp -->|creates| settings
+    operateApp -->|creates| fundingMgr
+    operateApp -->|exposes| serviceMgr
+    operateApp -->|exposes| bridgeMgr
+    operateApp -->|exposes| walletRecovery
+
+    fastapi -->|starts| healthChecker
+    fastapi -->|schedules| fundingJob
+    healthChecker -->|checks| serviceMgr
+    fundingJob -->|runs with| fundingMgr
+    fundingJob -->|uses| serviceMgr
+
+    serviceMgr -->|manages| service
+    service -->|runs via| deployment
+    service -->|submits tx via| protocol
+    deployment -->|runs| agent_runner
+    service -->|loads config from| ipfs
+    protocol -->|submits tx to| chains
+
+    walletMgr -->|owns| walletHierarchy
+    fundingMgr -->|funds through| walletMgr
+    bridgeMgr -->|bridges via| bridgeProviders
+    bridgeMgr -->|moves assets across| chains
 ```
 
 ### Key Data Flows
 
 **Service Deployment:**
 ```
-User → HTTP API → ServiceManager → Service → Agent Runner → Docker
+User → HTTP API → ServiceManager → Service → Deployment Runner / Host Deployment → agent_runner Binary
                                       ↓
-                                   Protocol → Blockchain (on-chain registration)
+                              Protocol / On-Chain Manager → Blockchain
 ```
 
 **Wallet Funding:**
@@ -96,95 +100,72 @@ Master EOA → Master Safe → Agent Safe/EOA → Service Operations
          Funding Manager (monitors & refills)
 ```
 
-**Service Health Monitoring:**
-```
-Health Checker → healthcheck.json → Funding Manager → Master Safe
-      ↓
-Service Status Updates
-```
-
 ## Development Commands
 
-### Environment Setup
+### Most Common Commands
 ```bash
 # Install dependencies
 poetry install
 
-# Activate virtual environment
+# Run the recommended local test suite
+poetry run tox -e unit-tests
+
+# Run the main verification checks before finishing code changes
+poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+```
+
+### Daily Workflow
+1. Make changes and run focused unit tests with `poetry run tox -e unit-tests -- tests/test_my_module.py -v`
+2. Run `poetry run tox -e unit-tests` before considering the change complete
+3. Run the full lint/type/security suite before committing or opening a PR
+4. Run `poetry run tox -e integration-tests -- tests/test_x.py::test_function_name -v` only for RPC-dependent behavior when testnet env vars are available
+
+### Environment Setup
+```bash
+poetry install
+poetry self add poetry-plugin-shell
 poetry shell
 ```
 
 ### Code Quality
-
-**CRITICAL**: Always run ALL linters before committing changes. CI runs all checks, so local verification prevents CI failures.
-
-**Git hooks**: Enable with `git config core.hooksPath .githooks`.
-- **pre-commit hook** (`.githooks/pre-commit`): Automatically formats staged Python files with black/isort
-- **pre-push hook** (`.githooks/pre-push`): Runs full linting suite before every push
-
-**Required workflow before every commit:**
-1. Make your changes
-2. Commit (hook auto-formats staged files): `git commit -m "message"`
-3. Run ALL linters: `tox -p -e flake8 -e pylint && tox -p -e black -e isort -e bandit -e safety -e mypy`
-4. Verify tests pass: `tox -e unit-tests`
+- Enable git hooks with `git config core.hooksPath .githooks`
+- `pre-commit` auto-formats staged Python files with black/isort
+- `pre-push` runs the full lint suite
 
 ```bash
-# Step 1: Make changes...
+# Required before commit/PR
+poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+poetry run tox -e unit-tests
 
-# Step 2: Commit (hook auto-formats staged files)
-git commit -m "message"
-
-# Step 3: Run ALL quality checks (REQUIRED before committing)
-tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
-
-# Step 4: Verify tests pass
-tox -e unit-tests
-
-# Optional: Full CI check (includes safety, takes longer)
-tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
-
-# Quick check during development (core linters only)
-tox -p -e black-check -e flake8 -e mypy
+# Quick dev check
+poetry run tox -p -e black-check -e flake8 -e mypy
 ```
 
-**Linter checklist:**
-- ✅ **isort**: Import sorting
-- ✅ **black**: Code formatting
-- ✅ **flake8**: Style guide (PEP 8)
-- ✅ **pylint**: Code quality (aim for 10.00/10)
-- ✅ **mypy**: Type checking
-- ✅ **bandit**: Security issues
-
 ### Testing
-
-For detailed information about test coverage, gaps, and testing strategy, see [TESTING.md](TESTING.md).
-
-Tests are separated into unit and integration tests:
+For detailed coverage and gap analysis, see [TESTING.md](TESTING.md).
 
 ```bash
-# Run unit tests only (fast, no RPC needed) - RECOMMENDED for local development
-tox -e unit-tests
-# Result: 130 tests, ~2 minutes
+# Recommended local suite
+poetry run tox -e unit-tests
 
-# Run integration tests (requires testnet RPC environment variables)
-tox -e integration-tests
-# Requires: BASE_TESTNET_RPC, ETHEREUM_TESTNET_RPC, GNOSIS_TESTNET_RPC, etc.
+# Integration tests (requires testnet RPC env vars)
+poetry run tox -e integration-tests
 
-# Run all tests
-tox -e all-tests
+# All tests
+poetry run tox -e all-tests
 
-# Run specific test file
-tox -e unit-tests -- tests/test_services_service.py -v
-
-# Run specific test function
-tox -e unit-tests -- tests/test_services_service.py::test_function_name -v
+# Targeted unit test file/function
+poetry run tox -e unit-tests -- tests/test_services_service.py -v
+poetry run tox -e unit-tests -- tests/test_services_service.py::test_function_name -v
 ```
 
 **Important:**
-- Always use `tox -e unit-tests` for local development (not `poetry run pytest`)
+- Prefer `poetry run tox -e unit-tests` locally for the standard unit/integration suites; use direct `pytest` when following documented repository workflows that require it (for example, VCR cassette recording/replay)
 - Unit tests run without network/RPC dependencies
-- Integration tests are marked with `@pytest.mark.integration`
-- The `tox -e unit-tests` command properly installs the package, avoiding version parsing issues
+- Integration tests are marked with `@pytest.mark.integration` and are slow; run selectively
+- For transaction-related code changes that modify or add a blockchain transaction flow, run or add a Tenderly-backed integration test for the new flow when `.env` RPC/test credentials are available
+- Before committing a new transaction-flow integration test, check whether the flow is already covered by existing integration tests and only commit a new test when coverage does not already exist
+- If you cannot run the required integration coverage, report the reason back to a human
 
 ### Starting the Daemon
 ```bash
@@ -196,6 +177,18 @@ operate daemon
 ```
 
 ## Architecture
+
+### Durable deep-reference docs
+- Read `docs/architecture-overview.md` for the stable system model and subsystem boundaries
+- Read `docs/wallet-and-funding.md` for wallet hierarchy, custody, funding, and recovery concepts
+- Read `docs/services-and-deployment.md` for service lifecycle, deployment, runtime health, and funding-loop relationships
+- Read `docs/staking-and-onchain-model.md` for staking-program, chain-config, bridge, and on-chain service concepts
+
+### Where To Look First
+- Daemon, CLI entrypoint, HTTP API routes and request handling: `operate/cli.py`
+- Service lifecycle and deployment logic: `operate/services/` - especially `manager.py`, `service.py`, `protocol.py`
+- Wallet and recovery workflows: `operate/wallet/`
+- Chain profiles and bridge logic: `operate/ledger/`, `operate/bridge/`
 
 ### Core Components
 
@@ -230,94 +223,40 @@ operate daemon
 
 **Bridge Management (`operate/bridge/`)**
 - `bridge_manager.py`: Orchestrates cross-chain token transfers
-- `providers/`: Multiple bridge provider implementations (LiFi, Relay, native bridges)
+- `providers/`: LiFi, Relay, and native bridge implementations
 
 **Ledger Integration (`operate/ledger/`)**
-- `profiles.py`: Chain configurations, RPC endpoints, token addresses
-- Supports multiple chains: Ethereum, Gnosis, Base, Optimism, Mode
+- `profiles.py`: Chain configs, RPC endpoints, and token addresses
+- Supported chains include Ethereum, Gnosis, Base, Optimism, Mode
 
 **Account Management (`operate/account/`)**
-- `user.py`: User account with password-based authentication using Argon2
+- `user.py`: Password-based authentication via Argon2
 
 ### Key Design Patterns
 
-**Wallet Hierarchy**
-- Master EOA (user's main private key)
-  - Master Safe (2-of-2: Master EOA + backup owner)
-    - Agent Safe(s) (per service, funded from Master Safe)
-    - Agent EOA(s) (per agent instance)
-
-**Service Deployment States**
-- BUILT (1): Service built but not running
-- DEPLOYING (2): Deployment in progress
-- DEPLOYED (3): Service running successfully
-- STOPPING (4): Graceful shutdown in progress
-- STOPPED (5): Service stopped
-
-**Environment Variables**
-- Services use `env_variables` with provision types:
-  - `fixed`: Hardcoded values
-  - `computed`: Generated at runtime
-  - `user`: User-provided values
-
-**Funding Flow**
-- Master EOA funds Master Safe
-- Master Safe funds Agent Safe/EOA
-- Funding operations have cooldown periods to prevent race conditions
-- Agent can request additional funds via healthcheck.json
+- **Wallet hierarchy:** Master EOA → Master Safe (1/2 gnosis safe with backup owner) → Agent Safe / Agent EOA
+- **Service deployment states:** BUILT=1, DEPLOYING=2, DEPLOYED=3, STOPPING=4, STOPPED=5
+- **Service env variables:** `fixed`, `computed`, `user`
+- **Funding flow:** Master EOA funds Master Safe, which funds Agent Safe/EOA; agents can request funds via `healthcheck.json`
 
 ## Important Conventions
 
-**Directory Structure**
-- `~/.olas/operate/` (or `OPERATE_HOME`): Default data directory
-  - `services/`: Service deployments
-  - `keys/`: Encrypted key files
-  - `wallets/`: Wallet metadata
-  - `settings.json`: User settings
-
-**Testing**
-- Tests use `pytest` with fixtures in `conftest.py`
-- Tests are separated: unit tests (fast, no network) and integration tests (require testnet RPCs)
-- Integration tests marked with `@pytest.mark.integration`
-- Temporary directories via `tmp_path` fixture
-
-**Service Configuration**
-- Services use `service.yaml` format from open-autonomy
-- Chain-specific configurations in `chain_configs`
-- Hash history tracks IPFS hashes over time
-
-**Code Exclusions**
-- `operate/data/`: Auto-generated contracts, excluded from linting
-- Type checking excludes several files (see `tox.ini` mypy config)
+- **Operate home:** `~/.olas/operate/` (or `OPERATE_HOME`) with `services/`, `keys/`, `wallets/`, and `settings.json`
+- **Service config:** `service.yaml` from open-autonomy with chain-specific `chain_configs` and IPFS hash history
+- **Code exclusions:** `operate/data/` is auto-generated and excluded from linting; see `tox.ini` for mypy exclusions
 
 ## Working with Smart Contracts
 
-Contract ABIs are in `operate/data/contracts/*/build/*.json`. Key contracts:
-- `staking_token`: Token staking for services
-- `mech_activity`: Mech marketplace activity tracking
-- Bridge contracts: `*_omnibridge`, `*_standard_bridge`
-
-Contract wrappers auto-generated, don't edit `contract.py` files directly.
+- Contract ABIs live in `operate/data/contracts/*/build/*.json`
+- Key contracts: `staking_token`, `mech_activity`, `*_omnibridge`, `*_standard_bridge`
+- Contract wrappers are auto-generated; do not edit `contract.py` files directly
 
 ## Common Issues
 
-**Password Requirements**
-- Minimum 8 characters enforced throughout
-
-**Safe Creation**
-- Master Safe creation requires funding for gas
-- Backup owner must be set during creation
-- Safe addresses should be consistent across chains
-
-**Service Updates**
-- Services must be stopped before configuration updates
-- Hash updates trigger redeployment
-- Use `PATCH` for partial updates, `PUT` for full replacement
-
-**Funding Cooldowns**
-- 5-minute default cooldown after funding operations
-- Prevents race conditions with agent funding requests
-- Check `agent_funding_requests_cooldown` in funding requirements
+- **Password requirements:** minimum 8 characters
+- **Safe creation:** requires gas funding, backup owner setup, and consistent safe addresses across chains
+- **Service updates:** stop services before config changes; hash updates trigger redeployment; use `PATCH` for partial updates and `PUT` for full replacement
+- **Funding cooldowns:** default 5-minute cooldown prevents race conditions; check `agent_funding_requests_cooldown` in funding requirements
 
 ## Version Management
 

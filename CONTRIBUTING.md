@@ -101,46 +101,46 @@ The project uses several tools to maintain code quality. All are configured in `
 
 1. **Black**: Code formatting
    ```bash
-   tox -e black      # Format code
-   tox -e black-check # Check formatting
+   poetry run tox -e black      # Format code
+   poetry run tox -e black-check # Check formatting
    ```
 
 2. **isort**: Import sorting
    ```bash
-   tox -e isort       # Sort imports
-   tox -e isort-check # Check imports
+   poetry run tox -e isort       # Sort imports
+   poetry run tox -e isort-check # Check imports
    ```
 
 3. **Flake8**: Linting
    ```bash
-   tox -e flake8
+   poetry run tox -e flake8
    ```
 
 4. **MyPy**: Type checking
    ```bash
-   tox -e mypy
+   poetry run tox -e mypy
    ```
 
 5. **Pylint**: Code analysis
    ```bash
-   tox -e pylint
+   poetry run tox -e pylint
    ```
 
 6. **Bandit**: Security checks
    ```bash
-   tox -e bandit
+   poetry run tox -e bandit
    ```
 
 7. **Safety**: Dependency vulnerability checks
    ```bash
-   tox -e safety
+   poetry run tox -e safety
    ```
 
 ### Running All Checks
 
 ```bash
 # Run all quality checks
-tox -p -e flake8 -e pylint && tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
+poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 ```
 
 **Git hooks**: Enable with `git config core.hooksPath .githooks`.
@@ -237,10 +237,10 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
 2. **Run all checks locally:**
    ```bash
    # Format code
-   tox -p -e black -e isort
+   poetry run tox -p -e black -e isort
    
    # Run quality checks
-   tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+   poetry run tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
    ```
    
    **Note**: The pre-push hook will automatically run these checks when you push, blocking the push if any checks fail. Running locally first is recommended to avoid CI failures.
@@ -317,6 +317,7 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
 ### Issue: Import errors after `poetry install`
 **Solution**: Make sure you've activated the virtual environment:
 ```bash
+poetry self add poetry-plugin-shell
 poetry shell
 ```
 
@@ -324,9 +325,9 @@ poetry shell
 **Solution**: Tests use temporary directories. Ensure `tmp_path` fixtures are being used.
 
 ### Issue: Type checking fails
-**Solution**: Run `tox -e mypy` to see detailed type errors:
+**Solution**: Run `poetry run tox -e mypy` to see detailed type errors:
 ```bash
-tox -e mypy
+poetry run tox -e mypy
 ```
 
 ### Getting Help
