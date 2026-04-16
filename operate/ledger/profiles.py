@@ -120,6 +120,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_supply_alpha": "0xCAbD0C941E54147D40644CF7DA7e36d70DF46f44",
         "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
         "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
+        "memora_memory_weaver": "0xbf8B2E2A0C0b5ccede9F9D3943aC8B3C4CDa4835",
     },
     Chain.OPTIMISM: {
         "optimus_alpha_1": "0x88996bbdE7f982D93214881756840cE2c77C4992",
