@@ -2482,3 +2482,87 @@ Individual bridge request status:
   "error": "Failed to get bridge status. Please check the logs."
 }
 ```
+
+## Store Management
+
+Persistent key-value store backed by `.operate/pearl_store.json`. The store migrates with the `.operate` folder, allowing app state to persist across machine moves. Supports dot-notation keys for nested objects (e.g. `trader.isInitialFunded`).
+
+### `GET /api/store`
+
+Get the full store contents.
+
+**Response (Success - 200):**
+
+```json
+{
+  "data": {
+    "trader": {
+      "isInitialFunded": true
+    },
+    "autoRun": {
+      "enabled": false
+    }
+  }
+}
+```
+
+Returns `{"data": {}}` on first run when the store is empty.
+
+---
+
+### `POST /api/store`
+
+Set a key in the store. Supports dot-notation for nested keys (e.g. `trader.isInitialFunded`).
+
+**Request Body:**
+
+```json
+{
+  "key": "trader.isInitialFunded",
+  "value": true
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "success": true
+}
+```
+
+**Response (Missing or invalid key - 400):**
+
+```json
+{
+  "error": "Missing or invalid 'key' field."
+}
+```
+
+**Response (Malformed key - 400):**
+
+```json
+{
+  "error": "Invalid key: segments must be non-empty (no leading, trailing, or consecutive dots)."
+}
+```
+
+---
+
+### `DELETE /api/store/{key}`
+
+Delete a key from the store. Supports dot-notation for nested keys (e.g. `trader.isInitialFunded`).
+
+**Path Parameters:**
+
+| Parameter | Type   | Description                              |
+|-----------|--------|------------------------------------------|
+| `key`     | string | Dot-notation key to delete (e.g. `trader.isInitialFunded`) |
+
+**Response (Success - 200):**
+
+```json
+{
+  "success": true
+}
+```

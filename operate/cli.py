@@ -87,6 +87,7 @@ from operate.operate_types import (
     FundRecoveryExecuteRequest,
     FundRecoveryScanRequest,
     LedgerType,
+    PearlStore,
     Version,
 )
 from operate.quickstart.analyse_logs import analyse_logs
@@ -195,6 +196,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self._migration_manager.migrate_services(self.service_manager())
         self._migration_manager.migrate_wallets(self.wallet_manager)
         self._migration_manager.migrate_qs_configs()
+        self._migration_manager.migrate_pearl_store()
 
     @property
     def password(self) -> t.Optional[str]:
@@ -553,6 +555,46 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _get_settings(request: Request) -> JSONResponse:
         """Get settings."""
         return JSONResponse(content=operate.settings.json)
+
+    # --- Pearl Store API ---
+    # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
+    _pearl_store = PearlStore(
+        path=operate._path, data={}  # pylint: disable=protected-access
+    )
+
+    @app.get("/api/store")
+    async def _get_store(request: Request) -> JSONResponse:
+        """Get the full pearl store."""
+        data = await run_in_executor(PearlStore.read, _pearl_store.path)
+        return JSONResponse(content={"data": data}, status_code=HTTPStatus.OK)
+
+    @app.post("/api/store")
+    async def _set_store_key(request: Request) -> JSONResponse:
+        """Set a key in the pearl store (supports dot-notation)."""
+        body = await request.json()
+        key = body.get("key")
+        if not isinstance(key, str) or not key:
+            return JSONResponse(
+                content={"error": "Missing or invalid 'key' field."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        if any(segment == "" for segment in key.split(".")):
+            return JSONResponse(
+                content={
+                    "error": "Invalid key: segments must be non-empty "
+                    "(no leading, trailing, or consecutive dots)."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        value = body.get("value")
+        await run_in_executor(_pearl_store.set_key, key, value)
+        return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
+
+    @app.delete("/api/store/{key}")
+    async def _delete_store_key(key: str) -> JSONResponse:
+        """Delete a key from the pearl store (supports dot-notation)."""
+        await run_in_executor(_pearl_store.delete_key, key)
+        return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
 
     @app.get("/api/account")
     async def _get_account(request: Request) -> t.Dict:
