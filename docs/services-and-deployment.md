@@ -95,14 +95,14 @@ Once all agent instances are unbonded, the service returns to a pre-registration
 
 The middleware also tracks a separate local deployment lifecycle for the service runtime.
 
-The durable local pattern is:
-- created,
+The concrete local deployment states exposed by `DeploymentStatus` are:
 - built,
 - deploying,
 - deployed,
 - stopping,
-- stopped,
-- deleted.
+- stopped.
+
+Conceptually, a service may also be absent before a build exists or removed after local cleanup, but those are not named `DeploymentStatus` enum values.
 
 These states answer a different question from the on-chain lifecycle.
 They describe whether the middleware has already prepared and launched the runtime environment for the service on the local machine.

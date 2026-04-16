@@ -26,6 +26,8 @@ Its stable role is to:
 ### Managed operational safes (Master safes)
 The next layer provides managed operational custody.
 
+In the current implementation, the master safe is configured with threshold `1`, so the durable model here is a 1-of-2 safe with a backup-owner-aware ownership arrangement multisig.
+
 Its stable role is to:
 - hold funds intended for service operation,
 - create separation between user-rooted ownership and day-to-day service funding,

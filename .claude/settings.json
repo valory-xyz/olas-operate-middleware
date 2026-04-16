@@ -10,9 +10,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/block-git-commit.py",
+            "command": "python3 .claude/hooks/advise-code-review.py",
             "timeout": 10,
-            "statusMessage": "Enforcing pre-commit code review"
+            "statusMessage": "Reminding about pre-commit code review"
           }
         ]
       }
