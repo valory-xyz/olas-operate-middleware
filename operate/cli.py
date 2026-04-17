@@ -206,6 +206,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
     @password.setter
     def password(self, value: t.Optional[str]) -> None:
         """Set the password."""
+        print(f"setting password to {value=}")
         self._password = value
         self._keys_manager.password = value
         self._wallet_manager.password = value
