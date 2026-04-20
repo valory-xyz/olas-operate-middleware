@@ -628,6 +628,23 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
 class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
     """Linux deployment runner."""
 
+    LINUX_MULTIPROCESSING_START_METHOD = "fork"
+
+    def _setup_agent(self, password: str) -> None:
+        """Prepare agent using Linux-safe multiprocessing behavior."""
+        try:
+            multiprocessing.set_start_method(
+                self.LINUX_MULTIPROCESSING_START_METHOD,
+                force=True,
+            )
+        except RuntimeError as e:
+            self.logger.warning(
+                "Could not set multiprocessing start method to %s: %s",
+                self.LINUX_MULTIPROCESSING_START_METHOD,
+                e,
+            )
+        super()._setup_agent(password=password)
+
 
 class PyInstallerHostDeploymentRunnerWindows(
     PyInstallerHostDeploymentRunner

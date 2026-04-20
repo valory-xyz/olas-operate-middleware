@@ -26,6 +26,7 @@ import multiprocessing
 import os
 import shutil
 import signal
+import sys
 import traceback
 import typing as t
 import uuid
@@ -2181,10 +2182,23 @@ def qs_analyse_logs(  # pylint: disable=too-many-arguments
     )
 
 
+PYTHON_INTERPRETER_FLAGS = frozenset(
+    {"-B", "-O", "-OO", "-u", "-v", "-d", "-i", "-s", "-S", "-E"}
+)
+
+
+def _strip_python_interpreter_flags(argv: list[str]) -> list[str]:
+    """Remove interpreter flags before passing arguments to the CLI parser."""
+    executable, *args = argv
+    filtered_args = [arg for arg in args if arg not in PYTHON_INTERPRETER_FLAGS]
+    return [executable, *filtered_args]
+
+
 def main() -> None:
     """CLI entry point."""
     if "freeze_support" in multiprocessing.__dict__:
         multiprocessing.freeze_support()
+    sys.argv = _strip_python_interpreter_flags(sys.argv)  # Because clea fails with them
     run(cli=_operate)
 
 

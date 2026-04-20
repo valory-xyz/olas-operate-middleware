@@ -2588,10 +2588,10 @@ class TestCliCommands:
 
 
 class TestMain:
-    """Cover main() (lines 2013-2015)."""
+    """Cover main() behavior."""
 
     def test_main_with_freeze_support(self) -> None:
-        """Cover lines 2013-2015: main() calls freeze_support and run."""
+        """Cover main() calls freeze_support and run."""
         with patch("operate.cli.run") as mock_run, patch.dict(
             multiprocessing.__dict__, {"freeze_support": MagicMock()}
         ):
@@ -2607,6 +2607,31 @@ class TestMain:
         ):
             main()
         mock_run.assert_called_once()
+
+    def test_main_strips_python_interpreter_flags(self) -> None:
+        """Remove Python interpreter flags before handing argv to clea."""
+        freeze_support = MagicMock()
+        initial_argv = ["pearl_x64", "-B", "daemon", "--home", "tmp-home"]
+        expected_argv = ["pearl_x64", "daemon", "--home", "tmp-home"]
+        with patch("operate.cli.run") as mock_run, patch.dict(
+            multiprocessing.__dict__, {"freeze_support": freeze_support}
+        ), patch("sys.argv", list(initial_argv)):
+            main()
+            assert __import__("sys").argv == expected_argv
+
+        freeze_support.assert_called_once_with()
+        mock_run.assert_called_once_with(cli=mock_run.call_args.kwargs["cli"])
+
+    def test_main_preserves_non_interpreter_arguments(self) -> None:
+        """Leave valid CLI arguments unchanged."""
+        expected_argv = ["pearl_x64", "daemon", "--port", "8001"]
+        with patch("operate.cli.run") as mock_run, patch.dict(
+            multiprocessing.__dict__, {"freeze_support": MagicMock()}
+        ), patch("sys.argv", list(expected_argv)):
+            main()
+            assert __import__("sys").argv == expected_argv
+
+        mock_run.assert_called_once_with(cli=mock_run.call_args.kwargs["cli"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
