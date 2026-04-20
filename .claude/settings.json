@@ -2,5 +2,20 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/advise-code-review.py",
+            "timeout": 10,
+            "statusMessage": "Reminding about pre-commit code review"
+          }
+        ]
+      }
+    ]
   }
 }

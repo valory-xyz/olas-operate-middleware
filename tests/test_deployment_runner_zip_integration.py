@@ -21,6 +21,7 @@
 
 import json
 from pathlib import Path
+from platform import system
 from typing import Any
 from unittest.mock import patch
 
@@ -28,6 +29,8 @@ import pytest
 
 from operate.services.agent_assets import AgentAssetManager
 from operate.services.deployment_runner import HostPythonHostDeploymentRunner
+
+from tests.constants import RUNNING_IN_CI
 
 
 def _create_test_service_config(service_dir: Path, version: str = "v0.31.3") -> None:
@@ -135,6 +138,10 @@ def test_setup_agent_uses_zip(tmp_path: Path) -> None:
             assert len(add_key_calls) == 2
 
 
+@pytest.mark.skipif(
+    RUNNING_IN_CI and system() == "Darwin",
+    reason="GitHub API download tests make live HTTP requests that are unreliable from macOS CI runners.",
+)
 class TestRealGitHubDownload:
     """Tests with real GitHub API and zip downloads."""
 

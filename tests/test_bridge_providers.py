@@ -22,6 +22,7 @@
 import time
 import typing as t
 from pathlib import Path
+from platform import system
 from unittest.mock import patch
 
 import pytest
@@ -58,7 +59,7 @@ from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.serialization import BigInt
 
-from tests.constants import OPERATE_TEST
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
 LOGGER = setup_logger(name="test_bridge_providers")
@@ -567,6 +568,11 @@ def get_transfer_amount(
 class TestNativeBridgeProvider:
     """Tests for bridge.providers.NativeBridgeProvider class."""
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain transaction calls are unreliable from macOS/Windows CI runners.",
+    )
     def test_bridge_execute_error(
         self,
         tmp_path: Path,
@@ -966,6 +972,11 @@ class TestProvider:
         assert not diff, "Wrong status."
         assert provider_request == expected_request, "Wrong request."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize(
         "provider_class",
         [
@@ -1132,6 +1143,11 @@ class TestProvider:
 
         assert not diff, "Wrong status."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize(
         "provider_class",
         [

@@ -30,10 +30,15 @@ from aea_cli_ipfs.ipfs_utils import IPFSTool
 from aea_ledger_ethereum import EthereumCrypto
 from web3 import Web3
 
-from operate.constants import USER_JSON, ZERO_ADDRESS
+from operate.constants import PEARL_STORE_JSON, USER_JSON, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.operate_types import AgentRelease as AgentReleaseType
-from operate.operate_types import AgentReleaseRepo, Chain, LedgerType
+from operate.operate_types import (
+    AgentReleaseRepo,
+    Chain,
+    LedgerType,
+    PEARL_STORE_VERSION,
+)
 from operate.services.agent_assets import AgentRelease
 from operate.services.manage import ServiceManager
 from operate.services.service import (
@@ -458,6 +463,42 @@ class MigrationManager:
 
         self.logger.info("Migrating service configs done.")
         self.log_directories(service_manager.path)
+
+    def _migrate_pearl_store(self, path: Path) -> bool:
+        """Migrate PearlStore file format if needed."""
+        if not path.exists():
+            return False
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise RuntimeError("Pearl store root must be a JSON object.")
+
+        if "version" not in data:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"version": PEARL_STORE_VERSION, "data": data}, f, indent=2)
+            return True
+
+        version = data["version"]
+        if not isinstance(version, int):
+            raise RuntimeError("Pearl store version must be an integer.")
+        if version > PEARL_STORE_VERSION:
+            raise RuntimeError(
+                f"Pearl store in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only store versions <= {PEARL_STORE_VERSION} are supported by this version of olas-operate-middleware."
+            )
+
+        return False
+
+    def migrate_pearl_store(self) -> None:
+        """Migrate PearlStore file if needed."""
+        pearl_store_path = self._path / PEARL_STORE_JSON
+        if not pearl_store_path.exists():
+            return
+
+        migrated = self._migrate_pearl_store(pearl_store_path)
+        if migrated:
+            self.logger.info("[MIGRATION MANAGER] Migrated PearlStore.")
 
     def migrate_qs_configs(self) -> None:
         """Migrates quickstart configs."""

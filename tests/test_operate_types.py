@@ -20,11 +20,13 @@
 """Tests for operate.operate_types module."""
 
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
 from operate.constants import NO_STAKING_PROGRAM_ID
-from operate.operate_types import ChainAmounts, OnChainUserParams, Version
+from operate.operate_types import ChainAmounts, OnChainUserParams, PearlStore, Version
 from operate.serialization import BigInt
 
 
@@ -287,3 +289,77 @@ def test_chain_amounts_lt_empty_is_vacuously_true() -> None:
     empty = ChainAmounts({})
     other = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(1)}}})
     assert (empty < other) is True
+
+
+def test_pearl_store_set_nested_raises_on_empty_segment() -> None:
+    """PearlStore._set_nested raises ValueError when key has an empty segment."""
+    with pytest.raises(ValueError, match="non-empty"):
+        PearlStore._set_nested({}, "a..b", "value")
+
+
+def test_pearl_store_json_uses_wrapped_versioned_schema(tmp_path: Path) -> None:
+    """PearlStore.json wraps payload under versioned schema."""
+    store = PearlStore(path=tmp_path, data={"foo": "bar"})
+
+    assert store.json == {"version": 1, "data": {"foo": "bar"}}
+
+
+def test_pearl_store_from_json_restores_path_and_data(tmp_path: Path) -> None:
+    """PearlStore.from_json restores both path metadata and wrapped payload data."""
+    restored = PearlStore.from_json({"path": tmp_path, "data": {"foo": "bar"}})
+
+    assert restored.path == tmp_path
+    assert restored.data == {"foo": "bar"}
+
+
+def test_pearl_store_load_rejects_legacy_flat_file(tmp_path: Path) -> None:
+    """PearlStore.load raises for legacy flat files before startup migration."""
+    store_path = tmp_path / "pearl_store.json"
+    legacy_data = {"foo": "bar", "path": {"inner": 123}}
+    store_path.write_text(json.dumps(legacy_data), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="legacy format"):
+        PearlStore.load(tmp_path)
+
+
+def test_pearl_store_load_rejects_newer_unsupported_version(tmp_path: Path) -> None:
+    """PearlStore.load raises for files created with a newer schema version."""
+    store_path = tmp_path / "pearl_store.json"
+    store_path.write_text(
+        json.dumps({"version": 999, "data": {"foo": "bar"}}), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="newer version"):
+        PearlStore.load(tmp_path)
+
+
+def test_pearl_store_load_rejects_non_dict_root(tmp_path: Path) -> None:
+    """PearlStore.load raises when the root JSON value is not an object."""
+    store_path = tmp_path / "pearl_store.json"
+    store_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="JSON object"):
+        PearlStore.load(tmp_path)
+
+
+def test_pearl_store_load_rejects_non_integer_version(tmp_path: Path) -> None:
+    """PearlStore.load raises when the version field is not an integer."""
+    store_path = tmp_path / "pearl_store.json"
+    store_path.write_text(
+        json.dumps({"version": "1", "data": {"foo": "bar"}}), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="integer"):
+        PearlStore.load(tmp_path)
+
+
+def test_pearl_store_load_rejects_non_dict_data(tmp_path: Path) -> None:
+    """PearlStore.load raises when the data field is not an object."""
+    store_path = tmp_path / "pearl_store.json"
+    store_path.write_text(
+        json.dumps({"version": 1, "data": ["not", "an", "object"]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="dictionary"):
+        PearlStore.load(tmp_path)
