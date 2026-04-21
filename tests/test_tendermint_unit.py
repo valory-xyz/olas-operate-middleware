@@ -23,6 +23,7 @@ import json
 import subprocess  # nosec B404
 from pathlib import Path
 from typing import Generator, Tuple
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -33,80 +34,11 @@ from operate.services.utils.tendermint import (
     StoppableThread,
     TendermintNode,
     TendermintParams,
-    _collect_process_debug_context,
-    _log_process_debug_event,
+    WinHelper,
     _should_skip_main_entry,
     create_app,
     run_stoppable_main,
 )
-
-
-def test_collect_process_debug_context_returns_launch_fields() -> None:
-    """The debug context includes process and frozen-runtime markers."""
-    with patch("operate.services.utils.tendermint.os.getpid", return_value=111):
-        with patch("operate.services.utils.tendermint.os.getppid", return_value=22):
-            with patch(
-                "operate.services.utils.tendermint.sys.argv", ["tm-helper", "--flag"]
-            ):
-                with patch(
-                    "operate.services.utils.tendermint.sys.executable",
-                    "/tmp/appimage",  # nosec B108
-                ):
-                    with patch.object(
-                        __import__(
-                            "operate.services.utils.tendermint", fromlist=["sys"]
-                        ).sys,
-                        "frozen",
-                        True,
-                        create=True,
-                    ):
-                        with patch.object(
-                            __import__(
-                                "operate.services.utils.tendermint", fromlist=["sys"]
-                            ).sys,
-                            "_MEIPASS",
-                            "/tmp/meipass",  # nosec B108
-                            create=True,
-                        ):
-                            with patch.dict(
-                                "operate.services.utils.tendermint.os.environ",
-                                {"__MP_MAIN__": "1"},
-                                clear=False,
-                            ):
-                                context = _collect_process_debug_context()
-
-    assert context["pid"] == 111
-    assert context["ppid"] == 22
-    assert context["argv"] == ["tm-helper", "--flag"]
-    assert context["executable"] == "/tmp/appimage"  # nosec B108
-    assert context["is_frozen"] is True
-    assert context["meipass"] == "/tmp/meipass"  # nosec B108
-    assert context["mp_main_flag"] == "1"
-
-
-def test_log_process_debug_event_emits_json_line() -> None:
-    """The debug event logger emits a single JSON line with the event name."""
-    fake_context = {
-        "pid": 1,
-        "ppid": 0,
-        "argv": [],
-        "executable": "x",
-        "is_frozen": False,
-        "meipass": None,
-        "mp_main_flag": None,
-    }
-
-    with patch(
-        "operate.services.utils.tendermint._collect_process_debug_context",
-        return_value=fake_context,
-    ):
-        with patch("builtins.print") as mock_print:
-            _log_process_debug_event("module_entry")
-
-    payload = json.loads(mock_print.call_args.args[0])
-    assert payload["tm_debug_event"] == "module_entry"
-    assert payload["pid"] == 1
-    assert mock_print.call_args.kwargs["flush"] is True
 
 
 def test_should_skip_main_entry_returns_true_for_forkserver_bootstrap() -> None:
@@ -142,18 +74,44 @@ def test_should_skip_main_entry_returns_false_for_normal_launch() -> None:
     assert _should_skip_main_entry(["tendermint_bin"]) is False
 
 
-def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
-    """run_stoppable_main closes queue resources after child exit signal."""
+def test_run_stoppable_main_uses_fork_context_on_non_windows() -> None:
+    """run_stoppable_main uses a fork-based multiprocessing context on Unix."""
+    mock_context = MagicMock()
     mock_queue = MagicMock()
     mock_process = MagicMock()
+    mock_context.Queue.return_value = mock_queue
+    mock_context.Process.return_value = mock_process
 
-    with patch(
-        "operate.services.utils.tendermint.multiprocessing.Queue",
-        return_value=mock_queue,
-    ):
+    with patch("operate.services.utils.tendermint.os.name", "posix"):
         with patch(
-            "operate.services.utils.tendermint.multiprocessing.Process",
-            return_value=mock_process,
+            "operate.services.utils.tendermint.multiprocessing.get_context",
+            return_value=mock_context,
+        ) as mock_get_context:
+            with patch("operate.services.utils.tendermint.sleep"):
+                run_stoppable_main()
+
+    mock_get_context.assert_called_once_with("fork")
+    mock_context.Queue.assert_called_once_with()
+    mock_context.Process.assert_called_once_with(
+        target=__import__(
+            "operate.services.utils.tendermint", fromlist=["run_app_in_subprocess"]
+        ).run_app_in_subprocess,
+        args=(mock_queue,),
+    )
+
+
+def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
+    """run_stoppable_main closes queue resources after child exit signal."""
+    mock_context = MagicMock()
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+    mock_context.Queue.return_value = mock_queue
+    mock_context.Process.return_value = mock_process
+
+    with patch("operate.services.utils.tendermint.os.name", "posix"):
+        with patch(
+            "operate.services.utils.tendermint.multiprocessing.get_context",
+            return_value=mock_context,
         ):
             with patch("operate.services.utils.tendermint.sleep"):
                 run_stoppable_main()
@@ -164,6 +122,31 @@ def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
     mock_process.join.assert_called_once_with(timeout=10)
     mock_queue.close.assert_called_once_with()
     mock_queue.join_thread.assert_called_once_with()
+
+
+def test_run_stoppable_main_assigns_windows_process_to_job_object() -> None:
+    """run_stoppable_main assigns the child process to a Windows job object."""
+    mock_context = MagicMock()
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+    mock_process.pid = 1234
+    mock_context.Queue.return_value = mock_queue
+    mock_context.Process.return_value = mock_process
+
+    with patch("operate.services.utils.tendermint.os.name", "nt"):
+        with patch(
+            "operate.services.utils.tendermint.multiprocessing.get_context",
+            return_value=mock_context,
+        ) as mock_get_context:
+            with patch(
+                "operate.services.utils.tendermint.WinHelper"
+            ) as mock_win_helper:
+                with patch("operate.services.utils.tendermint.sleep"):
+                    run_stoppable_main()
+
+    mock_get_context.assert_called_once_with()
+    mock_win_helper.assert_called_once_with()
+    mock_win_helper.return_value.assign_to_job.assert_called_once_with(1234)
 
 
 def test_tendermint_node_start_avoids_duplicate_monitor_thread() -> None:
@@ -300,6 +283,25 @@ class TestTendermintNodeMethods:
         call_args = mock_popen.call_args[0][0]
         assert "--log_level=debug" in call_args
 
+    def test_start_tm_process_assigns_windows_job_object(self) -> None:
+        """_start_tm_process assigns the spawned process to a Windows job object."""
+        node = self._make_node()
+        mock_process = MagicMock()
+        mock_process.pid = 4321
+
+        with patch("operate.services.utils.tendermint.os.name", "nt"):
+            with patch(
+                "operate.services.utils.tendermint.subprocess.Popen",
+                return_value=mock_process,
+            ):
+                with patch(
+                    "operate.services.utils.tendermint.WinHelper"
+                ) as mock_win_helper:
+                    node._start_tm_process()  # pylint: disable=protected-access
+
+        mock_win_helper.assert_called_once_with()
+        mock_win_helper.return_value.assign_to_job.assert_called_once_with(4321)
+
     def test_start_monitoring_thread_creates_and_starts(self) -> None:
         """_start_monitoring_thread creates a StoppableThread and starts it."""
         node = self._make_node()
@@ -431,6 +433,106 @@ class TestTendermintNodeMethods:
                 node.stop()
         mock_mon.assert_called_once()
         mock_tm.assert_called_once()
+
+    def test_reset_genesis_file_updates_initial_height_and_chain_id(
+        self, tmp_path: Path
+    ) -> None:
+        """reset_genesis_file rewrites initial height and period-derived chain id."""
+        home_dir = tmp_path / "tmhome"
+        config_dir = home_dir / "config"
+        config_dir.mkdir(parents=True)
+        genesis_path = config_dir / "genesis.json"
+        genesis_path.write_text(
+            json.dumps(
+                {
+                    "genesis_time": "old-time",
+                    "initial_height": "0",
+                    "chain_id": "autonolas-0",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        node = TendermintNode(
+            params=TendermintParams(proxy_app="tcp://localhost:26658", home=home_dir)
+        )
+
+        node.reset_genesis_file(
+            genesis_time="new-time",
+            initial_height="7",
+            period_count="11",
+        )
+
+        updated_genesis = json.loads(genesis_path.read_text(encoding="utf-8"))
+        assert updated_genesis["genesis_time"] == "new-time"
+        assert updated_genesis["initial_height"] == "7"
+        assert updated_genesis["chain_id"] == "autonolas-11"
+
+
+class TestWinHelper:
+    """Tests for Windows job-object helpers."""
+
+    def test_init_creates_job_object(self) -> None:
+        """WinHelper stores the job handle returned by create_job_object."""
+        with patch.object(WinHelper, "create_job_object", return_value="job-handle"):
+            helper = WinHelper()
+
+        assert helper.job == "job-handle"
+
+    def test_get_proc_handler_uses_open_process(self) -> None:
+        """get_proc_handler delegates to kernel32.OpenProcess."""
+        kernel32 = MagicMock()
+        kernel32.OpenProcess.return_value = "proc-handle"
+        fake_ctypes = SimpleNamespace(windll=SimpleNamespace(kernel32=kernel32))
+
+        with patch.dict("sys.modules", {"ctypes.wintypes": MagicMock()}):
+            with patch("ctypes.windll", fake_ctypes.windll, create=True):
+                handle = WinHelper.get_proc_handler(55)
+
+        assert handle == "proc-handle"
+        kernel32.OpenProcess.assert_called_once_with(0x1F0FFF, False, 55)
+
+    def test_create_job_object_raises_when_creation_fails(self) -> None:
+        """create_job_object propagates a Windows error when CreateJobObjectW fails."""
+        with patch.object(
+            WinHelper, "create_job_object", side_effect=OSError("create failed")
+        ):
+            with pytest.raises(OSError, match="create failed"):
+                WinHelper()
+
+    def test_create_job_object_raises_on_configuration_failure(self) -> None:
+        """create_job_object initialization failures propagate through the constructor."""
+        helper = WinHelper.__new__(WinHelper)
+
+        with patch.object(
+            WinHelper, "create_job_object", side_effect=OSError("configure failed")
+        ):
+            with pytest.raises(OSError, match="configure failed"):
+                WinHelper.__init__(helper)
+
+    def test_assign_to_job_raises_when_assignment_fails(self) -> None:
+        """assign_to_job raises a Windows error when the process cannot be assigned."""
+        kernel32 = MagicMock()
+        kernel32.AssignProcessToJobObject.return_value = 0
+        helper = WinHelper.__new__(WinHelper)
+        helper.job = "job-handle"
+
+        with patch.dict("sys.modules", {"ctypes.wintypes": MagicMock()}):
+            with patch(
+                "ctypes.windll", SimpleNamespace(kernel32=kernel32), create=True
+            ):
+                with patch(
+                    "ctypes.WinError", side_effect=OSError("assign failed"), create=True
+                ):
+                    with patch.object(
+                        WinHelper, "get_proc_handler", return_value="proc-handle"
+                    ):
+                        with pytest.raises(OSError, match="assign failed"):
+                            helper.assign_to_job(99)
+
+        kernel32.AssignProcessToJobObject.assert_called_once_with(
+            "job-handle", "proc-handle"
+        )
 
 
 class TestCreateAppFlaskRoutes:
