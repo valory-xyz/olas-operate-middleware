@@ -259,6 +259,8 @@ class TendermintNode:
 
     def _start_monitoring_thread(self) -> None:
         """Start a monitoring thread."""
+        if self._monitoring is not None and self._monitoring.is_alive():
+            return
         self._monitoring = StoppableThread(target=self._monitor_tendermint_process)
         self._monitoring.start()
 
@@ -707,6 +709,9 @@ def run_stoppable_main() -> None:  # pragma: no cover
         q.get(block=True)
         sleep(1)
     finally:
+        with contextlib.suppress(Exception):
+            q.close()
+            q.join_thread()
         p.terminate()
         with contextlib.suppress(Exception):
             p.join(timeout=10)

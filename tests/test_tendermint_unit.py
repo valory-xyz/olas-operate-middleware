@@ -34,7 +34,48 @@ from operate.services.utils.tendermint import (
     TendermintNode,
     TendermintParams,
     create_app,
+    run_stoppable_main,
 )
+
+
+def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
+    """run_stoppable_main closes queue resources after child exit signal."""
+    mock_queue = MagicMock()
+    mock_process = MagicMock()
+
+    with patch(
+        "operate.services.utils.tendermint.multiprocessing.Queue",
+        return_value=mock_queue,
+    ):
+        with patch(
+            "operate.services.utils.tendermint.multiprocessing.Process",
+            return_value=mock_process,
+        ):
+            with patch("operate.services.utils.tendermint.sleep"):
+                run_stoppable_main()
+
+    mock_process.start.assert_called_once_with()
+    mock_queue.get.assert_called_once_with(block=True)
+    assert mock_process.terminate.call_count == 2
+    mock_process.join.assert_called_once_with(timeout=10)
+    mock_queue.close.assert_called_once_with()
+    mock_queue.join_thread.assert_called_once_with()
+
+
+def test_tendermint_node_start_avoids_duplicate_monitor_thread() -> None:
+    """start() does not create a second monitor thread when one is already active."""
+    node = TendermintNode(params=TendermintParams(proxy_app="tcp://localhost:26658"))
+    existing_monitor = MagicMock()
+    existing_monitor.is_alive.return_value = True
+    node._monitoring = existing_monitor  # pylint: disable=protected-access
+
+    with patch.object(node, "_start_tm_process") as mock_start_tm:
+        with patch.object(StoppableThread, "start") as mock_thread_start:
+            node.start()
+
+    mock_start_tm.assert_called_once_with(False)
+    mock_thread_start.assert_not_called()
+    assert node._monitoring is existing_monitor  # pylint: disable=protected-access
 
 
 class TestTendermintNodeMethods:
