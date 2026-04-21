@@ -75,7 +75,7 @@ jobs:
 
       - name: Run unit tests
         env:
-          POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry' || 'poetry' }}
+          POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry.exe' || 'poetry' }}
         run: |
           pip install tomte[tox]==0.6.1
           tox -e unit-tests
@@ -97,7 +97,7 @@ jobs:
 
       - name: Run unit tests with coverage
         env:
-          POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry' || 'poetry' }}
+          POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry.exe' || 'poetry' }}
         run: |
           pip install tomte[tox]==0.6.1
           tox -e unit-tests-coverage
@@ -146,7 +146,7 @@ jobs:
 
       - name: Run integration tests
         env:
-          POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry' || 'poetry' }}
+          POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry.exe' || 'poetry' }}
         run: |
           pip install tomte[tox]==0.6.1
           tox -e integration-tests
