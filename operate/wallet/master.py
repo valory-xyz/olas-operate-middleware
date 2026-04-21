@@ -1056,6 +1056,35 @@ class EthereumMasterWallet(
         return raw_ethereum_wallet
 
     @classmethod
+    def _infer_canonical_backup_owner(cls, data: t.Dict) -> t.Optional[str]:
+        """Infer a shared backup owner when every Safe matches the same topology."""
+        master_eoa_address = data["address"]
+        backup_owners = set()
+        all_safes_valid = True
+
+        for chain, safe in data["safes"].items():
+            chain_type = Chain(chain)
+            ledger_api = get_default_ledger_api(chain=chain_type)
+            owners = get_owners(ledger_api=ledger_api, safe=safe)
+            if master_eoa_address not in owners:
+                all_safes_valid = False
+                continue
+
+            non_master_owners = [
+                owner for owner in owners if owner != master_eoa_address
+            ]
+            if len(non_master_owners) != 1:
+                all_safes_valid = False
+                continue
+
+            backup_owners.add(non_master_owners[0])
+
+        if not all_safes_valid or len(backup_owners) != 1:
+            return None
+
+        return next(iter(backup_owners))
+
+    @classmethod
     def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
         wallet_path = path / cls._file
@@ -1115,38 +1144,10 @@ class EthereumMasterWallet(
             migrated = True
 
         if "canonical_backup_owner" not in data:
-
-            def _infer_canonical_backup_owner() -> t.Optional[str]:
-                """Infer a shared backup owner when every Safe matches the same topology."""
-
-                master_eoa_address = data["address"]
-                backup_owners = set()
-                all_safes_valid = True
-
-                for chain, safe in data["safes"].items():
-                    chain_type = Chain(chain)
-                    ledger_api = get_default_ledger_api(chain=chain_type)
-                    owners = get_owners(ledger_api=ledger_api, safe=safe)
-                    if master_eoa_address not in owners:
-                        all_safes_valid = False
-                        continue
-
-                    non_master_owners = [
-                        owner for owner in owners if owner != master_eoa_address
-                    ]
-                    if len(non_master_owners) != 1:
-                        all_safes_valid = False
-                        continue
-
-                    backup_owners.add(non_master_owners[0])
-
-                if not all_safes_valid or len(backup_owners) != 1:
-                    return None
-
-                return next(iter(backup_owners))
-
             try:
-                data["canonical_backup_owner"] = _infer_canonical_backup_owner()
+                data["canonical_backup_owner"] = cls._infer_canonical_backup_owner(
+                    data=data
+                )
             except Exception:  # pylint: disable=broad-except
                 data["canonical_backup_owner"] = None
             migrated = True
