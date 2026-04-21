@@ -22,8 +22,8 @@
 import json
 import subprocess  # nosec B404
 from pathlib import Path
-from typing import Generator, Tuple
 from types import SimpleNamespace
+from typing import Generator, Tuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -454,7 +454,9 @@ class TestTendermintNodeMethods:
         )
 
         node = TendermintNode(
-            params=TendermintParams(proxy_app="tcp://localhost:26658", home=home_dir)
+            params=TendermintParams(
+                proxy_app="tcp://localhost:26658", home=str(home_dir)
+            )
         )
 
         node.reset_genesis_file(
@@ -473,7 +475,7 @@ class TestWinHelper:
     """Tests for Windows job-object helpers."""
 
     def test_init_creates_job_object(self) -> None:
-        """WinHelper stores the job handle returned by create_job_object."""
+        """`WinHelper` stores the job handle returned by create_job_object."""
         with patch.object(WinHelper, "create_job_object", return_value="job-handle"):
             helper = WinHelper()
 
