@@ -35,6 +35,7 @@ from operate.services.utils.tendermint import (
     TendermintParams,
     _collect_process_debug_context,
     _log_process_debug_event,
+    _should_skip_main_entry,
     create_app,
     run_stoppable_main,
 )
@@ -106,6 +107,39 @@ def test_log_process_debug_event_emits_json_line() -> None:
     assert payload["tm_debug_event"] == "module_entry"
     assert payload["pid"] == 1
     assert mock_print.call_args.kwargs["flush"] is True
+
+
+def test_should_skip_main_entry_returns_true_for_forkserver_bootstrap() -> None:
+    """Forkserver bootstrap children do not re-enter the helper main."""
+    argv = [
+        "tendermint_bin",
+        "-B",
+        "-S",
+        "-I",
+        "-c",
+        "import sys; from multiprocessing.forkserver import main; main(7, 9, ['__main__'])",
+    ]
+
+    assert _should_skip_main_entry(argv) is True
+
+
+def test_should_skip_main_entry_returns_true_for_resource_tracker() -> None:
+    """Resource tracker children do not re-enter the helper main."""
+    argv = [
+        "tendermint_bin",
+        "-B",
+        "-S",
+        "-I",
+        "-c",
+        "from multiprocessing.resource_tracker import main;main(7)",
+    ]
+
+    assert _should_skip_main_entry(argv) is True
+
+
+def test_should_skip_main_entry_returns_false_for_normal_launch() -> None:
+    """Normal top-level launches still execute the helper main."""
+    assert _should_skip_main_entry(["tendermint_bin"]) is False
 
 
 def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
