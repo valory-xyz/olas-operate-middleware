@@ -70,36 +70,6 @@ logging.basicConfig(
 )
 
 
-def _collect_process_debug_context() -> Dict[str, Any]:
-    """Collect process-boundary debug context for frozen helper launches."""
-    return {
-        "pid": os.getpid(),
-        "ppid": os.getppid(),
-        "argv": list(sys.argv),
-        "executable": sys.executable,
-        "is_frozen": bool(getattr(sys, "frozen", False)),
-        "meipass": getattr(sys, "_MEIPASS", None),
-        "mp_main_flag": os.environ.get("__MP_MAIN__"),
-    }
-
-
-def _log_process_debug_event(event: str) -> None:
-    """Emit a single structured diagnostic event for helper launch tracing."""
-    context = _collect_process_debug_context()
-    print(json.dumps({"tm_debug_event": event, **context}, sort_keys=True), flush=True)
-
-
-def _should_skip_main_entry(argv: Optional[List[str]] = None) -> bool:
-    """Return whether this process is a multiprocessing bootstrap helper."""
-    arguments = list(sys.argv if argv is None else argv)
-    joined = " ".join(arguments)
-    bootstrap_markers = (
-        "from multiprocessing.forkserver import main",
-        "from multiprocessing.resource_tracker import main",
-    )
-    return any(marker in joined for marker in bootstrap_markers)
-
-
 class StoppableThread(
     Thread,
 ):
@@ -289,8 +259,6 @@ class TendermintNode:
 
     def _start_monitoring_thread(self) -> None:
         """Start a monitoring thread."""
-        if self._monitoring is not None and self._monitoring.is_alive():
-            return
         self._monitoring = StoppableThread(target=self._monitor_tendermint_process)
         self._monitoring.start()
 
@@ -619,7 +587,6 @@ def create_app(  # pylint: disable=too-many-statements
     @app.route("/gentle_reset")
     def gentle_reset() -> Tuple[Any, int]:
         """Reset the tendermint node gently."""
-        _log_process_debug_event("gentle_reset")
         if app._is_on_exit:  # pylint: disable=protected-access
             raise RuntimeError("server exit now")
         try:
@@ -655,7 +622,6 @@ def create_app(  # pylint: disable=too-many-statements
     @app.route("/hard_reset")
     def hard_reset() -> Tuple[Any, int]:
         """Reset the node forcefully, and prune the blocks"""
-        _log_process_debug_event("hard_reset")
         if app._is_on_exit:  # pylint: disable=protected-access
             raise RuntimeError("server exit now")
         try:
@@ -714,14 +680,12 @@ def create_server() -> Any:  # pragma: no cover
 
 def run_app_in_subprocess(q: multiprocessing.Queue) -> None:  # pragma: no cover
     """Run flask app in a subprocess to kill it when needed."""
-    _log_process_debug_event("run_app_in_subprocess")
     print("app in subprocess")
     app, tendermint_node = create_app()
 
     @app.route("/exit")
     def handle_server_exit() -> Response:
         """Handle server exit."""
-        _log_process_debug_event("exit")
         app._is_on_exit = True  # pylint: disable=protected-access
         try:
             tendermint_node.stop()
@@ -734,7 +698,6 @@ def run_app_in_subprocess(q: multiprocessing.Queue) -> None:  # pragma: no cover
 
 def run_stoppable_main() -> None:  # pragma: no cover
     """Main to spawn flask in a subprocess."""
-    _log_process_debug_event("run_stoppable_main")
     print("run stoppable main!")
     q: multiprocessing.Queue = multiprocessing.Queue()
     p = multiprocessing.Process(target=run_app_in_subprocess, args=(q,))
@@ -744,9 +707,6 @@ def run_stoppable_main() -> None:  # pragma: no cover
         q.get(block=True)
         sleep(1)
     finally:
-        with contextlib.suppress(Exception):
-            q.close()
-            q.join_thread()
         p.terminate()
         with contextlib.suppress(Exception):
             p.join(timeout=10)
@@ -755,18 +715,15 @@ def run_stoppable_main() -> None:  # pragma: no cover
 
 def main() -> None:  # pragma: no cover
     """Main entrance."""
-    _log_process_debug_event("main")
     app = create_server()
     app.run(host="localhost", port=8080)
 
 
 if __name__ == "__main__":  # pragma: no cover
     # Start the Flask server programmatically
-    _log_process_debug_event("module_entry")
 
     with contextlib.suppress(Exception):
         # support for pyinstaller multiprocessing
         multiprocessing.freeze_support()
 
-    if not _should_skip_main_entry():
-        run_stoppable_main()
+    run_stoppable_main()
