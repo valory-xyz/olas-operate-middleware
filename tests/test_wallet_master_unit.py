@@ -22,7 +22,7 @@
 import json
 import typing as t
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -217,11 +217,14 @@ class TestMasterWalletGetBalance:
         """Test that safe balance query uses the safe address."""
         wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
         mock_api = MagicMock()
-        with patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=mock_api
-        ), patch(
-            "operate.wallet.master.get_asset_balance", return_value=999
-        ) as mock_bal:
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=mock_api
+            ),
+            patch(
+                "operate.wallet.master.get_asset_balance", return_value=999
+            ) as mock_bal,
+        ):
             result = wallet.get_balance(Chain.GNOSIS, from_safe=True)
         mock_bal.assert_called_once_with(
             ledger_api=mock_api, asset_address=ZERO_ADDRESS, address=SAFE_ADDR
@@ -232,11 +235,14 @@ class TestMasterWalletGetBalance:
         """Test that EOA balance query uses the EOA address."""
         wallet = _make_wallet(tmp_path)
         mock_api = MagicMock()
-        with patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=mock_api
-        ), patch(
-            "operate.wallet.master.get_asset_balance", return_value=42
-        ) as mock_bal:
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=mock_api
+            ),
+            patch(
+                "operate.wallet.master.get_asset_balance", return_value=42
+            ) as mock_bal,
+        ):
             result = wallet.get_balance(Chain.GNOSIS, from_safe=False)
         mock_bal.assert_called_once_with(
             ledger_api=mock_api, asset_address=ZERO_ADDRESS, address=EOA_ADDR
@@ -247,9 +253,12 @@ class TestMasterWalletGetBalance:
         """Test that providing rpc uses make_chain_ledger_api."""
         wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
         mock_api = MagicMock()
-        with patch(
-            "operate.wallet.master.make_chain_ledger_api", return_value=mock_api
-        ) as mock_fn, patch("operate.wallet.master.get_asset_balance", return_value=0):
+        with (
+            patch(
+                "operate.wallet.master.make_chain_ledger_api", return_value=mock_api
+            ) as mock_fn,
+            patch("operate.wallet.master.get_asset_balance", return_value=0),
+        ):
             wallet.get_balance(Chain.GNOSIS, from_safe=True, rpc="http://custom-rpc")
         mock_fn.assert_called_once_with(Chain.GNOSIS, "http://custom-rpc")
 
@@ -328,11 +337,13 @@ class TestTransferFromSafe:
         )
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         mock_api = MagicMock()
-        with patch.object(
-            wallet, "_pre_transfer_checks", return_value=EOA_ADDR
-        ), patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.transfer_from_safe", return_value="0xtxhash"
-        ) as mock_transfer:
+        with (
+            patch.object(wallet, "_pre_transfer_checks", return_value=EOA_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch(
+                "operate.wallet.master.transfer_from_safe", return_value="0xtxhash"
+            ) as mock_transfer,
+        ):
             result = wallet._transfer_from_safe(  # pylint: disable=protected-access
                 EOA_ADDR, 100, Chain.GNOSIS
             )
@@ -346,11 +357,13 @@ class TestTransferFromSafe:
         )
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         mock_api = MagicMock()
-        with patch.object(
-            wallet, "_pre_transfer_checks", return_value=EOA_ADDR
-        ), patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.transfer_erc20_from_safe", return_value="0xtxerc"
-        ) as mock_erc:
+        with (
+            patch.object(wallet, "_pre_transfer_checks", return_value=EOA_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch(
+                "operate.wallet.master.transfer_erc20_from_safe", return_value="0xtxerc"
+            ) as mock_erc,
+        ):
             result = (
                 wallet._transfer_erc20_from_safe(  # pylint: disable=protected-access
                     TOKEN_ADDR, EOA_ADDR, 100, Chain.GNOSIS
@@ -437,8 +450,11 @@ class TestTransferFromSafeThenEoa:
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
         # Use ERC20 (no DUST added). safe=5, eoa=5, total=10 < 100.
-        with patch.object(wallet, "get_balance", side_effect=[5, 5]), patch(
-            "operate.wallet.master.format_asset_amount", return_value="100 TOKEN"
+        with (
+            patch.object(wallet, "get_balance", side_effect=[5, 5]),
+            patch(
+                "operate.wallet.master.format_asset_amount", return_value="100 TOKEN"
+            ),
         ):
             with pytest.raises(InsufficientFundsException):
                 wallet.transfer_from_safe_then_eoa(
@@ -451,9 +467,10 @@ class TestTransferFromSafeThenEoa:
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
         # safe_balance=200 >= amount=100; eoa not needed for initial check
-        with patch.object(wallet, "get_balance", return_value=200), patch.object(
-            wallet, "transfer", return_value="0xtx_safe"
-        ) as mock_transfer:
+        with (
+            patch.object(wallet, "get_balance", return_value=200),
+            patch.object(wallet, "transfer", return_value="0xtx_safe") as mock_transfer,
+        ):
             result = wallet.transfer_from_safe_then_eoa(
                 EOA_ADDR, 100, Chain.GNOSIS, asset=TOKEN_ADDR
             )
@@ -470,9 +487,10 @@ class TestTransferFromSafeThenEoa:
         # safe=40, eoa=80, total=120 >= 100; safe < 100 so both used
         # get_balance called: once for safe, once for eoa in initial check,
         # then again for eoa after safe transfer (3 calls total)
-        with patch.object(
-            wallet, "get_balance", side_effect=[40, 80, 80]
-        ), patch.object(wallet, "transfer", return_value="0xtx") as mock_transfer:
+        with (
+            patch.object(wallet, "get_balance", side_effect=[40, 80, 80]),
+            patch.object(wallet, "transfer", return_value="0xtx") as mock_transfer,
+        ):
             result = wallet.transfer_from_safe_then_eoa(
                 EOA_ADDR, 100, Chain.GNOSIS, asset=TOKEN_ADDR
             )
@@ -495,9 +513,10 @@ class TestEthereumDrain:
         wallet = _make_wallet(
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
-        with patch.object(wallet, "get_balance", return_value=0), patch.object(
-            wallet, "transfer"
-        ) as mock_transfer:
+        with (
+            patch.object(wallet, "get_balance", return_value=0),
+            patch.object(wallet, "transfer") as mock_transfer,
+        ):
             wallet.drain("0xWithdrawal", Chain.GNOSIS)
         mock_transfer.assert_not_called()
 
@@ -508,9 +527,10 @@ class TestEthereumDrain:
         )
         # Return 100 for first asset, 0 for everything else
         balance_side_effect = [100] + [0] * 20
-        with patch.object(
-            wallet, "get_balance", side_effect=balance_side_effect
-        ), patch.object(wallet, "transfer") as mock_transfer:
+        with (
+            patch.object(wallet, "get_balance", side_effect=balance_side_effect),
+            patch.object(wallet, "transfer") as mock_transfer,
+        ):
             wallet.drain("0xWithdrawal", Chain.GNOSIS)
         assert mock_transfer.call_count == 1
         call_kwargs = mock_transfer.call_args[1]
@@ -558,12 +578,15 @@ class TestDecryptMnemonic:
         wallet = _make_wallet(tmp_path)
         mock_encrypted = MagicMock()
         mock_encrypted.decrypt.return_value = b"word1 word2 word3"
-        with patch(
-            "operate.wallet.master.EncryptedData.load", return_value=mock_encrypted
-        ), patch.object(
-            type(wallet),
-            "mnemonic_path",
-            new_callable=lambda: property(lambda self: tmp_path / "fake.json"),
+        with (
+            patch(
+                "operate.wallet.master.EncryptedData.load", return_value=mock_encrypted
+            ),
+            patch.object(
+                type(wallet),
+                "mnemonic_path",
+                new_callable=lambda: property(lambda self: tmp_path / "fake.json"),
+            ),
         ):
             # Create the fake mnemonic file so the exists() check passes
             (tmp_path / "fake.json").write_text("{}", encoding="utf-8")
@@ -746,9 +769,10 @@ class TestCreateSafe:
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
         mock_api = MagicMock()
-        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.create_gnosis_safe"
-        ) as mock_create:
+        with (
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.create_gnosis_safe") as mock_create,
+        ):
             result = wallet.create_safe(Chain.GNOSIS)
         mock_create.assert_not_called()
         assert result is None
@@ -758,10 +782,14 @@ class TestCreateSafe:
         wallet = _make_wallet(tmp_path)
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         mock_api = MagicMock()
-        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.create_gnosis_safe",
-            return_value=(SAFE_ADDR, 42, "0xtxhash"),
-        ) as mock_create, patch.object(wallet, "store"):
+        with (
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch(
+                "operate.wallet.master.create_gnosis_safe",
+                return_value=(SAFE_ADDR, 42, "0xtxhash"),
+            ) as mock_create,
+            patch.object(wallet, "store"),
+        ):
             result = wallet.create_safe(Chain.GNOSIS)
         mock_create.assert_called_once()
         assert result == "0xtxhash"
@@ -775,9 +803,10 @@ class TestCreateSafe:
         )
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         mock_api = MagicMock()
-        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.add_owner"
-        ) as mock_add:
+        with (
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.add_owner") as mock_add,
+        ):
             wallet.create_safe(Chain.GNOSIS, backup_owner=BACKUP_ADDR)
         mock_add.assert_called_once()
         assert mock_add.call_args[1]["owner"] == BACKUP_ADDR
@@ -877,9 +906,10 @@ class TestUpdateBackupOwner:
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         self._patch_ledger_api(wallet)
         # Only master as owner → no existing backup
-        with patch(
-            "operate.wallet.master.get_owners", return_value=[wallet.address]
-        ), patch("operate.wallet.master.add_owner") as mock_add:
+        with (
+            patch("operate.wallet.master.get_owners", return_value=[wallet.address]),
+            patch("operate.wallet.master.add_owner") as mock_add,
+        ):
             result = wallet.update_backup_owner(Chain.GNOSIS, backup_owner=BACKUP_ADDR)
         mock_add.assert_called_once()
         assert result is True
@@ -891,10 +921,13 @@ class TestUpdateBackupOwner:
         )
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         self._patch_ledger_api(wallet)
-        with patch(
-            "operate.wallet.master.get_owners",
-            return_value=[wallet.address, BACKUP_ADDR],
-        ), patch("operate.wallet.master.remove_owner") as mock_remove:
+        with (
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[wallet.address, BACKUP_ADDR],
+            ),
+            patch("operate.wallet.master.remove_owner") as mock_remove,
+        ):
             result = wallet.update_backup_owner(
                 Chain.GNOSIS, backup_owner=None
             )  # remove
@@ -909,10 +942,13 @@ class TestUpdateBackupOwner:
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
         self._patch_ledger_api(wallet)
         new_backup = "0x" + "f" * 40
-        with patch(
-            "operate.wallet.master.get_owners",
-            return_value=[wallet.address, BACKUP_ADDR],
-        ), patch("operate.wallet.master.swap_owner") as mock_swap:
+        with (
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[wallet.address, BACKUP_ADDR],
+            ),
+            patch("operate.wallet.master.swap_owner") as mock_swap,
+        ):
             result = wallet.update_backup_owner(Chain.GNOSIS, backup_owner=new_backup)
         mock_swap.assert_called_once()
         assert result is True
@@ -1021,14 +1057,12 @@ class TestTransferFromEoa:
             kwargs["tx_builder"]()  # call _build_tx to cover its body
             return mock_settler_inst
 
-        with patch.object(wallet, "get_balance", return_value=1000), patch(
-            "operate.wallet.master.estimate_transfer_tx_fee", return_value=100
-        ), patch.object(
-            wallet, "_pre_transfer_checks", return_value=SAFE_ADDR
-        ), patch.object(
-            wallet, "ledger_api", return_value=mock_api
-        ), patch(
-            "operate.wallet.master.TxSettler", side_effect=settler_side_effect
+        with (
+            patch.object(wallet, "get_balance", return_value=1000),
+            patch("operate.wallet.master.estimate_transfer_tx_fee", return_value=100),
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", side_effect=settler_side_effect),
         ):
             result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
                 SAFE_ADDR, 500, Chain.GNOSIS
@@ -1043,8 +1077,9 @@ class TestTransferFromEoa:
         wallet = _make_wallet(tmp_path)
         # balance=50, tx_fee=80: balance - tx_fee = -30 < 50 <= 50, so drain branch
         # amount becomes -30 which is <=0, so warning and return None
-        with patch.object(wallet, "get_balance", return_value=50), patch(
-            "operate.wallet.master.estimate_transfer_tx_fee", return_value=80
+        with (
+            patch.object(wallet, "get_balance", return_value=50),
+            patch("operate.wallet.master.estimate_transfer_tx_fee", return_value=80),
         ):
             result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
                 SAFE_ADDR, 50, Chain.GNOSIS
@@ -1081,16 +1116,13 @@ class TestTransferErc20FromEoa:
             kwargs["tx_builder"]()  # call _build_transfer_tx to cover its body
             return mock_settler_inst
 
-        with patch.object(
-            wallet, "_pre_transfer_checks", return_value=SAFE_ADDR
-        ), patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.registry_contracts"
-        ) as mock_registry, patch(
-            "operate.wallet.master.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.wallet.master.update_tx_with_gas_estimate"
-        ), patch(
-            "operate.wallet.master.TxSettler", side_effect=settler_side_effect
+        with (
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.registry_contracts") as mock_registry,
+            patch("operate.wallet.master.update_tx_with_gas_pricing"),
+            patch("operate.wallet.master.update_tx_with_gas_estimate"),
+            patch("operate.wallet.master.TxSettler", side_effect=settler_side_effect),
         ):
             mock_registry.erc20.get_instance.return_value = mock_instance
             result = (
@@ -1121,14 +1153,11 @@ class TestTransferFromSafeThenEoaNative:
         # Re-fetched eoa_balance = 60 <= 65, so amount = 60 (line 555)
         balance_side_effect = [50, 100, 60]
 
-        with patch.object(
-            wallet, "get_balance", side_effect=balance_side_effect
-        ), patch.object(
-            wallet, "transfer", side_effect=["0xtx_safe", "0xtx_eoa"]
-        ), patch(
-            "operate.wallet.master.gas_fees_spent_in_tx", return_value=5
-        ), patch.object(
-            wallet, "ledger_api", return_value=MagicMock()
+        with (
+            patch.object(wallet, "get_balance", side_effect=balance_side_effect),
+            patch.object(wallet, "transfer", side_effect=["0xtx_safe", "0xtx_eoa"]),
+            patch("operate.wallet.master.gas_fees_spent_in_tx", return_value=5),
+            patch.object(wallet, "ledger_api", return_value=MagicMock()),
         ):
             result = wallet.transfer_from_safe_then_eoa(
                 SAFE_ADDR, 120, Chain.GNOSIS, asset=ZERO_ADDRESS
@@ -1160,10 +1189,14 @@ class TestCreateSafeWithNoneSafes:
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
 
         mock_api = MagicMock()
-        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.create_gnosis_safe",
-            return_value=(SAFE_ADDR, 42, "0xtxhash"),
-        ), patch.object(wallet, "store"):
+        with (
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch(
+                "operate.wallet.master.create_gnosis_safe",
+                return_value=(SAFE_ADDR, 42, "0xtxhash"),
+            ),
+            patch.object(wallet, "store"),
+        ):
             wallet.create_safe(Chain.GNOSIS)
 
         assert wallet.safes is not None
@@ -1187,11 +1220,14 @@ class TestExtendedJson:
 
         mock_api = MagicMock()
 
-        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
-            "operate.wallet.master.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],
-        ), patch.object(wallet, "get_balance", return_value=1000), patch(
-            "operate.wallet.master.ERC20_TOKENS", {}
+        with (
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch.object(wallet, "get_balance", return_value=1000),
+            patch("operate.wallet.master.ERC20_TOKENS", {}),
         ):
             result = wallet.extended_json
 
@@ -1224,10 +1260,11 @@ class TestEthereumDrainTransferException:
         )
         # balance_side_effect: first asset has 100, rest are 0
         balance_side_effect = [100] + [0] * 20
-        with patch.object(
-            wallet, "get_balance", side_effect=balance_side_effect
-        ), patch.object(
-            wallet, "transfer", side_effect=RuntimeError("tx broadcast failed")
+        with (
+            patch.object(wallet, "get_balance", side_effect=balance_side_effect),
+            patch.object(
+                wallet, "transfer", side_effect=RuntimeError("tx broadcast failed")
+            ),
         ):
             result = wallet.drain("0xWithdrawal", Chain.GNOSIS)
         # Nothing was moved because the transfer raised
@@ -1239,9 +1276,10 @@ class TestEthereumDrainTransferException:
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
         balance_side_effect = [100] + [0] * 20
-        with patch.object(
-            wallet, "get_balance", side_effect=balance_side_effect
-        ), patch.object(wallet, "transfer"):
+        with (
+            patch.object(wallet, "get_balance", side_effect=balance_side_effect),
+            patch.object(wallet, "transfer"),
+        ):
             result = wallet.drain("0xWithdrawal", Chain.GNOSIS)
         # The first asset with balance 100 should be in the returned dict
         assert len(result) == 1
@@ -1364,12 +1402,14 @@ class TestSyncBackupOwner:
             # divergent
             return [EOA_ADDR, old_backup]
 
-        with patch(
-            "operate.wallet.master.get_owners", side_effect=_mock_get_owners
-        ), patch.object(
-            wallet, "update_backup_owner", return_value=True
-        ) as mock_update, patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        with (
+            patch("operate.wallet.master.get_owners", side_effect=_mock_get_owners),
+            patch.object(
+                wallet, "update_backup_owner", return_value=True
+            ) as mock_update,
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+            ),
         ):
             result = wallet.sync_backup_owner()
 
@@ -1389,13 +1429,17 @@ class TestSyncBackupOwner:
         wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
         wallet.canonical_backup_owner = BACKUP_ADDR
 
-        with patch(
-            "operate.wallet.master.get_owners",
-            return_value=[EOA_ADDR, "0x" + "f" * 40],  # divergent
-        ), patch.object(
-            wallet, "update_backup_owner", side_effect=RuntimeError("rpc down")
-        ), patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        with (
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[EOA_ADDR, "0x" + "f" * 40],  # divergent
+            ),
+            patch.object(
+                wallet, "update_backup_owner", side_effect=RuntimeError("rpc down")
+            ),
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+            ),
         ):
             result = wallet.sync_backup_owner()
 
@@ -1415,11 +1459,14 @@ class TestBackupOwnerStatus:
         )
         wallet.canonical_backup_owner = BACKUP_ADDR
 
-        with patch(
-            "operate.wallet.master.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        with (
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+            ),
         ):
             status = wallet.backup_owner_status()
 
@@ -1440,11 +1487,14 @@ class TestBackupOwnerStatus:
         )
         wallet.canonical_backup_owner = None
 
-        with patch(
-            "operate.wallet.master.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        with (
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+            ),
         ):
             status = wallet.backup_owner_status()
 
@@ -1465,11 +1515,14 @@ class TestBackupOwnerStatus:
         )
         wallet.canonical_backup_owner = BACKUP_ADDR
 
-        with patch(
-            "operate.wallet.master.get_owners",
-            return_value=[EOA_ADDR],  # no backup owner
-        ), patch(
-            "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+        with (
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[EOA_ADDR],  # no backup owner
+            ),
+            patch(
+                "operate.wallet.master.get_default_ledger_api", return_value=MagicMock()
+            ),
         ):
             status = wallet.backup_owner_status()
 
@@ -1504,16 +1557,17 @@ class TestCreateSafeAutoAppliesCanonical:
         mock_crypto = MagicMock()
         wallet._crypto = mock_crypto  # pylint: disable=protected-access
 
-        with patch(
-            "operate.wallet.master.get_default_ledger_api",
-            return_value=mock_ledger_api,
-        ), patch(
-            "operate.wallet.master.create_gnosis_safe",
-            return_value=(SAFE_ADDR, 1, "0xtxhash"),
-        ), patch(
-            "operate.wallet.master.add_owner"
-        ) as mock_add_owner, patch.object(
-            wallet, "store"
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch(
+                "operate.wallet.master.create_gnosis_safe",
+                return_value=(SAFE_ADDR, 1, "0xtxhash"),
+            ),
+            patch("operate.wallet.master.add_owner") as mock_add_owner,
+            patch.object(wallet, "store"),
         ):
             wallet.create_safe(chain=Chain.GNOSIS)
 
@@ -1537,16 +1591,17 @@ class TestCreateSafeAutoAppliesCanonical:
         mock_crypto = MagicMock()
         wallet._crypto = mock_crypto  # pylint: disable=protected-access
 
-        with patch(
-            "operate.wallet.master.get_default_ledger_api",
-            return_value=mock_ledger_api,
-        ), patch(
-            "operate.wallet.master.create_gnosis_safe",
-            return_value=(SAFE_ADDR, 1, "0xtxhash"),
-        ), patch(
-            "operate.wallet.master.add_owner"
-        ) as mock_add_owner, patch.object(
-            wallet, "store"
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch(
+                "operate.wallet.master.create_gnosis_safe",
+                return_value=(SAFE_ADDR, 1, "0xtxhash"),
+            ),
+            patch("operate.wallet.master.add_owner") as mock_add_owner,
+            patch.object(wallet, "store"),
         ):
             wallet.create_safe(chain=Chain.GNOSIS, backup_owner=explicit_owner)
 
@@ -1597,3 +1652,165 @@ class TestMigrateFormatAddsCanonicalBackupOwner:
 
         # No structural change → should be False
         assert migrated is False
+
+    def test_migrate_format_infers_canonical_backup_owner_when_consistent(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_format infers the backup owner when all safes agree."""
+        second_safe = "0x" + "e" * 40
+        ethereum_api = MagicMock()
+        gnosis_api = MagicMock()
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"ethereum": SAFE_ADDR, "gnosis": second_safe},
+            "safe_chains": ["ethereum", "gnosis"],
+            "ledger_type": "ethereum",
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                side_effect=(ethereum_api, gnosis_api),
+            ) as mock_get_default_ledger_api,
+            patch(
+                "operate.wallet.master.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ) as mock_get_owners,
+        ):
+            migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        assert migrated is True
+        mock_get_default_ledger_api.assert_has_calls(
+            [call(chain=Chain.ETHEREUM), call(chain=Chain.GNOSIS)]
+        )
+        assert mock_get_default_ledger_api.call_count == 2
+        mock_get_owners.assert_has_calls(
+            [
+                call(ledger_api=ethereum_api, safe=SAFE_ADDR),
+                call(ledger_api=gnosis_api, safe=second_safe),
+            ]
+        )
+        assert mock_get_owners.call_count == 2
+        result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
+        assert result["canonical_backup_owner"] == BACKUP_ADDR
+
+    def test_migrate_format_leaves_canonical_backup_owner_none_when_inconsistent(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_format leaves canonical_backup_owner unset when safes disagree."""
+        second_safe = "0x" + "e" * 40
+        other_backup = "0x" + "f" * 40
+        ethereum_api = MagicMock()
+        gnosis_api = MagicMock()
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"ethereum": SAFE_ADDR, "gnosis": second_safe},
+            "safe_chains": ["ethereum", "gnosis"],
+            "ledger_type": "ethereum",
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                side_effect=(ethereum_api, gnosis_api),
+            ) as mock_get_default_ledger_api,
+            patch(
+                "operate.wallet.master.get_owners",
+                side_effect=([EOA_ADDR, BACKUP_ADDR], [EOA_ADDR, other_backup]),
+            ) as mock_get_owners,
+        ):
+            migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        assert migrated is True
+        mock_get_default_ledger_api.assert_has_calls(
+            [call(chain=Chain.ETHEREUM), call(chain=Chain.GNOSIS)]
+        )
+        assert mock_get_default_ledger_api.call_count == 2
+        mock_get_owners.assert_has_calls(
+            [
+                call(ledger_api=ethereum_api, safe=SAFE_ADDR),
+                call(ledger_api=gnosis_api, safe=second_safe),
+            ]
+        )
+        assert mock_get_owners.call_count == 2
+        result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
+        assert result["canonical_backup_owner"] is None
+
+    def test_migrate_format_leaves_canonical_backup_owner_none_when_owner_topology_is_malformed(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_format only infers when each Safe has master plus one shared backup."""
+        second_safe = "0x" + "e" * 40
+        ethereum_api = MagicMock()
+        gnosis_api = MagicMock()
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"ethereum": SAFE_ADDR, "gnosis": second_safe},
+            "safe_chains": ["ethereum", "gnosis"],
+            "ledger_type": "ethereum",
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                side_effect=(ethereum_api, gnosis_api),
+            ) as mock_get_default_ledger_api,
+            patch(
+                "operate.wallet.master.get_owners",
+                side_effect=(
+                    [EOA_ADDR, BACKUP_ADDR, second_safe],
+                    [EOA_ADDR, BACKUP_ADDR],
+                ),
+            ) as mock_get_owners,
+        ):
+            migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        assert migrated is True
+        mock_get_default_ledger_api.assert_has_calls(
+            [call(chain=Chain.ETHEREUM), call(chain=Chain.GNOSIS)]
+        )
+        assert mock_get_default_ledger_api.call_count == 2
+        mock_get_owners.assert_has_calls(
+            [
+                call(ledger_api=ethereum_api, safe=SAFE_ADDR),
+                call(ledger_api=gnosis_api, safe=second_safe),
+            ]
+        )
+        assert mock_get_owners.call_count == 2
+        result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
+        assert result["canonical_backup_owner"] is None
+
+    def test_migrate_format_keeps_canonical_backup_owner_none_when_owner_lookup_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_format tolerates owner lookup failures during inference."""
+        ethereum_api = MagicMock()
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"ethereum": SAFE_ADDR},
+            "safe_chains": ["ethereum"],
+            "ledger_type": "ethereum",
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                return_value=ethereum_api,
+            ) as mock_get_default_ledger_api,
+            patch(
+                "operate.wallet.master.get_owners",
+                side_effect=RuntimeError("owner lookup failed"),
+            ) as mock_get_owners,
+        ):
+            migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        assert migrated is True
+        mock_get_default_ledger_api.assert_called_once_with(chain=Chain.ETHEREUM)
+        mock_get_owners.assert_called_once_with(ledger_api=ethereum_api, safe=SAFE_ADDR)
+        assert mock_get_owners.call_count == 1
+        result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
+        assert result["canonical_backup_owner"] is None
