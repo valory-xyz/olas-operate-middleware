@@ -83,14 +83,16 @@ def test_run_stoppable_main_uses_fork_context_on_non_windows() -> None:
     mock_context.Process.return_value = mock_process
 
     with patch("operate.services.utils.tendermint.os.name", "posix"):
-        with patch(
-            "operate.services.utils.tendermint.multiprocessing.get_context",
-            return_value=mock_context,
-        ) as mock_get_context:
-            with patch("operate.services.utils.tendermint.sleep"):
-                run_stoppable_main()
+        with patch("operate.services.utils.tendermint.os.setpgrp") as mock_setpgrp:
+            with patch(
+                "operate.services.utils.tendermint.multiprocessing.get_context",
+                return_value=mock_context,
+            ) as mock_get_context:
+                with patch("operate.services.utils.tendermint.sleep"):
+                    run_stoppable_main()
 
     mock_get_context.assert_called_once_with("fork")
+    mock_setpgrp.assert_called_once_with()
     mock_context.Queue.assert_called_once_with()
     mock_context.Process.assert_called_once_with(
         target=__import__(
@@ -109,13 +111,15 @@ def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
     mock_context.Process.return_value = mock_process
 
     with patch("operate.services.utils.tendermint.os.name", "posix"):
-        with patch(
-            "operate.services.utils.tendermint.multiprocessing.get_context",
-            return_value=mock_context,
-        ):
-            with patch("operate.services.utils.tendermint.sleep"):
-                run_stoppable_main()
+        with patch("operate.services.utils.tendermint.os.setpgrp") as mock_setpgrp:
+            with patch(
+                "operate.services.utils.tendermint.multiprocessing.get_context",
+                return_value=mock_context,
+            ):
+                with patch("operate.services.utils.tendermint.sleep"):
+                    run_stoppable_main()
 
+    mock_setpgrp.assert_called_once_with()
     mock_process.start.assert_called_once_with()
     mock_queue.get.assert_called_once_with(block=True)
     assert mock_process.terminate.call_count == 2
@@ -268,18 +272,24 @@ class TestTendermintNodeMethods:
     def test_start_tm_process_spawns_popen(self) -> None:
         """_start_tm_process creates a subprocess and stores it in _process."""
         node = self._make_node()
+        mock_process = MagicMock()
+        mock_process.pid = 1234
         with patch("operate.services.utils.tendermint.subprocess.Popen") as mock_popen:
-            mock_popen.return_value = MagicMock()
-            node._start_tm_process()  # pylint: disable=protected-access
+            mock_popen.return_value = mock_process
+            with patch("operate.services.utils.tendermint.WinHelper"):
+                node._start_tm_process()  # pylint: disable=protected-access
         assert node._process is not None  # pylint: disable=protected-access
         mock_popen.assert_called_once()
 
     def test_start_tm_process_debug_flag(self) -> None:
         """_start_tm_process with debug=True includes --log_level=debug."""
         node = self._make_node()
+        mock_process = MagicMock()
+        mock_process.pid = 1234
         with patch("operate.services.utils.tendermint.subprocess.Popen") as mock_popen:
-            mock_popen.return_value = MagicMock()
-            node._start_tm_process(debug=True)  # pylint: disable=protected-access
+            mock_popen.return_value = mock_process
+            with patch("operate.services.utils.tendermint.WinHelper"):
+                node._start_tm_process(debug=True)  # pylint: disable=protected-access
         call_args = mock_popen.call_args[0][0]
         assert "--log_level=debug" in call_args
 
