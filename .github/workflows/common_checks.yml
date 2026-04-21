@@ -74,9 +74,11 @@ jobs:
           version: "2.3.2"
 
       - name: Run unit tests
+        env:
+          POETRY_EXE: ${{ runner.os == 'Windows' && format('{0}\\Scripts\\poetry.exe', env.pythonLocation) || format('{0}/bin/poetry', env.pythonLocation) }}
         run: |
           pip install tomte[tox]==0.6.1
-          pip install -e .
+          poetry install
           tox -e unit-tests
 
   coverage:
@@ -95,9 +97,11 @@ jobs:
           version: "2.3.2"
 
       - name: Run unit tests with coverage
+        env:
+          POETRY_EXE: ${{ runner.os == 'Windows' && format('{0}\\Scripts\\poetry.exe', env.pythonLocation) || format('{0}/bin/poetry', env.pythonLocation) }}
         run: |
           pip install tomte[tox]==0.6.1
-          pip install -e .
+          poetry install
           tox -e unit-tests-coverage
 
       - name: Upload coverage to Codecov
@@ -143,7 +147,9 @@ jobs:
           version: "2.3.2"
 
       - name: Run integration tests
+        env:
+          POETRY_EXE: ${{ runner.os == 'Windows' && format('{0}\\Scripts\\poetry.exe', env.pythonLocation) || format('{0}/bin/poetry', env.pythonLocation) }}
         run: |
           pip install tomte[tox]==0.6.1
-          pip install -e .
+          poetry install
           tox -e integration-tests
