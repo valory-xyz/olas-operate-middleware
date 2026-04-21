@@ -494,23 +494,77 @@ class TestWinHelper:
         assert handle == "proc-handle"
         kernel32.OpenProcess.assert_called_once_with(0x1F0FFF, False, 55)
 
-    def test_create_job_object_raises_when_creation_fails(self) -> None:
-        """create_job_object propagates a Windows error when CreateJobObjectW fails."""
-        with patch.object(
-            WinHelper, "create_job_object", side_effect=OSError("create failed")
-        ):
-            with pytest.raises(OSError, match="create failed"):
-                WinHelper()
+    def test_create_job_object_returns_handle_when_configuration_succeeds(self) -> None:
+        """create_job_object returns the created handle after successful setup."""
+        import ctypes
 
-    def test_create_job_object_raises_on_configuration_failure(self) -> None:
-        """create_job_object initialization failures propagate through the constructor."""
-        helper = WinHelper.__new__(WinHelper)
+        kernel32 = MagicMock()
+        kernel32.CreateJobObjectW.return_value = "job-handle"
+        kernel32.SetInformationJobObject.return_value = 1
+        fake_wintypes = SimpleNamespace(
+            LARGE_INTEGER=ctypes.c_longlong,
+            DWORD=ctypes.c_uint32,
+            ULONG=ctypes.c_ulong,
+        )
 
-        with patch.object(
-            WinHelper, "create_job_object", side_effect=OSError("configure failed")
-        ):
-            with pytest.raises(OSError, match="configure failed"):
-                WinHelper.__init__(helper)
+        with patch.dict("sys.modules", {"ctypes.wintypes": fake_wintypes}):
+            with patch(
+                "ctypes.windll", SimpleNamespace(kernel32=kernel32), create=True
+            ):
+                job = WinHelper.create_job_object()
+
+        assert job == "job-handle"
+        kernel32.CreateJobObjectW.assert_called_once_with(None, None)
+        kernel32.SetInformationJobObject.assert_called_once()
+
+    def test_create_job_object_raises_when_create_returns_falsy(self) -> None:
+        """create_job_object raises WinError when CreateJobObjectW returns falsy value."""
+        import ctypes
+
+        kernel32 = MagicMock()
+        kernel32.CreateJobObjectW.return_value = 0
+        fake_wintypes = SimpleNamespace(
+            LARGE_INTEGER=ctypes.c_longlong,
+            DWORD=ctypes.c_uint32,
+            ULONG=ctypes.c_ulong,
+        )
+
+        with patch.dict("sys.modules", {"ctypes.wintypes": fake_wintypes}):
+            with patch(
+                "ctypes.windll", SimpleNamespace(kernel32=kernel32), create=True
+            ):
+                with patch(
+                    "ctypes.WinError", side_effect=OSError("create failed"), create=True
+                ):
+                    with pytest.raises(OSError, match="create failed"):
+                        WinHelper.create_job_object()
+
+    def test_create_job_object_closes_handle_when_configuration_fails(self) -> None:
+        """create_job_object closes the handle before raising on setup failure."""
+        import ctypes
+
+        kernel32 = MagicMock()
+        kernel32.CreateJobObjectW.return_value = "job-handle"
+        kernel32.SetInformationJobObject.return_value = 0
+        fake_wintypes = SimpleNamespace(
+            LARGE_INTEGER=ctypes.c_longlong,
+            DWORD=ctypes.c_uint32,
+            ULONG=ctypes.c_ulong,
+        )
+
+        with patch.dict("sys.modules", {"ctypes.wintypes": fake_wintypes}):
+            with patch(
+                "ctypes.windll", SimpleNamespace(kernel32=kernel32), create=True
+            ):
+                with patch(
+                    "ctypes.WinError",
+                    side_effect=OSError("configure failed"),
+                    create=True,
+                ):
+                    with pytest.raises(OSError, match="configure failed"):
+                        WinHelper.create_job_object()
+
+        kernel32.CloseHandle.assert_called_once_with("job-handle")
 
     def test_assign_to_job_raises_when_assignment_fails(self) -> None:
         """assign_to_job raises a Windows error when the process cannot be assigned."""
