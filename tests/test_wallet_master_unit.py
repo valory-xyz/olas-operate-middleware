@@ -1783,6 +1783,48 @@ class TestMigrateFormatAddsCanonicalBackupOwner:
         result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
         assert result["canonical_backup_owner"] is None
 
+    def test_migrate_format_leaves_canonical_backup_owner_none_when_master_owner_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """migrate_format does not infer when a Safe owners list excludes the master EOA."""
+        second_safe = "0x" + "e" * 40
+        ethereum_api = MagicMock()
+        gnosis_api = MagicMock()
+        data = {
+            "address": EOA_ADDR,
+            "safes": {"ethereum": SAFE_ADDR, "gnosis": second_safe},
+            "safe_chains": ["ethereum", "gnosis"],
+            "ledger_type": "ethereum",
+        }
+        _write_ethereum_json(tmp_path, data)
+
+        with (
+            patch(
+                "operate.wallet.master.get_default_ledger_api",
+                side_effect=(ethereum_api, gnosis_api),
+            ) as mock_get_default_ledger_api,
+            patch(
+                "operate.wallet.master.get_owners",
+                side_effect=([BACKUP_ADDR], [EOA_ADDR, BACKUP_ADDR]),
+            ) as mock_get_owners,
+        ):
+            migrated = EthereumMasterWallet.migrate_format(tmp_path)
+
+        assert migrated is True
+        mock_get_default_ledger_api.assert_has_calls(
+            [call(chain=Chain.ETHEREUM), call(chain=Chain.GNOSIS)]
+        )
+        assert mock_get_default_ledger_api.call_count == 2
+        mock_get_owners.assert_has_calls(
+            [
+                call(ledger_api=ethereum_api, safe=SAFE_ADDR),
+                call(ledger_api=gnosis_api, safe=second_safe),
+            ]
+        )
+        assert mock_get_owners.call_count == 2
+        result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
+        assert result["canonical_backup_owner"] is None
+
     def test_migrate_format_keeps_canonical_backup_owner_none_when_owner_lookup_fails(
         self, tmp_path: Path
     ) -> None:
