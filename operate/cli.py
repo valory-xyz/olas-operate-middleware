@@ -2183,7 +2183,33 @@ def qs_analyse_logs(  # pylint: disable=too-many-arguments
 
 
 PYTHON_INTERPRETER_FLAGS = frozenset(
-    {"-B", "-O", "-OO", "-u", "-v", "-d", "-i", "-s", "-S", "-E"}
+    {
+        "-b",
+        "-B",
+        "-c",
+        "-d",
+        "-E",
+        "-h",
+        "-i",
+        "-I",
+        "-m",
+        "-O",
+        "-OO",
+        "-P",
+        "-q",
+        "-s",
+        "-S",
+        "-u",
+        "-v",
+        "-V",
+        "-W",
+        "-x",
+        "-X",
+        "--check-hash-based-pycs",
+        "--help-env",
+        "--help-xoptions",
+        "--help-all",
+    }
 )
 
 
