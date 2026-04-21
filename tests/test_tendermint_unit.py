@@ -33,9 +33,79 @@ from operate.services.utils.tendermint import (
     StoppableThread,
     TendermintNode,
     TendermintParams,
+    _collect_process_debug_context,
+    _log_process_debug_event,
     create_app,
     run_stoppable_main,
 )
+
+
+def test_collect_process_debug_context_returns_launch_fields() -> None:
+    """The debug context includes process and frozen-runtime markers."""
+    with patch("operate.services.utils.tendermint.os.getpid", return_value=111):
+        with patch("operate.services.utils.tendermint.os.getppid", return_value=22):
+            with patch(
+                "operate.services.utils.tendermint.sys.argv", ["tm-helper", "--flag"]
+            ):
+                with patch(
+                    "operate.services.utils.tendermint.sys.executable",
+                    "/tmp/appimage",  # nosec B108
+                ):
+                    with patch.object(
+                        __import__(
+                            "operate.services.utils.tendermint", fromlist=["sys"]
+                        ).sys,
+                        "frozen",
+                        True,
+                        create=True,
+                    ):
+                        with patch.object(
+                            __import__(
+                                "operate.services.utils.tendermint", fromlist=["sys"]
+                            ).sys,
+                            "_MEIPASS",
+                            "/tmp/meipass",  # nosec B108
+                            create=True,
+                        ):
+                            with patch.dict(
+                                "operate.services.utils.tendermint.os.environ",
+                                {"__MP_MAIN__": "1"},
+                                clear=False,
+                            ):
+                                context = _collect_process_debug_context()
+
+    assert context["pid"] == 111
+    assert context["ppid"] == 22
+    assert context["argv"] == ["tm-helper", "--flag"]
+    assert context["executable"] == "/tmp/appimage"  # nosec B108
+    assert context["is_frozen"] is True
+    assert context["meipass"] == "/tmp/meipass"  # nosec B108
+    assert context["mp_main_flag"] == "1"
+
+
+def test_log_process_debug_event_emits_json_line() -> None:
+    """The debug event logger emits a single JSON line with the event name."""
+    fake_context = {
+        "pid": 1,
+        "ppid": 0,
+        "argv": [],
+        "executable": "x",
+        "is_frozen": False,
+        "meipass": None,
+        "mp_main_flag": None,
+    }
+
+    with patch(
+        "operate.services.utils.tendermint._collect_process_debug_context",
+        return_value=fake_context,
+    ):
+        with patch("builtins.print") as mock_print:
+            _log_process_debug_event("module_entry")
+
+    payload = json.loads(mock_print.call_args.args[0])
+    assert payload["tm_debug_event"] == "module_entry"
+    assert payload["pid"] == 1
+    assert mock_print.call_args.kwargs["flush"] is True
 
 
 def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
