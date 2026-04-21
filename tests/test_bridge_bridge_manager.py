@@ -158,6 +158,10 @@ class TestBridgeManager:
         return price_usd * amount / (10**decimals)
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live RPC balance checks are unreliable from macOS/Windows CI runners.",
+    )
     def test_bundle_zero(
         self,
         tmp_path: Path,
