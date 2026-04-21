@@ -38,24 +38,9 @@ jobs:
         pip install tomte[tox]==0.6.1
         pip install --user --upgrade setuptools
         sudo npm install -g markdown-spellcheck
-    - name: Security checks
+    - name: All pre-test checks
       run: |
-        tox -p -e bandit -e safety
-    - name: Code style check
-      run: |
-        tox -p -e black-check -e isort-check 
-    - name: Flake7
-      run: |
-        tox -e flake8 
-    - name: Pylint
-      run: tox -e pylint
-    - name: Static type check
-      run: tox -e mypy
-    # - name: Check spelling
-    #   run: tox -e spell-check
-    # - name: License compatibility check
-    #   run: tox -e liccheck
-    # tox -p -e vulture -e darglint
+        tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 
   unit-tests:
     continue-on-error: False
