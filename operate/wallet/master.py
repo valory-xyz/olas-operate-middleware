@@ -939,8 +939,13 @@ class EthereumMasterWallet(
             - ``all_chains_synced`` (bool): True when every Safe's backup matches
               the canonical.
             - ``any_backup_missing`` (bool): True when at least one Safe has no
-              backup owner at all.
-            - ``chains`` (list): per-chain status dicts.
+              backup owner at all (on-chain owners list has no entry besides the
+              master EOA).
+            - ``existing_backup_on_any_chain`` (bool): True when at least one Safe
+              has any backup owner set on-chain, even if ``canonical_backup_owner``
+              is not yet set.  Lets the frontend distinguish "never had a backup"
+              from "had one but canonical not yet assigned".
+            - ``chains`` (list): per-chain status dicts, each with ``is_synced``.
             - ``chains_without_safe`` (list): chain values for chains in
               ``safe_chains`` that don't have a safe address yet.
         """
@@ -948,6 +953,7 @@ class EthereumMasterWallet(
         chains_without_safe = []
         all_chains_synced = True
         any_backup_missing = False
+        existing_backup_on_any_chain = False
 
         for chain in self.safe_chains:
             if chain not in self.safes:
@@ -960,18 +966,20 @@ class EthereumMasterWallet(
             backup_owners = [o for o in owners if o != self.address]
             current_backup = backup_owners[0] if backup_owners else None
 
-            synced = self.canonical_backup_owner in backup_owners
-            if not synced:
+            is_synced = self.canonical_backup_owner in backup_owners
+            if not is_synced:
                 all_chains_synced = False
             if not backup_owners:
                 any_backup_missing = True
+            else:
+                existing_backup_on_any_chain = True
 
             chains_status.append(
                 {
                     "chain": chain.value,
                     "safe": safe,
                     "current_backup_owner": current_backup,
-                    "synced": synced,
+                    "is_synced": is_synced,
                 }
             )
 
@@ -979,6 +987,7 @@ class EthereumMasterWallet(
             "canonical_backup_owner": self.canonical_backup_owner,
             "all_chains_synced": all_chains_synced,
             "any_backup_missing": any_backup_missing,
+            "existing_backup_on_any_chain": existing_backup_on_any_chain,
             "chains": chains_status,
             "chains_without_safe": chains_without_safe,
         }

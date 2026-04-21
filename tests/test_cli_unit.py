@@ -2908,10 +2908,33 @@ class TestPutSafeAllChains:
     """Tests for PUT /api/wallet/safe with chain='all'."""
 
     def test_put_safe_all_chains_add_success(self) -> None:
-        """chain='all' with correct password persists canonical and updates chains."""
+        """Add (canonical not set): succeeds without a password."""
         m = _make_mock_operate_with_wallet()
         wallet_mock = m.wallet_manager.load.return_value
         # Simulate checksum returning the same address
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        wallet_mock.canonical_backup_owner = None  # not yet set
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                # Add flow: no password sent
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={"chain": "all", "backup_owner": BACKUP_ADDR},
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["canonical_backup_owner"] == BACKUP_ADDR
+        assert "results" in body
+        assert "all_succeeded" in body
+
+    def test_put_safe_all_chains_add_with_password_also_succeeds(self) -> None:
+        """Add flow optionally accepts a password without erroring."""
+        m = _make_mock_operate_with_wallet()
+        wallet_mock = m.wallet_manager.load.return_value
         wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
             BACKUP_ADDR
         )
@@ -2925,18 +2948,21 @@ class TestPutSafeAllChains:
                     json={
                         "chain": "all",
                         "backup_owner": BACKUP_ADDR,
-                        "password": "pass",  # nosec
+                        "password": "pass",  # nosec — extra field; ignored for Add
                     },
                 )
         assert resp.status_code == HTTPStatus.OK
-        body = resp.json()
-        assert body["canonical_backup_owner"] == BACKUP_ADDR
-        assert "results" in body
-        assert "all_succeeded" in body
 
     def test_put_safe_all_chains_update_requires_password(self) -> None:
-        """chain='all' without password returns 400."""
-        m = _make_mock_operate_with_wallet()
+        """Update (canonical already set): missing password returns 400."""
+        # canonical is set — this triggers the Update path that requires a password.
+        m = _make_mock_operate_with_wallet(
+            canonical_backup_owner="0x" + "a" * 40  # different from BACKUP_ADDR
+        )
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
@@ -2948,8 +2974,14 @@ class TestPutSafeAllChains:
         assert "password" in resp.json()["error"].lower()
 
     def test_put_safe_all_chains_update_wrong_password(self) -> None:
-        """chain='all' with wrong password returns 401."""
-        m = _make_mock_operate_with_wallet()
+        """Update (canonical already set): wrong password returns 401."""
+        m = _make_mock_operate_with_wallet(
+            canonical_backup_owner="0x" + "a" * 40  # different from BACKUP_ADDR
+        )
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
         m.user_account.is_valid.return_value = False
         stack, app, _, _ = _open_app(m)
         with stack:
@@ -3078,6 +3110,7 @@ class TestGetBackupOwnerStatus:
             "canonical_backup_owner": None,
             "all_chains_synced": False,
             "any_backup_missing": True,
+            "existing_backup_on_any_chain": False,
             "chains": [],
             "chains_without_safe": [],
         }
@@ -3089,6 +3122,38 @@ class TestGetBackupOwnerStatus:
         assert resp.status_code == HTTPStatus.OK
         body = resp.json()
         assert body["canonical_backup_owner"] is None
+        assert body["existing_backup_on_any_chain"] is False
+
+    def test_get_backup_owner_status_no_canonical_but_existing_on_chain(self) -> None:
+        """Returns existing_backup_on_any_chain=True when chains have a backup but canonical is null."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=None)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.backup_owner_status.return_value = {
+            "canonical_backup_owner": None,
+            "all_chains_synced": False,
+            "any_backup_missing": False,
+            "existing_backup_on_any_chain": True,
+            "chains": [
+                {
+                    "chain": "gnosis",
+                    "safe": "0x" + "b" * 40,
+                    "current_backup_owner": BACKUP_ADDR,
+                    "is_synced": False,
+                }
+            ],
+            "chains_without_safe": [],
+        }
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["canonical_backup_owner"] is None
+        assert body["existing_backup_on_any_chain"] is True
+        assert body["chains"][0]["is_synced"] is False
+        assert body["chains"][0]["current_backup_owner"] == BACKUP_ADDR
 
     def test_get_backup_owner_status_synced(self) -> None:
         """Returns 200 with all_chains_synced=True when all chains match."""
@@ -3098,12 +3163,13 @@ class TestGetBackupOwnerStatus:
             "canonical_backup_owner": BACKUP_ADDR,
             "all_chains_synced": True,
             "any_backup_missing": False,
+            "existing_backup_on_any_chain": True,
             "chains": [
                 {
                     "chain": "gnosis",
                     "safe": "0x" + "b" * 40,
                     "current_backup_owner": BACKUP_ADDR,
-                    "synced": True,
+                    "is_synced": True,
                 }
             ],
             "chains_without_safe": [],
@@ -3117,6 +3183,7 @@ class TestGetBackupOwnerStatus:
         body = resp.json()
         assert body["all_chains_synced"] is True
         assert body["canonical_backup_owner"] == BACKUP_ADDR
+        assert body["chains"][0]["is_synced"] is True
 
     def test_get_backup_owner_status_not_logged_in(self) -> None:
         """Returns 401 when user is not logged in."""

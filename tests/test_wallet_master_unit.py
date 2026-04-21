@@ -1426,8 +1426,9 @@ class TestBackupOwnerStatus:
         assert status["canonical_backup_owner"] == BACKUP_ADDR
         assert status["all_chains_synced"] is True
         assert status["any_backup_missing"] is False
+        assert status["existing_backup_on_any_chain"] is True
         assert len(status["chains"]) == 1
-        assert status["chains"][0]["synced"] is True
+        assert status["chains"][0]["is_synced"] is True
         assert status["chains"][0]["current_backup_owner"] == BACKUP_ADDR
 
     def test_backup_owner_status_no_canonical(self, tmp_path: Path) -> None:
@@ -1450,6 +1451,10 @@ class TestBackupOwnerStatus:
         # canonical is None so no chain can match → not synced
         assert status["canonical_backup_owner"] is None
         assert status["all_chains_synced"] is False
+        # But an existing backup IS present on-chain — frontend can detect this.
+        assert status["existing_backup_on_any_chain"] is True
+        assert status["chains"][0]["is_synced"] is False
+        assert status["chains"][0]["current_backup_owner"] == BACKUP_ADDR
 
     def test_backup_owner_status_missing_backup(self, tmp_path: Path) -> None:
         """backup_owner_status marks any_backup_missing when a Safe has no backup."""
@@ -1469,6 +1474,7 @@ class TestBackupOwnerStatus:
             status = wallet.backup_owner_status()
 
         assert status["any_backup_missing"] is True
+        assert status["existing_backup_on_any_chain"] is False
         assert status["chains"][0]["current_backup_owner"] is None
 
     def test_backup_owner_status_chains_without_safe(self, tmp_path: Path) -> None:

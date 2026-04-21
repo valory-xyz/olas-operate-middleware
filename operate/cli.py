@@ -1019,7 +1019,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         manager = operate.wallet_manager
 
         if chain_value == "all":
-            # Bulk path — requires password verification for canonicalisation.
+            # Bulk path: Add (first time, no password) or Update (canonical set, password required).
             backup_owner_raw = data.get("backup_owner")
             if not backup_owner_raw:
                 return JSONResponse(
@@ -1029,20 +1029,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     status_code=HTTPStatus.BAD_REQUEST,
                 )
 
-            password = data.get("password")
-            if not password:
-                return JSONResponse(
-                    content={"error": "'password' is required when chain is 'all'."},
-                    status_code=HTTPStatus.BAD_REQUEST,
-                )
-
-            if not operate.user_account.is_valid(password=password):
-                return JSONResponse(
-                    content={"error": MSG_INVALID_PASSWORD},
-                    status_code=HTTPStatus.UNAUTHORIZED,
-                )
-
-            # Load an Ethereum wallet to resolve checksum address.
+            # Load wallet first so we can determine whether this is Add or Update.
             if not manager.exists(ledger_type=LedgerType.ETHEREUM):
                 return JSONResponse(
                     content={"error": "No Master EOA found."},
@@ -1050,6 +1037,23 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 )
 
             wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
+
+            # Password is only required for Update (canonical already set).
+            if wallet.canonical_backup_owner is not None:
+                password = data.get("password")
+                if not password:
+                    return JSONResponse(
+                        content={
+                            "error": "'password' is required to update the canonical backup wallet."
+                        },
+                        status_code=HTTPStatus.BAD_REQUEST,
+                    )
+                if not operate.user_account.is_valid(password=password):
+                    return JSONResponse(
+                        content={"error": MSG_INVALID_PASSWORD},
+                        status_code=HTTPStatus.UNAUTHORIZED,
+                    )
+
             # Use web3 from any chain ledger api to checksum the address.
             sample_chain = next(iter(wallet.safes)) if wallet.safes else None
             if sample_chain is not None:
@@ -1058,7 +1062,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             else:
                 backup_owner = backup_owner_raw
 
-            # Guard: canonical already set to a *different* address means update.
+            # Guard: trying to set the same address that is already canonical.
             if (
                 wallet.canonical_backup_owner is not None
                 and wallet.canonical_backup_owner == backup_owner
