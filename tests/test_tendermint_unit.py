@@ -83,7 +83,9 @@ def test_run_stoppable_main_uses_fork_context_on_non_windows() -> None:
     mock_context.Process.return_value = mock_process
 
     with patch("operate.services.utils.tendermint.os.name", "posix"):
-        with patch("operate.services.utils.tendermint.os.setpgrp") as mock_setpgrp:
+        with patch(
+            "operate.services.utils.tendermint.os.setpgrp", create=True
+        ) as mock_setpgrp:
             with patch(
                 "operate.services.utils.tendermint.multiprocessing.get_context",
                 return_value=mock_context,
@@ -111,7 +113,9 @@ def test_run_stoppable_main_closes_queue_and_joins_process() -> None:
     mock_context.Process.return_value = mock_process
 
     with patch("operate.services.utils.tendermint.os.name", "posix"):
-        with patch("operate.services.utils.tendermint.os.setpgrp") as mock_setpgrp:
+        with patch(
+            "operate.services.utils.tendermint.os.setpgrp", create=True
+        ) as mock_setpgrp:
             with patch(
                 "operate.services.utils.tendermint.multiprocessing.get_context",
                 return_value=mock_context,
