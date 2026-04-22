@@ -521,6 +521,11 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain RPC calls via Web3.HTTPProvider bypass VCR cassette interception on macOS/Windows CI runners.",
+    )
     @pytest.mark.vcr
     @pytest.mark.parametrize(
         ("to_chain_enum", "expected_provider_cls", "expected_contract_adaptor_cls"),
