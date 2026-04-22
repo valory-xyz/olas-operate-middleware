@@ -776,6 +776,10 @@ class TestNativeBridgeProvider:
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="NativeBridgeProvider makes Web3 eth_call (l1Token) that bypasses VCR cassette interception on macOS/Windows CI runners.",
+    )
     @pytest.mark.vcr
     @pytest.mark.parametrize(
         "provider_class",
