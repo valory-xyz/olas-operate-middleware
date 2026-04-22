@@ -76,6 +76,7 @@ from operate.services.service import NON_EXISTENT_MULTISIG
 from operate.utils.gnosis import (
     fetch_safes_for_owner,
     get_asset_balance,
+    get_owners,
 )
 from operate.wallet.master import EthereumMasterWallet, MasterWalletManager
 
@@ -338,6 +339,122 @@ def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
         raise
 
 
+def _get_master_safes_from_contracts(
+    chain: Chain,
+    ledger_api: t.Any,
+    service_registry_address: str,
+    eoa_address: str,
+    subgraph_url: t.Optional[str],
+    chain_id: t.Optional[int] = None,
+) -> t.List[str]:
+    """Discover MasterSafe addresses for *eoa_address* via on-chain contract lookups.
+
+    Replaces the Safe Transaction Service API dependency in the recovery flow.
+    Uses the OLAS subgraph as primary service-ID source, falls back to on-chain
+    Transfer-event enumeration, then resolves each service's MasterSafe via
+    ``StakingManager.get_current_staking_program`` (handles both staked and
+    non-staked cases) and ``StakingManager.service_info`` (staked branch).
+
+    A supplementary ``fetch_safes_for_owner`` call is made after the contract
+    loop to cover wallet-only accounts; its failures are silently discarded.
+
+    Only safes where *eoa_address* is a confirmed owner are returned.
+    """
+    safe_addresses: t.Set[str] = set()
+
+    # ── 1. Service ID discovery ──────────────────────────────────────────────
+    service_ids: t.List[int] = []
+    if subgraph_url:
+        try:
+            service_ids = _fetch_services_from_subgraph(subgraph_url, eoa_address)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Subgraph query failed in _get_master_safes_from_contracts (%s): %s. "
+                "Falling back to on-chain enumeration.",
+                subgraph_url,
+                exc,
+            )
+            service_ids = []
+
+    if not service_ids:
+        service_ids = _enumerate_owned_services(
+            ledger_api=ledger_api,
+            service_registry_address=service_registry_address,
+            owner_address=eoa_address,
+        )
+
+    # ── 2. MasterSafe resolution per service ID ─────────────────────────────
+    staking_manager = StakingManager(chain=chain, rpc=get_default_rpc(chain))
+    unique_service_ids = list(dict.fromkeys(service_ids))  # deduplicate, preserve order
+
+    for svc_id in unique_service_ids:
+        try:
+            staking_program_id = staking_manager.get_current_staking_program(svc_id)
+            if staking_program_id is None:
+                # Not staked: ownerOf(svc_id) is the MasterSafe.
+                registry = _get_service_registry_contract(
+                    ledger_api, service_registry_address
+                )
+                master_safe = registry.functions.ownerOf(svc_id).call()
+            else:
+                # Staked: resolve via service_info wrapper (index 1 = owner = MasterSafe).
+                staking_contract = staking_manager.get_staking_contract(
+                    staking_program_id
+                )
+                svc_info = staking_manager.service_info(
+                    staking_contract=staking_contract,
+                    service_id=svc_id,
+                )
+                # service_info returns (multisig, owner, nonces, tsStart, reward, inactivity)
+                master_safe = svc_info[1]
+
+            if not master_safe or master_safe.lower() == _ZERO_ADDRESS_LOWER:
+                continue
+
+            master_safe_cs = Web3.to_checksum_address(master_safe)
+
+            # Verify that the recovery EOA is actually an owner of this safe.
+            try:
+                owners = get_owners(ledger_api=ledger_api, safe=master_safe_cs)
+                if eoa_address.lower() not in [o.lower() for o in owners]:
+                    logger.warning(
+                        "Resolved MasterSafe %s for service %s does not have EOA %s "
+                        "as owner; skipping.",
+                        master_safe_cs,
+                        svc_id,
+                        eoa_address,
+                    )
+                    continue
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to verify ownership of safe %s for service %s: %s; skipping.",
+                    master_safe_cs,
+                    svc_id,
+                    exc,
+                )
+                continue
+
+            safe_addresses.add(master_safe_cs)
+
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Failed to resolve MasterSafe for service %s: %s",
+                svc_id,
+                exc,
+            )
+
+    # ── 3. Supplementary Safe TX Service lookup (covers wallet-only accounts) ─
+    try:
+        supplementary = fetch_safes_for_owner(chain_id, eoa_address)
+        for addr in supplementary:
+            if addr and addr.lower() != _ZERO_ADDRESS_LOWER:
+                safe_addresses.add(Web3.to_checksum_address(addr))
+    except Exception:  # pylint: disable=broad-except  # nosec B110
+        pass  # rate-limit or network failure — silently discard
+
+    return list(safe_addresses)
+
+
 def _check_gas_warning(
     chain_id: int,
     eoa_address: str,
@@ -458,7 +575,23 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         chain_balances[eoa_address][token_addr] = BigInt(bal)
 
                 # --- Master Safe discovery ---
-                safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
+                _contract_addrs_for_safe = CONTRACTS.get(chain)
+                _service_registry_addr_for_safe = (
+                    _contract_addrs_for_safe.get("service_registry", "")
+                    if _contract_addrs_for_safe
+                    else ""
+                )
+                if _service_registry_addr_for_safe:
+                    safe_addresses = _get_master_safes_from_contracts(
+                        chain=chain,
+                        ledger_api=ledger_api,
+                        service_registry_address=_service_registry_addr_for_safe,
+                        eoa_address=eoa_address,
+                        subgraph_url=SUBGRAPH_URLS.get(chain),
+                        chain_id=chain_id,
+                    )
+                else:
+                    safe_addresses = []
                 for safe_addr in safe_addresses:
                     safe_native = get_asset_balance(
                         ledger_api=ledger_api,
@@ -757,7 +890,18 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         )
                         chain_str = chain.value
                         rpc = get_default_rpc(chain)
-                        safe_addresses = fetch_safes_for_owner(chain_id, eoa_address)
+                        safe_addresses = (
+                            _get_master_safes_from_contracts(
+                                chain=chain,
+                                ledger_api=ledger_api,
+                                service_registry_address=service_registry_addr,
+                                eoa_address=eoa_address,
+                                subgraph_url=SUBGRAPH_URLS.get(chain),
+                                chain_id=chain_id,
+                            )
+                            if service_registry_addr
+                            else []
+                        )
 
                         # Iterate per-safe: inject the safe into the wallet once, run
                         # all service recovery steps under it, then drain it before
