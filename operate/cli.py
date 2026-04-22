@@ -560,7 +560,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # --- Pearl Store API ---
     # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
     _pearl_store = PearlStore(
-        path=operate._path, data={}  # pylint: disable=protected-access
+        path=operate._path,  # pylint: disable=protected-access
+        data={},
     )
 
     @app.get("/api/store")
@@ -1192,7 +1193,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.get("/api/v2/service/{service_config_id}/achievements")
     async def _get_service_achievements(
-        request: Request, include_acknowledged: bool = Query(False)  # noqa: B008
+        request: Request,
+        include_acknowledged: bool = Query(False),  # noqa: B008
     ) -> JSONResponse:
         """Get the service achievements."""
         service_config_id = request.path_params["service_config_id"]
@@ -2186,13 +2188,10 @@ PYTHON_INTERPRETER_FLAGS = frozenset(
     {
         "-b",
         "-B",
-        "-c",
-        "-d",
         "-E",
         "-h",
         "-i",
         "-I",
-        "-m",
         "-O",
         "-OO",
         "-P",
@@ -2202,9 +2201,7 @@ PYTHON_INTERPRETER_FLAGS = frozenset(
         "-u",
         "-v",
         "-V",
-        "-W",
         "-x",
-        "-X",
         "--check-hash-based-pycs",
         "--help-env",
         "--help-xoptions",
@@ -2212,11 +2209,24 @@ PYTHON_INTERPRETER_FLAGS = frozenset(
     }
 )
 
+PYTHON_FLAGS_WITH_ARGUMENT = frozenset({"-W", "-X", "-c", "-m", "-d"})
+
 
 def _strip_python_interpreter_flags(argv: list[str]) -> list[str]:
     """Remove interpreter flags before passing arguments to the CLI parser."""
     executable, *args = argv
-    filtered_args = [arg for arg in args if arg not in PYTHON_INTERPRETER_FLAGS]
+    filtered_args: list[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in PYTHON_FLAGS_WITH_ARGUMENT:
+            skip_next = True
+            continue
+        if arg in PYTHON_INTERPRETER_FLAGS:
+            continue
+        filtered_args.append(arg)
     return [executable, *filtered_args]
 
 
@@ -2224,7 +2234,9 @@ def main() -> None:
     """CLI entry point."""
     if "freeze_support" in multiprocessing.__dict__:
         multiprocessing.freeze_support()
-    sys.argv = _strip_python_interpreter_flags(sys.argv)  # Because clea fails with them
+    sys.argv = _strip_python_interpreter_flags(
+        sys.argv
+    )  # Because the CLI parser fails with them
     run(cli=_operate)
 
 
