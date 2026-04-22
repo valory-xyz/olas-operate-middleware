@@ -339,7 +339,7 @@ def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
         raise
 
 
-def _get_master_safes_from_contracts(
+def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
     chain: Chain,
     ledger_api: t.Any,
     service_registry_address: str,
@@ -444,13 +444,14 @@ def _get_master_safes_from_contracts(
             )
 
     # ── 3. Supplementary Safe TX Service lookup (covers wallet-only accounts) ─
-    try:
-        supplementary = fetch_safes_for_owner(chain_id, eoa_address)
-        for addr in supplementary:
-            if addr and addr.lower() != _ZERO_ADDRESS_LOWER:
-                safe_addresses.add(Web3.to_checksum_address(addr))
-    except Exception:  # pylint: disable=broad-except  # nosec B110
-        pass  # rate-limit or network failure — silently discard
+    if chain_id is not None:
+        try:
+            supplementary = fetch_safes_for_owner(chain_id, eoa_address)
+            for addr in supplementary:
+                if addr and addr.lower() != _ZERO_ADDRESS_LOWER:
+                    safe_addresses.add(Web3.to_checksum_address(addr))
+        except Exception:  # pylint: disable=broad-except  # nosec B110
+            pass  # rate-limit or network failure — silently discard
 
     return list(safe_addresses)
 
