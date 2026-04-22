@@ -1317,6 +1317,10 @@ class TestProvider:
         assert provider_request == expected_request, "Wrong request."
 
     @pytest.mark.vcr
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain RPC calls are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status(
         self,
@@ -1422,6 +1426,10 @@ class TestProvider:
             assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
 
     @pytest.mark.vcr
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain RPC calls are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status_failure_then_success(
         self,
