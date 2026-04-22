@@ -64,9 +64,8 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
         - Funded Master EOA + Master Safe on Gnosis and Optimism
         - A Trader service created (not yet deployed) — gnosis chain only
 
-        Note: Two external calls are patched because Tenderly virtual forks are
+        Note: One external call is patched because Tenderly virtual forks are
         not indexed by public APIs:
-        - fetch_safes_for_owner: Safe TX Service API doesn't see fork safes.
         - _fetch_services_from_subgraph: The subgraph doesn't index fork services.
 
         This test:
@@ -148,24 +147,6 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
 
             # Advance time to clear staking lock periods
             tenderly_increase_time(chain)
-
-        # ── Build known safe mapping (chain_id -> [safe_address]) ─────────────
-        # The public Safe TX service cannot discover safes on Tenderly forks.
-        # All tested chains must have a master safe (asserted above).
-        known_safes: t.Dict[int, t.List[str]] = {
-            chain.id: [wallet.safes[chain]] for chain in SERVICE_CHAINS
-        }
-        for chain in SERVICE_CHAINS:
-            LOGGER.info(
-                "Registered safe %s for chain %s (id=%s)",
-                wallet.safes[chain],
-                chain,
-                chain.id,
-            )
-
-        def _mock_fetch_safes(chain_id: int, owner_address: str) -> t.List[str]:
-            """Return pre-registered safe addresses for Tenderly fork testing."""
-            return known_safes.get(chain_id, [])
 
         def _mock_fetch_subgraph(url: str, eoa_address: str) -> t.List[int]:
             """Return known on-chain service IDs for Tenderly fork testing.
@@ -271,10 +252,9 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
                         pre[chain][token]["agent_safe"],
                     )
 
-        # ── Step 7: Scan (with patched safe + subgraph discovery) ──────────────
+        # ── Step 7: Scan (with patched subgraph discovery) ────────────────────
         LOGGER.info("Running FundRecoveryManager.scan()...")
         with (
-            patch(f"{_RECOVERY_MODULE}.fetch_safes_for_owner", _mock_fetch_safes),
             patch(
                 f"{_RECOVERY_MODULE}._fetch_services_from_subgraph",
                 _mock_fetch_subgraph,
@@ -406,10 +386,9 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
                 f"found deployed chain ids: {deployed_chain_ids}"
             )
 
-        # ── Step 11: Execute (with patched safe + subgraph discovery) ──────────
+        # ── Step 11: Execute (with patched subgraph discovery) ────────────────
         LOGGER.info("Running FundRecoveryManager.execute() to %s...", dest)
         with (
-            patch(f"{_RECOVERY_MODULE}.fetch_safes_for_owner", _mock_fetch_safes),
             patch(
                 f"{_RECOVERY_MODULE}._fetch_services_from_subgraph",
                 _mock_fetch_subgraph,

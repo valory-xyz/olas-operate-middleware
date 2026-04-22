@@ -382,7 +382,6 @@ class TestGetMasterSafesFromContracts:
         eoa_address: str = "",
         service_registry_address: str = _SERVICE_REGISTRY,
         subgraph_url: t.Optional[str] = None,
-        chain_id: t.Optional[int] = 100,
     ) -> t.List[str]:
         """Thin wrapper that calls _get_master_safes_from_contracts with test defaults."""
         from operate.operate_types import Chain
@@ -393,7 +392,6 @@ class TestGetMasterSafesFromContracts:
             service_registry_address=service_registry_address,
             eoa_address=eoa_address or self._EOA,
             subgraph_url=subgraph_url,
-            chain_id=chain_id,
         )
 
     # ------------------------------------------------------------------
@@ -410,7 +408,6 @@ class TestGetMasterSafesFromContracts:
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch(f"{_MODULE}.StakingManager", return_value=MagicMock()),
             patch(f"{_MODULE}.get_default_rpc"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call(subgraph_url=None)
         assert result == []
@@ -440,7 +437,6 @@ class TestGetMasterSafesFromContracts:
                 f"{_MODULE}.get_owners",
                 return_value=[self._EOA],
             ),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call(subgraph_url="http://subgraph")
         from web3 import Web3
@@ -454,7 +450,6 @@ class TestGetMasterSafesFromContracts:
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
             patch(f"{_MODULE}.StakingManager", return_value=MagicMock()),
             patch(f"{_MODULE}.get_default_rpc"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call(subgraph_url="http://subgraph")
         assert result == []
@@ -482,7 +477,6 @@ class TestGetMasterSafesFromContracts:
                 f"{_MODULE}.get_owners",
                 return_value=[self._EOA],
             ),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
         from web3 import Web3
@@ -510,7 +504,6 @@ class TestGetMasterSafesFromContracts:
                 f"{_MODULE}.get_owners",
                 return_value=[self._EOA],
             ),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
         from web3 import Web3
@@ -560,7 +553,6 @@ class TestGetMasterSafesFromContracts:
                 f"{_MODULE}.get_owners",
                 return_value=[self._EOA],
             ),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
 
@@ -594,7 +586,6 @@ class TestGetMasterSafesFromContracts:
                 f"{_MODULE}.get_owners",
                 return_value=[self._EOA],
             ),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
 
@@ -625,7 +616,6 @@ class TestGetMasterSafesFromContracts:
             ),
             # EOA is NOT in the owners list
             patch(f"{_MODULE}.get_owners", return_value=[other_owner]),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
         assert result == []
@@ -646,7 +636,6 @@ class TestGetMasterSafesFromContracts:
                 return_value=registry_mock,
             ),
             patch(f"{_MODULE}.get_owners", side_effect=Exception("rpc failure")),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
         assert result == []
@@ -666,61 +655,9 @@ class TestGetMasterSafesFromContracts:
             patch(f"{_MODULE}._enumerate_owned_services", return_value=[3]),
             patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
             patch(f"{_MODULE}.get_default_rpc"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         ):
             result = self._call()
         assert result == []
-
-    # ------------------------------------------------------------------
-    # Supplementary fetch_safes_for_owner (wallet-only accounts)
-    # ------------------------------------------------------------------
-
-    def test_fetch_safes_for_owner_supplementary_adds_wallet_only_safe(self) -> None:
-        """A safe returned only by fetch_safes_for_owner (no services) is included."""
-        wallet_only_safe = "0x" + "7" * 40
-        with (
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
-            patch(f"{_MODULE}.StakingManager", return_value=MagicMock()),
-            patch(f"{_MODULE}.get_default_rpc"),
-            patch(
-                f"{_MODULE}.fetch_safes_for_owner",
-                return_value=[wallet_only_safe],
-            ),
-        ):
-            result = self._call()
-
-        from web3 import Web3
-
-        assert Web3.to_checksum_address(wallet_only_safe) in result
-
-    def test_fetch_safes_for_owner_rate_limit_silently_discarded(self) -> None:
-        """When fetch_safes_for_owner raises (e.g. HTTP 429), it is silently ignored."""
-        mock_sm = self._mock_staking_manager(program_id=None)
-        registry_mock = MagicMock()
-        registry_mock.functions.ownerOf.return_value.call.return_value = (
-            self._MASTER_SAFE
-        )
-        with (
-            patch(f"{_MODULE}._enumerate_owned_services", return_value=[8]),
-            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
-            patch(f"{_MODULE}.get_default_rpc"),
-            patch(
-                f"{_MODULE}._get_service_registry_contract",
-                return_value=registry_mock,
-            ),
-            patch(f"{_MODULE}.get_owners", return_value=[self._EOA]),
-            # Simulate HTTP 429 by raising
-            patch(
-                f"{_MODULE}.fetch_safes_for_owner",
-                side_effect=Exception("429 Too Many Requests"),
-            ),
-        ):
-            result = self._call()
-
-        from web3 import Web3
-
-        # The contract-resolved safe is still in the result
-        assert Web3.to_checksum_address(self._MASTER_SAFE) in result
 
 
 # ---------------------------------------------------------------------------

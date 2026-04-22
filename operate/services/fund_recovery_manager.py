@@ -74,7 +74,6 @@ from operate.services.manage import ServiceManager
 from operate.services.protocol import StakingManager
 from operate.services.service import NON_EXISTENT_MULTISIG
 from operate.utils.gnosis import (
-    fetch_safes_for_owner,
     get_asset_balance,
     get_owners,
 )
@@ -345,7 +344,6 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
     service_registry_address: str,
     eoa_address: str,
     subgraph_url: t.Optional[str],
-    chain_id: t.Optional[int] = None,
 ) -> t.List[str]:
     """Discover MasterSafe addresses for *eoa_address* via on-chain contract lookups.
 
@@ -354,9 +352,6 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
     Transfer-event enumeration, then resolves each service's MasterSafe via
     ``StakingManager.get_current_staking_program`` (handles both staked and
     non-staked cases) and ``StakingManager.service_info`` (staked branch).
-
-    A supplementary ``fetch_safes_for_owner`` call is made after the contract
-    loop to cover wallet-only accounts; its failures are silently discarded.
 
     Only safes where *eoa_address* is a confirmed owner are returned.
     """
@@ -442,16 +437,6 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
                 svc_id,
                 exc,
             )
-
-    # ── 3. Supplementary Safe TX Service lookup (covers wallet-only accounts) ─
-    if chain_id is not None:
-        try:
-            supplementary = fetch_safes_for_owner(chain_id, eoa_address)
-            for addr in supplementary:
-                if addr and addr.lower() != _ZERO_ADDRESS_LOWER:
-                    safe_addresses.add(Web3.to_checksum_address(addr))
-        except Exception:  # pylint: disable=broad-except  # nosec B110
-            pass  # rate-limit or network failure — silently discard
 
     return list(safe_addresses)
 
@@ -589,7 +574,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         service_registry_address=_service_registry_addr_for_safe,
                         eoa_address=eoa_address,
                         subgraph_url=SUBGRAPH_URLS.get(chain),
-                        chain_id=chain_id,
                     )
                 else:
                     safe_addresses = []
@@ -898,7 +882,6 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 service_registry_address=service_registry_addr,
                                 eoa_address=eoa_address,
                                 subgraph_url=SUBGRAPH_URLS.get(chain),
-                                chain_id=chain_id,
                             )
                             if service_registry_addr
                             else []
