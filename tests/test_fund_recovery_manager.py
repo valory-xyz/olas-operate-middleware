@@ -659,6 +659,20 @@ class TestGetMasterSafesFromContracts:
             result = self._call()
         assert result == []
 
+    def test_staking_manager_resolution_exception_skips_service(self) -> None:
+        """When get_current_staking_program raises, the outer except fires and service is skipped."""
+        mock_sm = MagicMock()
+        mock_sm.get_current_staking_program.side_effect = RuntimeError(
+            "staking rpc error"
+        )
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[9]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+        ):
+            result = self._call()
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # FundRecoveryManager.scan
