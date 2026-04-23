@@ -26,7 +26,10 @@ from autonomy.chain.base import registry_contracts
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
 from operate.ledger import NATIVE_CURRENCY_DECIMALS
 from operate.ledger.profiles import (
+    ERC20_TOKENS,
+    ERC20_TOKENS_BY_CHAIN_ID,
     OLAS,
+    PUSD,
     WRAPPED_NATIVE_ASSET,
     format_asset_amount,
     get_asset_decimals,
@@ -123,3 +126,33 @@ class TestGetStakingContract:
         """Test an unknown staking program ID is returned unchanged (line 383)."""
         result = get_staking_contract("gnosis", "not_a_real_program_xyz")
         assert result == "not_a_real_program_xyz"
+
+
+PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+
+
+class TestPUSDRegistration:
+    """Tests for pUSD token registration in profiles."""
+
+    def test_pusd_constant_has_polygon_entry(self) -> None:
+        """PUSD dict must contain the Polygon address."""
+        assert PUSD[Chain.POLYGON] == PUSD_ADDRESS
+
+    def test_pusd_registered_in_erc20_tokens(self) -> None:
+        """The 'pUSD' key must appear in ERC20_TOKENS."""
+        assert "pUSD" in ERC20_TOKENS
+
+    def test_pusd_erc20_tokens_value_matches_constant(self) -> None:
+        """ERC20_TOKENS['pUSD'] must be the same dict as the PUSD constant."""
+        assert ERC20_TOKENS["pUSD"] is PUSD
+
+    def test_get_asset_name_resolves_pusd_on_polygon(self) -> None:
+        """get_asset_name must return 'pUSD' for the Polygon pUSD address."""
+        # get_asset_name is @cached; call with a fresh address to avoid cache collision
+        result = get_asset_name(Chain.POLYGON, PUSD_ADDRESS)
+        assert result == "pUSD"
+
+    def test_pusd_address_in_erc20_tokens_by_chain_id(self) -> None:
+        """The pUSD address must appear in ERC20_TOKENS_BY_CHAIN_ID for the Polygon chain ID."""
+        polygon_id = Chain.POLYGON.id
+        assert PUSD_ADDRESS in ERC20_TOKENS_BY_CHAIN_ID[polygon_id]
