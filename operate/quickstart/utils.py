@@ -30,7 +30,7 @@ from halo import Halo
 from web3.exceptions import Web3RPCError
 
 from operate.constants import DEFAULT_TIMEOUT, ZERO_ADDRESS
-from operate.ledger.profiles import OLAS, USDC
+from operate.ledger.profiles import OLAS, PUSD, USDC
 from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
@@ -182,6 +182,10 @@ CHAIN_TO_METADATA = {
             OLAS[Chain.POLYGON]: {
                 "symbol": "OLAS",
                 "decimals": 18,
+            },
+            PUSD[Chain.POLYGON]: {
+                "symbol": "pUSD",
+                "decimals": 6,
             },
         },
         "gasParams": {

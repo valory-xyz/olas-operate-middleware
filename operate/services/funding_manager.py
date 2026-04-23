@@ -54,10 +54,7 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
-    OLAS,
-    USDC,
-    USDC_E,
-    WRAPPED_NATIVE_ASSET,
+    ERC20_TOKENS,
     get_asset_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
@@ -111,10 +108,7 @@ class FundingManager:
             f"Draining service agents {service.name} ({service_config_id=})"
         )
         tokens = {
-            WRAPPED_NATIVE_ASSET[chain],
-            OLAS[chain],
-            USDC[chain],
-            USDC_E.get(chain, ZERO_ADDRESS),
+            token_map.get(chain, ZERO_ADDRESS) for token_map in ERC20_TOKENS.values()
         } | service.chain_configs[
             chain.value
         ].chain_data.user_params.fund_requirements.keys()
@@ -186,10 +180,7 @@ class FundingManager:
 
         # Drain ERC20 tokens from service Safe
         tokens = {
-            WRAPPED_NATIVE_ASSET[chain],
-            OLAS[chain],
-            USDC[chain],
-            USDC_E.get(chain, ZERO_ADDRESS),
+            token_map.get(chain, ZERO_ADDRESS) for token_map in ERC20_TOKENS.values()
         } | service.chain_configs[
             chain.value
         ].chain_data.user_params.fund_requirements.keys()
