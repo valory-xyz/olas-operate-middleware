@@ -147,6 +147,7 @@ jobs:
       - name: Run integration tests
         env:
           POETRY_EXE: ${{ runner.os == 'Windows' && 'C:\\Users\\runneradmin\\.local\\bin\\poetry.exe' || 'poetry' }}
+          PYTEST_XDIST_WORKERS: "8"
         run: |
           pip install tomte[tox]==0.6.1
           tox -e integration-tests

@@ -12,7 +12,7 @@ Fast tests with no external dependencies. Run with:
 poetry run tox -e unit-tests
 ```
 
-### Integration Tests (262 tests, ~7-10 minutes)
+### Integration Tests (262 tests, takes too long, run very selectively)
 Tests requiring testnet RPC endpoints. Run with:
 ```bash
 # Requires environment variables
@@ -22,6 +22,15 @@ export GNOSIS_TESTNET_RPC="https://..."
 export OPTIMISM_TESTNET_RPC="https://..."
 export POLYGON_TESTNET_RPC="https://..."
 
+poetry run tox -e integration-tests -- path/to/test -v
+```
+
+By default, runs with `pytest-xdist` in parallel (`-n auto`). CI overrides this with `-n 8`.
+
+For debugging or narrower parallelism, override locally:
+```bash
+export CI=true
+export PYTEST_XDIST_WORKERS=2
 poetry run tox -e integration-tests -- path/to/test -v
 ```
 
@@ -87,9 +96,6 @@ poetry run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test
 
 # Run all VCR tests
 poetry run pytest tests/test_bridge_providers.py -m vcr -v
-
-# VCR tests run as part of integration tests
-poetry run tox -e integration-tests
 ```
 
 Tests with recorded cassettes run automatically in replay mode—no special flags needed.
@@ -353,7 +359,7 @@ poetry run pytest -m "not integration"
 - **Linter checks**: Run first, must pass
 - **Unit tests**: Run in parallel on 3 OS × 5 Python versions (3.10, 3.11, 3.12, 3.13, 3.14), must pass
 - **Coverage**: Run on Ubuntu Python 3.14 with `--cov-fail-under=100`, must pass
-- **Integration tests**: Run in parallel on 3 OS × Python 3.14, can fail (`continue-on-error: true`)
+- **Integration tests**: Run in parallel on 3 OS × Python 3.14, must pass
 
 ### Platform-Specific Test Behavior
 
