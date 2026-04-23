@@ -321,7 +321,7 @@ class EthereumMasterWallet(MasterWallet):
         if balance - tx_fee <= amount <= balance:
             # we assume that the user wants to drain the EOA
             # we also account for dust here because withdraw call use some EOA balance to drain the safes first
-            amount = balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER
+            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
             if amount <= 0:
                 logger.warning(
                     f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
