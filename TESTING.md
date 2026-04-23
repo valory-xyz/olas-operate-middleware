@@ -96,9 +96,6 @@ poetry run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test
 
 # Run all VCR tests
 poetry run pytest tests/test_bridge_providers.py -m vcr -v
-
-# VCR tests run as part of integration tests
-poetry run tox -e integration-tests -- path/to/test -v
 ```
 
 Tests with recorded cassettes run automatically in replay mode—no special flags needed.
