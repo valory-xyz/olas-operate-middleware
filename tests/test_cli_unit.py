@@ -1491,7 +1491,7 @@ class TestWalletWithdrawRoute:
                 assert resp.status_code == HTTPStatus.OK
 
     def test_insufficient_funds_structured_error(self) -> None:
-        """InsufficientFundsException inside loop returns structured error fields."""
+        """Structured error fields returned when insufficient-funds exception fires inside loop."""
         m = self._basic()
         wallet_mock = MagicMock()
         wallet_mock.transfer_from_safe_then_eoa.side_effect = (
@@ -2046,7 +2046,7 @@ class TestWithdrawAndTerminateRoutes:
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
     def test_terminate_and_withdraw_insufficient_funds_structured_error(self) -> None:
-        """InsufficientFundsException from inside loop returns structured error fields."""
+        """Structured error fields returned when insufficient-funds exception fires from inside loop."""
         m = _make_mock_operate()
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True
@@ -2075,7 +2075,7 @@ class TestWithdrawAndTerminateRoutes:
     def test_terminate_and_withdraw_insufficient_funds_pre_loop_degrades_gracefully(
         self,
     ) -> None:
-        """InsufficientFundsException before loop body (chain='') → no structured fields."""
+        """Exception before loop body (chain is empty) degrades without structured fields."""
         m = _make_mock_operate()
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True
@@ -2182,7 +2182,7 @@ class TestFundServiceRoute:
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
     def test_insufficient_funds_with_structured_error(self) -> None:
-        """InsufficientFundsException returns structured error fields with chain + prefill."""
+        """Structured error fields with chain and prefill_amount_wei on insufficient-funds failure."""
         m = _make_mock_operate()
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True
@@ -2206,7 +2206,7 @@ class TestFundServiceRoute:
             )
 
     def test_insufficient_funds_funding_in_progress_no_structured_error(self) -> None:
-        """FundingInProgressError does not add structured error fields."""
+        """Conflict response from funding-in-progress does not include structured gas fields."""
         m = _make_mock_operate()
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True

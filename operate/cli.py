@@ -1563,9 +1563,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        # Capture the first chain key before the try block so it is always defined
+        # at the InsufficientFundsException handler even if request.json() raises.
+        error_chain_str = ""
         try:
             data = await request.json()
-            chain_str = next(iter(data)) if data else ""
+            error_chain_str = next(iter(data)) if data else ""
             service_manager.fund_service(
                 service_config_id=service_config_id,
                 amounts=ChainAmounts(
@@ -1595,7 +1598,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": f"Failed to fund from Master Safe. Insufficient funds: {e}",
-                    **_build_insufficient_gas_error(chain_str),
+                    **_build_insufficient_gas_error(error_chain_str),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
