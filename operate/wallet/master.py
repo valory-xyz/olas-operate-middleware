@@ -20,7 +20,6 @@
 """Master key implementation"""
 
 import json
-import os
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +38,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import (
+    DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     get_default_ledger_api,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
@@ -323,10 +323,10 @@ class EthereumMasterWallet(
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if balance - tx_fee < amount <= balance:
+        if balance - tx_fee <= amount <= balance:
             # we assume that the user wants to drain the EOA
             # we also account for dust here because withdraw call use some EOA balance to drain the safes first
-            amount = balance - tx_fee
+            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
             if amount <= 0:
                 logger.warning(
                     f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
@@ -342,20 +342,14 @@ class EthereumMasterWallet(
 
         def _build_tx() -> t.Dict:
             """Build transaction"""
-            max_priority_fee_per_gas = os.getenv("MAX_PRIORITY_FEE_PER_GAS", None)
-            max_fee_per_gas = os.getenv("MAX_FEE_PER_GAS", None)
             tx = ledger_api.get_transfer_transaction(
                 sender_address=self.crypto.address,
                 destination_address=to,
                 amount=amount,
-                tx_fee=50000,
+                tx_fee=0,
                 tx_nonce="0x",
                 chain_id=chain.id,
                 raise_on_try=True,
-                max_fee_per_gas=int(max_fee_per_gas) if max_fee_per_gas else None,
-                max_priority_fee_per_gas=(
-                    int(max_priority_fee_per_gas) if max_priority_fee_per_gas else None
-                ),
             )
             return ledger_api.update_with_gas_estimate(
                 transaction=tx,
