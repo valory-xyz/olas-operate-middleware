@@ -1192,6 +1192,144 @@ Update safe settings, such as backup owner.
 }
 ```
 
+#### Bulk path: `chain: "all"`
+
+When `chain` is `"all"` the call sets the **canonical backup owner** across every chain
+where the Master Safe exists.  Two sub-cases apply:
+
+| Sub-case | When | Password required? |
+|----------|------|--------------------|
+| **Add** | `canonical_backup_owner` is `null` (first time) | No |
+| **Update** | `canonical_backup_owner` is already set | Yes |
+
+**Request Body (Add — first time, no password):**
+
+```json
+{
+  "chain": "all",
+  "backup_owner": "0xNewBackupAddress"
+}
+```
+
+**Request Body (Update — canonical already set, password required):**
+
+```json
+{
+  "chain": "all",
+  "backup_owner": "0xNewBackupAddress",
+  "password": "..."
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "canonical_backup_owner": "0xNewBackupAddress",
+  "all_succeeded": true,
+  "results": [
+    {
+      "chain": "gnosis",
+      "safe": "0x...",
+      "success": true,
+      "error": null
+    }
+  ]
+}
+```
+
+**Response (Missing password for Update - 400):**
+
+```json
+{
+  "error": "'password' is required to update the canonical backup wallet."
+}
+```
+
+**Response (Wrong password - 401):**
+
+```json
+{
+  "error": "Invalid password."
+}
+```
+
+**Response (Already linked - 409):**
+
+```json
+{
+  "error": "Wallet Already Linked"
+}
+```
+
+---
+
+### `GET /api/wallet/safe/backup_owner/status`
+
+Returns the **canonical backup owner** and its sync state relative to each chain's
+on-chain Safe.
+
+**Response (Success - 200):**
+
+```json
+{
+  "canonical_backup_owner": "0xAbcDef...",
+  "all_chains_synced": true,
+  "any_backup_missing": false,
+  "existing_backup_on_any_chain": true,
+  "chains": [
+    {
+      "chain": "gnosis",
+      "safe": "0xSafeAddress",
+      "current_backup_owner": "0xAbcDef...",
+      "is_synced": true
+    }
+  ],
+  "chains_without_safe": []
+}
+```
+
+**Field notes:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `canonical_backup_owner` | `string \| null` | The designated canonical backup address, or `null` if never set |
+| `all_chains_synced` | `bool` | `true` when every chain's on-chain backup matches the canonical |
+| `any_backup_missing` | `bool` | `true` when at least one chain has no backup owner on-chain |
+| `existing_backup_on_any_chain` | `bool` | `true` when at least one chain has any on-chain backup, even if `canonical_backup_owner` is `null`.  Use this to distinguish "never had a backup" from "has an existing on-chain backup but canonical not yet designated". |
+| `chains[].is_synced` | `bool` | Whether the chain's current on-chain backup matches the canonical |
+
+---
+
+### `POST /api/wallet/safe/backup_owner/sync`
+
+Applies the canonical backup owner to any chains that are currently out of sync.
+
+**Request Body:**
+
+```json
+{
+  "password": "..."
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "canonical_backup_owner": "0xAbcDef...",
+  "all_succeeded": true,
+  "results": [
+    {
+      "chain": "gnosis",
+      "safe": "0x...",
+      "success": true,
+      "error": null
+    }
+  ]
+}
+```
+
 ## Service Management
 
 ### `GET /api/v2/services`
