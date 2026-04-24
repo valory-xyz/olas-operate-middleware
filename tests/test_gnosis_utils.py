@@ -20,7 +20,6 @@
 """Tests for operate/utils/gnosis.py utility functions."""
 
 import typing as t
-from platform import system
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -52,8 +51,6 @@ from operate.utils.gnosis import (
     transfer_erc20_from_eoa,
     transfer_erc20_from_safe,
 )
-
-from tests.constants import RUNNING_IN_CI
 
 
 class TestSafeOperation:
