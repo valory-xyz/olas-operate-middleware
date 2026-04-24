@@ -59,6 +59,7 @@ from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.serialization import BigInt
 
+from tests.conftest import OnTestnet
 from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
@@ -565,7 +566,7 @@ def get_transfer_amount(
 
 
 @pytest.mark.integration
-class TestNativeBridgeProvider:
+class TestNativeBridgeProvider(OnTestnet):
     """Tests for bridge.providers.NativeBridgeProvider class."""
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
@@ -773,7 +774,7 @@ class TestNativeBridgeProvider:
 
 
 @pytest.mark.integration
-class TestProvider:
+class TestProvider(OnTestnet):
     """Tests for bridge.providers.Provider class."""
 
     @pytest.mark.skipif(

@@ -26,6 +26,7 @@ import multiprocessing
 import os
 import shutil
 import signal
+import sys
 import traceback
 import typing as t
 import uuid
@@ -559,7 +560,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # --- Pearl Store API ---
     # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
     _pearl_store = PearlStore(
-        path=operate._path, data={}  # pylint: disable=protected-access
+        path=operate._path,  # pylint: disable=protected-access
+        data={},
     )
 
     @app.get("/api/store")
@@ -1339,7 +1341,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.get("/api/v2/service/{service_config_id}/achievements")
     async def _get_service_achievements(
-        request: Request, include_acknowledged: bool = Query(False)  # noqa: B008
+        request: Request,
+        include_acknowledged: bool = Query(False),  # noqa: B008
     ) -> JSONResponse:
         """Get the service achievements."""
         service_config_id = request.path_params["service_config_id"]
@@ -2329,10 +2332,59 @@ def qs_analyse_logs(  # pylint: disable=too-many-arguments
     )
 
 
+PYTHON_INTERPRETER_FLAGS = frozenset(
+    {
+        "-b",
+        "-B",
+        "-E",
+        "-h",
+        "-i",
+        "-I",
+        "-O",
+        "-OO",
+        "-P",
+        "-q",
+        "-s",
+        "-S",
+        "-u",
+        "-v",
+        "-V",
+        "-x",
+        "--check-hash-based-pycs",
+        "--help-env",
+        "--help-xoptions",
+        "--help-all",
+    }
+)
+
+PYTHON_FLAGS_WITH_ARGUMENT = frozenset({"-W", "-X", "-c", "-m", "-d"})
+
+
+def _strip_python_interpreter_flags(argv: list[str]) -> list[str]:
+    """Remove interpreter flags before passing arguments to the CLI parser."""
+    executable, *args = argv
+    filtered_args: list[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in PYTHON_FLAGS_WITH_ARGUMENT:
+            skip_next = True
+            continue
+        if arg in PYTHON_INTERPRETER_FLAGS:
+            continue
+        filtered_args.append(arg)
+    return [executable, *filtered_args]
+
+
 def main() -> None:
     """CLI entry point."""
     if "freeze_support" in multiprocessing.__dict__:
         multiprocessing.freeze_support()
+    sys.argv = _strip_python_interpreter_flags(
+        sys.argv
+    )  # Because the CLI parser fails with them
     run(cli=_operate)
 
 

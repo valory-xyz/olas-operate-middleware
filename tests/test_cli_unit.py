@@ -190,8 +190,9 @@ class TestOperateAppMissingCoverage:
             dst.mkdir(parents=True, exist_ok=True)
             (dst / SERVICES_DIR).mkdir(exist_ok=True)
 
-        with patch("operate.cli.shutil.copytree", side_effect=_fake_copytree), patch(
-            "operate.cli.shutil.rmtree"
+        with (
+            patch("operate.cli.shutil.copytree", side_effect=_fake_copytree),
+            patch("operate.cli.shutil.rmtree"),
         ):
             obj._backup_operate_if_new_version()
         # No assertion needed — reaching here without error proves the branch ran.
@@ -205,8 +206,9 @@ class TestOperateAppMissingCoverage:
         obj._keys_manager = MagicMock()
         obj._funding_manager = MagicMock()
         obj._migration_manager = MagicMock()
-        with patch("operate.cli.WalletRecoveryManager") as mock_cls, patch(
-            "operate.cli.services"
+        with (
+            patch("operate.cli.WalletRecoveryManager") as mock_cls,
+            patch("operate.cli.services"),
         ):
             mock_cls.return_value = MagicMock()
             obj.service_manager = MagicMock(return_value=MagicMock())
@@ -328,7 +330,8 @@ class TestCreateAppInfra:
             with TestClient(app, raise_server_exceptions=False) as client:
                 m.password = None  # not logged in before login
                 resp = client.post(
-                    "/api/account/login", json={"password": "testpass123"}  # nosec
+                    "/api/account/login",
+                    json={"password": "testpass123"},  # nosec
                 )
             # schedule_funding_job is called on successful login
             assert resp.status_code in (HTTPStatus.OK, HTTPStatus.UNAUTHORIZED)
@@ -441,14 +444,13 @@ class TestCreateAppInfra:
         def _capture_signal(signum: Any, handler: Any) -> None:
             registered_handlers[signum] = handler
 
-        with patch("operate.cli.signal") as mock_sig, patch(
-            "operate.cli.HealthChecker"
-        ) as mock_hc, patch("operate.cli.OperateApp", return_value=m), patch(
-            "operate.cli.atexit"
-        ), patch(
-            "operate.cli.ParentWatchdog"
-        ), patch.dict(
-            os.environ, {"HEALTH_CHECKER_OFF": "0"}
+        with (
+            patch("operate.cli.signal") as mock_sig,
+            patch("operate.cli.HealthChecker") as mock_hc,
+            patch("operate.cli.OperateApp", return_value=m),
+            patch("operate.cli.atexit"),
+            patch("operate.cli.ParentWatchdog"),
+            patch.dict(os.environ, {"HEALTH_CHECKER_OFF": "0"}),
         ):
             mock_hc.NUMBER_OF_FAILS_DEFAULT = 60
             mock_sig.SIGINT = signal_module.SIGINT
@@ -584,7 +586,8 @@ class TestAccountRoutes:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
-                    "/api/account", json={"password": "testpass123"}  # nosec
+                    "/api/account",
+                    json={"password": "testpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.CONFLICT
 
@@ -650,7 +653,8 @@ class TestAccountRoutes:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
-                    "/api/account/login", json={"password": "testpass123"}  # nosec
+                    "/api/account/login",
+                    json={"password": "testpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -664,7 +668,8 @@ class TestAccountRoutes:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
-                    "/api/account/login", json={"password": "wrongpass"}  # nosec
+                    "/api/account/login",
+                    json={"password": "wrongpass"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -676,7 +681,8 @@ class TestAccountRoutes:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
-                    "/api/account/login", json={"password": "testpass123"}  # nosec
+                    "/api/account/login",
+                    json={"password": "testpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -1051,9 +1057,10 @@ class TestCreateSafeRoute:
 
         m.wallet_manager.load.side_effect = _mock_load
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             mock_balances.return_value = {"0xsafe": {"0x0": 0}}
             mock_subtract.return_value = {"0x0": 1000}
 
@@ -1076,9 +1083,10 @@ class TestCreateSafeRoute:
         wallet_mock.address = "0xeoa"
         m.wallet_manager.load.return_value = wallet_mock
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             # All amounts are 0 → no transfers needed
             mock_balances.return_value = {"0xsafe": {"0x0": 0}}
             mock_subtract.return_value = {}  # empty → no transfers
@@ -1106,9 +1114,10 @@ class TestCreateSafeRoute:
         wallet_mock.transfer.return_value = "0xtransfer_tx"
         m.wallet_manager.load.return_value = wallet_mock
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             mock_balances.return_value = {"0xsafe": {"0x0": 0}}
             mock_subtract.return_value = {"0x0": 500}  # positive → transfer
 
@@ -1150,9 +1159,10 @@ class TestCreateSafeRoute:
 
         m.wallet_manager.load.side_effect = _mock_load
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             mock_balances.return_value = {"0xsafe": {"0x0": 0}}
             mock_subtract.return_value = {"0x0": 1000}
 
@@ -1180,9 +1190,10 @@ class TestCreateSafeRoute:
         wallet_mock.transfer.return_value = "0xtx"
         m.wallet_manager.load.return_value = wallet_mock
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             mock_balances.return_value = {"0xeoa": {"0x0": 0}}
             mock_subtract.return_value = {}
 
@@ -1210,9 +1221,10 @@ class TestCreateSafeRoute:
         wallet_mock.transfer.side_effect = ["0xtx_ok", RuntimeError("fail")]
         m.wallet_manager.load.return_value = wallet_mock
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             mock_balances.return_value = {"0xsafe": {"0x0": 0}}
             # Two assets: both positive so both transfers are attempted
             mock_subtract.return_value = {"0xtoken": 50, "0x0": 100}
@@ -2409,10 +2421,11 @@ class TestCliCommands:
         fn = self._get_callback("_daemon")
         assert fn is not None
 
-        with patch("operate.cli.create_app") as mock_create_app, patch(
-            "operate.cli.Server"
-        ) as mock_server_cls, patch("operate.cli.Config") as mock_config_cls, patch(
-            "operate.cli.AppSingleInstance"
+        with (
+            patch("operate.cli.create_app") as mock_create_app,
+            patch("operate.cli.Server") as mock_server_cls,
+            patch("operate.cli.Config") as mock_config_cls,
+            patch("operate.cli.AppSingleInstance"),
         ):
             mock_app = MagicMock()
             mock_create_app.return_value = mock_app
@@ -2435,10 +2448,11 @@ class TestCliCommands:
         fn = self._get_callback("_daemon")
         assert fn is not None
 
-        with patch("operate.cli.create_app") as mock_create_app, patch(
-            "operate.cli.Server"
-        ) as mock_server_cls, patch("operate.cli.Config") as mock_config_cls, patch(
-            "operate.cli.AppSingleInstance"
+        with (
+            patch("operate.cli.create_app") as mock_create_app,
+            patch("operate.cli.Server") as mock_server_cls,
+            patch("operate.cli.Config") as mock_config_cls,
+            patch("operate.cli.AppSingleInstance"),
         ):
             mock_app = MagicMock()
             mock_create_app.return_value = mock_app
@@ -2461,9 +2475,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_start")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.run_service"
-        ) as mock_run:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.run_service") as mock_run,
+        ):
             mock_app = MagicMock()
             mock_app_cls.return_value = mock_app
 
@@ -2482,9 +2497,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_stop")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.stop_service"
-        ) as mock_stop:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.stop_service") as mock_stop,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(
                 config="/path/to/config.yaml",
@@ -2499,9 +2515,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_terminate")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.terminate_service"
-        ) as mock_term:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.terminate_service") as mock_term,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(config="/path/to/config.yaml", attended="true")
 
@@ -2512,9 +2529,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_claim")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.claim_staking_rewards"
-        ) as mock_claim:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.claim_staking_rewards") as mock_claim,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(config="/path/to/config.yaml", attended="true")
 
@@ -2525,9 +2543,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_reset_configs")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.reset_configs"
-        ) as mock_reset:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.reset_configs") as mock_reset,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(config="/path/to/config.yaml", attended="true")
 
@@ -2538,9 +2557,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_reset_staking")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.reset_staking"
-        ) as mock_reset:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.reset_staking") as mock_reset,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(config="/path/to/config.yaml", attended="true")
 
@@ -2551,9 +2571,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_reset_password")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.reset_password"
-        ) as mock_reset:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.reset_password") as mock_reset,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(attended="true")
 
@@ -2564,9 +2585,10 @@ class TestCliCommands:
         fn = self._get_callback("qs_analyse_logs")
         assert fn is not None
 
-        with patch("operate.cli.OperateApp") as mock_app_cls, patch(
-            "operate.cli.analyse_logs"
-        ) as mock_analyse:
+        with (
+            patch("operate.cli.OperateApp") as mock_app_cls,
+            patch("operate.cli.analyse_logs") as mock_analyse,
+        ):
             mock_app_cls.return_value = MagicMock()
             fn(
                 config="/path/to/config.yaml",
@@ -2588,12 +2610,13 @@ class TestCliCommands:
 
 
 class TestMain:
-    """Cover main() (lines 2013-2015)."""
+    """Cover main() behavior."""
 
     def test_main_with_freeze_support(self) -> None:
-        """Cover lines 2013-2015: main() calls freeze_support and run."""
-        with patch("operate.cli.run") as mock_run, patch.dict(
-            multiprocessing.__dict__, {"freeze_support": MagicMock()}
+        """Cover main() calls freeze_support and run."""
+        with (
+            patch("operate.cli.run") as mock_run,
+            patch.dict(multiprocessing.__dict__, {"freeze_support": MagicMock()}),
         ):
             main()
         mock_run.assert_called_once()
@@ -2602,11 +2625,50 @@ class TestMain:
         """Cover main() when freeze_support is not in multiprocessing.__dict__."""
         mp_dict = {k: v for k, v in multiprocessing.__dict__.items()}
         mp_dict.pop("freeze_support", None)
-        with patch("operate.cli.run") as mock_run, patch.dict(
-            multiprocessing.__dict__, mp_dict, clear=True
+        with (
+            patch("operate.cli.run") as mock_run,
+            patch.dict(multiprocessing.__dict__, mp_dict, clear=True),
         ):
             main()
         mock_run.assert_called_once()
+
+    def test_main_strips_python_interpreter_flags(self) -> None:
+        """Remove Python interpreter flags before handing argv to the CLI."""
+        freeze_support = MagicMock()
+        initial_argv = ["pearl_x64", "-B", "daemon", "--home", "tmp-home"]
+        expected_argv = ["pearl_x64", "daemon", "--home", "tmp-home"]
+        with (
+            patch("operate.cli.run") as mock_run,
+            patch.dict(multiprocessing.__dict__, {"freeze_support": freeze_support}),
+            patch("sys.argv", list(initial_argv)),
+        ):
+            main()
+            assert __import__("sys").argv == expected_argv
+
+        freeze_support.assert_called_once_with()
+        mock_run.assert_called_once_with(cli=mock_run.call_args.kwargs["cli"])
+
+    def test_main_strips_flags_with_arguments(self) -> None:
+        """Remove flags that take arguments along with their argument values."""
+        from operate.cli import _strip_python_interpreter_flags
+
+        initial_argv = ["pearl", "-W", "ignore::DeprecationWarning", "daemon"]
+        expected_argv = ["pearl", "daemon"]
+        result = _strip_python_interpreter_flags(list(initial_argv))
+        assert result == expected_argv
+
+    def test_main_preserves_non_interpreter_arguments(self) -> None:
+        """Leave valid CLI arguments unchanged."""
+        expected_argv = ["pearl_x64", "daemon", "--port", "8001"]
+        with (
+            patch("operate.cli.run") as mock_run,
+            patch.dict(multiprocessing.__dict__, {"freeze_support": MagicMock()}),
+            patch("sys.argv", list(expected_argv)),
+        ):
+            main()
+            assert __import__("sys").argv == expected_argv
+
+        mock_run.assert_called_once_with(cli=mock_run.call_args.kwargs["cli"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2675,7 +2737,8 @@ class TestExtraCoverageLines:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post(
-                    "/api/account", json={"password": "validpass123"}  # nosec
+                    "/api/account",
+                    json={"password": "validpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -2702,7 +2765,8 @@ class TestExtraCoverageLines:
         with stack:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.put(
-                    "/api/account", json={"new_password": "newpass123"}  # nosec
+                    "/api/account",
+                    json={"new_password": "newpass123"},  # nosec
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
@@ -2839,9 +2903,10 @@ class TestExtraCoverageLines:
         wallet_mock.address = "0xeoa"
         m.wallet_manager.load.return_value = wallet_mock
 
-        with patch("operate.cli.get_assets_balances") as mock_balances, patch(
-            "operate.cli.subtract_dicts"
-        ) as mock_subtract:
+        with (
+            patch("operate.cli.get_assets_balances") as mock_balances,
+            patch("operate.cli.subtract_dicts") as mock_subtract,
+        ):
             mock_balances.return_value = {"0xsafe": {"0x0": 0}}
             # Return a zero amount so the `if amount <= 0: continue` branch runs
             mock_subtract.return_value = {"0x0": 0}

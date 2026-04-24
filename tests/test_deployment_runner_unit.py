@@ -112,6 +112,51 @@ def _make_manager() -> DeploymentManager:
     return manager
 
 
+class TestPyInstallerHostDeploymentRunnerLinux:
+    """Tests for Linux-specific PyInstaller deployment runner behavior."""
+
+    def test_setup_agent_forces_fork_start_method(self, tmp_path: Path) -> None:
+        """Force fork start method before delegating to parent setup."""
+        runner = PyInstallerHostDeploymentRunnerLinux(tmp_path, is_aea=True)
+
+        with patch(
+            "operate.services.deployment_runner.multiprocessing.set_start_method"
+        ) as mock_set_start_method, patch.object(
+            PyInstallerHostDeploymentRunnerMac,
+            "_setup_agent",
+        ) as mock_parent_setup:
+            runner._setup_agent(password="pass")  # nosec B106
+
+        mock_set_start_method.assert_called_once_with("fork", force=True)
+        mock_parent_setup.assert_called_once_with(password="pass")  # nosec B106
+
+    def test_setup_agent_logs_warning_when_start_method_already_set(
+        self, tmp_path: Path
+    ) -> None:
+        """Log and continue when fork start method cannot be set."""
+        runner = PyInstallerHostDeploymentRunnerLinux(tmp_path, is_aea=True)
+
+        with patch(
+            "operate.services.deployment_runner.multiprocessing.set_start_method",
+            side_effect=RuntimeError("already set"),
+        ), patch.object(
+            PyInstallerHostDeploymentRunnerMac,
+            "_setup_agent",
+        ) as mock_parent_setup, patch.object(
+            runner.logger,
+            "warning",
+        ) as mock_warning:
+            runner._setup_agent(password="pass")  # nosec B106
+
+        mock_warning.assert_called_once()
+        warning_args = mock_warning.call_args.args
+        assert warning_args[0] == "Could not set multiprocessing start method to %s: %s"
+        assert warning_args[1] == "fork"
+        assert isinstance(warning_args[2], RuntimeError)
+        assert str(warning_args[2]) == "already set"
+        mock_parent_setup.assert_called_once_with(password="pass")  # nosec B106
+
+
 class TestDeploymentManagerGetHostClass:
     """Tests for DeploymentManager._get_host_deployment_runner_class (lines 860-874)."""
 

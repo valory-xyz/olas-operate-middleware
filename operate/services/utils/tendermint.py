@@ -19,6 +19,7 @@
 
 """Tendermint manager."""
 
+import atexit
 import contextlib
 import inspect
 import json
@@ -68,6 +69,17 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s",  # noqa : W1309
 )
+
+
+def _should_skip_main_entry(argv: Optional[List[str]] = None) -> bool:
+    """Return whether this process is a multiprocessing bootstrap helper."""
+    arguments = list(sys.argv if argv is None else argv)
+    joined = " ".join(arguments)
+    bootstrap_markers = (
+        "from multiprocessing.forkserver import main",
+        "from multiprocessing.resource_tracker import main",
+    )
+    return any(marker in joined for marker in bootstrap_markers)
 
 
 class StoppableThread(
@@ -249,16 +261,26 @@ class TendermintNode:
             return
         cmd = self.params.build_node_command(debug)
         kwargs = self.params.get_node_command_kwargs()
+
+        if os.name != "nt":
+            kwargs.update(dict(preexec_fn=os.setpgrp))
+
         self.log(f"Starting Tendermint: {cmd}\n")
         self._process = (
             subprocess.Popen(  # nosec # pylint: disable=consider-using-with,W1509
                 cmd, **kwargs
             )
         )
+        if os.name == "nt":
+            self._wh = WinHelper()  # pylint: disable=attribute-defined-outside-init
+            self._wh.assign_to_job(self._process.pid)
+
         self.log("Tendermint process started\n")
 
     def _start_monitoring_thread(self) -> None:
         """Start a monitoring thread."""
+        if self._monitoring is not None and self._monitoring.is_alive():
+            return
         self._monitoring = StoppableThread(target=self._monitor_tendermint_process)
         self._monitoring.start()
 
@@ -682,6 +704,7 @@ def run_app_in_subprocess(q: multiprocessing.Queue) -> None:  # pragma: no cover
     """Run flask app in a subprocess to kill it when needed."""
     print("app in subprocess")
     app, tendermint_node = create_app()
+    atexit.register(tendermint_node.stop)
 
     @app.route("/exit")
     def handle_server_exit() -> Response:
@@ -696,17 +719,135 @@ def run_app_in_subprocess(q: multiprocessing.Queue) -> None:  # pragma: no cover
     app.run(host="localhost", port=8080)
 
 
-def run_stoppable_main() -> None:  # pragma: no cover
+class WinHelper:
+    """Helper class to manage Job Objects on Windows, which allow us to kill the Tendermint process and all its children when the main process is killed."""
+
+    def __init__(self) -> None:
+        """Initialize the Job Object and assign the current process to it."""
+        self.job = self.create_job_object()
+
+    @staticmethod
+    def get_proc_handler(pid: int) -> Any:
+        """Get process handler for a given pid."""
+
+        import ctypes.wintypes  # pylint: disable=import-outside-toplevel
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        PROCESS_ALL_ACCESS = 0x1F0FFF
+
+        return kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, pid)
+
+    @staticmethod
+    def create_job_object() -> Any:
+        """Create a Job Object and set it to kill all child processes when the main process is killed."""
+        import ctypes.wintypes  # pylint: disable=import-outside-toplevel
+        from ctypes import (  # pylint: disable=import-outside-toplevel,reimported  # noqa: I001
+            wintypes,
+        )
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        import ctypes  # pylint: disable=import-outside-toplevel,reimported
+
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            """Basic limit information for a Job Object, which includes the limits on user time, working set size, and process count, as well as flags that specify the behavior of the Job Object."""
+
+            _fields_ = [
+                ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.POINTER(wintypes.ULONG)),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class IO_COUNTERS(ctypes.Structure):
+            """I/O counters for a Job Object, which include the counts of read, write, and other operations, as well as the counts of bytes transferred for each type of operation."""
+
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_ulonglong),
+                ("WriteOperationCount", ctypes.c_ulonglong),
+                ("OtherOperationCount", ctypes.c_ulonglong),
+                ("ReadTransferCount", ctypes.c_ulonglong),
+                ("WriteTransferCount", ctypes.c_ulonglong),
+                ("OtherTransferCount", ctypes.c_ulonglong),
+            ]
+
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            """Extended limit information for a Job Object, which includes the basic limit information as well as additional limits on process memory usage and job memory usage."""
+
+            _fields_ = [
+                ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        # Создаем Job Object
+        job = kernel32.CreateJobObjectW(None, None)
+        if not job:
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+
+        # Настраиваем автоматическое завершение процессов при закрытии Job
+        info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        info.BasicLimitInformation.LimitFlags = (
+            0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        )
+
+        if not kernel32.SetInformationJobObject(
+            job,
+            9,  # JobObjectExtendedLimitInformation
+            ctypes.byref(info),
+            ctypes.sizeof(info),
+        ):
+            kernel32.CloseHandle(job)
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+
+        return job
+
+    def assign_to_job(self, pid: int) -> None:
+        """Assign a process to the Job Object to ensure it gets killed when the main process is killed."""
+        import ctypes.wintypes  # pylint: disable=import-outside-toplevel
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        job = self.job
+        handle = self.get_proc_handler(pid)
+        if not kernel32.AssignProcessToJobObject(job, handle):
+            raise ctypes.WinError()  # type: ignore[attr-defined]
+
+
+def run_stoppable_main() -> None:
     """Main to spawn flask in a subprocess."""
     print("run stoppable main!")
-    q: multiprocessing.Queue = multiprocessing.Queue()
-    p = multiprocessing.Process(target=run_app_in_subprocess, args=(q,))
+    if os.name != "nt":
+        os.setpgrp()
+
+    context = (
+        multiprocessing.get_context("fork")
+        if os.name != "nt"
+        else multiprocessing.get_context()
+    )
+    q: multiprocessing.Queue = context.Queue()
+    p = context.Process(target=run_app_in_subprocess, args=(q,))
     p.start()
     # wait for stop marker
+    atexit.register(p.terminate)
+
+    if os.name == "nt":
+        win_helper = WinHelper()
+        win_helper.assign_to_job(p.pid)  # type: ignore[arg-type]
+
     try:
         q.get(block=True)
         sleep(1)
     finally:
+        with contextlib.suppress(Exception):
+            q.close()
+            q.join_thread()
         p.terminate()
         with contextlib.suppress(Exception):
             p.join(timeout=10)
@@ -726,4 +867,5 @@ if __name__ == "__main__":  # pragma: no cover
         # support for pyinstaller multiprocessing
         multiprocessing.freeze_support()
 
-    run_stoppable_main()
+    if not _should_skip_main_entry():
+        run_stoppable_main()
