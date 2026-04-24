@@ -794,8 +794,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                             ] = BigInt(_agent_tok_bal)
                                 else:
                                     self._logger.warning(
-                                        "No token balances found for AgentSafe %s on chain %s; skipping.",
-                                        _agent_safe_cs,
+                                        "AgentSafe %s on chain %s is zero address or already tracked; skipping balance fetch.",
+                                        _agent_safe,
                                         chain_id,
                                     )
                         else:
@@ -805,8 +805,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                             )
                     else:
                         self._logger.warning(
-                            "Resolved MasterSafe for service %s is zero address; skipping.",
-                            svc_id,
+                            "No contract addresses configured for chain %s; skipping service enumeration.",
+                            chain.value,
                         )
                 except Exception as exc:  # pylint: disable=broad-except
                     self._logger.warning(

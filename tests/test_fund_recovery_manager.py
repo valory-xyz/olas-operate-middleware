@@ -1361,6 +1361,87 @@ class TestFundRecoveryManagerScan:
         service_ids = [s.service_id for s in result.services]
         assert 77 in service_ids
 
+    def test_scan_staking_contract_not_found_logs_warning(self) -> None:
+        """When staking_program_id is set but not in STAKING dict, warning is logged."""
+        manager = _make_manager()
+
+        mock_staking_manager = MagicMock()
+        # Service is staked with a program ID, but that ID has no entry in STAKING
+        mock_staking_manager.get_current_staking_program.return_value = (
+            "unknown_program"
+        )
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+            # STAKING dict does not contain "unknown_program" for any chain
+            patch(
+                f"{_MODULE}.STAKING",
+                {chain: {} for chain in RECOVERY_CHAINS},
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Scan must complete successfully; the staking contract warning is just logged
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 77 in service_ids
+
+    def test_scan_service_not_staked_logs_info(self) -> None:
+        """When staking_program_id is None (service not staked), info is logged."""
+        manager = _make_manager()
+
+        mock_staking_manager = MagicMock()
+        # get_current_staking_program returns None → service is not staked
+        mock_staking_manager.get_current_staking_program.return_value = None
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[88]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Scan must complete successfully and include the service
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 88 in service_ids
+
 
 # ---------------------------------------------------------------------------
 # FundRecoveryManager.execute
