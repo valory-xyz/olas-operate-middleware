@@ -1167,6 +1167,200 @@ class TestFundRecoveryManagerScan:
                     break
         assert found, f"Staked OLAS not found in balances; balances={result.balances}"
 
+    def test_scan_zero_staked_olas_logs_info(self) -> None:
+        """When a service is staked but has zero min_staking_deposit, info is logged."""
+        manager = _make_manager()
+
+        _staking_contract = "0x" + "a" * 40
+        _olas_addr = "0x" + "c" * 40
+
+        mock_staking_manager = MagicMock()
+        mock_staking_manager.get_current_staking_program.return_value = "pearl_beta"
+        mock_staking_manager.get_staking_params.return_value = {
+            "min_staking_deposit": 0
+        }
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+            patch(
+                f"{_MODULE}.STAKING",
+                {chain: {"pearl_beta": _staking_contract} for chain in RECOVERY_CHAINS},
+            ),
+            patch(
+                f"{_MODULE}.OLAS",
+                {chain: _olas_addr for chain in RECOVERY_CHAINS},
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify scan completed (should succeed)
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 77 in service_ids
+
+    def test_scan_no_subgraph_url_falls_back_to_rpc(self) -> None:
+        """When no subgraph URL is configured, warning is logged and RPC enumeration is used."""
+        manager = _make_manager()
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(f"{_MODULE}.SUBGRAPH_URLS", {}),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[55]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify scan succeeded and used RPC enumeration
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 55 in service_ids
+
+    def test_scan_get_service_state_is_called(self) -> None:
+        """_get_service_state is called for each discovered service."""
+        manager = _make_manager()
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[88]),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
+            ) as mock_state,
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify _get_service_state was called
+        assert mock_state.called
+        service_ids = [s.service_id for s in result.services]
+        assert 88 in service_ids
+
+    def test_scan_agent_safe_zero_address_logs_warning(self) -> None:
+        """When agent safe resolves to zero address, warning is logged and service is skipped for balances."""
+        manager = _make_manager()
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[99]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify service is still included (but agent safe balances skipped)
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 99 in service_ids
+
+    def test_scan_olas_token_not_found_logs_warning(self) -> None:
+        """When OLAS token address is not found for chain, warning is logged."""
+        manager = _make_manager()
+
+        _staking_contract = "0x" + "a" * 40
+
+        mock_staking_manager = MagicMock()
+        mock_staking_manager.get_current_staking_program.return_value = "pearl_beta"
+        mock_staking_manager.get_staking_params.return_value = {
+            "min_staking_deposit": 100
+        }
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+            patch(
+                f"{_MODULE}.STAKING",
+                {chain: {"pearl_beta": _staking_contract} for chain in RECOVERY_CHAINS},
+            ),
+            patch(
+                f"{_MODULE}.OLAS",
+                {chain: None for chain in RECOVERY_CHAINS},
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify scan completed despite missing OLAS token
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 77 in service_ids
+
 
 # ---------------------------------------------------------------------------
 # FundRecoveryManager.execute

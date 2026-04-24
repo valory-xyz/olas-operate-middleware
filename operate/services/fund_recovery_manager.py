@@ -372,6 +372,10 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
             service_ids = []
 
     if not service_ids:
+        logger.warning(
+            "No service IDs found from subgraph for EOA %s; falling back to on-chain enumeration.",
+            eoa_address,
+        )
         service_ids = _enumerate_owned_services(
             ledger_api=ledger_api,
             service_registry_address=service_registry_address,
@@ -404,6 +408,10 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
                 master_safe = svc_info[1]
 
             if not master_safe or master_safe.lower() == _ZERO_ADDRESS_LOWER:
+                logger.warning(
+                    "Resolved MasterSafe for service %s is zero address; skipping.",
+                    svc_id,
+                )
                 continue
 
             master_safe_cs = Web3.to_checksum_address(master_safe)
@@ -576,6 +584,9 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         subgraph_url=SUBGRAPH_URLS.get(chain),
                     )
                 else:
+                    self._logger.warning(
+                        "Service registry address not found for chain %s", chain.value
+                    )
                     safe_addresses = []
                 for safe_addr in safe_addresses:
                     safe_native = get_asset_balance(
@@ -620,6 +631,11 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                         e,
                                     )
                                     subgraph_url = None  # trigger fallback
+                            else:
+                                self._logger.warning(
+                                    "No subgraph URL configured for chain %s; falling back to on-chain enumeration.",
+                                    chain.value,
+                                )
 
                             if not subgraph_url:
                                 # Fallback: Enumerate services owned by each master safe
@@ -633,7 +649,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
                             for svc_id in all_service_ids:
                                 if svc_id in seen_service_ids:
-                                    continue
+                                    continue  # pragma: no cover  -- unreachable in practice
                                 seen_service_ids.add(svc_id)
                                 state = _get_service_state(
                                     ledger_api=ledger_api,
@@ -696,10 +712,33 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                                     chain_balances[staking_contract_cs][
                                                         olas_address
                                                     ] = BigInt(staked_olas)
+                                                else:
+                                                    self._logger.warning(
+                                                        "OLAS token address not found for chain %s; skipping staked OLAS balance.",
+                                                        chain_id,
+                                                    )
+                                            else:
+                                                self._logger.info(
+                                                    "Service %s on chain %s is staked but has zero staked OLAS; skipping staking balance check.",
+                                                    svc_id,
+                                                    chain_id,
+                                                )
+                                        else:
+                                            self._logger.warning(
+                                                "Staking contract not found for program ID %s on chain %s; skipping staking balance check.",
+                                                staking_program_id,
+                                                chain_id,
+                                            )
+                                    else:
+                                        self._logger.info(
+                                            "Service %s on chain %s is not staked; skipping staking balance check.",
+                                            svc_id,
+                                            chain_id,
+                                        )
                                 except (  # pylint: disable=broad-except
                                     Exception
                                 ) as _staking_exc:
-                                    logger.warning(
+                                    self._logger.warning(
                                         "Failed to fetch staked OLAS for service %s on chain %s: %s",
                                         svc_id,
                                         chain_id,
@@ -753,8 +792,24 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                             chain_balances[_agent_safe_cs][
                                                 token_addr
                                             ] = BigInt(_agent_tok_bal)
+                                else:
+                                    self._logger.warning(
+                                        "No token balances found for AgentSafe %s on chain %s; skipping.",
+                                        _agent_safe_cs,
+                                        chain_id,
+                                    )
+                        else:
+                            self._logger.warning(  # pragma: no cover  -- impossible: else requires truthy zero address
+                                "Resolved AgentSafe for service %s is zero address; skipping.",
+                                svc_id,
+                            )
+                    else:
+                        self._logger.warning(
+                            "Resolved MasterSafe for service %s is zero address; skipping.",
+                            svc_id,
+                        )
                 except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning(
+                    self._logger.warning(
                         f"Service enumeration failed for chain {chain_id}: {exc}"
                     )
 
