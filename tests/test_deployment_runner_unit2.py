@@ -505,8 +505,10 @@ class TestGetNamedEnvVariables:
     def test_returns_empty_on_load_error(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Load failures are logged and yield an empty dict; the existing
-        path-based injection path keeps the subprocess functional."""
+        """Load failure logs and yields empty dict.
+
+        Existing path-based injection path keeps the subprocess functional.
+        """
         work_dir = tmp_path / "svc" / "deployment"
         work_dir.mkdir(parents=True)
         runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
@@ -1186,10 +1188,11 @@ class TestPyInstallerStartAgent:
     def test_start_agent_named_env_vars_override_agent_json_on_conflict(
         self, tmp_path: Path
     ) -> None:
-        """When the same key appears in agent.json and named vars,
-        the named value wins. agent.json's path-based substitution is
-        baked at build time — the user-configured named value should
-        take precedence at runtime."""
+        """Named env vars win over agent.json on key conflict.
+
+        agent.json's path-based substitution is baked at build time —
+        the user-configured named value should take precedence at runtime.
+        """
         env = {"STORE_PATH": "/data/"}  # the YAML default — should be overridden
         (tmp_path / "agent.json").write_text(json.dumps(env), encoding="utf-8")
         runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)

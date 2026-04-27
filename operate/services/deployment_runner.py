@@ -160,8 +160,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         Returns an empty dict on any load error so the existing path-based
         injection path keeps working.
         """
-        # Lazy import: service.py imports from this module.
-        # pylint: disable=import-outside-toplevel
+        # Lazy import: service.py imports from this module — at top-level this
+        # raises ImportError because Service is defined below service.py's
+        # import of run_host_deployment. The cycle warning is expected.
+        # pylint: disable=import-outside-toplevel,cyclic-import
         from operate.services.service import Service
 
         service_dir = self._work_directory.parent
