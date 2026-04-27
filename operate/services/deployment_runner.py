@@ -146,44 +146,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Get .operate dir."""
         return Path(self._work_directory).parent.parent.parent
 
-    def _get_named_env_variables(self) -> Dict[str, str]:
-        """Load the service's named env variables for subprocess injection.
-
-        These mirror the named placeholders in the agent's aea-config.yaml
-        (e.g. ``${STORE_PATH:str:/data/}``). open-aea's
-        ``replace_with_env_var`` only consults a template's literal name
-        when the template provides one — the path-based fallback (e.g.
-        ``SKILL_*_STORE_PATH``) is silently skipped. Without this, named
-        templates resolve to their YAML defaults regardless of what
-        operate computed in ``service.env_variables``.
-
-        Returns an empty dict on any load error so the existing path-based
-        injection path keeps working.
-        """
-        # Lazy import: service.py imports from this module — at top-level this
-        # raises ImportError because Service is defined below service.py's
-        # import of run_host_deployment. The cycle warning is expected.
-        # pylint: disable=import-outside-toplevel,cyclic-import
-        from operate.services.service import Service
-
-        service_dir = self._work_directory.parent
-        try:
-            service = Service.load(path=service_dir)
-        except Exception as exc:  # nosec B902 # pylint: disable=broad-except
-            self.logger.warning(
-                f"Could not load service config from {service_dir} for "
-                f"named env-var injection: {exc}"
-            )
-            return {}
-
-        named_vars: Dict[str, str] = {}
-        for var_name, attrs in service.env_variables.items():
-            value = attrs.get("value")
-            if value in (None, ""):
-                continue
-            named_vars[var_name] = str(value)
-        return named_vars
-
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
         no_password_args = []
@@ -554,10 +516,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
-        # Named env vars must override agent.json's path-based keys: open-aea
-        # only consults the literal name in named templates like
-        # ${STORE_PATH:str:/data/} and ignores the path-based fallback.
-        env = {**os.environ, **env, **self._get_named_env_variables()}
+        env = {**os.environ, **env}
         self.logger.info("Starting agent runner process")
         process = (  # pylint: disable=assignment-from-no-return
             self._start_agent_process(
@@ -836,7 +795,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=self.get_agent_start_args(password=password),
             cwd=str(working_dir / "agent"),
-            env={**os.environ, **env, **self._get_named_env_variables()},
+            env={**os.environ, **env},
             stdout=self._agent_log_file,
             stderr=self._agent_log_file,
             creationflags=(
