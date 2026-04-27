@@ -83,7 +83,7 @@ class AgentAssetManager:
             machine = platform.machine().lower()
             if machine in ("x86_64", "amd64"):
                 return "x64"
-            if machine == "arm64":
+            if machine in ("arm64", "aarch64"):
                 return "arm64"
             raise ValueError(f"unsupported arch: {platform.machine()}")
 

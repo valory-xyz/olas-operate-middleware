@@ -161,9 +161,17 @@ class TestAgentAssetManagerExecutableName:
                 AgentAssetManager.get_agent_runner_executable_name()
 
     def test_linux_arm64(self) -> None:
-        """Test executable name for Linux arm64 (Raspberry Pi)."""
+        """Test executable name for Linux arm64 (arm64 machine string)."""
         with patch("platform.system", return_value="Linux"), patch(
             "platform.machine", return_value="arm64"
+        ):
+            name = AgentAssetManager.get_agent_runner_executable_name()
+        assert name == "agent_runner_linux_arm64"
+
+    def test_linux_aarch64(self) -> None:
+        """Test executable name for Linux aarch64 (Raspberry Pi OS 64-bit)."""
+        with patch("platform.system", return_value="Linux"), patch(
+            "platform.machine", return_value="aarch64"
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert name == "agent_runner_linux_arm64"
