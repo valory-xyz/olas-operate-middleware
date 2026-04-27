@@ -173,8 +173,8 @@ class TestUniswapV2ERC20Contract(BaseContractTestCase):
         value = 100
         deadline = 10
         v = 10
-        r = b""
-        s = b""
+        r = b"\x00" * 32
+        s = b"\x00" * 32
         data = self.contract.get_instance(
             self.ledger_api, self.contract_address
         ).encode_abi(
@@ -308,8 +308,8 @@ class TestUniswapV2ERC20Contract(BaseContractTestCase):
             value=1,
             deadline=300,
             v=0,
-            r=b"0",
-            s=b"0",
+            r=b"0" + b"\x00" * 31,
+            s=b"0" + b"\x00" * 31,
         )
 
         assert result == {

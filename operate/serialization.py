@@ -47,7 +47,11 @@ class BigInt(int):
 
     def __itruediv__(self, other: t.Union[int, str]) -> "BigInt":
         """In-place true division."""
-        return BigInt(int(self) / int(other))
+        return BigInt(int(self) // int(other))
+
+    def __truediv__(self, other: t.Union[int, str]) -> "BigInt":
+        """True division."""
+        return BigInt(int(self) // int(other))
 
 
 def serialize(obj: t.Any) -> t.Any:  # pylint: disable=too-many-return-statements

@@ -38,6 +38,7 @@ from operate.services.fund_recovery_manager import (
     RECOVERY_CHAINS,
     _check_gas_warning,
     _enumerate_owned_services,
+    _get_master_safes_from_contracts,
     _get_service_registry_contract,
     _get_service_state,
     _mnemonic_to_address,
@@ -339,6 +340,341 @@ class TestEnumerateOwnedServices:
 
 
 # ---------------------------------------------------------------------------
+# _get_master_safes_from_contracts
+# ---------------------------------------------------------------------------
+
+
+class TestGetMasterSafesFromContracts:
+    """Tests for _get_master_safes_from_contracts."""
+
+    # Constants shared across tests in this class
+    _EOA = _TEST_EOA_ADDRESS
+    _MASTER_SAFE = "0x" + "a" * 40
+    _MASTER_SAFE2 = "0x" + "c" * 40
+    _STAKING_CONTRACT = "0x" + "5" * 40
+    _PROGRAM_ID = "pearl_beta"
+
+    def _mock_staking_manager(
+        self,
+        program_id: t.Optional[str] = None,
+        staking_contract: str = "",
+        svc_info_safe: str = "",
+    ) -> MagicMock:
+        """Return a StakingManager mock with sensible defaults."""
+        m = MagicMock()
+        m.get_current_staking_program.return_value = program_id
+        m.get_staking_contract.return_value = staking_contract or self._STAKING_CONTRACT
+        # service_info returns (multisig, owner, nonces, tsStart, reward, inactivity)
+        m.service_info.return_value = (
+            "0x" + "0" * 40,
+            svc_info_safe or self._MASTER_SAFE,
+            [],
+            0,
+            0,
+            0,
+        )
+        return m
+
+    def _call(
+        self,
+        *,
+        ledger_api: t.Any = None,
+        eoa_address: str = "",
+        service_registry_address: str = _SERVICE_REGISTRY,
+        subgraph_url: t.Optional[str] = None,
+    ) -> t.List[str]:
+        """Thin wrapper that calls _get_master_safes_from_contracts with test defaults."""
+        from operate.operate_types import Chain
+
+        return _get_master_safes_from_contracts(
+            chain=Chain.GNOSIS,
+            ledger_api=ledger_api or MagicMock(),
+            service_registry_address=service_registry_address,
+            eoa_address=eoa_address or self._EOA,
+            subgraph_url=subgraph_url,
+        )
+
+    # ------------------------------------------------------------------
+    # Service ID discovery
+    # ------------------------------------------------------------------
+
+    def test_subgraph_url_none_skips_subgraph(self) -> None:
+        """When subgraph_url is None, _fetch_services_from_subgraph is never called."""
+        with (
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=AssertionError("should not be called"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch(f"{_MODULE}.StakingManager", return_value=MagicMock()),
+            patch(f"{_MODULE}.get_default_rpc"),
+        ):
+            result = self._call(subgraph_url=None)
+        assert result == []
+
+    def test_subgraph_fails_falls_back_to_rpc(self) -> None:
+        """When subgraph raises, _enumerate_owned_services is used as fallback."""
+        mock_sm = self._mock_staking_manager(
+            program_id=None, svc_info_safe=self._MASTER_SAFE
+        )
+        registry_mock = MagicMock()
+        registry_mock.functions.ownerOf.return_value.call.return_value = (
+            self._MASTER_SAFE
+        )
+        with (
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[1]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}._get_service_registry_contract",
+                return_value=registry_mock,
+            ),
+            patch(
+                f"{_MODULE}.get_owners",
+                return_value=[self._EOA],
+            ),
+        ):
+            result = self._call(subgraph_url="http://subgraph")
+        from web3 import Web3
+
+        assert Web3.to_checksum_address(self._MASTER_SAFE) in result
+
+    def test_zero_services_returns_empty(self) -> None:
+        """When no service IDs are found, an empty list is returned."""
+        with (
+            patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[]),
+            patch(f"{_MODULE}.StakingManager", return_value=MagicMock()),
+            patch(f"{_MODULE}.get_default_rpc"),
+        ):
+            result = self._call(subgraph_url="http://subgraph")
+        assert result == []
+
+    # ------------------------------------------------------------------
+    # MasterSafe resolution — non-staked branch
+    # ------------------------------------------------------------------
+
+    def test_non_staked_service_get_current_returns_none(self) -> None:
+        """When get_current_staking_program returns None, ownerOf() is used."""
+        mock_sm = self._mock_staking_manager(program_id=None)
+        registry_mock = MagicMock()
+        registry_mock.functions.ownerOf.return_value.call.return_value = (
+            self._MASTER_SAFE
+        )
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[42]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}._get_service_registry_contract",
+                return_value=registry_mock,
+            ),
+            patch(
+                f"{_MODULE}.get_owners",
+                return_value=[self._EOA],
+            ),
+        ):
+            result = self._call()
+        from web3 import Web3
+
+        assert Web3.to_checksum_address(self._MASTER_SAFE) in result
+        # service_info should NOT have been called
+        mock_sm.service_info.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # MasterSafe resolution — staked branch
+    # ------------------------------------------------------------------
+
+    def test_staked_service_uses_service_info_wrapper(self) -> None:
+        """When get_current_staking_program returns a program ID, service_info is used."""
+        mock_sm = self._mock_staking_manager(
+            program_id=self._PROGRAM_ID,
+            staking_contract=self._STAKING_CONTRACT,
+            svc_info_safe=self._MASTER_SAFE,
+        )
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[7]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}.get_owners",
+                return_value=[self._EOA],
+            ),
+        ):
+            result = self._call()
+        from web3 import Web3
+
+        assert Web3.to_checksum_address(self._MASTER_SAFE) in result
+        mock_sm.service_info.assert_called_once_with(
+            staking_contract=self._STAKING_CONTRACT,
+            service_id=7,
+        )
+
+    # ------------------------------------------------------------------
+    # Multiple services / mixed staking states
+    # ------------------------------------------------------------------
+
+    def test_mixed_staked_and_non_staked_services(self) -> None:
+        """Mix of staked (svc 1) and non-staked (svc 2) resolves both safes."""
+        safe_staked = self._MASTER_SAFE
+        safe_nonstaked = self._MASTER_SAFE2
+
+        mock_sm = MagicMock()
+        mock_sm.get_current_staking_program.side_effect = [
+            self._PROGRAM_ID,  # svc 1 → staked
+            None,  # svc 2 → not staked
+        ]
+        mock_sm.get_staking_contract.return_value = self._STAKING_CONTRACT
+        mock_sm.service_info.return_value = (
+            "0x" + "0" * 40,
+            safe_staked,
+            [],
+            0,
+            0,
+            0,
+        )
+
+        registry_mock = MagicMock()
+        registry_mock.functions.ownerOf.return_value.call.return_value = safe_nonstaked
+
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[1, 2]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}._get_service_registry_contract",
+                return_value=registry_mock,
+            ),
+            patch(
+                f"{_MODULE}.get_owners",
+                return_value=[self._EOA],
+            ),
+        ):
+            result = self._call()
+
+        from web3 import Web3
+
+        assert Web3.to_checksum_address(safe_staked) in result
+        assert Web3.to_checksum_address(safe_nonstaked) in result
+
+    def test_multiple_master_safes(self) -> None:
+        """Two different service IDs mapping to two different MasterSafes."""
+        safe_a = self._MASTER_SAFE
+        safe_b = self._MASTER_SAFE2
+
+        mock_sm = MagicMock()
+        mock_sm.get_current_staking_program.return_value = None
+        registry_mock = MagicMock()
+        registry_mock.functions.ownerOf.return_value.call.side_effect = [
+            safe_a,
+            safe_b,
+        ]
+
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[10, 20]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}._get_service_registry_contract",
+                return_value=registry_mock,
+            ),
+            patch(
+                f"{_MODULE}.get_owners",
+                return_value=[self._EOA],
+            ),
+        ):
+            result = self._call()
+
+        from web3 import Web3
+
+        assert Web3.to_checksum_address(safe_a) in result
+        assert Web3.to_checksum_address(safe_b) in result
+
+    # ------------------------------------------------------------------
+    # Ownership verification
+    # ------------------------------------------------------------------
+
+    def test_eoa_not_owner_of_safe_skipped(self) -> None:
+        """Safe is skipped when the recovery EOA is not listed as an owner."""
+        mock_sm = self._mock_staking_manager(program_id=None)
+        registry_mock = MagicMock()
+        registry_mock.functions.ownerOf.return_value.call.return_value = (
+            self._MASTER_SAFE
+        )
+        other_owner = "0x" + "9" * 40
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[5]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}._get_service_registry_contract",
+                return_value=registry_mock,
+            ),
+            # EOA is NOT in the owners list
+            patch(f"{_MODULE}.get_owners", return_value=[other_owner]),
+        ):
+            result = self._call()
+        assert result == []
+
+    def test_ownership_check_raises_skips_safe(self) -> None:
+        """Safe is skipped when get_owners raises an exception."""
+        mock_sm = self._mock_staking_manager(program_id=None)
+        registry_mock = MagicMock()
+        registry_mock.functions.ownerOf.return_value.call.return_value = (
+            self._MASTER_SAFE
+        )
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[5]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+            patch(
+                f"{_MODULE}._get_service_registry_contract",
+                return_value=registry_mock,
+            ),
+            patch(f"{_MODULE}.get_owners", side_effect=Exception("rpc failure")),
+        ):
+            result = self._call()
+        assert result == []
+
+    # ------------------------------------------------------------------
+    # Zero-address filtering
+    # ------------------------------------------------------------------
+
+    def test_service_info_owner_zero_address_skipped(self) -> None:
+        """Safe resolution returning a zero address is silently skipped."""
+        mock_sm = self._mock_staking_manager(
+            program_id=self._PROGRAM_ID,
+            staking_contract=self._STAKING_CONTRACT,
+            svc_info_safe=ZERO_ADDRESS,
+        )
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[3]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+        ):
+            result = self._call()
+        assert result == []
+
+    def test_staking_manager_resolution_exception_skips_service(self) -> None:
+        """When get_current_staking_program raises, the outer except fires and service is skipped."""
+        mock_sm = MagicMock()
+        mock_sm.get_current_staking_program.side_effect = RuntimeError(
+            "staking rpc error"
+        )
+        with (
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[9]),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_sm),
+            patch(f"{_MODULE}.get_default_rpc"),
+        ):
+            result = self._call()
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
 # FundRecoveryManager.scan
 # ---------------------------------------------------------------------------
 
@@ -354,7 +690,7 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -369,7 +705,7 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -389,7 +725,7 @@ class TestFundRecoveryManagerScan:
                     1000 if asset_address == ZERO_ADDRESS else 0
                 ),
             ),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -419,7 +755,7 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -446,7 +782,7 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -463,7 +799,7 @@ class TestFundRecoveryManagerScan:
                 assert _TOKEN_ADDR not in addr_balances
 
     def test_scan_records_safe_balances(self) -> None:
-        """Safe addresses returned by fetch_safes_for_owner are scanned."""
+        """Safe addresses returned by _get_master_safes_from_contracts are scanned."""
         manager = _make_manager()
         safe = _SAFE_ADDR
 
@@ -475,7 +811,7 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[safe]),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -503,7 +839,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -532,7 +870,7 @@ class TestFundRecoveryManagerScan:
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
             patch(
-                f"{_MODULE}.fetch_safes_for_owner",
+                f"{_MODULE}._get_master_safes_from_contracts",
                 return_value=[_SAFE_ADDR, "0x" + "3" * 40],
             ),
             patch(
@@ -566,7 +904,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -595,7 +935,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -627,7 +969,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -659,7 +1003,7 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=True),
@@ -691,7 +1035,6 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
             patch(
                 f"{_MODULE}._check_gas_warning",
                 return_value=GasWarningEntry(insufficient=False),
@@ -709,7 +1052,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=RuntimeError("subgraph boom"),
@@ -734,7 +1079,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -778,7 +1125,9 @@ class TestFundRecoveryManagerScan:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", return_value=0),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -817,6 +1166,281 @@ class TestFundRecoveryManagerScan:
                     found = True
                     break
         assert found, f"Staked OLAS not found in balances; balances={result.balances}"
+
+    def test_scan_zero_staked_olas_logs_info(self) -> None:
+        """When a service is staked but has zero min_staking_deposit, info is logged."""
+        manager = _make_manager()
+
+        _staking_contract = "0x" + "a" * 40
+        _olas_addr = "0x" + "c" * 40
+
+        mock_staking_manager = MagicMock()
+        mock_staking_manager.get_current_staking_program.return_value = "pearl_beta"
+        mock_staking_manager.get_staking_params.return_value = {
+            "min_staking_deposit": 0
+        }
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+            patch(
+                f"{_MODULE}.STAKING",
+                {chain: {"pearl_beta": _staking_contract} for chain in RECOVERY_CHAINS},
+            ),
+            patch(
+                f"{_MODULE}.OLAS",
+                {chain: _olas_addr for chain in RECOVERY_CHAINS},
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify scan completed (should succeed)
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 77 in service_ids
+
+    def test_scan_no_subgraph_url_falls_back_to_rpc(self) -> None:
+        """When no subgraph URL is configured, warning is logged and RPC enumeration is used."""
+        manager = _make_manager()
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(f"{_MODULE}.SUBGRAPH_URLS", {}),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[55]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify scan succeeded and used RPC enumeration
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 55 in service_ids
+
+    def test_scan_get_service_state_is_called(self) -> None:
+        """_get_service_state is called for each discovered service."""
+        manager = _make_manager()
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[88]),
+            patch(
+                f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED
+            ) as mock_state,
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify _get_service_state was called
+        assert mock_state.called
+        service_ids = [s.service_id for s in result.services]
+        assert 88 in service_ids
+
+    def test_scan_agent_safe_zero_address_logs_warning(self) -> None:
+        """When agent safe resolves to zero address, warning is logged and service is skipped for balances."""
+        manager = _make_manager()
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[99]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify service is still included (but agent safe balances skipped)
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 99 in service_ids
+
+    def test_scan_olas_token_not_found_logs_warning(self) -> None:
+        """When OLAS token address is not found for chain, warning is logged."""
+        manager = _make_manager()
+
+        _staking_contract = "0x" + "a" * 40
+
+        mock_staking_manager = MagicMock()
+        mock_staking_manager.get_current_staking_program.return_value = "pearl_beta"
+        mock_staking_manager.get_staking_params.return_value = {
+            "min_staking_deposit": 100
+        }
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+            patch(
+                f"{_MODULE}.STAKING",
+                {chain: {"pearl_beta": _staking_contract} for chain in RECOVERY_CHAINS},
+            ),
+            patch(
+                f"{_MODULE}.OLAS",
+                {chain: None for chain in RECOVERY_CHAINS},
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Verify scan completed despite missing OLAS token
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 77 in service_ids
+
+    def test_scan_staking_contract_not_found_logs_warning(self) -> None:
+        """When staking_program_id is set but not in STAKING dict, warning is logged."""
+        manager = _make_manager()
+
+        mock_staking_manager = MagicMock()
+        # Service is staked with a program ID, but that ID has no entry in STAKING
+        mock_staking_manager.get_current_staking_program.return_value = (
+            "unknown_program"
+        )
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[77]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+            # STAKING dict does not contain "unknown_program" for any chain
+            patch(
+                f"{_MODULE}.STAKING",
+                {chain: {} for chain in RECOVERY_CHAINS},
+            ),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Scan must complete successfully; the staking contract warning is just logged
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 77 in service_ids
+
+    def test_scan_service_not_staked_logs_info(self) -> None:
+        """When staking_program_id is None (service not staked), info is logged."""
+        manager = _make_manager()
+
+        mock_staking_manager = MagicMock()
+        # get_current_staking_program returns None → service is not staked
+        mock_staking_manager.get_current_staking_program.return_value = None
+
+        with (
+            patch(f"{_MODULE}.get_default_ledger_api"),
+            patch(f"{_MODULE}.get_asset_balance", return_value=0),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
+            patch(
+                f"{_MODULE}._fetch_services_from_subgraph",
+                side_effect=Exception("network"),
+            ),
+            patch(f"{_MODULE}._enumerate_owned_services", return_value=[88]),
+            patch(f"{_MODULE}._get_service_state", return_value=OnChainState.DEPLOYED),
+            patch(
+                f"{_MODULE}.get_service_info",
+                return_value=(0, ZERO_ADDRESS, b"", 1, 1, 0, 1, []),
+            ),
+            patch(
+                f"{_MODULE}._check_gas_warning",
+                return_value=GasWarningEntry(insufficient=False),
+            ),
+            patch(f"{_MODULE}.StakingManager", return_value=mock_staking_manager),
+        ):
+            result = manager.scan(_TEST_MNEMONIC)
+
+        # Scan must complete successfully and include the service
+        assert isinstance(result, FundRecoveryScanResponse)
+        service_ids = [s.service_id for s in result.services]
+        assert 88 in service_ids
 
 
 # ---------------------------------------------------------------------------
@@ -858,7 +1482,7 @@ class TestFundRecoveryManagerExecute:
             patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
             patch(f"{_MODULE}.FundingManager"),
             patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         ):
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
@@ -873,7 +1497,7 @@ class TestFundRecoveryManagerExecute:
             patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
             patch(f"{_MODULE}.FundingManager"),
             patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         ):
             result = manager.execute(_TEST_MNEMONIC, _DEST_ADDR)
@@ -943,7 +1567,9 @@ class TestExecuteMultisigFetch:
             patch(f"{_MODULE}.FundingManager"),
             patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[55]),
             patch(f"{_MODULE}.get_service_info", return_value=svc_info),
         ):
@@ -990,7 +1616,9 @@ class TestExecuteMultisigFetch:
             patch(f"{_MODULE}.FundingManager"),
             patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[56]),
             patch(f"{_MODULE}.get_service_info", return_value=svc_info),
         ):
@@ -1021,7 +1649,9 @@ class TestExecuteMultisigFetch:
             patch(f"{_MODULE}.FundingManager"),
             patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
             patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+            patch(
+                f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]
+            ),
             patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[58]),
             patch(f"{_MODULE}.get_service_info", side_effect=Exception("rpc error")),
         ):
@@ -1068,7 +1698,7 @@ class TestScanSafeErc20Balance:
         with (
             patch(f"{_MODULE}.get_default_ledger_api"),
             patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-            patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[safe]),
+            patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[safe]),
             patch(
                 f"{_MODULE}._fetch_services_from_subgraph",
                 side_effect=Exception("network"),
@@ -1326,7 +1956,7 @@ def test_execute_calls_service_manager_methods_for_deployed_service() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[7]),
         patch(f"{_MODULE}.get_service_info", return_value=svc_info),
@@ -1356,7 +1986,7 @@ def test_execute_creates_wallet_manager_and_imports_wallet() -> None:
         patch(f"{_MODULE}.MasterWalletManager", mock_wm_cls),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
     ):
         manager = FundRecoveryManager()
@@ -1396,7 +2026,6 @@ def test_execute_chain_level_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
     ):
         manager = FundRecoveryManager()
@@ -1410,7 +2039,7 @@ def test_execute_chain_level_exception_adds_to_errors() -> None:
 
 
 def test_execute_subgraph_fallback_calls_enumerate_owned_services() -> None:
-    """When _fetch_services_from_subgraph raises, _enumerate_owned_services is called."""
+    """When _fetch_services_from_subgraph raises in execute(), _enumerate_owned_services is called."""
     mock_wallet, mock_wm_instance, mock_sm_instance = _make_execute_mocks()
 
     with (
@@ -1418,7 +2047,7 @@ def test_execute_subgraph_fallback_calls_enumerate_owned_services() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(
             f"{_MODULE}._fetch_services_from_subgraph",
@@ -1446,7 +2075,7 @@ def test_execute_svc_manager_create_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
     ):
@@ -1472,7 +2101,7 @@ def test_execute_terminate_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
         patch(f"{_MODULE}.get_service_info", return_value=svc_info),
@@ -1499,7 +2128,7 @@ def test_execute_recovery_module_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
         patch(f"{_MODULE}.get_service_info", return_value=svc_info),
@@ -1524,7 +2153,7 @@ def test_execute_agent_safe_drain_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
         patch(f"{_MODULE}.get_service_info", return_value=svc_info),
@@ -1552,7 +2181,7 @@ def test_execute_safe_drain_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
     ):
@@ -1579,7 +2208,7 @@ def test_execute_eoa_drain_exception_adds_to_errors() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
     ):
         manager = FundRecoveryManager()
@@ -1600,7 +2229,7 @@ def test_execute_funds_moved_tracked_when_drain_returns_nonzero() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
     ):
         manager = FundRecoveryManager()
@@ -1625,7 +2254,7 @@ def test_execute_safe_funds_moved_tracked_when_drain_returns_nonzero() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[]),
     ):
@@ -1662,7 +2291,7 @@ def test_execute_partial_failure_when_errors_and_funds_moved() -> None:
         patch(f"{_MODULE}.MasterWalletManager", return_value=mock_wm_instance),
         patch(f"{_MODULE}.FundingManager"),
         patch(f"{_MODULE}.ServiceManager", return_value=mock_sm_instance),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(f"{_MODULE}.get_default_rpc", return_value="https://rpc.test"),
         patch(f"{_MODULE}._fetch_services_from_subgraph", return_value=[42]),
         patch(f"{_MODULE}.get_service_info", return_value=svc_info),
@@ -1694,7 +2323,7 @@ def test_scan_deduplicates_service_ids_via_continue() -> None:
         patch(f"{_MODULE}.get_default_ledger_api"),
         patch(f"{_MODULE}.get_asset_balance", return_value=0),
         patch(
-            f"{_MODULE}.fetch_safes_for_owner",
+            f"{_MODULE}._get_master_safes_from_contracts",
             return_value=[_SAFE_ADDR, "0x" + "4" * 40],
         ),
         patch(
@@ -1730,7 +2359,7 @@ def test_scan_get_service_info_raises_is_swallowed() -> None:
     with (
         patch(f"{_MODULE}.get_default_ledger_api"),
         patch(f"{_MODULE}.get_asset_balance", return_value=0),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(
             f"{_MODULE}._fetch_services_from_subgraph",
             side_effect=Exception("network"),
@@ -1779,7 +2408,7 @@ def test_scan_agent_safe_balance_included_when_nonzero() -> None:
     with (
         patch(f"{_MODULE}.get_default_ledger_api"),
         patch(f"{_MODULE}.get_asset_balance", side_effect=_bal),
-        patch(f"{_MODULE}.fetch_safes_for_owner", return_value=[_SAFE_ADDR]),
+        patch(f"{_MODULE}._get_master_safes_from_contracts", return_value=[_SAFE_ADDR]),
         patch(
             f"{_MODULE}._fetch_services_from_subgraph",
             side_effect=Exception("network"),

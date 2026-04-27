@@ -20,7 +20,6 @@
 """Master key implementation"""
 
 import json
-import os
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +38,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import (
+    DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     get_default_ledger_api,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
@@ -266,7 +266,9 @@ class MasterWallet(LocalResource):
 
 
 @dataclass
-class EthereumMasterWallet(MasterWallet):
+class EthereumMasterWallet(
+    MasterWallet
+):  # pylint: disable=too-many-instance-attributes
     """Master wallet manager."""
 
     path: Path
@@ -276,6 +278,9 @@ class EthereumMasterWallet(MasterWallet):
     safe_chains: t.List[Chain] = field(default_factory=list)
     ledger_type: LedgerType = LedgerType.ETHEREUM
     safe_nonce: t.Optional[int] = None  # For cross-chain reusability
+    canonical_backup_owner: t.Optional[str] = (
+        None  # Canonical backup owner across all chains
+    )
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
@@ -318,10 +323,10 @@ class EthereumMasterWallet(MasterWallet):
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if balance - tx_fee < amount <= balance:
+        if balance - tx_fee <= amount <= balance:
             # we assume that the user wants to drain the EOA
             # we also account for dust here because withdraw call use some EOA balance to drain the safes first
-            amount = balance - tx_fee
+            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
             if amount <= 0:
                 logger.warning(
                     f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
@@ -337,20 +342,14 @@ class EthereumMasterWallet(MasterWallet):
 
         def _build_tx() -> t.Dict:
             """Build transaction"""
-            max_priority_fee_per_gas = os.getenv("MAX_PRIORITY_FEE_PER_GAS", None)
-            max_fee_per_gas = os.getenv("MAX_FEE_PER_GAS", None)
             tx = ledger_api.get_transfer_transaction(
                 sender_address=self.crypto.address,
                 destination_address=to,
                 amount=amount,
-                tx_fee=50000,
+                tx_fee=0,
                 tx_nonce="0x",
                 chain_id=chain.id,
                 raise_on_try=True,
-                max_fee_per_gas=int(max_fee_per_gas) if max_fee_per_gas else None,
-                max_priority_fee_per_gas=(
-                    int(max_priority_fee_per_gas) if max_priority_fee_per_gas else None
-                ),
             )
             return ledger_api.update_with_gas_estimate(
                 transaction=tx,
@@ -789,12 +788,16 @@ class EthereumMasterWallet(MasterWallet):
             self.safes[chain] = safe
             self.store()
 
-        if backup_owner is not None:
+        # Prefer explicitly provided backup_owner; fall back to canonical
+        effective_backup_owner = (
+            backup_owner if backup_owner is not None else self.canonical_backup_owner
+        )
+        if effective_backup_owner is not None:
             add_owner(
                 ledger_api=ledger_api,
                 crypto=self.crypto,
                 safe=self.safes[chain],
-                owner=backup_owner,
+                owner=effective_backup_owner,
             )
 
         return tx_hash
@@ -863,6 +866,126 @@ class EthereumMasterWallet(MasterWallet):
 
         return False  # pragma: no cover
 
+    def sync_backup_owner(self) -> t.Dict:
+        """Sync the canonical backup owner to all chains that diverge from it.
+
+        Only updates chains whose current on-chain backup owner differs from
+        ``self.canonical_backup_owner``.  Chains without a Safe are skipped.
+
+        Returns a dict with keys:
+            - ``canonical_backup_owner`` (str): the canonical address used.
+            - ``results`` (list): per-chain result dicts.
+            - ``all_succeeded`` (bool): True when every attempted update succeeded.
+        """
+        if not self.canonical_backup_owner:
+            raise ValueError("No canonical backup owner is set.")
+
+        results = []
+        all_succeeded = True
+        for chain, safe in self.safes.items():
+            ledger_api = self.ledger_api(chain=chain)
+            owners = get_owners(ledger_api=ledger_api, safe=safe)
+            current_owners = [o for o in owners if o != self.address]
+
+            if self.canonical_backup_owner in current_owners:
+                results.append(
+                    {
+                        "chain": chain.value,
+                        "updated": False,
+                        "message": "Already in sync",
+                    }
+                )
+                continue
+
+            try:
+                self.update_backup_owner(
+                    chain=chain,
+                    backup_owner=self.canonical_backup_owner,
+                )
+                results.append(
+                    {
+                        "chain": chain.value,
+                        "updated": True,
+                        "message": "Synced successfully",
+                    }
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                results.append(
+                    {
+                        "chain": chain.value,
+                        "updated": False,
+                        "message": f"Failed: {exc}",
+                    }
+                )
+                all_succeeded = False
+
+        return {
+            "canonical_backup_owner": self.canonical_backup_owner,
+            "results": results,
+            "all_succeeded": all_succeeded,
+        }
+
+    def backup_owner_status(self) -> t.Dict:
+        """Return per-chain backup owner status relative to the canonical value.
+
+        Returns a dict with keys:
+            - ``canonical_backup_owner`` (str | None)
+            - ``all_chains_synced`` (bool): True when every Safe's backup matches
+              the canonical.
+            - ``any_backup_missing`` (bool): True when at least one Safe has no
+              backup owner at all (on-chain owners list has no entry besides the
+              master EOA).
+            - ``existing_backup_on_any_chain`` (bool): True when at least one Safe
+              has any backup owner set on-chain, even if ``canonical_backup_owner``
+              is not yet set.  Lets the frontend distinguish "never had a backup"
+              from "had one but canonical not yet assigned".
+            - ``chains`` (list): per-chain status dicts, each with ``is_synced``.
+            - ``chains_without_safe`` (list): chain values for chains in
+              ``safe_chains`` that don't have a safe address yet.
+        """
+        chains_status = []
+        chains_without_safe = []
+        all_chains_synced = True
+        any_backup_missing = False
+        existing_backup_on_any_chain = False
+
+        for chain in self.safe_chains:
+            if chain not in self.safes:
+                chains_without_safe.append(chain.value)
+                continue
+
+            safe = self.safes[chain]
+            ledger_api = self.ledger_api(chain=chain)
+            owners = get_owners(ledger_api=ledger_api, safe=safe)
+            backup_owners = [o for o in owners if o != self.address]
+            current_backup = backup_owners[0] if backup_owners else None
+
+            is_synced = self.canonical_backup_owner in backup_owners
+            if not is_synced:
+                all_chains_synced = False
+            if not backup_owners:
+                any_backup_missing = True
+            else:
+                existing_backup_on_any_chain = True
+
+            chains_status.append(
+                {
+                    "chain": chain.value,
+                    "safe": safe,
+                    "current_backup_owner": current_backup,
+                    "is_synced": is_synced,
+                }
+            )
+
+        return {
+            "canonical_backup_owner": self.canonical_backup_owner,
+            "all_chains_synced": all_chains_synced,
+            "any_backup_missing": any_backup_missing,
+            "existing_backup_on_any_chain": existing_backup_on_any_chain,
+            "chains": chains_status,
+            "chains_without_safe": chains_without_safe,
+        }
+
     @property
     def extended_json(self) -> t.Dict:
         """Get JSON representation with extended information (e.g., safe owners)."""
@@ -927,6 +1050,35 @@ class EthereumMasterWallet(MasterWallet):
         return raw_ethereum_wallet
 
     @classmethod
+    def _infer_canonical_backup_owner(cls, data: t.Dict) -> t.Optional[str]:
+        """Infer a shared backup owner when every Safe matches the same topology."""
+        master_eoa_address = data["address"]
+        backup_owners = set()
+        all_safes_valid = True
+
+        for chain, safe in data["safes"].items():
+            chain_type = Chain(chain)
+            ledger_api = get_default_ledger_api(chain=chain_type)
+            owners = get_owners(ledger_api=ledger_api, safe=safe)
+            if master_eoa_address not in owners:
+                all_safes_valid = False
+                continue
+
+            non_master_owners = [
+                owner for owner in owners if owner != master_eoa_address
+            ]
+            if len(non_master_owners) != 1:
+                all_safes_valid = False
+                continue
+
+            backup_owners.add(non_master_owners[0])
+
+        if not all_safes_valid or len(backup_owners) != 1:
+            return None
+
+        return next(iter(backup_owners))
+
+    @classmethod
     def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
         wallet_path = path / cls._file
@@ -983,6 +1135,15 @@ class EthereumMasterWallet(MasterWallet):
                 "optimism" if chain == "optimistic" else chain
                 for chain in data["safe_chains"]
             ]
+            migrated = True
+
+        if "canonical_backup_owner" not in data:
+            try:
+                data["canonical_backup_owner"] = cls._infer_canonical_backup_owner(
+                    data=data
+                )
+            except Exception:  # pylint: disable=broad-except
+                data["canonical_backup_owner"] = None
             migrated = True
 
         with open(wallet_path, "w", encoding="utf-8") as file:

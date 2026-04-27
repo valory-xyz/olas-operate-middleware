@@ -740,6 +740,10 @@ class TestNativeBridgeProvider(OnTestnet):
         assert provider_request == expected_request, "Wrong request."
 
     @pytest.mark.vcr
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Direct Web3.HTTPProvider calls bypass VCR cassette interception on macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize("rpc", ["https://rpc-gate.autonolas.tech/base-rpc/"])
     @pytest.mark.parametrize(
         ("timestamp", "expected_block"),
@@ -773,6 +777,10 @@ class TestNativeBridgeProvider(OnTestnet):
 class TestProvider(OnTestnet):
     """Tests for bridge.providers.Provider class."""
 
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="NativeBridgeProvider makes Web3 eth_call (l1Token) that bypasses VCR cassette interception on macOS/Windows CI runners.",
+    )
     @pytest.mark.vcr
     @pytest.mark.parametrize(
         "provider_class",
@@ -1318,6 +1326,10 @@ class TestProvider(OnTestnet):
         assert provider_request == expected_request, "Wrong request."
 
     @pytest.mark.vcr
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain RPC calls are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status(
         self,
@@ -1423,6 +1435,10 @@ class TestProvider(OnTestnet):
             assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
 
     @pytest.mark.vcr
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Live on-chain RPC calls are unreliable from macOS/Windows CI runners.",
+    )
     @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status_failure_then_success(
         self,
