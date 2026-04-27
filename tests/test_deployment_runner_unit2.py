@@ -446,6 +446,99 @@ class TestPrepareAgentEnv:
 
 
 # ---------------------------------------------------------------------------
+# _get_named_env_variables tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetNamedEnvVariables:
+    """Tests for ``_get_named_env_variables``.
+
+    The helper bridges operate's ``service.env_variables`` to the agent_runner
+    subprocess so named YAML placeholders like ``${STORE_PATH:str:/data/}``
+    resolve to user-configured values (open-aea ignores the path-based
+    fallback when a template carries an explicit name).
+    """
+
+    def test_returns_named_env_vars_from_service_config(self, tmp_path: Path) -> None:
+        """Returns the named env vars that operate persisted on disk."""
+        # work_dir layout: <tmp>/svc/deployment, with config.json in <tmp>/svc.
+        service_dir = tmp_path / "svc"
+        work_dir = service_dir / "deployment"
+        work_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
+
+        fake_service = MagicMock()
+        fake_service.env_variables = {
+            "STORE_PATH": {"value": "/Users/x/persistent_data"},
+            "GENAI_API_KEY": {"value": "secret"},
+        }
+
+        with patch(
+            "operate.services.service.Service.load", return_value=fake_service
+        ) as mock_load:
+            result = runner._get_named_env_variables()
+
+        mock_load.assert_called_once_with(path=service_dir)
+        assert result == {
+            "STORE_PATH": "/Users/x/persistent_data",
+            "GENAI_API_KEY": "secret",
+        }
+
+    def test_skips_empty_and_none_values(self, tmp_path: Path) -> None:
+        """Vars with empty-string or None ``value`` are not exported."""
+        work_dir = tmp_path / "svc" / "deployment"
+        work_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
+
+        fake_service = MagicMock()
+        fake_service.env_variables = {
+            "EMPTY": {"value": ""},
+            "NULL": {"value": None},
+            "REAL": {"value": "x"},
+        }
+
+        with patch("operate.services.service.Service.load", return_value=fake_service):
+            result = runner._get_named_env_variables()
+
+        assert result == {"REAL": "x"}
+
+    def test_returns_empty_on_load_error(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Load failures are logged and yield an empty dict; the existing
+        path-based injection path keeps the subprocess functional."""
+        work_dir = tmp_path / "svc" / "deployment"
+        work_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
+
+        with patch(
+            "operate.services.service.Service.load",
+            side_effect=FileNotFoundError("config.json"),
+        ):
+            result = runner._get_named_env_variables()
+
+        assert result == {}
+        assert "named env-var injection" in caplog.text
+
+    def test_coerces_non_string_values_to_str(self, tmp_path: Path) -> None:
+        """Numeric / bool values get stringified — env vars must be strings."""
+        work_dir = tmp_path / "svc" / "deployment"
+        work_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
+
+        fake_service = MagicMock()
+        fake_service.env_variables = {
+            "PORT": {"value": 8716},
+            "FLAG": {"value": True},
+        }
+
+        with patch("operate.services.service.Service.load", return_value=fake_service):
+            result = runner._get_named_env_variables()
+
+        assert result == {"PORT": "8716", "FLAG": "True"}
+
+
+# ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
 
@@ -1054,6 +1147,71 @@ class TestPyInstallerStartAgent:
             pytest.raises(PIDFileError),
         ):
             runner._start_agent(password="pw")  # nosec B106
+
+    def test_start_agent_passes_named_env_vars_to_subprocess(
+        self, tmp_path: Path
+    ) -> None:
+        """Named env vars from service.env_variables reach the agent_runner env.
+
+        Regression for the named-template substitution bug: open-aea's runtime
+        ignores path-based fallback names when an explicit name is given in
+        the YAML template, so without this propagation ``${STORE_PATH:str:...}``
+        falls through to the default and skill startup fails.
+        """
+        work_dir = self._make_work_dir(tmp_path)
+        runner = PyInstallerHostDeploymentRunnerMac(work_dir, is_aea=True)
+
+        mock_process = MagicMock()
+        mock_process.pid = 42
+
+        with (
+            patch.object(
+                runner, "_start_agent_process", return_value=mock_process
+            ) as mock_start,
+            patch.object(
+                runner,
+                "_get_named_env_variables",
+                return_value={"STORE_PATH": "/Users/x/persistent_data"},
+            ),
+            patch("operate.services.deployment_runner.write_pid_file"),
+        ):
+            runner._start_agent(password="pw")  # nosec B106
+
+        passed_env = mock_start.call_args.kwargs["env"]
+        assert passed_env["STORE_PATH"] == "/Users/x/persistent_data"
+        # Existing path-based key from agent.json is still present —
+        # the fix is additive, not a replacement.
+        assert passed_env["SOME_VAR"] == "value"
+
+    def test_start_agent_named_env_vars_override_agent_json_on_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        """When the same key appears in agent.json and named vars,
+        the named value wins. agent.json's path-based substitution is
+        baked at build time — the user-configured named value should
+        take precedence at runtime."""
+        env = {"STORE_PATH": "/data/"}  # the YAML default — should be overridden
+        (tmp_path / "agent.json").write_text(json.dumps(env), encoding="utf-8")
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+
+        mock_process = MagicMock()
+        mock_process.pid = 42
+
+        with (
+            patch.object(
+                runner, "_start_agent_process", return_value=mock_process
+            ) as mock_start,
+            patch.object(
+                runner,
+                "_get_named_env_variables",
+                return_value={"STORE_PATH": "/Users/x/persistent_data"},
+            ),
+            patch("operate.services.deployment_runner.write_pid_file"),
+        ):
+            runner._start_agent(password="pw")  # nosec B106
+
+        passed_env = mock_start.call_args.kwargs["env"]
+        assert passed_env["STORE_PATH"] == "/Users/x/persistent_data"
 
 
 # ---------------------------------------------------------------------------
