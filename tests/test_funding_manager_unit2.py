@@ -136,20 +136,8 @@ class TestDrainAgentsEOAs:
             ) as mock_transfer_erc20,
             patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
@@ -183,20 +171,8 @@ class TestDrainAgentsEOAs:
             ) as mock_transfer_erc20,
             patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
@@ -252,20 +228,8 @@ class TestDrainServiceSafe:
             # native balance also zero
             with (
                 patch(
-                    "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                    {Chain.GNOSIS: TOKEN_ADDR},
-                ),
-                patch(
-                    "operate.services.funding_manager.OLAS",
-                    {Chain.GNOSIS: TOKEN_ADDR},
-                ),
-                patch(
-                    "operate.services.funding_manager.USDC",
-                    {Chain.GNOSIS: TOKEN_ADDR},
-                ),
-                patch(
-                    "operate.services.funding_manager.USDC_E",
-                    {Chain.GNOSIS: TOKEN_ADDR},
+                    "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                    {100: [TOKEN_ADDR]},
                 ),
             ):
                 ledger_api = MagicMock()
@@ -314,20 +278,8 @@ class TestDrainServiceSafe:
                 "operate.services.funding_manager.transfer_erc20_from_safe"
             ) as mock_transfer,
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
@@ -376,20 +328,8 @@ class TestDrainServiceSafe:
                 return_value="OLAS",
             ),
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
@@ -433,20 +373,8 @@ class TestDrainServiceSafe:
                 return_value="OLAS",
             ),
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             with pytest.raises(RuntimeError, match="unrecognized owner set"):
@@ -492,20 +420,8 @@ class TestDrainServiceSafe:
                 "operate.services.funding_manager.transfer_from_safe"
             ) as mock_transfer,
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
@@ -554,20 +470,8 @@ class TestDrainServiceSafe:
                 return_value="ETH",
             ),
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             mock_registry.erc20.get_instance.return_value = mock_token_instance
@@ -612,20 +516,8 @@ class TestDrainServiceSafe:
                 return_value="ETH",
             ),
             patch(
-                "operate.services.funding_manager.WRAPPED_NATIVE_ASSET",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.OLAS",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC",
-                {Chain.GNOSIS: TOKEN_ADDR},
-            ),
-            patch(
-                "operate.services.funding_manager.USDC_E",
-                {Chain.GNOSIS: TOKEN_ADDR},
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
             ),
         ):
             with pytest.raises(RuntimeError, match="unrecognized owner set"):
