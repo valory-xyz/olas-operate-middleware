@@ -72,7 +72,10 @@ def _clear_invalid_runtime_ca_bundle_env() -> None:
 
 def _get_stable_certifi_bundle_path() -> Path:
     """Return the stable on-disk location for the bundled certifi CA bundle."""
-    operate_home = Path(os.environ.get("OPERATE_HOME", Path.home() / ".operate"))
+    operate_home_str = os.environ.get("OPERATE_HOME")
+    operate_home = (
+        Path(operate_home_str) if operate_home_str else Path.home() / ".operate"
+    )
     return operate_home / "certs" / "cacert.pem"
 
 
