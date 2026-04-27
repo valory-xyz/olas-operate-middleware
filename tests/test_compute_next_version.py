@@ -3,11 +3,13 @@
 import pytest
 
 from scripts.compute_next_version import (
+    FALLBACK_REPO,
     FEAT_PREFIX,
     PullRequest,
     bump_version,
     determine_bump,
     parse_version,
+    resolve_repo,
     tag_to_version,
 )
 
@@ -134,3 +136,13 @@ class TestDetermineBump:
             PullRequest(1, "fix: bug", ("agent-review", "python", "documentation")),
         ]
         assert determine_bump(prs) == "patch"
+
+
+class TestResolveRepo:
+    def test_uses_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+        assert resolve_repo() == "owner/repo"
+
+    def test_falls_back_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        assert resolve_repo() == FALLBACK_REPO

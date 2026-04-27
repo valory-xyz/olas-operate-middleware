@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -21,8 +22,13 @@ from typing import Iterable
 
 BREAKING_LABEL = "breaking change"
 FEAT_PREFIX = re.compile(r"^feat(\([^)]+\))?!?:", re.IGNORECASE)
-DEFAULT_REPO = "valory-xyz/olas-operate-middleware"
+FALLBACK_REPO = "valory-xyz/olas-operate-middleware"
 PR_FETCH_LIMIT = 200
+
+
+def resolve_repo() -> str:
+    """$GITHUB_REPOSITORY (always set in CI), else local fallback."""
+    return os.environ.get("GITHUB_REPOSITORY") or FALLBACK_REPO
 
 
 @dataclass(frozen=True)
@@ -125,15 +131,10 @@ def main(argv: list[str] | None = None) -> int:
         "--prev-tag",
         help="Previous git tag. Defaults to latest tag in the current repo.",
     )
-    parser.add_argument(
-        "--repo",
-        default=DEFAULT_REPO,
-        help=f"GitHub repo (owner/name). Default: {DEFAULT_REPO}",
-    )
     args = parser.parse_args(argv)
 
     prev_tag = args.prev_tag or latest_tag()
-    result = compute(prev_tag, args.repo)
+    result = compute(prev_tag, resolve_repo())
     json.dump(result, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0
