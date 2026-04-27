@@ -43,3 +43,46 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip_existing: true
           packages_dir: dist/
+
+      - name: Fetch tags
+        run: git fetch --tags
+
+      - name: Compute branches in this release
+        id: branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | sed -n 2p)
+          python scripts/compute_next_version.py --prev-tag "$PREV_TAG" | tee /tmp/release.json
+          if [ "$(jq -r '.branches | length' /tmp/release.json)" = "0" ]; then
+            echo "No branches in this release; skipping FE dispatch."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "branches=$(jq -c '.branches' /tmp/release.json)"
+            echo "version=${GITHUB_REF_NAME#v}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Get App token
+        if: steps.branches.outputs.skip != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GITHUB_APP_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          owner: valory-xyz
+          repositories: olas-operate-app
+
+      - name: Dispatch FE pin-bump workflow
+        if: steps.branches.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.branches.outputs.version }}
+          BRANCHES: ${{ steps.branches.outputs.branches }}
+        run: |
+          jq -n \
+            --arg version "$VERSION" \
+            --argjson branches "$BRANCHES" \
+            '{event_type: "mw-released", client_payload: {version: $version, branches: $branches}}' \
+          | gh api repos/valory-xyz/olas-operate-app/dispatches --method POST --input -

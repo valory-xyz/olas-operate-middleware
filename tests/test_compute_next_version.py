@@ -146,3 +146,15 @@ class TestResolveRepo:
     def test_falls_back_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
         assert resolve_repo() == FALLBACK_REPO
+
+
+class TestPullRequestBranch:
+    def test_branch_field_defaults_to_empty(self) -> None:
+        pr = PullRequest(number=1, title="fix: bug", labels=())
+        assert pr.branch == ""
+
+    def test_branch_field_set_explicitly(self) -> None:
+        pr = PullRequest(
+            number=1, title="feat: x", labels=(), branch="feature/foo"
+        )
+        assert pr.branch == "feature/foo"

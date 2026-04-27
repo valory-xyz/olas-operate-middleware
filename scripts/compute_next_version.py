@@ -36,6 +36,7 @@ class PullRequest:
     number: int
     title: str
     labels: tuple[str, ...]
+    branch: str = ""
 
 
 def _run(cmd: list[str]) -> str:
@@ -92,7 +93,7 @@ def fetch_merged_prs(since_iso: str, repo: str) -> list[PullRequest]:
         "--base", "main",
         "--search", f"merged:>{since_iso}",
         "--limit", str(PR_FETCH_LIMIT),
-        "--json", "number,title,labels",
+        "--json", "number,title,labels,headRefName",
     ])
     data = json.loads(raw)
     return [
@@ -100,6 +101,7 @@ def fetch_merged_prs(since_iso: str, repo: str) -> list[PullRequest]:
             number=item["number"],
             title=item["title"],
             labels=tuple(label["name"] for label in item["labels"]),
+            branch=item["headRefName"],
         )
         for item in data
     ]
@@ -119,9 +121,15 @@ def compute(prev_tag: str, repo: str) -> dict:
         "next_tag": f"v{next_version}",
         "bump_type": bump_type,
         "prs": [
-            {"number": pr.number, "title": pr.title, "labels": list(pr.labels)}
+            {
+                "number": pr.number,
+                "title": pr.title,
+                "labels": list(pr.labels),
+                "branch": pr.branch,
+            }
             for pr in prs
         ],
+        "branches": list(dict.fromkeys(pr.branch for pr in prs if pr.branch)),
     }
 
 
