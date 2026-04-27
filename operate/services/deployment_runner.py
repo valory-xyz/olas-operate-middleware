@@ -43,7 +43,7 @@ from aea.__version__ import __version__ as aea_version
 from aea.helpers.logging import setup_logger
 from autonomy.__version__ import __version__ as autonomy_version
 
-from operate import constants
+from operate import _is_usable_ca_bundle_path, constants, get_runtime_ca_bundle_env
 from operate.utils import secure_copy_private_key
 from operate.utils.pid_file import (
     PIDFileError,
@@ -112,6 +112,27 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     SLEEP_BEFORE_TM_KILL = 2  # seconds
     START_TRIES = constants.DEPLOYMENT_START_TRIES_NUM
     logger = setup_logger(name="operate.base_deployment_runner")
+
+    @staticmethod
+    def _inject_runtime_ca_bundle(env: Dict[str, str]) -> Dict[str, str]:
+        """Ensure spawned processes inherit the runtime CA bundle settings."""
+        bundle_env = get_runtime_ca_bundle_env()
+        updated_env = dict(env)
+        if not bundle_env:
+            if platform.system() == "Windows":
+                for key in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
+                    current_value = updated_env.get(key)
+                    if current_value is not None and not _is_usable_ca_bundle_path(
+                        current_value
+                    ):
+                        updated_env.pop(key, None)
+            return updated_env
+
+        for key, value in bundle_env.items():
+            current_value = updated_env.get(key)
+            if not _is_usable_ca_bundle_path(current_value):
+                updated_env[key] = value
+        return updated_env
 
     def __init__(self, work_directory: Path, is_aea: bool) -> None:
         """Initialize the deployment runner."""
@@ -517,6 +538,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
+        env = self._inject_runtime_ca_bundle(env)
         self.logger.info("Starting agent runner process")
         process = (  # pylint: disable=assignment-from-no-return
             self._start_agent_process(
@@ -561,6 +583,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             **os.environ,
             **env,
         }
+        env = self._inject_runtime_ca_bundle(env)
 
         process = self._start_tendermint_process(env=env, working_dir=working_dir)
 
@@ -790,12 +813,13 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
+        env = self._inject_runtime_ca_bundle({**os.environ, **env})
         self._agent_log_file = self._open_agent_runner_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=self.get_agent_start_args(password=password),
             cwd=str(working_dir / "agent"),
-            env={**os.environ, **env},
+            env=env,
             stdout=self._agent_log_file,
             stderr=self._agent_log_file,
             creationflags=(
@@ -826,6 +850,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
+        env = self._inject_runtime_ca_bundle({**os.environ, **env})
         self._tm_log_file = self._open_tendermint_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
@@ -840,7 +865,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
             cwd=working_dir,
             stdout=self._tm_log_file,
             stderr=self._tm_log_file,
-            env={**os.environ, **env},
+            env=env,
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
