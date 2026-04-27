@@ -154,7 +154,7 @@ def _build_insufficient_gas_error(chain_str: str) -> t.Dict:
     return {
         "error_code": "INSUFFICIENT_SIGNER_GAS",
         "chain": chain_str,
-        "prefill_amount_wei": DEFAULT_EOA_TOPUPS[Chain(chain_str)][ZERO_ADDRESS],
+        "prefill_amount_wei": str(DEFAULT_EOA_TOPUPS[Chain(chain_str)][ZERO_ADDRESS]),
     }
 
 

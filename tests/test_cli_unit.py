@@ -147,22 +147,20 @@ class TestBuildInsufficientGasError:
         result = _build_insufficient_gas_error("gnosis")
         assert result["error_code"] == "INSUFFICIENT_SIGNER_GAS"
         assert result["chain"] == "gnosis"
-        assert (
-            result["prefill_amount_wei"]
-            == DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+        assert result["prefill_amount_wei"] == str(
+            DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
         )
 
     def test_base_returns_chain_specific_prefill(self) -> None:
         """Base chain uses its own DEFAULT_EOA_TOPUPS value."""
         result = _build_insufficient_gas_error("base")
         assert result["chain"] == "base"
-        assert (
-            result["prefill_amount_wei"] == DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
+        assert result["prefill_amount_wei"] == str(
+            DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
         )
         # Base prefill is different from Gnosis prefill
-        assert (
-            result["prefill_amount_wei"]
-            != DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+        assert result["prefill_amount_wei"] != str(
+            DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
         )
 
 
@@ -1513,9 +1511,8 @@ class TestWalletWithdrawRoute:
             body = resp.json()
             assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
             assert body["chain"] == "gnosis"
-            assert (
-                body["prefill_amount_wei"]
-                == DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+            assert body["prefill_amount_wei"] == str(
+                DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
             )
             assert "transfer_txs" in body  # existing field preserved
 
@@ -1541,9 +1538,8 @@ class TestWalletWithdrawRoute:
             assert resp.status_code == HTTPStatus.BAD_REQUEST
             body = resp.json()
             assert body["chain"] == "base"
-            assert (
-                body["prefill_amount_wei"]
-                == DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
+            assert body["prefill_amount_wei"] == str(
+                DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
             )
 
 
@@ -2067,9 +2063,8 @@ class TestWithdrawAndTerminateRoutes:
             body = resp.json()
             assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
             assert body["chain"] == "gnosis"
-            assert (
-                body["prefill_amount_wei"]
-                == DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+            assert body["prefill_amount_wei"] == str(
+                DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
             )
 
     def test_terminate_and_withdraw_insufficient_funds_pre_loop_degrades_gracefully(
@@ -2200,9 +2195,8 @@ class TestFundServiceRoute:
             body = resp.json()
             assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
             assert body["chain"] == "gnosis"
-            assert (
-                body["prefill_amount_wei"]
-                == DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+            assert body["prefill_amount_wei"] == str(
+                DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
             )
 
     def test_insufficient_funds_funding_in_progress_no_structured_error(self) -> None:
