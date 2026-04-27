@@ -123,7 +123,7 @@ def get_runtime_ca_bundle_path() -> Optional[str]:
 def get_runtime_ca_bundle_env() -> Dict[str, str]:
     """Return environment variables that point Python TLS clients to a CA bundle."""
     if platform.system() == "Windows":
-        return {}
+        return {}  # pragma: no cover - Can't mock platform.system() on linux
 
     bundle_path = get_runtime_ca_bundle_path()
     if bundle_path is None:

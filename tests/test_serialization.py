@@ -56,6 +56,13 @@ class TestBigIntInPlaceOperators:
         assert x == BigInt(5)
         assert isinstance(x, BigInt)
 
+    def test_truediv_returns_bigint(self) -> None:
+        """Test __truediv__ returns a new BigInt (line 52)."""
+        x = BigInt(10)
+        result = x / 2
+        assert result == BigInt(5)
+        assert isinstance(result, BigInt)
+
 
 class TestSerialize:
     """Tests for serialize function edge cases."""

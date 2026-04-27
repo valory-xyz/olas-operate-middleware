@@ -2936,6 +2936,452 @@ class TestExtraCoverageLines:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# OPE-1507: canonical backup owner — PUT /api/wallet/safe and new endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+
+BACKUP_ADDR = "0x" + "c" * 40
+EOA_ADDR = "0x" + "a" * 40
+
+
+def _make_mock_operate_with_wallet(
+    *,
+    canonical_backup_owner: "Optional[str]" = None,
+    safes: "Optional[dict]" = None,
+    safe_chains: "Optional[list]" = None,
+    wallet_exists: bool = True,
+) -> MagicMock:
+    """Return a mock OperateApp with an EthereumMasterWallet mock attached."""
+    m = _make_mock_operate()
+    m.user_account = MagicMock()
+    m.user_account.is_valid.return_value = True
+    m.password = "pass"  # nosec B105
+
+    wallet_mock = MagicMock()
+    wallet_mock.canonical_backup_owner = canonical_backup_owner
+    wallet_mock.safes = safes if safes is not None else {Chain.GNOSIS: "0x" + "b" * 40}
+    wallet_mock.safe_chains = safe_chains if safe_chains is not None else [Chain.GNOSIS]
+    wallet_mock.address = EOA_ADDR
+    wallet_mock.update_backup_owner.return_value = True
+    wallet_mock.store = MagicMock()
+
+    m.wallet_manager.exists.return_value = wallet_exists
+    m.wallet_manager.load.return_value = wallet_mock
+    return m
+
+
+class TestPutSafeAllChains:
+    """Tests for PUT /api/wallet/safe with chain='all'."""
+
+    def test_put_safe_all_chains_add_success(self) -> None:
+        """Add (canonical not set): succeeds without a password."""
+        m = _make_mock_operate_with_wallet()
+        wallet_mock = m.wallet_manager.load.return_value
+        # Simulate checksum returning the same address
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        wallet_mock.canonical_backup_owner = None  # not yet set
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                # Add flow: no password sent
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={"chain": "all", "backup_owner": BACKUP_ADDR},
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["canonical_backup_owner"] == BACKUP_ADDR
+        assert "results" in body
+        assert "all_succeeded" in body
+
+    def test_put_safe_all_chains_add_with_password_also_succeeds(self) -> None:
+        """Add flow optionally accepts a password without erroring."""
+        m = _make_mock_operate_with_wallet()
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        wallet_mock.canonical_backup_owner = None  # not yet set
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec — extra field; ignored for Add
+                    },
+                )
+        assert resp.status_code == HTTPStatus.OK
+
+    def test_put_safe_all_chains_update_requires_password(self) -> None:
+        """Update (canonical already set): missing password returns 400."""
+        # canonical is set — this triggers the Update path that requires a password.
+        m = _make_mock_operate_with_wallet(
+            canonical_backup_owner="0x" + "a" * 40  # different from BACKUP_ADDR
+        )
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={"chain": "all", "backup_owner": BACKUP_ADDR},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "password" in resp.json()["error"].lower()
+
+    def test_put_safe_all_chains_update_wrong_password(self) -> None:
+        """Update (canonical already set): wrong password returns 401."""
+        m = _make_mock_operate_with_wallet(
+            canonical_backup_owner="0x" + "a" * 40  # different from BACKUP_ADDR
+        )
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        m.user_account.is_valid.return_value = False
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "wrong",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_put_safe_all_chains_already_linked(self) -> None:
+        """chain='all' returns 400 when canonical already equals new address."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=BACKUP_ADDR)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "Already Linked" in resp.json()["error"]
+
+    def test_put_safe_all_chains_missing_backup_owner(self) -> None:
+        """chain='all' without backup_owner returns 400."""
+        m = _make_mock_operate_with_wallet()
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={"chain": "all", "password": "pass"},  # nosec
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "backup_owner" in resp.json()["error"].lower()
+
+    def test_put_safe_single_chain_unchanged(self) -> None:
+        """Single-chain path returns wallet json with backup_owner_updated."""
+        m = _make_mock_operate_with_wallet()
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        wallet_mock.update_backup_owner.return_value = True
+        wallet_mock.json = {"address": EOA_ADDR}
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={"chain": "gnosis", "backup_owner": BACKUP_ADDR},
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert "backup_owner_updated" in body
+        assert body["chain"] == "gnosis"
+
+
+class TestPostBackupOwnerSync:
+    """Tests for POST /api/wallet/safe/backup_owner/sync."""
+
+    def test_post_backup_owner_sync_success(self) -> None:
+        """Returns 200 with sync results when canonical is set."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=BACKUP_ADDR)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.sync_backup_owner.return_value = {
+            "canonical_backup_owner": BACKUP_ADDR,
+            "results": [{"chain": "gnosis", "updated": True, "message": "OK"}],
+            "all_succeeded": True,
+        }
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["canonical_backup_owner"] == BACKUP_ADDR
+        assert body["all_succeeded"] is True
+
+    def test_post_backup_owner_sync_no_canonical(self) -> None:
+        """Returns 400 when canonical backup owner is not set."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=None)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.canonical_backup_owner = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+    def test_post_backup_owner_sync_not_logged_in(self) -> None:
+        """Returns 401 when user is not logged in."""
+        m = _make_mock_operate_with_wallet()
+        m.password = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+
+class TestGetBackupOwnerStatus:
+    """Tests for GET /api/wallet/safe/backup_owner/status."""
+
+    def test_get_backup_owner_status_no_canonical(self) -> None:
+        """Returns 200 with canonical=None when no canonical is set."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=None)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.backup_owner_status.return_value = {
+            "canonical_backup_owner": None,
+            "all_chains_synced": False,
+            "any_backup_missing": True,
+            "existing_backup_on_any_chain": False,
+            "chains": [],
+            "chains_without_safe": [],
+        }
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["canonical_backup_owner"] is None
+        assert body["existing_backup_on_any_chain"] is False
+
+    def test_get_backup_owner_status_no_canonical_but_existing_on_chain(self) -> None:
+        """Returns existing_backup_on_any_chain=True when chains have a backup but canonical is null."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=None)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.backup_owner_status.return_value = {
+            "canonical_backup_owner": None,
+            "all_chains_synced": False,
+            "any_backup_missing": False,
+            "existing_backup_on_any_chain": True,
+            "chains": [
+                {
+                    "chain": "gnosis",
+                    "safe": "0x" + "b" * 40,
+                    "current_backup_owner": BACKUP_ADDR,
+                    "is_synced": False,
+                }
+            ],
+            "chains_without_safe": [],
+        }
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["canonical_backup_owner"] is None
+        assert body["existing_backup_on_any_chain"] is True
+        assert body["chains"][0]["is_synced"] is False
+        assert body["chains"][0]["current_backup_owner"] == BACKUP_ADDR
+
+    def test_get_backup_owner_status_synced(self) -> None:
+        """Returns 200 with all_chains_synced=True when all chains match."""
+        m = _make_mock_operate_with_wallet(canonical_backup_owner=BACKUP_ADDR)
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.backup_owner_status.return_value = {
+            "canonical_backup_owner": BACKUP_ADDR,
+            "all_chains_synced": True,
+            "any_backup_missing": False,
+            "existing_backup_on_any_chain": True,
+            "chains": [
+                {
+                    "chain": "gnosis",
+                    "safe": "0x" + "b" * 40,
+                    "current_backup_owner": BACKUP_ADDR,
+                    "is_synced": True,
+                }
+            ],
+            "chains_without_safe": [],
+        }
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["all_chains_synced"] is True
+        assert body["canonical_backup_owner"] == BACKUP_ADDR
+        assert body["chains"][0]["is_synced"] is True
+
+    def test_get_backup_owner_status_not_logged_in(self) -> None:
+        """Returns 401 when user is not logged in."""
+        m = _make_mock_operate_with_wallet()
+        m.password = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_get_backup_owner_status_no_account(self) -> None:
+        """Returns 404 when user account does not exist (line 1135)."""
+        m = _make_mock_operate_with_wallet()
+        m.user_account = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_get_backup_owner_status_no_master_eoa(self) -> None:
+        """Returns 400 when no Ethereum wallet exists (line 1142)."""
+        m = _make_mock_operate_with_wallet(wallet_exists=False)
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.get("/api/wallet/safe/backup_owner/status")
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "No Master EOA found" in resp.json()["error"]
+
+
+class TestPutSafeAllChainsEdgeCases:
+    """Additional edge-case tests for PUT /api/wallet/safe with chain='all'."""
+
+    def test_put_safe_all_chains_no_master_eoa(self) -> None:
+        """Returns 400 when no Ethereum wallet exists (line 1005)."""
+        m = _make_mock_operate_with_wallet(wallet_exists=False)
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "No Master EOA found" in resp.json()["error"]
+
+    def test_put_safe_all_chains_no_safes_skips_checksum(self) -> None:
+        """When wallet has no safes the raw backup_owner is used (line 1017)."""
+        m = _make_mock_operate_with_wallet(safes={})
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.canonical_backup_owner = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        # canonical_backup_owner is the raw address (no checksum call needed)
+        assert body["canonical_backup_owner"] == BACKUP_ADDR
+
+    def test_put_safe_all_chains_update_backup_owner_exception(self) -> None:
+        """Exception during update_backup_owner is captured in results (lines 1045-1053)."""
+        m = _make_mock_operate_with_wallet()
+        wallet_mock = m.wallet_manager.load.return_value
+        wallet_mock.canonical_backup_owner = None
+        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
+            BACKUP_ADDR
+        )
+        wallet_mock.update_backup_owner.side_effect = RuntimeError("tx failed")
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.put(
+                    "/api/wallet/safe",
+                    json={
+                        "chain": "all",
+                        "backup_owner": BACKUP_ADDR,
+                        "password": "pass",  # nosec
+                    },
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["all_succeeded"] is False
+        assert any(not r["updated"] for r in body["results"])
+        assert any("tx failed" in r["message"] for r in body["results"])
+
+
+class TestPostBackupOwnerSyncEdgeCases:
+    """Additional edge-case tests for POST /api/wallet/safe/backup_owner/sync."""
+
+    def test_post_backup_owner_sync_no_account(self) -> None:
+        """Returns 404 when user account does not exist (line 1107)."""
+        m = _make_mock_operate_with_wallet()
+        m.user_account = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_post_backup_owner_sync_no_master_eoa(self) -> None:
+        """Returns 400 when no Ethereum wallet exists (line 1114)."""
+        m = _make_mock_operate_with_wallet(wallet_exists=False)
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/wallet/safe/backup_owner/sync")
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "No Master EOA found" in resp.json()["error"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Pearl Store API endpoints (/api/store)
 # ═══════════════════════════════════════════════════════════════════════════════
 

@@ -220,3 +220,39 @@ class TestOperateInitPlatformBranches:
         ):
             importlib.reload(operate_module)
         assert "No CA certificate bundle available" in caplog.text
+
+    def test_materialize_certifi_bundle_oserror_returns_none(
+        self, tmp_path: Path, caplog: Any
+    ) -> None:
+        """OS Error during bundle copy logs a warning and returns None (lines 85-89)."""
+        pyinstaller_dir = tmp_path / "_MEI123"
+        pyinstaller_dir.mkdir()
+        certifi_bundle = pyinstaller_dir / "cacert.pem"
+        certifi_bundle.write_text("bundle-data", encoding="utf-8")
+        operate_home = tmp_path / "operate-home"
+
+        with caplog.at_level(logging.WARNING, logger="operate"), patch(
+            "platform.system", return_value="FreeBSD"
+        ), patch("operate.certifi.where", return_value=str(certifi_bundle)), patch(
+            "operate.shutil.copyfile", side_effect=OSError("disk full")
+        ), patch.dict(
+            os.environ,
+            {"OPERATE_HOME": str(operate_home)},
+            clear=True,
+        ):
+            importlib.reload(operate_module)
+            assert "REQUESTS_CA_BUNDLE" not in os.environ
+            assert "SSL_CERT_FILE" not in os.environ
+        assert "Failed to materialize certifi CA bundle" in caplog.text
+
+    def test_get_runtime_ca_bundle_env_returns_empty_when_no_bundle(self) -> None:
+        """get_runtime_ca_bundle_env returns {} when no CA bundle is available (line 126)."""
+        with patch("platform.system", return_value="FreeBSD"), patch(
+            "operate.os.path.exists", return_value=False
+        ), patch(
+            "operate.certifi.where", return_value="/nonexistent/cacert.pem"
+        ), patch.dict(
+            os.environ, {}, clear=True
+        ):
+            result = operate_module.get_runtime_ca_bundle_env()
+        assert result == {}
