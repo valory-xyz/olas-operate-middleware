@@ -31,7 +31,6 @@ from operate.services.protocol import (
     MintManager,
     StakingManager,
     StakingState,
-    _normalize_multisend_tx_data,
 )
 
 # ---------------------------------------------------------------------------
@@ -98,20 +97,14 @@ class TestGnosisSafeTransaction:
         assert tx._txs == []
 
     def test_add_appends_tx_and_returns_self(self) -> None:
-        """Test add() appends a normalised tx dict and returns self for chaining."""
+        """Test add() appends the tx dict as-is and returns self for chaining."""
         safe_tx = self._make_safe_tx()
-        tx_dict = {"to": "0xRecipient", "value": 0, "data": "0xabcd"}
+        tx_dict = {"to": "0xRecipient", "value": 0, "data": b"\xab\xcd"}
 
         result = safe_tx.add(tx_dict)
 
         assert result is safe_tx
-        assert safe_tx._txs == [{"to": "0xRecipient", "value": 0, "data": b"\xab\xcd"}]
-
-    def test_add_defaults_missing_data_to_empty_bytes(self) -> None:
-        """Test add() injects ``data=b''`` when the input tx omits the field."""
-        safe_tx = self._make_safe_tx()
-        safe_tx.add({"to": "0xRecipient", "value": 0})
-        assert safe_tx._txs == [{"to": "0xRecipient", "value": 0, "data": b""}]
+        assert safe_tx._txs == [tx_dict]
 
     def test_add_multiple_txs(self) -> None:
         """Test add() can be called multiple times to accumulate transactions."""
@@ -168,37 +161,6 @@ class TestGnosisSafeTransaction:
         mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.assert_called_once()
         mock_contracts.gnosis_safe.get_raw_safe_transaction.assert_called_once()
         assert isinstance(result, dict)
-
-
-class TestNormalizeMultisendTxData:
-    """Tests for _normalize_multisend_tx_data."""
-
-    def test_bytes_passthrough(self) -> None:
-        """Test bytes input is returned unchanged (as bytes)."""
-        assert _normalize_multisend_tx_data(b"\xde\xad\xbe\xef") == b"\xde\xad\xbe\xef"
-
-    def test_bytearray_coerced_to_bytes(self) -> None:
-        """Test bytearray input is coerced to bytes."""
-        result = _normalize_multisend_tx_data(bytearray(b"\xde\xad"))
-        assert result == b"\xde\xad"
-        assert isinstance(result, bytes)
-
-    def test_hex_string_with_0x_prefix(self) -> None:
-        """Test hex string with 0x prefix is decoded to bytes."""
-        assert _normalize_multisend_tx_data("0xdeadbeef") == b"\xde\xad\xbe\xef"
-
-    def test_hex_string_with_0X_prefix(self) -> None:
-        """Test hex string with uppercase 0X prefix is decoded to bytes."""
-        assert _normalize_multisend_tx_data("0Xdeadbeef") == b"\xde\xad\xbe\xef"
-
-    def test_hex_string_without_prefix(self) -> None:
-        """Test bare hex string is decoded to bytes."""
-        assert _normalize_multisend_tx_data("deadbeef") == b"\xde\xad\xbe\xef"
-
-    def test_unsupported_type_raises(self) -> None:
-        """Test non-str/bytes input raises TypeError."""
-        with pytest.raises(TypeError, match="Unsupported multisend tx data type"):
-            _normalize_multisend_tx_data(12345)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
