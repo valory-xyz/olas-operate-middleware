@@ -102,6 +102,23 @@ class StakingState(Enum):
     EVICTED = 2
 
 
+def _normalize_multisend_tx_data(data: t.Any) -> bytes:
+    """Coerce a multisend ``tx["data"]`` value to bytes.
+
+    open-autonomy 0.21.19 inlined the multisend encoder and dropped its
+    ``HexBytes(data)`` wrapper, so ``encode_data`` now requires strict
+    ``bytes`` — pre-0.21.19 it silently accepted hex strings via the
+    HexBytes coercion. Call sites in this file historically passed a hex
+    string slice (``encode_abi(...)[2:]``); this helper keeps the call
+    sites readable while ensuring the value reaches multisend as bytes.
+    """
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data)
+    if isinstance(data, str):
+        return bytes.fromhex(data[2:] if data[:2].lower() == "0x" else data)
+    raise TypeError(f"Unsupported multisend tx data type: {type(data).__name__}")
+
+
 class GnosisSafeTransaction:
     """Safe transaction"""
 
@@ -121,7 +138,9 @@ class GnosisSafeTransaction:
 
     def add(self, tx: t.Dict) -> "GnosisSafeTransaction":
         """Add a transaction"""
-        self._txs.append(tx)
+        self._txs.append(
+            {**tx, "data": _normalize_multisend_tx_data(tx.get("data", b""))}
+        )
         return self
 
     def build(self) -> t.Dict:
@@ -1673,9 +1692,11 @@ class EthSafeTxBuilder(_ChainUtil):
         txs.append(
             {
                 "to": token,
-                "data": erc20_instance.encode_abi(
-                    abi_element_identifier="transfer",
-                    args=[to, amount],
+                "data": _normalize_multisend_tx_data(
+                    erc20_instance.encode_abi(
+                        abi_element_identifier="transfer",
+                        args=[to, amount],
+                    )
                 ),
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
