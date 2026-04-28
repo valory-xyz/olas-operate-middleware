@@ -31,6 +31,7 @@ from deepdiff import DeepDiff
 from operate.constants import ACHIEVEMENTS_NOTIFICATIONS_JSON, CONFIG_JSON
 from operate.migration import MigrationManager
 from operate.services.service import (
+    Deployment,
     NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
@@ -1209,3 +1210,90 @@ class TestServiceAchievementsNotifications:
 
         # Verify empty agent achievements (no file found)
         assert agent_achievements == {}
+
+
+class TestInjectNamedEnvVarsIntoAgentJson:
+    """Tests for ``Deployment._inject_named_env_vars_into_agent_json``.
+
+    open-aea's runtime resolves named YAML templates like
+    ``${STORE_PATH:str:/data/}`` by exact-name lookup; the path-based
+    fallback only fires for anonymous templates. So during host build we
+    must merge ``service.env_variables`` (named keys) into ``agent.json``
+    alongside the path-based keys that ``HostDeploymentGenerator.generate``
+    emits — otherwise named templates silently fall through to defaults.
+    """
+
+    @staticmethod
+    def _seed_agent_json(build_dir: Path, payload: t.Dict[str, str]) -> Path:
+        """Write a minimal agent.json mimicking the generator's output."""
+        build_dir.mkdir(parents=True, exist_ok=True)
+        path = build_dir / "agent.json"
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return path
+
+    def test_merges_named_keys_alongside_path_based_keys(self, tmp_path: Path) -> None:
+        """Named keys are added; existing path-based keys are preserved."""
+        agent_json = self._seed_agent_json(
+            tmp_path,
+            {"SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_STORE_PATH": "/legacy/path"},
+        )
+
+        Deployment._inject_named_env_vars_into_agent_json(
+            build_dir=tmp_path,
+            env_variables={
+                "STORE_PATH": {"value": "/Users/x/persistent_data"},
+                "GENAI_API_KEY": {"value": "secret"},
+            },
+        )
+
+        result = json.loads(agent_json.read_text(encoding="utf-8"))
+        assert result["STORE_PATH"] == "/Users/x/persistent_data"
+        assert result["GENAI_API_KEY"] == "secret"
+        assert (
+            result["SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_STORE_PATH"] == "/legacy/path"
+        )
+
+    def test_skips_empty_and_none_values(self, tmp_path: Path) -> None:
+        """Vars with empty-string or None values are not written."""
+        agent_json = self._seed_agent_json(tmp_path, {})
+
+        Deployment._inject_named_env_vars_into_agent_json(
+            build_dir=tmp_path,
+            env_variables={
+                "EMPTY": {"value": ""},
+                "NULL": {"value": None},
+                "REAL": {"value": "x"},
+            },
+        )
+
+        result = json.loads(agent_json.read_text(encoding="utf-8"))
+        assert result == {"REAL": "x"}
+
+    def test_coerces_non_string_values_to_str(self, tmp_path: Path) -> None:
+        """Numeric / bool values are stringified — env vars must be strings."""
+        agent_json = self._seed_agent_json(tmp_path, {})
+
+        Deployment._inject_named_env_vars_into_agent_json(
+            build_dir=tmp_path,
+            env_variables={
+                "PORT": {"value": 8716},
+                "FLAG": {"value": True},
+            },
+        )
+
+        result = json.loads(agent_json.read_text(encoding="utf-8"))
+        assert result == {"PORT": "8716", "FLAG": "True"}
+
+    def test_overrides_path_based_yaml_default_on_short_name_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        """Named-key value wins over a same-name leftover in agent.json."""
+        agent_json = self._seed_agent_json(tmp_path, {"STORE_PATH": "/data/"})
+
+        Deployment._inject_named_env_vars_into_agent_json(
+            build_dir=tmp_path,
+            env_variables={"STORE_PATH": {"value": "/Users/x/persistent_data"}},
+        )
+
+        result = json.loads(agent_json.read_text(encoding="utf-8"))
+        assert result["STORE_PATH"] == "/Users/x/persistent_data"
