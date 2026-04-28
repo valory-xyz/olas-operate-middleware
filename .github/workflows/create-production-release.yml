@@ -64,9 +64,19 @@ jobs:
           git tag "${{ steps.compute.outputs.next_tag }}"
           git push origin "${{ steps.compute.outputs.next_tag }}"
 
+      - name: Get App token
+        # Used so the release event has an external actor — releases created
+        # by the default GITHUB_TOKEN do not trigger downstream workflows
+        # (release.yml will not fire), per GitHub's anti-loop guard.
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GITHUB_APP_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+
       - name: Create GitHub release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh release create "${{ steps.compute.outputs.next_tag }}" \
             --title "${{ steps.compute.outputs.next_tag }}" \
