@@ -207,7 +207,5 @@ class TestPullRequestBranch:
 
     def test_branch_field_set_explicitly(self) -> None:
         """The branch field stores the value passed at construction time."""
-        pr = PullRequest(
-            number=1, title="feat: x", labels=(), branch="feature/foo"
-        )
+        pr = PullRequest(number=1, title="feat: x", labels=(), branch="feature/foo")
         assert pr.branch == "feature/foo"
