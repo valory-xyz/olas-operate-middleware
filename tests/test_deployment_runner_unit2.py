@@ -20,6 +20,7 @@
 """Unit tests for deployment_runner.py – part 2, targeting uncovered lines."""
 
 import json
+import os
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
@@ -1009,6 +1010,98 @@ class TestPyInstallerStartAgent:
             runner._start_agent(password="pw")  # nosec B106
 
         mock_write.assert_called_once()
+
+    def test_start_agent_propagates_runtime_ca_bundle(self, tmp_path: Path) -> None:
+        """_start_agent passes the resolved CA bundle to spawned agent processes."""
+        work_dir = self._make_work_dir(tmp_path)
+        runner = PyInstallerHostDeploymentRunnerMac(work_dir, is_aea=True)
+
+        mock_process = MagicMock()
+        mock_process.pid = 42
+
+        with (
+            patch.object(
+                runner, "_start_agent_process", return_value=mock_process
+            ) as mock_start,
+            patch("operate.services.deployment_runner.write_pid_file"),
+            patch.dict(os.environ, {}, clear=True),
+            patch(
+                "operate.services.deployment_runner.get_runtime_ca_bundle_env",
+                return_value={
+                    "REQUESTS_CA_BUNDLE": "/tmp/cacert.pem",  # nosec B108
+                    "SSL_CERT_FILE": "/tmp/cacert.pem",  # nosec B108
+                },
+            ),
+        ):
+            runner._start_agent(password="pw")  # nosec B106
+
+        env = mock_start.call_args.kwargs["env"]
+        assert env["REQUESTS_CA_BUNDLE"] == "/tmp/cacert.pem"  # nosec B108
+        assert env["SSL_CERT_FILE"] == "/tmp/cacert.pem"  # nosec B108
+
+
+class TestInjectRuntimeCABundle:
+    """Tests for BaseDeploymentRunner._inject_runtime_ca_bundle."""
+
+    def _make_work_dir(self, tmp_path: Path) -> Path:
+        """Create work dir with agent.json."""
+        env = {"SOME_VAR": "value"}
+        (tmp_path / "agent.json").write_text(json.dumps(env), encoding="utf-8")
+        return tmp_path
+
+    def test_windows_without_runtime_bundle_removes_unusable_ca_paths(self) -> None:
+        """When no runtime bundle is resolved, Windows drops unusable CA path env vars."""
+        env = {
+            "REQUESTS_CA_BUNDLE": "/tmp/_MEI123/cacert.pem",  # nosec B108
+            "SSL_CERT_FILE": "/tmp/_MEI123/cacert.pem",  # nosec B108
+            "UNCHANGED": "value",
+        }
+
+        with (
+            patch(
+                "operate.services.deployment_runner.get_runtime_ca_bundle_env",
+                return_value={},
+            ),
+            patch(
+                "operate.services.deployment_runner.platform.system",
+                return_value="Windows",
+            ),
+            patch(
+                "operate.services.deployment_runner._is_usable_ca_bundle_path",
+                return_value=False,
+            ),
+        ):
+            updated = BaseDeploymentRunner._inject_runtime_ca_bundle(env)
+
+        assert "REQUESTS_CA_BUNDLE" not in updated
+        assert "SSL_CERT_FILE" not in updated
+        assert updated["UNCHANGED"] == "value"
+
+    def test_windows_without_runtime_bundle_keeps_usable_ca_paths(self) -> None:
+        """When no runtime bundle is resolved, Windows keeps usable CA path env vars."""
+        env = {
+            "REQUESTS_CA_BUNDLE": "/etc/ssl/certs/ca-certificates.crt",
+            "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
+        }
+
+        with (
+            patch(
+                "operate.services.deployment_runner.get_runtime_ca_bundle_env",
+                return_value={},
+            ),
+            patch(
+                "operate.services.deployment_runner.platform.system",
+                return_value="Windows",
+            ),
+            patch(
+                "operate.services.deployment_runner._is_usable_ca_bundle_path",
+                return_value=True,
+            ),
+        ):
+            updated = BaseDeploymentRunner._inject_runtime_ca_bundle(env)
+
+        assert updated["REQUESTS_CA_BUNDLE"] == "/etc/ssl/certs/ca-certificates.crt"
+        assert updated["SSL_CERT_FILE"] == "/etc/ssl/certs/ca-certificates.crt"
 
     def test_start_agent_kills_process_on_pid_file_error(self, tmp_path: Path) -> None:
         """_start_agent kills process and re-raises on PIDFileError."""
