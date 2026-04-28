@@ -1500,6 +1500,8 @@ class TestEthSafeTxBuilderStakingDataMethods:
 
         assert result["to"] == _CONTRACTS["service_registry"]
         assert result["from"] == _SAFE_ADDRESS
+        assert isinstance(result["data"], bytes)
+        assert result["data"] == bytes.fromhex(_ENCODED[2:])
 
     def test_get_staking_data_delegates_to_staking_manager(self) -> None:
         """get_staking_data calls StakingManager and returns dict."""
@@ -1515,6 +1517,8 @@ class TestEthSafeTxBuilderStakingDataMethods:
             )
 
         assert result["to"] == _STAKING_CONTRACT
+        assert isinstance(result["data"], bytes)
+        assert result["data"] == bytes.fromhex(_ENCODED[2:])
 
     def test_get_unstaking_data_normal_path(self) -> None:
         """get_unstaking_data calls get_unstake_tx_data when force=False."""
@@ -1532,6 +1536,8 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm.get_unstake_tx_data.assert_called_once()
         mock_sm.get_forced_unstake_tx_data.assert_not_called()
         assert result["to"] == _STAKING_CONTRACT
+        assert isinstance(result["data"], bytes)
+        assert result["data"] == bytes.fromhex(_ENCODED[2:])
 
     def test_get_unstaking_data_force_path(self) -> None:
         """get_unstaking_data calls get_forced_unstake_tx_data when force=True."""
@@ -1549,6 +1555,8 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm.get_forced_unstake_tx_data.assert_called_once()
         mock_sm.get_unstake_tx_data.assert_not_called()
         assert result["to"] == _STAKING_CONTRACT
+        assert isinstance(result["data"], bytes)
+        assert result["data"] == bytes.fromhex(_ENCODED[2:])
 
     def test_get_claiming_data_delegates_to_staking_manager(self) -> None:
         """get_claiming_data calls get_claim_tx_data and returns dict."""
@@ -1565,6 +1573,8 @@ class TestEthSafeTxBuilderStakingDataMethods:
 
         mock_sm.get_claim_tx_data.assert_called_once()
         assert result["to"] == _STAKING_CONTRACT
+        assert isinstance(result["data"], bytes)
+        assert result["data"] == bytes.fromhex(_ENCODED[2:])
 
     def test_staking_slots_available_delegates(self) -> None:
         """staking_slots_available patches and delegates to StakingManager."""
