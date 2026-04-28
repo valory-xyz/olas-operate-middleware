@@ -566,6 +566,34 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
+    @staticmethod
+    def _inject_named_env_vars_into_agent_json(
+        build_dir: Path, env_variables: EnvVariables
+    ) -> None:
+        """Merge named env vars into agent.json so the agent subprocess sees them.
+
+        ``HostDeploymentGenerator.generate()`` writes ``agent.json`` with
+        path-based keys (``SKILL_..._STORE_PATH``). open-aea's
+        ``replace_with_env_var`` only consults that path-based fallback when
+        the template is anonymous (``${str:default}``). For named templates
+        (``${STORE_PATH:str:/data/}``) it looks up the literal name in env —
+        so without injecting by short name the agent silently falls through
+        to the YAML default. We merge ``service.env_variables`` (named keys)
+        into ``agent.json`` here; ``deployment_runner`` then reads the file
+        unchanged and passes everything to the subprocess.
+        """
+        agent_json_path = build_dir / "agent.json"
+        agent_env = json.loads(agent_json_path.read_text(encoding="utf-8"))
+        for var_name, attrs in env_variables.items():
+            value = attrs.get("value")
+            if value in (None, ""):
+                continue
+            agent_env[var_name] = str(value)
+        agent_json_path.write_text(
+            json.dumps(agent_env, indent=2),
+            encoding="utf-8",
+        )
+
     def _build_host(  # pragma: no cover
         self,
         keys_manager: KeysManager,
@@ -637,6 +665,10 @@ class Deployment(LocalResource):
                 deployement_generator.generate_config_tendermint()
 
             deployement_generator.generate()
+            self._inject_named_env_vars_into_agent_json(
+                build_dir=build.resolve(),
+                env_variables=service.env_variables,
+            )
             deployement_generator.populate_private_keys()
 
             # Add keys securely
