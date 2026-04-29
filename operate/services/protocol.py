@@ -58,7 +58,6 @@ from autonomy.chain.tx import TxSettler
 from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
-from hexbytes import HexBytes
 from web3.contract import Contract
 from web3.types import TxReceipt
 
@@ -969,7 +968,7 @@ class _ChainUtil:
                 "operation": MultiSendOperation.CALL,
                 "to": multisig,
                 "value": 0,
-                "data": HexBytes(txd[2:]),
+                "data": bytes.fromhex(txd[2:]),
             }
         )
         multisend_txd = registry_contracts.multisend.get_tx_data(  # type: ignore
@@ -2044,13 +2043,11 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
         txs.append(
             {
                 "to": multisig_address,
-                "data": HexBytes(
-                    bytes.fromhex(
-                        multisig_instance.encode_abi(
-                            abi_element_identifier="addOwnerWithThreshold",
-                            args=[_owner, 1],
-                        )[2:]
-                    )
+                "data": bytes.fromhex(
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="addOwnerWithThreshold",
+                        args=[_owner, 1],
+                    )[2:]
                 ),
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
@@ -2060,13 +2057,11 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     txs.append(
         {
             "to": multisig_address,
-            "data": HexBytes(
-                bytes.fromhex(
-                    multisig_instance.encode_abi(
-                        abi_element_identifier="removeOwner",
-                        args=[new_owners[0], master_safe, 1],
-                    )[2:]
-                )
+            "data": bytes.fromhex(
+                multisig_instance.encode_abi(
+                    abi_element_identifier="removeOwner",
+                    args=[new_owners[0], master_safe, 1],
+                )[2:]
             ),
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -2076,13 +2071,11 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     txs.append(
         {
             "to": multisig_address,
-            "data": HexBytes(
-                bytes.fromhex(
-                    multisig_instance.encode_abi(
-                        abi_element_identifier="changeThreshold",
-                        args=[threshold],
-                    )[2:]
-                )
+            "data": bytes.fromhex(
+                multisig_instance.encode_abi(
+                    abi_element_identifier="changeThreshold",
+                    args=[threshold],
+                )[2:]
             ),
             "operation": MultiSendOperation.CALL,
             "value": 0,
