@@ -52,7 +52,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREV_TAG=$(git tag --sort=-v:refname | sed -n 2p)
+          # The previous release tag is the second-most-recent published
+          # release. Querying gh (not local git) avoids edge cases where the
+          # tag isn't reachable from the current branch's history.
+          PREV_TAG=$(gh release list --limit 2 --json tagName --jq '.[1].tagName')
           python scripts/compute_next_version.py --prev-tag "$PREV_TAG" | tee /tmp/release.json
           if [ "$(jq -r '.branches | length' /tmp/release.json)" = "0" ]; then
             echo "No branches in this release; skipping FE dispatch."

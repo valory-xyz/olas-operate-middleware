@@ -18,6 +18,9 @@
 # ------------------------------------------------------------------------------
 """Unit tests for scripts/compute_next_version.py."""
 
+import json
+from unittest.mock import patch
+
 import pytest
 
 from scripts.compute_next_version import (
@@ -26,6 +29,7 @@ from scripts.compute_next_version import (
     PullRequest,
     bump_version,
     determine_bump,
+    latest_release_tag,
     parse_version,
     resolve_repo,
     tag_to_version,
@@ -209,3 +213,21 @@ class TestPullRequestBranch:
         """The branch field stores the value passed at construction time."""
         pr = PullRequest(number=1, title="feat: x", labels=(), branch="feature/foo")
         assert pr.branch == "feature/foo"
+
+
+class TestLatestReleaseTag:
+    """Tests for latest_release_tag."""
+
+    def test_returns_tag_from_gh_response(self) -> None:
+        """Parses tagName from gh release list output."""
+        with patch(
+            "scripts.compute_next_version._run",
+            return_value=json.dumps([{"tagName": "v0.15.12"}]),
+        ):
+            assert latest_release_tag("valory-xyz/foo") == "v0.15.12"
+
+    def test_raises_when_no_releases(self) -> None:
+        """An empty release list raises a clear error."""
+        with patch("scripts.compute_next_version._run", return_value="[]"):
+            with pytest.raises(RuntimeError, match="No releases found"):
+                latest_release_tag("valory-xyz/foo")

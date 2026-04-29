@@ -32,6 +32,8 @@ jobs:
 
       - name: Configure git identity
         run: |
+          # 41898282 is GitHub's stable user ID for github-actions[bot];
+          # the noreply email format is <user_id>+<username>@users.noreply.github.com.
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -56,7 +58,7 @@ jobs:
       - name: Commit version bump and push to main
         run: |
           git add pyproject.toml
-          git commit -m "fix: bump version to ${{ steps.compute.outputs.next_version }} in pyproject.toml"
+          git commit -m "chore: bump version to ${{ steps.compute.outputs.next_version }} in pyproject.toml"
           git push origin main
 
       - name: Create and push tag

@@ -45,8 +45,26 @@ def _run(cmd: list[str]) -> str:
     ).stdout.strip()
 
 
-def latest_tag() -> str:
-    return _run(["git", "describe", "--tags", "--abbrev=0"])
+def latest_release_tag(repo: str) -> str:
+    """Return the latest published release's tag, queried from GitHub.
+
+    Using ``gh release list`` (rather than ``git describe --tags``) avoids the
+    failure mode where the latest release tag is not reachable from the current
+    branch's history — e.g. when the tag was created via the GitHub UI on a
+    detached commit, or via a workflow that never pushed back to main.
+    """
+    raw = _run(
+        [
+            "gh", "release", "list",
+            "--repo", repo,
+            "--limit", "1",
+            "--json", "tagName",
+        ]
+    )
+    data = json.loads(raw)
+    if not data:
+        raise RuntimeError(f"No releases found on {repo}")
+    return data[0]["tagName"]
 
 
 def tag_commit_date(tag: str) -> str:
@@ -141,8 +159,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    prev_tag = args.prev_tag or latest_tag()
-    result = compute(prev_tag, resolve_repo())
+    repo = resolve_repo()
+    prev_tag = args.prev_tag or latest_release_tag(repo)
+    result = compute(prev_tag, repo)
     json.dump(result, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0
