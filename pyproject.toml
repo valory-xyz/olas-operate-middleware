@@ -19,10 +19,11 @@ operate = "operate.cli:main"
 
 [tool.poetry.dependencies]
 python = "<3.15,>=3.10"
-open-autonomy = {version = "^0.21.19", extras = ["cli", "docker"]}
-open-aea-ledger-cosmos = "^2.2.1"
-open-aea-ledger-ethereum = "^2.2.1"
-open-aea-cli-ipfs = "^2.2.1"
+open-autonomy = {version = "^0.21.13", extras = ["cli"]}
+open-aea-ledger-cosmos = "^2.1.0"
+open-aea-ledger-ethereum = "^2.1.0"
+open-aea-ledger-ethereum-flashbots = "^2.1.0"
+open-aea-cli-ipfs = "^2.1.0"
 clea = "==0.1.0rc4"
 cytoolz = "<1.2.0,>=1.0.0"
 fastapi = "0.110.3"
@@ -35,17 +36,9 @@ argon2-cffi = "==23.1.0"
 requests-mock = "^1.12.1"
 multiaddr = "==0.0.9"
 cryptography = "^46.0.3"
-# Direct deps for packages no longer pulled in transitively after the
-# open-autonomy 0.21.19 / open-aea 2.2.1 dependency-footprint trim.
-aiohttp = "^3.10"
-flask = "^3.0"
-werkzeug = "^3.0"
-hexbytes = "^1.2"
-typing_extensions = "^4.12"
-requests = "^2.32"
 
 [tool.poetry.group.development.dependencies]
-tomte = {version = "0.6.5", extras = ["cli"]}
+tomte = {version = "0.6.1", extras = ["cli"]}
 build = "1.2.2.post1"
 yappi = "^1.6.10"
 viztracer = "^1.1.1"

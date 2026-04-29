@@ -97,9 +97,9 @@ class TestGnosisSafeTransaction:
         assert tx._txs == []
 
     def test_add_appends_tx_and_returns_self(self) -> None:
-        """Test add() appends the tx dict as-is and returns self for chaining."""
+        """Test add() appends the tx dict to _txs and returns self for chaining."""
         safe_tx = self._make_safe_tx()
-        tx_dict = {"to": "0xRecipient", "value": 0, "data": b"\xab\xcd"}
+        tx_dict = {"to": "0xRecipient", "value": 0}
 
         result = safe_tx.add(tx_dict)
 
@@ -109,8 +109,8 @@ class TestGnosisSafeTransaction:
     def test_add_multiple_txs(self) -> None:
         """Test add() can be called multiple times to accumulate transactions."""
         safe_tx = self._make_safe_tx()
-        tx1 = {"to": "0xA", "value": 0, "data": b""}
-        tx2 = {"to": "0xB", "value": 1, "data": b""}
+        tx1 = {"to": "0xA", "value": 0}
+        tx2 = {"to": "0xB", "value": 1}
 
         safe_tx.add(tx1).add(tx2)
 
