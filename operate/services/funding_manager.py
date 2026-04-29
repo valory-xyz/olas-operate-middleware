@@ -54,10 +54,7 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
-    OLAS,
-    USDC,
-    USDC_E,
-    WRAPPED_NATIVE_ASSET,
+    ERC20_TOKENS_BY_CHAIN_ID,
     get_asset_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
@@ -110,14 +107,12 @@ class FundingManager:
         self.logger.info(
             f"Draining service agents {service.name} ({service_config_id=})"
         )
-        tokens = {
-            WRAPPED_NATIVE_ASSET[chain],
-            OLAS[chain],
-            USDC[chain],
-            USDC_E.get(chain, ZERO_ADDRESS),
-        } | service.chain_configs[
-            chain.value
-        ].chain_data.user_params.fund_requirements.keys()
+        tokens = (
+            set(ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, []))
+            | service.chain_configs[
+                chain.value
+            ].chain_data.user_params.fund_requirements.keys()
+        )
         tokens.discard(ZERO_ADDRESS)
 
         for agent_address in service.agent_addresses:
@@ -185,14 +180,12 @@ class FundingManager:
         owners = get_owners(ledger_api=ledger_api, safe=service_safe)
 
         # Drain ERC20 tokens from service Safe
-        tokens = {
-            WRAPPED_NATIVE_ASSET[chain],
-            OLAS[chain],
-            USDC[chain],
-            USDC_E.get(chain, ZERO_ADDRESS),
-        } | service.chain_configs[
-            chain.value
-        ].chain_data.user_params.fund_requirements.keys()
+        tokens = (
+            set(ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, []))
+            | service.chain_configs[
+                chain.value
+            ].chain_data.user_params.fund_requirements.keys()
+        )
         tokens.discard(ZERO_ADDRESS)
 
         for token_address in tokens:
