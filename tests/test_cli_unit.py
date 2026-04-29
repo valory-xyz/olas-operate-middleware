@@ -37,7 +37,6 @@ from operate import __version__
 from operate.cli import (
     CreateSafeStatus,
     OperateApp,
-    _build_insufficient_gas_error,
     create_app,
     main,
     service_not_found_error,
@@ -134,17 +133,13 @@ def _open_app(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestBuildInsufficientGasError:
-    """Unit tests for _build_insufficient_gas_error helper."""
-
-    def test_empty_chain_str_returns_empty_dict(self) -> None:
-        """Empty chain_str returns {} so callers merge in nothing (pre-loop guard)."""
-        result = _build_insufficient_gas_error("")
-        assert result == {}
+class TestInsufficientFundsException:
+    """Unit tests for InsufficientFundsException.to_error_fields()."""
 
     def test_gnosis_returns_correct_fields(self) -> None:
         """Gnosis chain produces all three structured fields with correct values."""
-        result = _build_insufficient_gas_error("gnosis")
+        exc = InsufficientFundsException("no gas", chain="gnosis")
+        result = exc.to_error_fields()
         assert result["error_code"] == "INSUFFICIENT_SIGNER_GAS"
         assert result["chain"] == "gnosis"
         assert result["prefill_amount_wei"] == str(
@@ -153,7 +148,8 @@ class TestBuildInsufficientGasError:
 
     def test_base_returns_chain_specific_prefill(self) -> None:
         """Base chain uses its own DEFAULT_EOA_TOPUPS value."""
-        result = _build_insufficient_gas_error("base")
+        exc = InsufficientFundsException("no gas", chain="base")
+        result = exc.to_error_fields()
         assert result["chain"] == "base"
         assert result["prefill_amount_wei"] == str(
             DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
@@ -1430,7 +1426,9 @@ class TestWalletWithdrawRoute:
     def test_insufficient_funds_exception(self) -> None:
         """Insufficient funds exception."""
         m = self._basic()
-        m.wallet_manager.load.side_effect = InsufficientFundsException("no funds")
+        m.wallet_manager.load.side_effect = InsufficientFundsException(
+            "no funds", chain="gnosis"
+        )
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app) as c:
@@ -1493,7 +1491,7 @@ class TestWalletWithdrawRoute:
         m = self._basic()
         wallet_mock = MagicMock()
         wallet_mock.transfer_from_safe_then_eoa.side_effect = (
-            InsufficientFundsException("no gas")
+            InsufficientFundsException("no gas", chain="gnosis")
         )
         m.wallet_manager.load.return_value = wallet_mock
         stack, app, _, _ = _open_app(m)
@@ -1521,7 +1519,7 @@ class TestWalletWithdrawRoute:
         m = self._basic()
         wallet_mock = MagicMock()
         wallet_mock.transfer_from_safe_then_eoa.side_effect = (
-            InsufficientFundsException("no gas")
+            InsufficientFundsException("no gas", chain="base")
         )
         m.wallet_manager.load.return_value = wallet_mock
         stack, app, _, _ = _open_app(m)
@@ -2021,7 +2019,7 @@ class TestWithdrawAndTerminateRoutes:
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.load.side_effect = InsufficientFundsException(
-            "no funds"
+            "no funds", chain="gnosis"
         )
         stack, app, _, _ = _open_app(m)
         with stack:
@@ -2053,7 +2051,7 @@ class TestWithdrawAndTerminateRoutes:
         wallet_mock.safes = {Chain.GNOSIS: "0xmastersafe"}
         m.wallet_manager.load.return_value = wallet_mock
         m.service_manager.return_value.terminate_service_on_chain_from_safe.side_effect = InsufficientFundsException(
-            "no gas for gnosis"
+            "no gas for gnosis", chain="gnosis"
         )
         stack, app, _, _ = _open_app(m)
         with stack:
@@ -2066,27 +2064,6 @@ class TestWithdrawAndTerminateRoutes:
             assert body["prefill_amount_wei"] == str(
                 DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
             )
-
-    def test_terminate_and_withdraw_insufficient_funds_pre_loop_degrades_gracefully(
-        self,
-    ) -> None:
-        """Exception before loop body (chain is empty) degrades without structured fields."""
-        m = _make_mock_operate()
-        m.password = "pass"  # nosec B105
-        m.service_manager.return_value.exists.return_value = True
-        # Exception fires from load() — before the for-chain loop, so chain == ""
-        m.service_manager.return_value.load.side_effect = InsufficientFundsException(
-            "no funds pre-loop"
-        )
-        stack, app, _, _ = _open_app(m)
-        with stack:
-            with TestClient(app) as c:
-                resp = c.post("/api/v2/service/svc1/terminate_and_withdraw")
-            assert resp.status_code == HTTPStatus.BAD_REQUEST
-            body = resp.json()
-            assert "error_code" not in body
-            assert "chain" not in body
-            assert "prefill_amount_wei" not in body
 
 
 class TestFundServiceRoute:
@@ -2142,7 +2119,7 @@ class TestFundServiceRoute:
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.fund_service.side_effect = (
-            InsufficientFundsException("no funds")
+            InsufficientFundsException("no funds", chain="gnosis")
         )
         stack, app, _, _ = _open_app(m)
         with stack:
@@ -2182,7 +2159,7 @@ class TestFundServiceRoute:
         m.password = "pass"  # nosec B105
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.fund_service.side_effect = (
-            InsufficientFundsException("no gas")
+            InsufficientFundsException("no gas", chain="gnosis")
         )
         stack, app, _, _ = _open_app(m)
         with stack:
@@ -2213,25 +2190,6 @@ class TestFundServiceRoute:
                 resp = c.post("/api/v2/service/svc1/fund", json={})
             assert resp.status_code == HTTPStatus.CONFLICT
             assert "error_code" not in resp.json()
-
-    def test_insufficient_funds_empty_body_chain_str_defaults(self) -> None:
-        """Empty request body → chain_str='' → no structured error fields (graceful)."""
-        m = _make_mock_operate()
-        m.password = "pass"  # nosec B105
-        m.service_manager.return_value.exists.return_value = True
-        m.service_manager.return_value.fund_service.side_effect = (
-            InsufficientFundsException("no gas")
-        )
-        stack, app, _, _ = _open_app(m)
-        with stack:
-            with TestClient(app) as c:
-                # POST with empty body → data={} → chain_str="" → helper returns {}
-                resp = c.post("/api/v2/service/svc1/fund", json={})
-            assert resp.status_code == HTTPStatus.BAD_REQUEST
-            body = resp.json()
-            assert "error_code" not in body
-            assert "chain" not in body
-            assert "prefill_amount_wei" not in body
 
 
 class TestBridgeRoutes:

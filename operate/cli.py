@@ -142,22 +142,6 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
     )
 
 
-def _build_insufficient_gas_error(chain_str: str) -> t.Dict:
-    """Build structured insufficient-gas error fields for merging into a JSONResponse.
-
-    Returns a dict with error_code, chain, and prefill_amount_wei when chain_str
-    is non-empty; returns an empty dict otherwise so the caller can safely merge
-    the result into an existing response body without adding unexpected fields.
-    """
-    if not chain_str:
-        return {}
-    return {
-        "error_code": "INSUFFICIENT_SIGNER_GAS",
-        "chain": chain_str,
-        "prefill_amount_wei": str(DEFAULT_EOA_TOPUPS[Chain(chain_str)][ZERO_ADDRESS]),
-    }
-
-
 class CreateSafeStatus(str, enum.Enum):
     """ProviderRequestStatus"""
 
@@ -1273,7 +1257,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={
                     "error": f"Failed to withdraw funds. Insufficient funds: {e}",
                     "transfer_txs": transfer_txs,
-                    **_build_insufficient_gas_error(chain_str),
+                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -1650,7 +1634,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        chain = ""
         try:
             pause_all_services()
             service = service_manager.load(service_config_id=service_config_id)
@@ -1674,7 +1657,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}",
-                    **_build_insufficient_gas_error(chain),
+                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -1711,12 +1694,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        # Capture the first chain key before the try block so it is always defined
-        # at the InsufficientFundsException handler even if request.json() raises.
-        error_chain_str = ""
         try:
             data = await request.json()
-            error_chain_str = next(iter(data)) if data else ""
             service_manager.fund_service(
                 service_config_id=service_config_id,
                 amounts=ChainAmounts(
@@ -1746,7 +1725,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": f"Failed to fund from Master Safe. Insufficient funds: {e}",
-                    **_build_insufficient_gas_error(error_chain_str),
+                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )

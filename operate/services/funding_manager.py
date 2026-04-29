@@ -985,7 +985,8 @@ class FundingManager:
 
         if balances < required:
             raise InsufficientFundsException(
-                f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
+                f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}",
+                chain=next(iter(amounts)),
             )
 
         for chain_str, addresses in amounts.items():
