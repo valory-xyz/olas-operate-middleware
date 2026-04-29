@@ -126,8 +126,10 @@ class TestDetermineBump:
         assert determine_bump(prs) == "minor"
 
     def test_no_breaking_label_is_patch(self) -> None:
-        """Without a breaking-change label, the bump is patch — feat prefix
-        no longer matters."""
+        """Without a breaking-change label, the bump is patch.
+
+        The feat-prefix rule no longer affects the bump.
+        """
         prs = [
             PullRequest(1, "feat: add foo", ()),
             PullRequest(2, "fix: bug", ()),
