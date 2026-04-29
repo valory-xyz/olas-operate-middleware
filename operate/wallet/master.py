@@ -79,8 +79,13 @@ class InsufficientFundsException(Exception):
     """Insufficient funds exception carrying the chain where gas is missing."""
 
     def __init__(self, msg: str, chain: str) -> None:
-        super().__init__(msg)
+        """Initialise with message and the chain where gas was insufficient."""
+        super().__init__(msg, chain)
         self.chain = chain
+
+    def __str__(self) -> str:
+        """Return only the human-readable message, not the full args tuple."""
+        return self.args[0]
 
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
