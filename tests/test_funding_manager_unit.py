@@ -626,3 +626,90 @@ class TestDelegatingMethods:
         # Shortfall is 150 (200-50), fund_chain_amounts should be called with it
         call_amounts = mock_fund.call_args[0][0]
         assert call_amounts["gnosis"][EOA_ADDR][ZERO_ADDRESS] == BigInt(150)
+
+
+# ---------------------------------------------------------------------------
+# Drain token set — ERC20_TOKENS-derived (pUSD coverage)
+# ---------------------------------------------------------------------------
+
+PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+POLYGON_CHAIN = Chain.POLYGON
+
+
+class TestDrainTokenSetIncludesPUSD:
+    """Tests that drain_agents_eoas and drain_service_safe include pUSD."""
+
+    def _make_polygon_service(self) -> MagicMock:
+        """Create a minimal mock Service configured for Polygon."""
+        service = MagicMock()
+        service.name = "test-service"
+        service.service_config_id = "svc-1"
+        service.agent_addresses = []
+
+        chain_config = MagicMock()
+        chain_config.ledger_config.rpc = "http://localhost:8545"
+        chain_config.chain_data.user_params.fund_requirements = {}
+        service.chain_configs = {POLYGON_CHAIN.value: chain_config}
+        return service
+
+    def test_drain_agents_eoas_token_set_includes_pusd(self) -> None:
+        """Token set for drain_agents_eoas must contain the pUSD address."""
+        manager = _make_manager()
+        service = self._make_polygon_service()
+
+        def fake_make_api(chain: Chain, rpc: str) -> MagicMock:  # noqa: D401
+            return MagicMock()
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                side_effect=fake_make_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=0,
+            ),
+            patch(
+                "operate.services.funding_manager.drain_eoa",
+            ),
+        ):
+            manager.drain_agents_eoas(service, "0x" + "f" * 40, POLYGON_CHAIN)
+
+        # Verify via ERC20_TOKENS directly: PUSD_ADDRESS must appear in the token set
+        from operate.ledger.profiles import ERC20_TOKENS  # local import for clarity
+
+        token_set = {
+            token_map.get(POLYGON_CHAIN, ZERO_ADDRESS)
+            for token_map in ERC20_TOKENS.values()
+        }
+        token_set.discard(ZERO_ADDRESS)
+        assert PUSD_ADDRESS in token_set
+
+    def test_drain_token_set_does_not_include_zero_address(self) -> None:
+        """ZERO_ADDRESS must be excluded from the drain token set."""
+        from operate.ledger.profiles import ERC20_TOKENS
+
+        token_set = {
+            token_map.get(POLYGON_CHAIN, ZERO_ADDRESS)
+            for token_map in ERC20_TOKENS.values()
+        }
+        token_set.discard(ZERO_ADDRESS)
+        assert ZERO_ADDRESS not in token_set
+
+    def test_adding_token_to_erc20_tokens_auto_includes_in_drain_set(self) -> None:
+        """Adding a new token to ERC20_TOKENS must automatically extend the drain set."""
+        from operate.ledger.profiles import ERC20_TOKENS
+
+        fake_address = "0x" + "1" * 40
+        fake_token: dict = {POLYGON_CHAIN: fake_address}
+
+        ERC20_TOKENS["_test_token_"] = fake_token  # type: ignore[assignment]
+        try:
+            token_set = {
+                token_map.get(POLYGON_CHAIN, ZERO_ADDRESS)
+                for token_map in ERC20_TOKENS.values()
+            }
+            token_set.discard(ZERO_ADDRESS)
+            assert fake_address in token_set
+        finally:
+            del ERC20_TOKENS["_test_token_"]

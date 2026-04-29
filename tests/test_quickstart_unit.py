@@ -105,6 +105,38 @@ class TestWeiToToken:
         assert isinstance(result, str)
 
 
+class TestPUSDInPolygonTokenData:
+    """Tests that pUSD is correctly registered in CHAIN_TO_METADATA polygon token_data."""
+
+    PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+
+    def test_pusd_address_present_in_polygon_token_data(self) -> None:
+        """The pUSD address must be a key in CHAIN_TO_METADATA['polygon']['token_data']."""
+        from operate.quickstart.utils import CHAIN_TO_METADATA
+
+        assert self.PUSD_ADDRESS in CHAIN_TO_METADATA["polygon"]["token_data"]
+
+    def test_pusd_symbol_is_correct(self) -> None:
+        """The pUSD entry must carry symbol 'pUSD'."""
+        from operate.quickstart.utils import CHAIN_TO_METADATA
+
+        entry = CHAIN_TO_METADATA["polygon"]["token_data"][self.PUSD_ADDRESS]
+        assert entry["symbol"] == "pUSD"
+
+    def test_pusd_decimals_is_six(self) -> None:
+        """The pUSD entry must carry decimals 6."""
+        from operate.quickstart.utils import CHAIN_TO_METADATA
+
+        entry = CHAIN_TO_METADATA["polygon"]["token_data"][self.PUSD_ADDRESS]
+        assert entry["decimals"] == 6
+
+    def test_wei_to_token_returns_pusd_symbol(self) -> None:
+        """Calling wei_to_token must return 'pUSD' for 1 pUSD (1_000_000 wei at 6 decimals)."""
+        result = wei_to_token(1_000_000, "polygon", self.PUSD_ADDRESS)
+        assert "pUSD" in result
+        assert "1.000000" in result
+
+
 class TestAskYesOrNo:
     """Tests for ask_yes_or_no."""
 
