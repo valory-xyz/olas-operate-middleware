@@ -83,7 +83,7 @@ class AgentAssetManager:
             machine = platform.machine().lower()
             if machine in ("x86_64", "amd64"):
                 return "x64"
-            if machine == "arm64":
+            if machine in ("arm64", "aarch64"):
                 return "arm64"
             raise ValueError(f"unsupported arch: {platform.machine()}")
 
@@ -125,7 +125,7 @@ class AgentAssetManager:
             raise ValueError("Platform not supported!")
 
         arch = AgentAssetManager.get_python_environment_architecture()
-        if arch == "arm64" and os_name in ["windows", "linux"]:
+        if arch == "arm64" and os_name == "windows":
             raise ValueError(f"{platform.system()} arm64 is not supported!")
 
         exec_name = f"{AGENT_RUNNER_PREFIX}_{os_name}_{arch}"
