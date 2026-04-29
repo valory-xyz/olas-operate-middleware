@@ -25,7 +25,6 @@ import pytest
 
 from scripts.compute_next_version import (
     FALLBACK_REPO,
-    FEAT_PREFIX,
     PullRequest,
     bump_version,
     determine_bump,
@@ -79,8 +78,6 @@ class TestBumpVersion:
         [
             ((0, 15, 11), "patch", (0, 15, 12)),
             ((0, 15, 11), "minor", (0, 16, 0)),
-            ((0, 15, 11), "major", (1, 0, 0)),
-            ((1, 2, 3), "major", (2, 0, 0)),
             ((0, 0, 0), "minor", (0, 1, 0)),
         ],
     )
@@ -93,44 +90,15 @@ class TestBumpVersion:
         """Each bump kind produces the expected next version."""
         assert bump_version(current, bump_type) == expected
 
+    def test_major_bump_is_not_supported(self) -> None:
+        """Major bumps are intentionally unsupported."""
+        with pytest.raises(ValueError, match="unknown bump type"):
+            bump_version((1, 0, 0), "major")
+
     def test_unknown_type_raises(self) -> None:
         """Unrecognised bump types raise ValueError."""
         with pytest.raises(ValueError, match="unknown bump type"):
             bump_version((1, 0, 0), "unknown")
-
-
-class TestFeatPrefixRegex:
-    """Tests for the FEAT_PREFIX regex matching conventional-commit feat titles."""
-
-    @pytest.mark.parametrize(
-        "title",
-        [
-            "feat: add foo",
-            "feat(scope): add foo",
-            "feat!: breaking",
-            "feat(scope)!: breaking",
-            "FEAT: shouty",
-            "Feat(api): mixed case",
-        ],
-    )
-    def test_matches(self, title: str) -> None:
-        """Recognised feat-prefixed titles match."""
-        assert FEAT_PREFIX.match(title) is not None
-
-    @pytest.mark.parametrize(
-        "title",
-        [
-            "fix: bug",
-            "feature: not conventional",
-            "featuring: not feat",
-            "chore: cleanup",
-            "Add feat to thing",
-            "",
-        ],
-    )
-    def test_does_not_match(self, title: str) -> None:
-        """Unrelated titles do not match the feat prefix."""
-        assert FEAT_PREFIX.match(title) is None
 
 
 class TestDetermineBump:
@@ -140,42 +108,35 @@ class TestDetermineBump:
         """An empty PR list resolves to patch."""
         assert determine_bump([]) == "patch"
 
-    def test_breaking_change_label_wins(self) -> None:
-        """A breaking-change label beats a feat prefix."""
+    def test_breaking_change_label_triggers_minor(self) -> None:
+        """A breaking-change label triggers a minor bump."""
         prs = [
             PullRequest(1, "feat: add foo", ("breaking change",)),
             PullRequest(2, "fix: bug", ()),
         ]
-        assert determine_bump(prs) == "major"
+        assert determine_bump(prs) == "minor"
 
-    def test_breaking_label_on_any_pr_triggers_major(self) -> None:
-        """A breaking-change label on any PR in the set triggers major."""
+    def test_breaking_label_on_any_pr_triggers_minor(self) -> None:
+        """A breaking-change label on any PR in the set triggers minor."""
         prs = [
             PullRequest(1, "fix: bug", ()),
             PullRequest(2, "chore: cleanup", ("breaking change",)),
             PullRequest(3, "fix: another", ()),
         ]
-        assert determine_bump(prs) == "major"
+        assert determine_bump(prs) == "minor"
 
-    def test_feat_prefix_triggers_minor(self) -> None:
-        """A feat-prefixed PR title triggers minor."""
+    def test_no_breaking_label_is_patch(self) -> None:
+        """Without a breaking-change label, the bump is patch — feat prefix
+        no longer matters."""
         prs = [
             PullRequest(1, "feat: add foo", ()),
             PullRequest(2, "fix: bug", ()),
-        ]
-        assert determine_bump(prs) == "minor"
-
-    def test_no_feat_no_breaking_is_patch(self) -> None:
-        """Without breaking label or feat prefix, the bump is patch."""
-        prs = [
-            PullRequest(1, "fix: bug", ()),
-            PullRequest(2, "chore: cleanup", ()),
             PullRequest(3, "Plain English title", ("documentation",)),
         ]
         assert determine_bump(prs) == "patch"
 
     def test_label_match_is_exact(self) -> None:
-        """Label matching is exact: breaking-change with hyphen does not trigger major."""
+        """Label matching is exact: breaking-change with hyphen does not trigger minor."""
         prs = [PullRequest(1, "fix: bug", ("breaking-change",))]
         assert determine_bump(prs) == "patch"
 

@@ -1,9 +1,10 @@
 """Compute the next release version based on PRs merged since the previous tag.
 
-Bump rule (highest wins):
-  - any PR has label "breaking change" -> major
-  - any PR title matches conventional-commit "feat" prefix -> minor
+Bump rule:
+  - any PR has label "breaking change" -> minor
   - else -> patch
+
+(No major bumps: aligns with the open-autonomy convention.)
 
 Outputs JSON to stdout for downstream consumption by the release workflow.
 """
@@ -13,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -21,7 +21,6 @@ from typing import Iterable
 
 
 BREAKING_LABEL = "breaking change"
-FEAT_PREFIX = re.compile(r"^feat(\([^)]+\))?!?:", re.IGNORECASE)
 FALLBACK_REPO = "valory-xyz/olas-operate-middleware"
 PR_FETCH_LIMIT = 200
 
@@ -85,8 +84,6 @@ def parse_version(version: str) -> tuple[int, int, int]:
 
 def bump_version(version: tuple[int, int, int], bump_type: str) -> tuple[int, int, int]:
     major, minor, patch = version
-    if bump_type == "major":
-        return major + 1, 0, 0
     if bump_type == "minor":
         return major, minor + 1, 0
     if bump_type == "patch":
@@ -95,10 +92,7 @@ def bump_version(version: tuple[int, int, int], bump_type: str) -> tuple[int, in
 
 
 def determine_bump(prs: Iterable[PullRequest]) -> str:
-    prs = list(prs)
     if any(BREAKING_LABEL in pr.labels for pr in prs):
-        return "major"
-    if any(FEAT_PREFIX.match(pr.title) for pr in prs):
         return "minor"
     return "patch"
 
