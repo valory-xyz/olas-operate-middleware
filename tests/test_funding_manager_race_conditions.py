@@ -223,7 +223,7 @@ class TestFundingManagerThreadSafetyImprovements:
 
     try:
         # Do funding operations outside lock
-        self.fund_chain_amounts(amounts, service=service)
+        self.fund_chain_amounts(amounts)
     finally:
         with self._lock:
             # Clear in-progress flag and set cooldown atomically

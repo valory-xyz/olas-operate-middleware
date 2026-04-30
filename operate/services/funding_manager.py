@@ -65,7 +65,7 @@ from operate.utils import concurrent_execute
 from operate.utils.gnosis import drain_eoa, get_asset_balance, get_owners
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_eoa, transfer_erc20_from_safe
-from operate.wallet.master import InsufficientFundsException, MasterWalletManager
+from operate.wallet.master import MasterWalletManager
 
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
@@ -952,7 +952,7 @@ class FundingManager:
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
-        self.fund_chain_amounts(service.get_initial_funding_amounts(), service=service)
+        self.fund_chain_amounts(service.get_initial_funding_amounts())
 
     def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
         """Compute service initial shortfalls"""
@@ -967,21 +967,10 @@ class FundingManager:
     def topup_service_initial(self, service: Service) -> None:
         """Fund service enough to reach initial funding amounts"""
         service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
-        self.fund_chain_amounts(service_initial_shortfalls, service=service)
+        self.fund_chain_amounts(service_initial_shortfalls)
 
-    def fund_chain_amounts(
-        self, amounts: ChainAmounts, service: t.Optional[Service] = None
-    ) -> None:
+    def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
         """Fund chain amounts"""
-        required = self._aggregate_as_master_safe_amounts(amounts)
-        balances = self._get_master_safe_balances(required, service=service)
-
-        if balances < required:
-            raise InsufficientFundsException(
-                f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}",
-                chain=next(iter(amounts)),
-            )
-
         for chain_str, addresses in amounts.items():
             chain = Chain(chain_str)
             wallet = self.wallet_manager.load(chain.ledger_type)
@@ -1036,7 +1025,7 @@ class FundingManager:
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts, service=service)
+            self.fund_chain_amounts(amounts)
         finally:
             # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:

@@ -38,7 +38,6 @@ from operate.serialization import BigInt
 from operate.services.funding_manager import FundingManager
 from operate.services.protocol import StakingState
 from operate.services.service import NON_EXISTENT_TOKEN
-from operate.wallet.master import InsufficientFundsException
 
 # ---------------------------------------------------------------------------
 # Helpers / constants
@@ -1939,29 +1938,3 @@ class TestFundChainAmountsCallArgs:
             amount=BigInt(500),
             from_safe=True,
         )
-
-    def test_insufficient_funds_raises(self) -> None:
-        """fund_chain_amounts raises InsufficientFundsException when balance < required."""
-        wallet_manager = MagicMock()
-        mock_wallet = MagicMock()
-        wallet_manager.load.return_value = mock_wallet
-        manager = _make_manager(wallet_manager=wallet_manager)
-
-        amounts = ChainAmounts({"gnosis": {AGENT_ADDR: {ZERO_ADDRESS: BigInt(1000)}}})
-        insufficient_balance = ChainAmounts(
-            {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(100)}}}
-        )
-        required = ChainAmounts(
-            {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(1000)}}}
-        )
-
-        with (
-            patch.object(
-                manager, "_aggregate_as_master_safe_amounts", return_value=required
-            ),
-            patch.object(
-                manager, "_get_master_safe_balances", return_value=insufficient_balance
-            ),
-            pytest.raises(InsufficientFundsException),
-        ):
-            manager.fund_chain_amounts(amounts)
