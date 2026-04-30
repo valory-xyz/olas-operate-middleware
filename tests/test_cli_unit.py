@@ -133,33 +133,6 @@ def _open_app(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestInsufficientFundsException:
-    """Unit tests for InsufficientFundsException.to_error_fields()."""
-
-    def test_gnosis_returns_correct_fields(self) -> None:
-        """Gnosis chain produces all three structured fields with correct values."""
-        exc = InsufficientFundsException("no gas", chain="gnosis")
-        result = exc.to_error_fields()
-        assert result["error_code"] == "INSUFFICIENT_SIGNER_GAS"
-        assert result["chain"] == "gnosis"
-        assert result["prefill_amount_wei"] == str(
-            DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
-        )
-
-    def test_base_returns_chain_specific_prefill(self) -> None:
-        """Base chain uses its own DEFAULT_EOA_TOPUPS value."""
-        exc = InsufficientFundsException("no gas", chain="base")
-        result = exc.to_error_fields()
-        assert result["chain"] == "base"
-        assert result["prefill_amount_wei"] == str(
-            DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
-        )
-        # Base prefill is different from Gnosis prefill
-        assert result["prefill_amount_wei"] != str(
-            DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
-        )
-
-
 class TestModuleUtils:
     """Tests for service_not_found_error() and CreateSafeStatus.__str__."""
 

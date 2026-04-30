@@ -27,6 +27,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from operate.constants import ZERO_ADDRESS
+from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
 from operate.wallet.master import (
     EthereumMasterWallet,
@@ -1856,3 +1857,30 @@ class TestMigrateFormatAddsCanonicalBackupOwner:
         assert mock_get_owners.call_count == 1
         result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
         assert result["canonical_backup_owner"] is None
+
+
+class TestInsufficientFundsException:
+    """Unit tests for InsufficientFundsException.to_error_fields()."""
+
+    def test_gnosis_returns_correct_fields(self) -> None:
+        """Gnosis chain produces all three structured fields with correct values."""
+        exc = InsufficientFundsException("no gas", chain="gnosis")
+        result = exc.to_error_fields()
+        assert result["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        assert result["chain"] == "gnosis"
+        assert result["prefill_amount_wei"] == str(
+            DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+        )
+
+    def test_base_returns_chain_specific_prefill(self) -> None:
+        """Base chain uses its own DEFAULT_EOA_TOPUPS value."""
+        exc = InsufficientFundsException("no gas", chain="base")
+        result = exc.to_error_fields()
+        assert result["chain"] == "base"
+        assert result["prefill_amount_wei"] == str(
+            DEFAULT_EOA_TOPUPS[Chain.BASE][ZERO_ADDRESS]
+        )
+        # Base prefill is different from Gnosis prefill
+        assert result["prefill_amount_wei"] != str(
+            DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+        )
