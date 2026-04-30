@@ -380,10 +380,13 @@ class OnTestnet:
     """TestOnTestnet"""
 
     # TODO: Remove this skip after optimizing tenderly usage
-    pytestmark = pytest.mark.skipif(
-        RUNNING_IN_CI and system() != "Linux",
-        reason="To avoid exhausting tenderly limits.",
-    )
+    pytestmark = [
+        pytest.mark.skipif(
+            RUNNING_IN_CI and system() != "Linux",
+            reason="To avoid exhausting tenderly limits.",
+        ),
+        pytest.mark.flaky(reruns=3, reruns_delay=15),
+    ]
 
     @pytest.fixture(autouse=True)
     def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:

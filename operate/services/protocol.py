@@ -58,6 +58,7 @@ from autonomy.chain.tx import TxSettler
 from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
+from hexbytes import HexBytes
 from web3.contract import Contract
 from web3.types import TxReceipt
 
@@ -968,7 +969,7 @@ class _ChainUtil:
                 "operation": MultiSendOperation.CALL,
                 "to": multisig,
                 "value": 0,
-                "data": bytes.fromhex(txd[2:]),
+                "data": HexBytes(txd[2:]),
             }
         )
         multisend_txd = registry_contracts.multisend.get_tx_data(  # type: ignore
@@ -1403,7 +1404,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return {
             "to": self.service_manager_address,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1425,7 +1426,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": erc20_contract,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1441,7 +1442,7 @@ class EthSafeTxBuilder(_ChainUtil):
         return {
             "from": self.safe,
             "to": self.service_manager_address,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": cost_of_bond,
         }
@@ -1465,7 +1466,7 @@ class EthSafeTxBuilder(_ChainUtil):
         return {
             "from": self.safe,
             "to": self.service_manager_address,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": cost_of_bond,
         }
@@ -1553,7 +1554,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         deploy_message = {
             "to": self.service_manager_address,
-            "data": bytes.fromhex(deploy_data[2:]),
+            "data": deploy_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1615,7 +1616,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         approve_hash_message = {
             "to": safe_b_address,
-            "data": bytes.fromhex(approve_hash_data[2:]),
+            "data": approve_hash_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1638,7 +1639,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         exec_message = {
             "to": safe_b_address,
-            "data": bytes.fromhex(exec_data[2:]),
+            "data": exec_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1668,15 +1669,14 @@ class EthSafeTxBuilder(_ChainUtil):
             contract_address=token,
         )
 
-        txd = erc20_instance.encode_abi(
-            abi_element_identifier="transfer",
-            args=[to, amount],
-        )
         txs = []
         txs.append(
             {
                 "to": token,
-                "data": bytes.fromhex(txd[2:]),
+                "data": erc20_instance.encode_abi(
+                    abi_element_identifier="transfer",
+                    args=[to, amount],
+                ),
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
             }
@@ -1708,7 +1708,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         approve_hash_message = {
             "to": safe_b_address,
-            "data": bytes.fromhex(approve_hash_data[2:]),
+            "data": approve_hash_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1731,7 +1731,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         exec_message = {
             "to": safe_b_address,
-            "data": bytes.fromhex(exec_data[2:]),
+            "data": exec_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1746,7 +1746,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": self.service_manager_address,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1759,7 +1759,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": self.service_manager_address,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1782,7 +1782,7 @@ class EthSafeTxBuilder(_ChainUtil):
         return {
             "from": self.safe,
             "to": self.contracts["service_registry"],
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1802,7 +1802,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": staking_contract,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1831,7 +1831,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": staking_contract,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1852,7 +1852,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": staking_contract,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1899,7 +1899,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": self.contracts["recovery_module"],
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1921,7 +1921,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "to": safe_address,
-            "data": bytes.fromhex(txd[2:]),
+            "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -2043,11 +2043,13 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
         txs.append(
             {
                 "to": multisig_address,
-                "data": bytes.fromhex(
-                    multisig_instance.encode_abi(
-                        abi_element_identifier="addOwnerWithThreshold",
-                        args=[_owner, 1],
-                    )[2:]
+                "data": HexBytes(
+                    bytes.fromhex(
+                        multisig_instance.encode_abi(
+                            abi_element_identifier="addOwnerWithThreshold",
+                            args=[_owner, 1],
+                        )[2:]
+                    )
                 ),
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
@@ -2057,11 +2059,13 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     txs.append(
         {
             "to": multisig_address,
-            "data": bytes.fromhex(
-                multisig_instance.encode_abi(
-                    abi_element_identifier="removeOwner",
-                    args=[new_owners[0], master_safe, 1],
-                )[2:]
+            "data": HexBytes(
+                bytes.fromhex(
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="removeOwner",
+                        args=[new_owners[0], master_safe, 1],
+                    )[2:]
+                )
             ),
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -2071,11 +2075,13 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     txs.append(
         {
             "to": multisig_address,
-            "data": bytes.fromhex(
-                multisig_instance.encode_abi(
-                    abi_element_identifier="changeThreshold",
-                    args=[threshold],
-                )[2:]
+            "data": HexBytes(
+                bytes.fromhex(
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="changeThreshold",
+                        args=[threshold],
+                    )[2:]
+                )
             ),
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -2105,7 +2111,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     )
     approve_hash_message = {
         "to": multisig_address,
-        "data": bytes.fromhex(approve_hash_data[2:]),
+        "data": approve_hash_data[2:],
         "operation": MultiSendOperation.CALL,
         "value": 0,
     }
