@@ -32,7 +32,6 @@ from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, ChainAmounts
 from operate.serialization import BigInt
 from operate.services.funding_manager import FundingInProgressError, FundingManager
-from operate.wallet.master import InsufficientFundsException
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -501,29 +500,6 @@ class TestFundService:
 class TestFundChainAmounts:
     """Tests for FundingManager.fund_chain_amounts (lines 944-973)."""
 
-    def test_raises_when_master_safe_has_insufficient_funds(self) -> None:
-        """Test InsufficientFundsException when the master safe balance is too low."""
-        mock_wallet = MagicMock()
-        mock_wallet.safes = {Chain.GNOSIS: SAFE_ADDR}
-        mock_wallet_manager = MagicMock()
-        mock_wallet_manager.exists.return_value = True
-        mock_wallet_manager.load.return_value = mock_wallet
-
-        manager = _make_manager(wallet_manager=mock_wallet_manager)
-
-        # Balance in safe is 0; we need 1000
-        amounts = ChainAmounts({"gnosis": {EOA_ADDR: {ZERO_ADDRESS: BigInt(1_000)}}})
-
-        with patch.object(
-            manager,
-            "_get_master_safe_balances",
-            return_value=ChainAmounts(
-                {"gnosis": {SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-            ),
-        ):
-            with pytest.raises(InsufficientFundsException, match="Insufficient funds"):
-                manager.fund_chain_amounts(amounts)
-
     def test_skips_zero_amount_transfers(self) -> None:
         """Test that zero-amount entries are skipped (no wallet.transfer called)."""
         mock_wallet = MagicMock()
@@ -607,7 +583,7 @@ class TestDelegatingMethods:
         with patch.object(manager, "fund_chain_amounts") as mock_fund:
             manager.fund_service_initial(mock_service)
 
-        mock_fund.assert_called_once_with(initial_amounts, service=mock_service)
+        mock_fund.assert_called_once_with(initial_amounts)
 
     def test_topup_service_initial_calls_fund_chain_amounts(self) -> None:
         """Test topup_service_initial computes shortfalls then calls fund_chain_amounts."""

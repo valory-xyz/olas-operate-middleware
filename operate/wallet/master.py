@@ -44,7 +44,12 @@ from operate.ledger import (
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
-from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
+from operate.ledger.profiles import (
+    DEFAULT_EOA_TOPUPS,
+    DUST,
+    ERC20_TOKENS,
+    format_asset_amount,
+)
 from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.serialization import BigInt
@@ -71,7 +76,26 @@ logger = setup_logger(name="master_wallet")
 
 # TODO Organize exceptions definition
 class InsufficientFundsException(Exception):
-    """Insufficient funds exception."""
+    """Insufficient funds exception carrying the chain where gas is missing."""
+
+    def __init__(self, msg: str, chain: str) -> None:
+        """Initialise with message and the chain where gas was insufficient."""
+        super().__init__(msg, chain)
+        self.chain = chain
+
+    def __str__(self) -> str:
+        """Return only the human-readable message, not the full args tuple."""
+        return self.args[0]
+
+    def to_error_fields(self) -> t.Dict:
+        """Return structured error fields for merging into a JSONResponse body."""
+        return {
+            "error_code": "INSUFFICIENT_SIGNER_GAS",
+            "chain": self.chain,
+            "prefill_amount_wei": str(
+                DEFAULT_EOA_TOPUPS[Chain(self.chain)][ZERO_ADDRESS]
+            ),
+        }
 
 
 class MasterWallet(LocalResource):
@@ -310,7 +334,8 @@ class EthereumMasterWallet(
             source_address = self.safes[chain] if from_safe else self.address
             raise InsufficientFundsException(
                 f"Cannot transfer {format_asset_amount(chain, asset, amount)} from {source} {source_address} to {to} on chain {chain.name}. "
-                f"Balance: {format_asset_amount(chain, asset, balance)}. Missing: {format_asset_amount(chain, asset, amount - balance)}."
+                f"Balance: {format_asset_amount(chain, asset, balance)}. Missing: {format_asset_amount(chain, asset, amount - balance)}.",
+                chain=chain.value,
             )
 
         return to
@@ -528,7 +553,8 @@ class EthereumMasterWallet(
                 f"Cannot transfer {format_asset_amount(chain, asset, amount)} to {to} on chain {chain.name}. "
                 f"Balance of Master Safe {self.safes[chain]}: {format_asset_amount(chain, asset, safe_balance)}. "
                 f"Balance of Master EOA {self.address}: {format_asset_amount(chain, asset, eoa_balance)}. "
-                f"Missing: {format_asset_amount(chain, asset, amount - balance)}."
+                f"Missing: {format_asset_amount(chain, asset, amount - balance)}.",
+                chain=chain.value,
             )
 
         tx_hashes = []

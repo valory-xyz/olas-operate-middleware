@@ -31,7 +31,9 @@ from time import time
 from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
+from autonomy.chain.exceptions import ChainInteractionError
 from web3 import Web3
+from web3.exceptions import Web3RPCError
 
 from operate.constants import (
     DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
@@ -62,10 +64,22 @@ from operate.serialization import BigInt
 from operate.services.protocol import EthSafeTxBuilder, StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
 from operate.utils import concurrent_execute
-from operate.utils.gnosis import drain_eoa, get_asset_balance, get_owners
+from operate.utils.gnosis import (
+    drain_eoa,
+    estimate_transfer_tx_fee,
+    get_asset_balance,
+    get_owners,
+)
 from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_eoa, transfer_erc20_from_safe
+from operate.utils.gnosis import (
+    transfer_erc20_from_eoa,
+    transfer_erc20_from_safe,
+)
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
+
+# An ERC20 `transfer` typically uses ~3x the gas of a native transfer.
+# Used to estimate the total native gas an EOA needs to drain its ERC20 balances.
+_ERC20_TRANSFER_GAS_MULTIPLIER = 3
 
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
@@ -118,20 +132,75 @@ class FundingManager:
         for agent_address in service.agent_addresses:
             ethereum_crypto = self.keys_manager.get_crypto_instance(agent_address)
 
+            token_balances: t.List[t.Tuple[str, BigInt]] = []
             for token_address in tokens:
                 token_balance = get_asset_balance(
                     ledger_api=ledger_api,
                     asset_address=token_address,
                     address=agent_address,
                 )
-                token_name = get_asset_name(chain, token_address)
-
                 if token_balance == 0:
                     self.logger.info(
-                        f"No {token_name} to drain from {agent_address} (agent EOA)"
+                        f"No {get_asset_name(chain, token_address)} to drain from {agent_address} (agent EOA)"
                     )
                     continue
+                token_balances.append((token_address, token_balance))
 
+            # Pre-check: agent EOA must hold enough native gas to pay for the
+            # pending ERC20 transfers AND the final native drain.
+            native_balance = ledger_api.get_balance(agent_address)
+            try:
+                native_transfer_fee = estimate_transfer_tx_fee(
+                    chain=chain,
+                    sender_address=agent_address,
+                    to=withdrawal_address,
+                    ledger_api=ledger_api,
+                )
+                # ERC20 transfers cost ~_ERC20_TRANSFER_GAS_MULTIPLIER × native;
+                # the trailing native drain itself costs one native transfer.
+                required_gas = (
+                    native_transfer_fee
+                    * _ERC20_TRANSFER_GAS_MULTIPLIER
+                    * len(token_balances)
+                    + native_transfer_fee
+                )
+                # update_with_gas_estimate inside estimate_transfer_tx_fee
+                # uses raise_on_try=False, so a failed eth_estimateGas leaves
+                # tx['gas']=0 → fee=0. Treat that as proof of insufficient gas.
+                gas_insufficient = (
+                    native_transfer_fee == 0 or native_balance < required_gas
+                )
+            except (Web3RPCError, ChainInteractionError) as e:
+                # The estimate itself can fail with "insufficient funds for
+                # gas * price + value" when the EOA cannot even pay for the
+                # eth_estimateGas dry-run — that's already proof the EOA is
+                # too gas-poor to drain anything.
+                if "insufficient funds" not in str(e).lower():
+                    raise
+                native_transfer_fee = 0
+                required_gas = 0
+                gas_insufficient = True
+
+            if gas_insufficient:
+                if token_balances:
+                    raise InsufficientFundsException(
+                        f"Agent EOA {agent_address} has insufficient "
+                        f"{get_currency_denom(chain)} on chain {chain.name} to pay "
+                        f"gas for draining {len(token_balances)} ERC20 balance(s) "
+                        f"and the native balance. Balance: {native_balance}, "
+                        f"required (approx): {required_gas}.",
+                        chain=chain.value,
+                    )
+
+                self.logger.info(
+                    f"Skipping native drain from {agent_address} (agent EOA): "
+                    f"dust balance {native_balance} {get_currency_denom(chain)} "
+                    f"≤ estimated tx fee {native_transfer_fee}."
+                )
+                continue
+
+            for token_address, token_balance in token_balances:
+                token_name = get_asset_name(chain, token_address)
                 self.logger.info(
                     f"Draining {token_balance} {token_name} from {agent_address} (agent EOA) to {withdrawal_address}"
                 )
@@ -952,7 +1021,7 @@ class FundingManager:
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
-        self.fund_chain_amounts(service.get_initial_funding_amounts(), service=service)
+        self.fund_chain_amounts(service.get_initial_funding_amounts())
 
     def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
         """Compute service initial shortfalls"""
@@ -967,20 +1036,10 @@ class FundingManager:
     def topup_service_initial(self, service: Service) -> None:
         """Fund service enough to reach initial funding amounts"""
         service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
-        self.fund_chain_amounts(service_initial_shortfalls, service=service)
+        self.fund_chain_amounts(service_initial_shortfalls)
 
-    def fund_chain_amounts(
-        self, amounts: ChainAmounts, service: t.Optional[Service] = None
-    ) -> None:
+    def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
         """Fund chain amounts"""
-        required = self._aggregate_as_master_safe_amounts(amounts)
-        balances = self._get_master_safe_balances(required, service=service)
-
-        if balances < required:
-            raise InsufficientFundsException(
-                f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
-            )
-
         for chain_str, addresses in amounts.items():
             chain = Chain(chain_str)
             wallet = self.wallet_manager.load(chain.ledger_type)
@@ -1035,7 +1094,7 @@ class FundingManager:
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts, service=service)
+            self.fund_chain_amounts(amounts)
         finally:
             # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:

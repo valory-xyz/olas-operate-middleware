@@ -263,7 +263,12 @@ class TestRPCConfigBug:
             with patch("operate.services.funding_manager.drain_eoa"), patch(
                 "operate.services.funding_manager.get_asset_balance",
                 return_value=0,
-            ), patch("operate.services.funding_manager.transfer_erc20_from_eoa"):
+            ), patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=1,
+            ), patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ):
                 keys_manager.get_crypto_instance.return_value = Mock()
 
                 # Call drain_agents_eoas - this should use the service's custom RPC

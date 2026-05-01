@@ -1257,6 +1257,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={
                     "error": f"Failed to withdraw funds. Insufficient funds: {e}",
                     "transfer_txs": transfer_txs,
+                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -1655,7 +1656,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}"
+                    "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}",
+                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -1722,7 +1724,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}"
+                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}",
+                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )

@@ -59,6 +59,7 @@ from operate.serialization import BigInt
 from operate.services.service import Deployment
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_asset_balance
+from operate.wallet.master import InsufficientFundsException
 
 from tests.conftest import (
     OnTestnet,
@@ -66,6 +67,7 @@ from tests.conftest import (
     _get_service_template_trader,
     tenderly_add_balance,
     tenderly_increase_time,
+    tenderly_set_native_balance,
 )
 from tests.constants import LOGGER, OPERATE_TEST
 
@@ -269,6 +271,64 @@ class TestFunding(OnTestnet):
             url="/api/account/login",
             json={"password": password},
         )
+
+        # Prove the agent-EOA gas pre-check fires on a real
+        # gas-poor agent. Force one chain's agent EOAs into the
+        # "ERC20 balance + dust native" state and call drain_agents_eoas
+        # directly — bypasses the API's terminate_service_on_chain_from_safe
+        # leg (already executed above) and exercises the pre-check on real
+        # Tenderly state. The HTTP wrapping into INSUFFICIENT_SIGNER_GAS is
+        # covered by tests/test_funding_manager_unit2.py.
+        precheck_chain_str = next(iter(service.chain_configs))
+        precheck_chain = Chain(precheck_chain_str)
+        precheck_ledger_api = get_default_ledger_api(precheck_chain)
+        precheck_olas_amount = random.randint(int(100e6), int(200e6))  # nosec B311
+        for agent_address in service.agent_addresses:
+            tenderly_add_balance(
+                precheck_chain,
+                agent_address,
+                precheck_olas_amount,
+                OLAS[precheck_chain],
+            )
+            tenderly_set_native_balance(precheck_chain, agent_address, 1)
+            assert (
+                get_asset_balance(
+                    precheck_ledger_api, OLAS[precheck_chain], agent_address
+                )
+                >= precheck_olas_amount
+            )
+            assert (
+                get_asset_balance(precheck_ledger_api, ZERO_ADDRESS, agent_address) == 1
+            )
+
+        precheck_master_safe = operate.wallet_manager.load(
+            precheck_chain.ledger_type
+        ).safes[precheck_chain]
+        with pytest.raises(InsufficientFundsException) as exc_info:
+            operate.funding_manager.drain_agents_eoas(
+                service=service,
+                withdrawal_address=precheck_master_safe,
+                chain=precheck_chain,
+            )
+        assert exc_info.value.chain == precheck_chain_str
+        assert (
+            exc_info.value.to_error_fields()["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        )
+        for agent_address in service.agent_addresses:
+            # ERC20 balance untouched — nothing was drained.
+            assert (
+                get_asset_balance(
+                    precheck_ledger_api, OLAS[precheck_chain], agent_address
+                )
+                >= precheck_olas_amount
+            )
+            # Restore native gas so the happy-path withdraw below can proceed.
+            tenderly_add_balance(
+                precheck_chain,
+                agent_address,
+                AGENT_FUNDING_ASSETS[precheck_chain][ZERO_ADDRESS],
+            )
+
         terminate_response = client.post(
             url=f"/api/v2/service/{service_config_id}/terminate_and_withdraw",
         )
