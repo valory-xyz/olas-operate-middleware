@@ -541,9 +541,21 @@ def gas_fees_spent_in_tx(
     raise ChainInteractionError(f"Cannot fetch transaction receipt for {tx_hash}.")
 
 
-def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
-    """Estimate transfer transaction fee."""
-    ledger_api = get_default_ledger_api(chain)
+def estimate_transfer_tx_fee(
+    chain: Chain,
+    sender_address: str,
+    to: str,
+    ledger_api: t.Optional[LedgerApi] = None,
+) -> int:
+    """Estimate transfer transaction fee.
+
+    If ``ledger_api`` is provided, it is used for the gas estimation RPC
+    calls (this lets callers reuse a service-configured RPC instead of the
+    chain's default public endpoint). Otherwise, the chain's default ledger
+    API is used.
+    """
+    if ledger_api is None:
+        ledger_api = get_default_ledger_api(chain)
     tx = ledger_api.get_transfer_transaction(
         sender_address=sender_address,
         destination_address=to,
@@ -583,6 +595,7 @@ def drain_eoa(
             chain=chain,
             sender_address=crypto.address,
             to=withdrawal_address,
+            ledger_api=ledger_api,
         )
 
         amount = ledger_api.get_balance(crypto.address) - chain_fee

@@ -154,6 +154,7 @@ class FundingManager:
                     chain=chain,
                     sender_address=agent_address,
                     to=withdrawal_address,
+                    ledger_api=ledger_api,
                 )
                 # ERC20 transfers cost ~_ERC20_TRANSFER_GAS_MULTIPLIER × native;
                 # the trailing native drain itself costs one native transfer.
