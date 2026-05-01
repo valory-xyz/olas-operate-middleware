@@ -145,30 +145,49 @@ class FundingManager:
                 token_balances.append((token_address, token_balance))
 
             # Pre-check: agent EOA must hold enough native gas to pay for the
-            # pending ERC20 transfers. Without this, transfer_erc20_from_eoa
-            # would loop in TxSettler for 60 retries (~5 min) before timing
-            # out, and the user would see a generic 500 instead of the
-            # structured INSUFFICIENT_SIGNER_GAS error the frontend expects.
-            if token_balances:
-                native_balance = ledger_api.get_balance(agent_address)
-                native_transfer_fee = estimate_transfer_tx_fee(
-                    chain=chain,
-                    sender_address=agent_address,
-                    to=withdrawal_address,
-                )
-                required_gas = (
-                    native_transfer_fee
-                    * _ERC20_TRANSFER_GAS_MULTIPLIER
-                    * len(token_balances)
-                )
-                if native_balance < required_gas:
+            # pending ERC20 transfers AND the final native drain. Without this,
+            # transfer_erc20_from_eoa / drain_eoa would loop in TxSettler for
+            # 60 retries (~5 min) and the user would see a generic 500 instead
+            # of the structured INSUFFICIENT_SIGNER_GAS error the frontend
+            # expects (OPE-1513).
+            native_balance = ledger_api.get_balance(agent_address)
+            native_transfer_fee = estimate_transfer_tx_fee(
+                chain=chain,
+                sender_address=agent_address,
+                to=withdrawal_address,
+            )
+            # ERC20 transfers cost ~_ERC20_TRANSFER_GAS_MULTIPLIER × native;
+            # the trailing native drain itself costs one native transfer.
+            required_gas = (
+                native_transfer_fee
+                * _ERC20_TRANSFER_GAS_MULTIPLIER
+                * len(token_balances)
+                + native_transfer_fee
+            )
+
+            if native_balance < required_gas:
+                if token_balances:
+                    # The agent has real value to recover but no gas. Surface
+                    # INSUFFICIENT_SIGNER_GAS so Pearl can prompt the user to
+                    # top up the agent EOA before retrying.
                     raise InsufficientFundsException(
                         f"Agent EOA {agent_address} has insufficient "
                         f"{get_currency_denom(chain)} on chain {chain.name} to pay "
-                        f"gas for draining {len(token_balances)} ERC20 balance(s). "
-                        f"Balance: {native_balance}, required (approx): {required_gas}.",
+                        f"gas for draining {len(token_balances)} ERC20 balance(s) "
+                        f"and the native balance. Balance: {native_balance}, "
+                        f"required (approx): {required_gas}.",
                         chain=chain.value,
                     )
+                # No ERC20s to recover and the native balance is just dust
+                # (≤ tx fee). There is nothing meaningful to drain — skip
+                # quietly so the withdrawal completes instead of hanging in
+                # TxSettler retries on a tx that can never confirm.
+                self.logger.info(
+                    f"Skipping native drain from {agent_address} (agent EOA): "
+                    f"dust balance {native_balance} {get_currency_denom(chain)} "
+                    f"≤ estimated tx fee {native_transfer_fee}."
+                )
+                continue
 
             for token_address, token_balance in token_balances:
                 token_name = get_asset_name(chain, token_address)

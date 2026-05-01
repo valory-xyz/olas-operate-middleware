@@ -148,13 +148,14 @@ class TestDrainAgentsEOAs:
         mock_transfer_erc20.assert_called_once()
         mock_drain_eoa.assert_called_once()
 
-    def test_zero_erc20_balance_skips_transfer(self) -> None:
-        """drain_agents_eoas skips ERC20 transfer when token balance is zero."""
+    def test_zero_erc20_balance_drains_native(self) -> None:
+        """No ERC20s to drain, but native balance covers the tx fee → drain native."""
         manager = _make_manager()
         service = _mock_service()
 
         ledger_api = MagicMock()
-        ledger_api.get_balance.return_value = 500
+        # Native balance comfortably exceeds the estimated tx fee.
+        ledger_api.get_balance.return_value = 10_000
 
         with (
             patch(
@@ -170,6 +171,10 @@ class TestDrainAgentsEOAs:
                 return_value="USDC.e",
             ),
             patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=100,
+            ),
+            patch(
                 "operate.services.funding_manager.transfer_erc20_from_eoa"
             ) as mock_transfer_erc20,
             patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
@@ -182,6 +187,50 @@ class TestDrainAgentsEOAs:
 
         mock_transfer_erc20.assert_not_called()
         mock_drain_eoa.assert_called_once()
+
+    def test_dust_native_balance_skips_drain(self) -> None:
+        """No ERC20s and native balance is dust (≤ tx fee) → skip drain_eoa.
+
+        Without this, drain_eoa would loop in TxSettler for 60 retries on a
+        tx that can never confirm, surfacing as a generic 500 to the user.
+        """
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        # Dust balance, well below the estimated tx fee.
+        ledger_api.get_balance.return_value = 449_559
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=0,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=10_000_000_000_000_000,
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ) as mock_transfer_erc20,
+            patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        mock_transfer_erc20.assert_not_called()
+        mock_drain_eoa.assert_not_called()
 
     def test_insufficient_signer_gas_raises(self) -> None:
         """drain_agents_eoas raises InsufficientFundsException for OPE-1513.
