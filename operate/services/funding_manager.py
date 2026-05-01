@@ -62,10 +62,22 @@ from operate.serialization import BigInt
 from operate.services.protocol import EthSafeTxBuilder, StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
 from operate.utils import concurrent_execute
-from operate.utils.gnosis import drain_eoa, get_asset_balance, get_owners
+from operate.utils.gnosis import (
+    drain_eoa,
+    estimate_transfer_tx_fee,
+    get_asset_balance,
+    get_owners,
+)
 from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_eoa, transfer_erc20_from_safe
-from operate.wallet.master import MasterWalletManager
+from operate.utils.gnosis import (
+    transfer_erc20_from_eoa,
+    transfer_erc20_from_safe,
+)
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
+
+# An ERC20 `transfer` typically uses ~3x the gas of a native transfer.
+# Used to estimate the total native gas an EOA needs to drain its ERC20 balances.
+_ERC20_TRANSFER_GAS_MULTIPLIER = 3
 
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
@@ -118,20 +130,48 @@ class FundingManager:
         for agent_address in service.agent_addresses:
             ethereum_crypto = self.keys_manager.get_crypto_instance(agent_address)
 
+            token_balances: t.List[t.Tuple[str, BigInt]] = []
             for token_address in tokens:
                 token_balance = get_asset_balance(
                     ledger_api=ledger_api,
                     asset_address=token_address,
                     address=agent_address,
                 )
-                token_name = get_asset_name(chain, token_address)
-
                 if token_balance == 0:
                     self.logger.info(
-                        f"No {token_name} to drain from {agent_address} (agent EOA)"
+                        f"No {get_asset_name(chain, token_address)} to drain from {agent_address} (agent EOA)"
                     )
                     continue
+                token_balances.append((token_address, token_balance))
 
+            # Pre-check: agent EOA must hold enough native gas to pay for the
+            # pending ERC20 transfers. Without this, transfer_erc20_from_eoa
+            # would loop in TxSettler for 60 retries (~5 min) before timing
+            # out, and the user would see a generic 500 instead of the
+            # structured INSUFFICIENT_SIGNER_GAS error the frontend expects.
+            if token_balances:
+                native_balance = ledger_api.get_balance(agent_address)
+                native_transfer_fee = estimate_transfer_tx_fee(
+                    chain=chain,
+                    sender_address=agent_address,
+                    to=withdrawal_address,
+                )
+                required_gas = (
+                    native_transfer_fee
+                    * _ERC20_TRANSFER_GAS_MULTIPLIER
+                    * len(token_balances)
+                )
+                if native_balance < required_gas:
+                    raise InsufficientFundsException(
+                        f"Agent EOA {agent_address} has insufficient "
+                        f"{get_currency_denom(chain)} on chain {chain.name} to pay "
+                        f"gas for draining {len(token_balances)} ERC20 balance(s). "
+                        f"Balance: {native_balance}, required (approx): {required_gas}.",
+                        chain=chain.value,
+                    )
+
+            for token_address, token_balance in token_balances:
+                token_name = get_asset_name(chain, token_address)
                 self.logger.info(
                     f"Draining {token_balance} {token_name} from {agent_address} (agent EOA) to {withdrawal_address}"
                 )

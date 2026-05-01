@@ -131,6 +131,10 @@ class TestDrainAgentsEOAs:
                 return_value="USDC.e",
             ),
             patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=10,
+            ),
+            patch(
                 "operate.services.funding_manager.transfer_erc20_from_eoa"
             ) as mock_transfer_erc20,
             patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
@@ -178,6 +182,58 @@ class TestDrainAgentsEOAs:
 
         mock_transfer_erc20.assert_not_called()
         mock_drain_eoa.assert_called_once()
+
+    def test_insufficient_signer_gas_raises(self) -> None:
+        """drain_agents_eoas raises InsufficientFundsException for OPE-1513.
+
+        When the agent EOA has non-zero ERC20 balances but not enough native
+        gas to transfer them, surface the structured INSUFFICIENT_SIGNER_GAS
+        error the frontend expects, instead of a 60-retry TxSettler timeout.
+        """
+        from operate.wallet.master import InsufficientFundsException
+
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        # Agent EOA has only 1 wei of native — not enough for any ERC20 transfer.
+        ledger_api.get_balance.return_value = 1
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=100,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=10_000,
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ) as mock_transfer_erc20,
+            patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+            pytest.raises(InsufficientFundsException) as exc_info,
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        assert exc_info.value.chain == Chain.GNOSIS.value
+        assert (
+            exc_info.value.to_error_fields()["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        )
+        mock_transfer_erc20.assert_not_called()
+        mock_drain_eoa.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
