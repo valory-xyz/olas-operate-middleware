@@ -228,7 +228,7 @@ def tenderly_set_native_balance(chain: Chain, recipient: str, amount: int) -> No
     data = {
         "jsonrpc": "2.0",
         "method": "tenderly_setBalance",
-        "params": [recipient, hex(amount)],
+        "params": [[recipient], hex(amount)],
         "id": "1",
     }
     response = requests.post(
