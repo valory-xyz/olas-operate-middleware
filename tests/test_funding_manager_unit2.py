@@ -284,6 +284,188 @@ class TestDrainAgentsEOAs:
         mock_transfer_erc20.assert_not_called()
         mock_drain_eoa.assert_not_called()
 
+    def test_estimate_fee_insufficient_funds_treated_as_short_gas(self) -> None:
+        """estimate_transfer_tx_fee can itself fail with 'insufficient funds'.
+
+        When the EOA cannot even pay for the eth_estimateGas dry-run, the
+        Web3RPCError is treated as proof of the insufficient-gas state and
+        surfaced as INSUFFICIENT_SIGNER_GAS instead of bubbling up as a 500.
+        """
+        from web3.exceptions import Web3RPCError
+
+        from operate.wallet.master import InsufficientFundsException
+
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 1
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=100,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                side_effect=Web3RPCError(
+                    {"code": 3, "message": "insufficient funds for gas * price + value"}
+                ),
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ) as mock_transfer_erc20,
+            patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+            pytest.raises(InsufficientFundsException) as exc_info,
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        assert exc_info.value.chain == Chain.GNOSIS.value
+        mock_transfer_erc20.assert_not_called()
+        mock_drain_eoa.assert_not_called()
+
+    def test_zero_estimate_treated_as_short_gas(self) -> None:
+        """A zero fee estimate (silent eth_estimateGas failure) is treated as short gas.
+
+        update_with_gas_estimate(raise_on_try=False) inside
+        estimate_transfer_tx_fee leaves tx['gas']=0 when the dry-run cannot run
+        (e.g. EOA cannot pay for gas), so the function returns 0. We must
+        recognise that signal instead of incorrectly concluding gas is enough.
+        """
+        from operate.wallet.master import InsufficientFundsException
+
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 1
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=100,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=0,
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_eoa"
+            ) as mock_transfer_erc20,
+            patch("operate.services.funding_manager.drain_eoa") as mock_drain_eoa,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+            pytest.raises(InsufficientFundsException),
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        mock_transfer_erc20.assert_not_called()
+        mock_drain_eoa.assert_not_called()
+
+    def test_estimate_fee_chain_interaction_error_treated_as_short_gas(self) -> None:
+        """Recognise insufficient-funds wrapped in ChainInteractionError.
+
+        autonomy.chain.tx wraps Web3RPCError into ChainInteractionError, so the
+        pre-check must recognise both flavours.
+        """
+        from autonomy.chain.exceptions import ChainInteractionError
+
+        from operate.wallet.master import InsufficientFundsException
+
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 1
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=100,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                side_effect=ChainInteractionError(
+                    "{'code': 3, 'message': 'insufficient funds for gas * price + value'}"
+                ),
+            ),
+            patch("operate.services.funding_manager.transfer_erc20_from_eoa"),
+            patch("operate.services.funding_manager.drain_eoa"),
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+            pytest.raises(InsufficientFundsException),
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+    def test_estimate_fee_other_rpc_errors_propagate(self) -> None:
+        """Web3RPCError unrelated to insufficient-funds must propagate."""
+        from web3.exceptions import Web3RPCError
+
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 1
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=100,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="USDC.e",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                side_effect=Web3RPCError({"code": -32000, "message": "nonce too low"}),
+            ),
+            patch("operate.services.funding_manager.transfer_erc20_from_eoa"),
+            patch("operate.services.funding_manager.drain_eoa"),
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+            pytest.raises(Web3RPCError),
+        ):
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
 
 # ---------------------------------------------------------------------------
 # Tests for drain_service_safe (lines 133-248)

@@ -31,7 +31,9 @@ from time import time
 from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
+from autonomy.chain.exceptions import ChainInteractionError
 from web3 import Web3
+from web3.exceptions import Web3RPCError
 
 from operate.constants import (
     DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
@@ -147,21 +149,38 @@ class FundingManager:
             # Pre-check: agent EOA must hold enough native gas to pay for the
             # pending ERC20 transfers AND the final native drain.
             native_balance = ledger_api.get_balance(agent_address)
-            native_transfer_fee = estimate_transfer_tx_fee(
-                chain=chain,
-                sender_address=agent_address,
-                to=withdrawal_address,
-            )
-            # ERC20 transfers cost ~_ERC20_TRANSFER_GAS_MULTIPLIER × native;
-            # the trailing native drain itself costs one native transfer.
-            required_gas = (
-                native_transfer_fee
-                * _ERC20_TRANSFER_GAS_MULTIPLIER
-                * len(token_balances)
-                + native_transfer_fee
-            )
+            try:
+                native_transfer_fee = estimate_transfer_tx_fee(
+                    chain=chain,
+                    sender_address=agent_address,
+                    to=withdrawal_address,
+                )
+                # ERC20 transfers cost ~_ERC20_TRANSFER_GAS_MULTIPLIER × native;
+                # the trailing native drain itself costs one native transfer.
+                required_gas = (
+                    native_transfer_fee
+                    * _ERC20_TRANSFER_GAS_MULTIPLIER
+                    * len(token_balances)
+                    + native_transfer_fee
+                )
+                # update_with_gas_estimate inside estimate_transfer_tx_fee
+                # uses raise_on_try=False, so a failed eth_estimateGas leaves
+                # tx['gas']=0 → fee=0. Treat that as proof of insufficient gas.
+                gas_insufficient = (
+                    native_transfer_fee == 0 or native_balance < required_gas
+                )
+            except (Web3RPCError, ChainInteractionError) as e:
+                # The estimate itself can fail with "insufficient funds for
+                # gas * price + value" when the EOA cannot even pay for the
+                # eth_estimateGas dry-run — that's already proof the EOA is
+                # too gas-poor to drain anything.
+                if "insufficient funds" not in str(e).lower():
+                    raise
+                native_transfer_fee = 0
+                required_gas = 0
+                gas_insufficient = True
 
-            if native_balance < required_gas:
+            if gas_insufficient:
                 if token_balances:
                     raise InsufficientFundsException(
                         f"Agent EOA {agent_address} has insufficient "
