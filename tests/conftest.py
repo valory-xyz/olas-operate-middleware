@@ -221,6 +221,22 @@ def tenderly_add_balance(
     response.raise_for_status()
 
 
+def tenderly_set_native_balance(chain: Chain, recipient: str, amount: int) -> None:
+    """Set the native balance of an address to an exact amount via Tenderly."""
+    rpc = get_default_rpc(chain)
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "jsonrpc": "2.0",
+        "method": "tenderly_setBalance",
+        "params": [recipient, hex(amount)],
+        "id": "1",
+    }
+    response = requests.post(
+        url=rpc, headers=headers, data=json.dumps(data), timeout=60
+    )
+    response.raise_for_status()
+
+
 def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
     """tenderly_increase_time"""
     rpc = get_default_rpc(chain)

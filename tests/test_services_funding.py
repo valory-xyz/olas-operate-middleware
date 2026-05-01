@@ -66,6 +66,7 @@ from tests.conftest import (
     _get_service_template_trader,
     tenderly_add_balance,
     tenderly_increase_time,
+    tenderly_set_native_balance,
 )
 from tests.constants import LOGGER, OPERATE_TEST
 
@@ -296,6 +297,79 @@ class TestFunding(OnTestnet):
             service_safe_address = chain_config.chain_data.multisig
             for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
                 assert get_asset_balance(ledger_api, asset, service_safe_address) == 0
+
+    def test_terminate_withdraw_insufficient_signer_gas(
+        self,
+        test_env: OperateTestEnv,
+    ) -> None:
+        """Terminate-and-withdraw must surface INSUFFICIENT_SIGNER_GAS (OPE-1513).
+
+        Reproduces the QA scenario where the agent EOA holds an ERC20 balance
+        but its native gas balance is dust. Without the pre-check in
+        FundingManager.drain_agents_eoas, transfer_erc20_from_eoa would loop in
+        TxSettler for 60 retries and return a generic 500. With the pre-check,
+        the API must return 400 with error_code=INSUFFICIENT_SIGNER_GAS so
+        Pearl can prompt the user to top up the agent EOA.
+        """
+        password = test_env.password
+        operate = test_env.operate
+        operate.password = password
+
+        service_manager = operate.service_manager()
+        services, _ = service_manager.get_all_services()
+
+        service_config_id = None
+        for service in services:
+            if "trader" in service.name.lower():
+                service_config_id = service.service_config_id
+                break
+        assert service_config_id is not None
+
+        service_manager.deploy_service_onchain_from_safe(
+            service_config_id=service_config_id
+        )
+        service = service_manager.load(service_config_id=service_config_id)
+
+        # Pick the first chain to drive the failure on; the API aborts on the
+        # first chain that raises, which is enough to assert the error shape.
+        target_chain_str = next(iter(service.chain_configs))
+        target_chain = Chain(target_chain_str)
+        ledger_api = get_default_ledger_api(target_chain)
+
+        # Force the failure mode on every agent EOA on this chain:
+        #   - leave a real ERC20 balance behind so there is value to recover,
+        #   - drop the native balance to dust so gas is unaffordable.
+        olas_amount = random.randint(int(100e6), int(200e6))  # nosec B311
+        for agent_address in service.agent_addresses:
+            tenderly_add_balance(
+                target_chain, agent_address, olas_amount, OLAS[target_chain]
+            )
+            tenderly_set_native_balance(target_chain, agent_address, 1)
+            assert (
+                get_asset_balance(ledger_api, OLAS[target_chain], agent_address)
+                >= olas_amount
+            )
+            assert get_asset_balance(ledger_api, ZERO_ADDRESS, agent_address) == 1
+
+        app = create_app(home=operate._path)
+        client = TestClient(app)
+        client.post(url="/api/account/login", json={"password": password})
+
+        response = client.post(
+            url=f"/api/v2/service/{service_config_id}/terminate_and_withdraw",
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        body = response.json()
+        assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        assert body["chain"] == target_chain_str
+        assert "prefill_amount_wei" in body
+        # ERC20 balances must remain intact — nothing was drained.
+        for agent_address in service.agent_addresses:
+            assert (
+                get_asset_balance(ledger_api, OLAS[target_chain], agent_address)
+                >= olas_amount
+            )
 
     def test_service_fund(
         self,
