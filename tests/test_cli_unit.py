@@ -2591,6 +2591,58 @@ class TestCliCommands:
 
         mock_server.run.assert_called_once()
 
+    def test_daemon_sets_windows_selector_event_loop_policy(self) -> None:
+        """On Windows, _daemon sets WindowsSelectorEventLoopPolicy before starting the server.
+
+        Patching sys and asyncio inside operate.cli lets us simulate win32 on
+        any CI OS without the class needing to actually exist at runtime.
+        """
+        fn = self._get_callback("_daemon")
+        assert fn is not None
+
+        with (
+            patch("operate.cli.create_app") as mock_create_app,
+            patch("operate.cli.Server") as mock_server_cls,
+            patch("operate.cli.Config") as mock_config_cls,
+            patch("operate.cli.AppSingleInstance"),
+            patch("operate.cli.sys") as mock_sys,
+            patch("operate.cli.asyncio") as mock_asyncio,
+        ):
+            mock_sys.platform = "win32"
+            mock_create_app.return_value = MagicMock()
+            mock_server_cls.return_value = MagicMock()
+            mock_config_cls.return_value = MagicMock()
+
+            fn(host="localhost", port=8000, ssl_keyfile="", ssl_certfile="", home=None)
+
+        # WindowsSelectorEventLoopPolicy() was instantiated and passed to set_event_loop_policy
+        mock_asyncio.WindowsSelectorEventLoopPolicy.assert_called_once_with()
+        mock_asyncio.set_event_loop_policy.assert_called_once_with(
+            mock_asyncio.WindowsSelectorEventLoopPolicy.return_value
+        )
+
+    def test_daemon_no_event_loop_policy_change_on_non_windows(self) -> None:
+        """On non-Windows, _daemon must not alter the event loop policy."""
+        fn = self._get_callback("_daemon")
+        assert fn is not None
+
+        with (
+            patch("operate.cli.create_app") as mock_create_app,
+            patch("operate.cli.Server") as mock_server_cls,
+            patch("operate.cli.Config") as mock_config_cls,
+            patch("operate.cli.AppSingleInstance"),
+            patch("operate.cli.sys") as mock_sys,
+            patch("operate.cli.asyncio") as mock_asyncio,
+        ):
+            mock_sys.platform = "linux"
+            mock_create_app.return_value = MagicMock()
+            mock_server_cls.return_value = MagicMock()
+            mock_config_cls.return_value = MagicMock()
+
+            fn(host="localhost", port=8000, ssl_keyfile="", ssl_certfile="", home=None)
+
+        mock_asyncio.set_event_loop_policy.assert_not_called()
+
     def test_qs_start_command_body(self) -> None:
         """Cover lines 1840-1843: qs_start body."""
         fn = self._get_callback("qs_start")
