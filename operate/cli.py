@@ -2140,6 +2140,18 @@ def _daemon(
             }
         )
 
+    # On Windows, the default ProactorEventLoop raises WSAECONNRESET(10054)
+    # whenever the Electron frontend closes an inbound localhost connection
+    # (page navigation, React Query refetch, AbortController on unmount).
+    # This produces thousands of misleading log lines that are asyncio
+    # teardown noise, not outbound RPC failures. SelectorEventLoop matches
+    # the POSIX behaviour and swallows the same event silently.
+    # No tradeoff: operate/ uses only blocking subprocess.Popen throughout,
+    # so the asyncio subprocess limitation of SelectorEventLoop on Windows
+    # does not apply.
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
     server.run()
