@@ -1016,6 +1016,35 @@ class TestDrainEoa:
                     chain_id=100,
                 )
 
+    def test_drain_eoa_raises_after_max_retries_on_gas_error(self) -> None:
+        """drain_eoa raises ChainInteractionError after all 3 attempts fail with -32000."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+
+        gas_error = ChainInteractionError(
+            "-32000 insufficient MaxFeePerGas for sender balance"
+        )
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.side_effect = gas_error
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(
+                ChainInteractionError, match="insufficient funds for gas"
+            ):
+                drain_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    withdrawal_address="0xWithdrawal",
+                    chain_id=100,
+                )
+
+        # Should have attempted exactly 3 times
+        assert mock_txsettler_cls.return_value.transact.call_count == 3
+
 
 # ---------------------------------------------------------------------------
 # Helper: a fake TxSettler class that actually calls tx_builder during transact()

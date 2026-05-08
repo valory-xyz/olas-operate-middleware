@@ -1859,6 +1859,128 @@ class TestMigrateFormatAddsCanonicalBackupOwner:
         assert result["canonical_backup_owner"] is None
 
 
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – _transfer_from_eoa drain-mode retry (OPE-1677)
+# ---------------------------------------------------------------------------
+
+
+class TestTransferFromEoaDrainModeRetry:
+    """Tests for the drain-mode retry logic in _transfer_from_eoa (OPE-1677)."""
+
+    def test_drain_mode_retries_on_rpc_rejection_succeeds(self, tmp_path: Path) -> None:
+        """Retry loop succeeds on the third attempt when first two raise -32000."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+        mock_api.get_transfer_transaction.return_value = {"tx": "data"}
+        mock_api.update_with_gas_estimate.return_value = {"tx": "updated"}
+
+        rpc_error = ValueError("-32000 insufficient MaxFeePerGas for sender balance")
+        success_settler = MagicMock()
+        success_settler.transact.return_value = success_settler
+        success_settler.settle.return_value = success_settler
+        success_settler.tx_hash = "0xsuccesshash"
+
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = rpc_error
+
+        # Attempts 1 and 2 fail; attempt 3 succeeds
+        settler_instances = [fail_settler, fail_settler, success_settler]
+        settler_call_count = iter(settler_instances)
+
+        def settler_factory(**_kwargs: t.Any) -> MagicMock:
+            return next(settler_call_count)
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", side_effect=settler_factory),
+        ):
+            # balance=1_000_000, fee=100_000 → drain mode (amount=1_000_000)
+            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                SAFE_ADDR, 1_000_000, Chain.GNOSIS
+            )
+
+        assert result == "0xsuccesshash"
+
+    def test_drain_mode_raises_insufficient_funds_after_all_retries_fail(
+        self, tmp_path: Path
+    ) -> None:
+        """InsufficientFundsException is raised after all 3 drain-mode attempts fail."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+
+        rpc_error = ValueError("-32000 insufficient MaxFeePerGas for sender balance")
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = rpc_error
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", return_value=fail_settler),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 1_000_000, Chain.GNOSIS
+                )
+
+        assert exc_info.value.chain == Chain.GNOSIS.value
+        assert (
+            exc_info.value.to_error_fields()["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        )
+
+    def test_drain_mode_reraises_unrelated_exception(self, tmp_path: Path) -> None:
+        """An unrelated exception propagates immediately without retrying."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+
+        unrelated_error = RuntimeError("unexpected network timeout")
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = unrelated_error
+
+        call_count = {"n": 0}
+
+        def counting_factory(**_kwargs: t.Any) -> MagicMock:
+            call_count["n"] += 1
+            return fail_settler
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", side_effect=counting_factory),
+        ):
+            with pytest.raises(RuntimeError, match="unexpected network timeout"):
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 1_000_000, Chain.GNOSIS
+                )
+
+        # Must not have retried — only one attempt before re-raise
+        assert call_count["n"] == 1
+
+
 class TestInsufficientFundsException:
     """Unit tests for InsufficientFundsException.to_error_fields()."""
 
