@@ -1913,7 +1913,7 @@ class TestTransferFromEoaDrainModeRetry:
     def test_drain_mode_raises_insufficient_funds_after_all_retries_fail(
         self, tmp_path: Path
     ) -> None:
-        """InsufficientFundsException is raised after all 3 drain-mode attempts fail."""
+        """Test that InsufficientFundsException is raised after all 3 drain-mode retries fail."""
         wallet = _make_wallet(tmp_path)
         crypto_mock = MagicMock()
         crypto_mock.address = EOA_ADDR
