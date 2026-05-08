@@ -342,67 +342,20 @@ class EthereumMasterWallet(
 
         return to
 
-    def _transfer_from_eoa(
-        self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
+    def _drain_eoa_with_retry(
+        self,
+        to: str,
+        chain: Chain,
+        ledger_api: EthereumApi,
+        balance: int,
     ) -> t.Optional[str]:
-        """Transfer funds from EOA wallet."""
-        balance = self.get_balance(chain=chain, from_safe=False)
-        tx_fee = estimate_transfer_tx_fee(
-            chain=chain, sender_address=self.address, to=to
-        )
-        is_drain_mode = balance - tx_fee <= amount <= balance
-        if is_drain_mode:
-            # we assume that the user wants to drain the EOA
-            # we also account for dust here because withdraw call use some EOA balance to drain the safes first
-            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
-            if amount <= 0:
-                logger.warning(
-                    f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
-                    f"Balance is {balance}, estimated fee is {tx_fee}. Not transferring."
-                )
-                return None
+        """Drain EOA to `to` with EIP-1559 gas spike retry logic.
 
-        to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=False
-        )
-
-        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
-
-        if not is_drain_mode:
-
-            def _build_tx() -> t.Dict:
-                """Build transaction"""
-                tx = ledger_api.get_transfer_transaction(
-                    sender_address=self.crypto.address,
-                    destination_address=to,
-                    amount=amount,
-                    tx_fee=0,
-                    tx_nonce="0x",
-                    chain_id=chain.id,
-                    raise_on_try=True,
-                )
-                return ledger_api.update_with_gas_estimate(
-                    transaction=tx,
-                    raise_on_try=True,
-                )
-
-            return (
-                TxSettler(
-                    ledger_api=ledger_api,
-                    crypto=self.crypto,
-                    chain_type=chain,
-                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                    retries=ON_CHAIN_INTERACT_RETRIES,
-                    sleep=ON_CHAIN_INTERACT_SLEEP,
-                    tx_builder=_build_tx,
-                )
-                .transact()
-                .settle()
-                .tx_hash
-            )
-
-        # Drain mode: retry with increasing gas buffer to handle EIP-1559 gas spikes
-        # between fee estimation (T0) and transaction broadcast (T1).
+        Re-estimates the fee on each attempt and widens the gas buffer by
+        EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP if the RPC rejects with an
+        insufficient-MaxFeePerGas error (-32000).  Raises
+        InsufficientFundsException after all retries are exhausted.
+        """
         _max_retries: int = 3
         multiplier = DEFAULT_GAS_ESTIMATE_MULTIPLIER
         for _attempt in range(_max_retries):
@@ -455,6 +408,68 @@ class EthereumMasterWallet(
             f"Cannot drain EOA {self.address} on {chain.name}: "
             f"insufficient funds for gas after {_max_retries} attempts.",
             chain=chain.value,
+        )
+
+    def _transfer_from_eoa(
+        self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
+    ) -> t.Optional[str]:
+        """Transfer funds from EOA wallet."""
+        balance = self.get_balance(chain=chain, from_safe=False)
+        tx_fee = estimate_transfer_tx_fee(
+            chain=chain, sender_address=self.address, to=to
+        )
+        is_drain_mode = balance - tx_fee <= amount <= balance
+        if is_drain_mode:
+            # we assume that the user wants to drain the EOA
+            # we also account for dust here because withdraw call use some EOA balance to drain the safes first
+            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
+            if amount <= 0:
+                logger.warning(
+                    f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
+                    f"Balance is {balance}, estimated fee is {tx_fee}. Not transferring."
+                )
+                return None
+
+        to = self._pre_transfer_checks(
+            to=to, amount=amount, chain=chain, from_safe=False
+        )
+
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+
+        if is_drain_mode:
+            return self._drain_eoa_with_retry(
+                to=to, chain=chain, ledger_api=ledger_api, balance=balance
+            )
+
+        def _build_tx() -> t.Dict:
+            """Build transaction"""
+            tx = ledger_api.get_transfer_transaction(
+                sender_address=self.crypto.address,
+                destination_address=to,
+                amount=amount,
+                tx_fee=0,
+                tx_nonce="0x",
+                chain_id=chain.id,
+                raise_on_try=True,
+            )
+            return ledger_api.update_with_gas_estimate(
+                transaction=tx,
+                raise_on_try=True,
+            )
+
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def _transfer_from_safe(
