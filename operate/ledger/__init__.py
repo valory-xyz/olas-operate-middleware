@@ -156,6 +156,7 @@ GAS_ESTIMATE_FALLBACK_ADDRESSES = [
     "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
 ]
 DEFAULT_GAS_ESTIMATE_MULTIPLIER = 1.10
+EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP = 0.40
 
 
 # TODO backport to open aea/autonomy

@@ -39,6 +39,8 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import (
+    DEFAULT_GAS_ESTIMATE_MULTIPLIER,
+    EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP,
     get_default_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
@@ -589,65 +591,82 @@ def drain_eoa(
     """Drain all the native tokens from the crypto wallet."""
     chain = Chain.from_id(chain_id)
 
-    def _build_tx() -> t.Dict:
-        """Build transaction"""
-        chain_fee = estimate_transfer_tx_fee(
-            chain=chain,
-            sender_address=crypto.address,
-            to=withdrawal_address,
-            ledger_api=ledger_api,
-        )
+    # Retry with increasing gas buffer to handle EIP-1559 gas spikes
+    # between fee estimation and transaction broadcast.
+    _max_retries: int = 3
+    multiplier = DEFAULT_GAS_ESTIMATE_MULTIPLIER
+    for _attempt in range(_max_retries):
 
-        amount = ledger_api.get_balance(crypto.address) - chain_fee
-        if amount <= 0:
-            raise ChainInteractionError(
-                f"No balance to drain from wallet: {crypto.address}"
-            )
-
-        tx = ledger_api.get_transfer_transaction(
-            sender_address=crypto.address,
-            destination_address=withdrawal_address,
-            amount=amount,
-            tx_fee=0,
-            tx_nonce="0x",
-            chain_id=chain_id,
-            raise_on_try=True,
-        )
-        empty_tx = tx.copy()
-        empty_tx["value"] = 0
-        empty_tx = ledger_api.update_with_gas_estimate(
-            transaction=empty_tx,
-            raise_on_try=False,
-        )
-        tx["gas"] = empty_tx["gas"]
-
-        logger.info(
-            f"Draining {tx['value']} native units from wallet: {crypto.address}"
-        )
-
-        return tx
-
-    try:
-        return (
-            TxSettler(
+        def _build_tx(_mult: float = multiplier) -> t.Dict:
+            """Build transaction"""
+            chain_fee = estimate_transfer_tx_fee(
+                chain=chain,
+                sender_address=crypto.address,
+                to=withdrawal_address,
                 ledger_api=ledger_api,
-                crypto=crypto,
-                chain_type=chain,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-                tx_builder=_build_tx,
             )
-            .transact()
-            .settle()
-            .tx_hash
-        )
-    except ChainInteractionError as e:
-        if "No balance to drain from wallet" in str(e):
-            logger.warning(f"Failed to drain wallet {crypto.address} with error: {e}.")
-            return None
 
-        raise e
+            amount = ledger_api.get_balance(crypto.address) - int(chain_fee * _mult)
+            if amount <= 0:
+                raise ChainInteractionError(
+                    f"No balance to drain from wallet: {crypto.address}"
+                )
+
+            tx = ledger_api.get_transfer_transaction(
+                sender_address=crypto.address,
+                destination_address=withdrawal_address,
+                amount=amount,
+                tx_fee=0,
+                tx_nonce="0x",
+                chain_id=chain_id,
+                raise_on_try=True,
+            )
+            empty_tx = tx.copy()
+            empty_tx["value"] = 0
+            empty_tx = ledger_api.update_with_gas_estimate(
+                transaction=empty_tx,
+                raise_on_try=False,
+            )
+            tx["gas"] = empty_tx["gas"]
+
+            logger.info(
+                f"Draining {tx['value']} native units from wallet: {crypto.address}"
+            )
+
+            return tx
+
+        try:
+            return (
+                TxSettler(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    chain_type=chain,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=_build_tx,
+                )
+                .transact()
+                .settle()
+                .tx_hash
+            )
+        except ChainInteractionError as e:
+            if "No balance to drain from wallet" in str(e):
+                logger.warning(
+                    f"Failed to drain wallet {crypto.address} with error: {e}."
+                )
+                return None
+
+            err_str = str(e)
+            if "-32000" not in err_str and "insufficient" not in err_str.lower():
+                raise
+
+            multiplier += EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP
+
+    raise ChainInteractionError(
+        f"Failed to drain EOA {crypto.address} on chain {chain.name}: "
+        f"insufficient funds for gas after {_max_retries} attempts."
+    )
 
 
 def get_asset_balance(
