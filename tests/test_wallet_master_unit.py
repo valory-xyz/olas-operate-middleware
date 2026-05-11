@@ -1900,7 +1900,9 @@ class TestTransferFromEoaDrainModeRetry:
                 "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
             ),
             patch.object(wallet, "ledger_api", return_value=mock_api),
-            patch("operate.wallet.master.TxSettler", side_effect=settler_factory),
+            patch(
+                "operate.wallet.master.TxSettler", side_effect=settler_factory
+            ) as mock_settler_cls,
         ):
             # balance=1_000_000, fee=100_000 → drain mode (amount=1_000_000)
             result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
@@ -1908,10 +1910,10 @@ class TestTransferFromEoaDrainModeRetry:
             )
 
         assert result == "0xsuccesshash"
-        # estimate_transfer_tx_fee called once per attempt (3 total)
+        # TxSettler constructed once per retry attempt (3 total)
         assert (
-            mock_api.get_transfer_transaction.call_count == 3
-        ), "Expected 3 fee estimation calls (one per retry attempt)"
+            mock_settler_cls.call_count == 3
+        ), "Expected 3 TxSettler constructions (one per retry attempt)"
 
     def test_drain_mode_raises_insufficient_funds_after_all_retries_fail(
         self, tmp_path: Path
@@ -1947,7 +1949,7 @@ class TestTransferFromEoaDrainModeRetry:
         )
 
     def test_drain_mode_reraises_unrelated_exception(self, tmp_path: Path) -> None:
-        """An unrelated exception propagates immediately without retrying."""
+        """A non-gas ValueError propagates immediately without retrying."""
         wallet = _make_wallet(tmp_path)
         crypto_mock = MagicMock()
         crypto_mock.address = EOA_ADDR
@@ -1955,7 +1957,9 @@ class TestTransferFromEoaDrainModeRetry:
 
         mock_api = MagicMock()
 
-        unrelated_error = RuntimeError("unexpected network timeout")
+        # Use ValueError (caught by the except block) with a non-gas message
+        # so the is_gas_error check is False and line 400 (raise) is hit.
+        unrelated_error = ValueError("unexpected network timeout")
         fail_settler = MagicMock()
         fail_settler.transact.side_effect = unrelated_error
 
@@ -1973,7 +1977,7 @@ class TestTransferFromEoaDrainModeRetry:
             patch.object(wallet, "ledger_api", return_value=mock_api),
             patch("operate.wallet.master.TxSettler", side_effect=counting_factory),
         ):
-            with pytest.raises(RuntimeError, match="unexpected network timeout"):
+            with pytest.raises(ValueError, match="unexpected network timeout"):
                 wallet._transfer_from_eoa(  # pylint: disable=protected-access
                     SAFE_ADDR, 1_000_000, Chain.GNOSIS
                 )
