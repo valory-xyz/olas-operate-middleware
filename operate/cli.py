@@ -2103,6 +2103,40 @@ def _operate() -> None:
     logger.info(f"Operate version: {__version__}")  # pragma: no cover
 
 
+class _SelectorLoopServer(Server):
+    """uvicorn Server that runs serve() on a SelectorEventLoop.
+
+    Used on Windows to avoid the default ProactorEventLoop, which raises
+    WSAECONNRESET(10054) whenever the Electron frontend closes an inbound
+    localhost connection (page navigation, React Query refetch,
+    AbortController on unmount). That produces thousands of misleading log
+    lines that are asyncio teardown noise, not outbound RPC failures.
+    SelectorEventLoop matches POSIX behaviour and swallows the same event
+    silently. operate/ uses only blocking subprocess.Popen, so
+    SelectorEventLoop's lack of asyncio subprocess support on Windows does
+    not apply.
+
+    Bypasses uvicorn's default ``setup_event_loop()`` (which would otherwise
+    leave the Proactor policy in place) and ``asyncio.run()`` (which builds
+    its own loop from the current policy). Keeping the loop choice in this
+    Server subclass instead of mutating the global event-loop policy avoids
+    the deprecation of ``asyncio.WindowsSelectorEventLoopPolicy`` in Python
+    3.14+.
+    """
+
+    def run(self, sockets: t.Optional[t.List[t.Any]] = None) -> None:
+        loop = asyncio.SelectorEventLoop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.serve(sockets=sockets))
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
+
+
 @_operate.command(name="daemon")
 def _daemon(
     host: Annotated[str, params.String(help="HTTP server host string")] = "localhost",
@@ -2140,19 +2174,9 @@ def _daemon(
             }
         )
 
-    # On Windows, the default ProactorEventLoop raises WSAECONNRESET(10054)
-    # whenever the Electron frontend closes an inbound localhost connection
-    # (page navigation, React Query refetch, AbortController on unmount).
-    # This produces thousands of misleading log lines that are asyncio
-    # teardown noise, not outbound RPC failures. SelectorEventLoop matches
-    # the POSIX behaviour and swallows the same event silently.
-    # No tradeoff: operate/ uses only blocking subprocess.Popen throughout,
-    # so the asyncio subprocess limitation of SelectorEventLoop on Windows
-    # does not apply.
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    server = Server(Config(**config_kwargs))
+    # On Windows, swap in _SelectorLoopServer (see its docstring for why).
+    server_cls = _SelectorLoopServer if sys.platform == "win32" else Server
+    server = server_cls(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
     server.run()
 
