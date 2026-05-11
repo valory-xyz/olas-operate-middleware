@@ -26,6 +26,7 @@ import pytest
 from autonomy.chain.exceptions import ChainInteractionError
 
 from operate.constants import ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
@@ -1018,10 +1019,6 @@ class TestDrainEoa:
 
     def test_drain_eoa_raises_after_max_retries_on_gas_error(self) -> None:
         """drain_eoa raises InsufficientFundsException after all 3 attempts fail with -32000."""
-        from operate.wallet.master import (
-            InsufficientFundsException,  # pylint: disable=import-outside-toplevel
-        )
-
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
         mock_crypto.address = "0xWalletAddr"
@@ -1122,10 +1119,6 @@ class TestDrainEoa:
                 return_value=100_000,
             ),
         ):
-            from operate.wallet.master import (
-                InsufficientFundsException,  # pylint: disable=import-outside-toplevel
-            )
-
             with pytest.raises(InsufficientFundsException):
                 drain_eoa(
                     ledger_api=mock_ledger,

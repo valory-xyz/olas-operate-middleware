@@ -38,6 +38,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP,
@@ -74,30 +75,6 @@ from operate.utils.gnosis import (
 )
 
 logger = setup_logger(name="master_wallet")
-
-
-# TODO Organize exceptions definition
-class InsufficientFundsException(Exception):
-    """Insufficient funds exception carrying the chain where gas is missing."""
-
-    def __init__(self, msg: str, chain: str) -> None:
-        """Initialise with message and the chain where gas was insufficient."""
-        super().__init__(msg, chain)
-        self.chain = chain
-
-    def __str__(self) -> str:
-        """Return only the human-readable message, not the full args tuple."""
-        return self.args[0]
-
-    def to_error_fields(self) -> t.Dict:
-        """Return structured error fields for merging into a JSONResponse body."""
-        return {
-            "error_code": "INSUFFICIENT_SIGNER_GAS",
-            "chain": self.chain,
-            "prefill_amount_wei": str(
-                DEFAULT_EOA_TOPUPS[Chain(self.chain)][ZERO_ADDRESS]
-            ),
-        }
 
 
 class MasterWallet(LocalResource):
@@ -382,7 +359,7 @@ class EthereumMasterWallet(
                 tx = ledger_api.get_transfer_transaction(
                     sender_address=self.crypto.address,
                     destination_address=to,
-                    amount=drain_amount,  # noqa: B023
+                    amount=drain_amount,  # noqa: B023  # pylint: disable=cell-var-from-loop
                     tx_fee=0,
                     tx_nonce="0x",
                     chain_id=chain.id,

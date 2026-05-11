@@ -38,6 +38,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP,
@@ -589,11 +590,6 @@ def drain_eoa(
     chain_id: int,
 ) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
-    # Late import to avoid circular dependency with operate.wallet.master.
-    from operate.wallet.master import (
-        InsufficientFundsException,  # pylint: disable=import-outside-toplevel
-    )
-
     chain = Chain.from_id(chain_id)
 
     # Retry with increasing gas buffer to handle EIP-1559 gas spikes
@@ -613,7 +609,8 @@ def drain_eoa(
             )
 
             amount = ledger_api.get_balance(crypto.address) - int(
-                chain_fee * multiplier  # noqa: B023
+                chain_fee
+                * multiplier  # noqa: B023  # pylint: disable=cell-var-from-loop
             )
             if amount <= 0:
                 raise ChainInteractionError(
