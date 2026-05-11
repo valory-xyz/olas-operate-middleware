@@ -43,6 +43,7 @@ from operate.ledger import (
     DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP,
     get_default_ledger_api,
+    is_gas_spike_error,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
@@ -386,17 +387,7 @@ class EthereumMasterWallet(
                 )
             except (ValueError, ChainInteractionError) as exc:
                 last_exc = exc
-                err_str = str(exc)
-                # EIP-1559 gas-spike RPC codes: geth returns -32000 with
-                # "insufficient MaxFeePerGas"; go-ethereum also uses
-                # "max fee per gas less than block base fee".
-                is_gas_error = (
-                    "-32000" in err_str
-                    or "insufficient maxfeepergas" in err_str.lower()
-                    or "insufficient funds for gas" in err_str.lower()
-                    or "max fee per gas less than block base fee" in err_str.lower()
-                )
-                if not is_gas_error:
+                if not is_gas_spike_error(str(exc)):
                     raise
                 logger.warning(
                     "EOA drain attempt %d/%d failed (multiplier=%.2f): %s — retrying",
@@ -419,7 +410,8 @@ class EthereumMasterWallet(
         """Transfer funds from EOA wallet.
 
         Raises InsufficientFundsException when the balance is too low to
-        cover gas in drain mode.
+        cover gas — either in drain mode (after exhausting retry attempts)
+        or in normal mode (via ``_pre_transfer_checks`` / ``_check_balance``).
         """
         balance = self.get_balance(chain=chain, from_safe=False)
         tx_fee = estimate_transfer_tx_fee(

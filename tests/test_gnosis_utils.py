@@ -1017,6 +1017,9 @@ class TestDrainEoa:
                     chain_id=100,
                 )
 
+        # Must not have retried — only one attempt before re-raise
+        assert mock_txsettler_cls.return_value.transact.call_count == 1
+
     def test_drain_eoa_raises_after_max_retries_on_gas_error(self) -> None:
         """drain_eoa raises InsufficientFundsException after all 3 attempts fail with -32000."""
         mock_ledger = MagicMock()
@@ -1035,7 +1038,7 @@ class TestDrainEoa:
         ):
             with pytest.raises(
                 InsufficientFundsException, match="insufficient funds for gas"
-            ):
+            ) as exc_info:
                 drain_eoa(
                     ledger_api=mock_ledger,
                     crypto=mock_crypto,
@@ -1045,6 +1048,8 @@ class TestDrainEoa:
 
         # Should have attempted exactly 3 times
         assert mock_txsettler_cls.return_value.transact.call_count == 3
+        # Verify exception chaining preserves the original gas error
+        assert exc_info.value.__cause__ is gas_error
 
     def test_drain_eoa_retries_on_rpc_rejection_succeeds(self) -> None:
         """Retry loop succeeds on second attempt after first raises -32000."""

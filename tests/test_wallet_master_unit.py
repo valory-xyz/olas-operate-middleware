@@ -1947,6 +1947,8 @@ class TestTransferFromEoaDrainModeRetry:
         assert (
             exc_info.value.to_error_fields()["error_code"] == "INSUFFICIENT_SIGNER_GAS"
         )
+        # Verify exception chaining preserves the original gas error
+        assert exc_info.value.__cause__ is rpc_error
 
     def test_drain_mode_reraises_unrelated_exception(self, tmp_path: Path) -> None:
         """A non-gas ValueError propagates immediately without retrying."""

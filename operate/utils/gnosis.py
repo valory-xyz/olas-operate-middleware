@@ -43,6 +43,7 @@ from operate.ledger import (
     DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP,
     get_default_ledger_api,
+    is_gas_spike_error,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
@@ -663,17 +664,7 @@ def drain_eoa(
                 return None
 
             last_exc = e
-            err_str = str(e)
-            # EIP-1559 gas-spike RPC codes: geth returns -32000 with
-            # "insufficient MaxFeePerGas"; go-ethereum also uses
-            # "max fee per gas less than block base fee".
-            is_gas_error = (
-                "-32000" in err_str
-                or "insufficient maxfeepergas" in err_str.lower()
-                or "insufficient funds for gas" in err_str.lower()
-                or "max fee per gas less than block base fee" in err_str.lower()
-            )
-            if not is_gas_error:
+            if not is_gas_spike_error(str(e)):
                 raise
             logger.warning(
                 "EOA drain attempt %d/%d failed (multiplier=%.2f): %s — retrying",
