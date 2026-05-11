@@ -48,7 +48,6 @@ from operate.ledger import (
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import (
-    DEFAULT_EOA_TOPUPS,
     DUST,
     ERC20_TOKENS,
     format_asset_amount,
