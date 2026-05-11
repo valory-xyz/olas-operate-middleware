@@ -1017,7 +1017,11 @@ class TestDrainEoa:
                 )
 
     def test_drain_eoa_raises_after_max_retries_on_gas_error(self) -> None:
-        """drain_eoa raises ChainInteractionError after all 3 attempts fail with -32000."""
+        """drain_eoa raises InsufficientFundsException after all 3 attempts fail with -32000."""
+        from operate.wallet.master import (
+            InsufficientFundsException,  # pylint: disable=import-outside-toplevel
+        )
+
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
         mock_crypto.address = "0xWalletAddr"
@@ -1033,7 +1037,7 @@ class TestDrainEoa:
             patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
         ):
             with pytest.raises(
-                ChainInteractionError, match="insufficient funds for gas"
+                InsufficientFundsException, match="insufficient funds for gas"
             ):
                 drain_eoa(
                     ledger_api=mock_ledger,
@@ -1044,6 +1048,95 @@ class TestDrainEoa:
 
         # Should have attempted exactly 3 times
         assert mock_txsettler_cls.return_value.transact.call_count == 3
+
+    def test_drain_eoa_retries_on_rpc_rejection_succeeds(self) -> None:
+        """Retry loop succeeds on second attempt after first raises -32000."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+
+        gas_error = ChainInteractionError(
+            "-32000 insufficient MaxFeePerGas for sender balance"
+        )
+        success_settler = MagicMock()
+        success_settler.transact.return_value = success_settler
+        success_settler.settle.return_value = success_settler
+        success_settler.tx_hash = "0xsuccesshash"
+
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = gas_error
+
+        settler_instances = iter([fail_settler, success_settler])
+
+        def settler_factory(**_kwargs: t.Any) -> MagicMock:
+            return next(settler_instances)
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", side_effect=settler_factory),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            result = drain_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                withdrawal_address="0xWithdrawal",
+                chain_id=100,
+            )
+
+        assert result == "0xsuccesshash"
+
+    def test_drain_eoa_multiplier_escalation(self) -> None:
+        """Verify the drain amount shrinks across retry attempts as multiplier widens."""
+        mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 1_000_000
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+
+        amounts_seen: t.List[int] = []
+
+        class _CapturingSettler:
+            """Fake TxSettler that captures the drain amount from tx_builder."""
+
+            def __init__(self, *, tx_builder: t.Callable, **_kw: t.Any) -> None:
+                self._tx_builder = tx_builder
+
+            def transact(self) -> "_CapturingSettler":
+                self._tx_builder()
+                raise ChainInteractionError("-32000 insufficient MaxFeePerGas")
+
+        def _fake_get_transfer_tx(
+            **kwargs: t.Any,
+        ) -> t.Dict:
+            amounts_seen.append(kwargs["amount"])
+            return {"value": kwargs["amount"], "gas": 21000}
+
+        mock_ledger.get_transfer_transaction = _fake_get_transfer_tx
+        mock_ledger.update_with_gas_estimate.side_effect = lambda **kw: kw[
+            "transaction"
+        ]
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", _CapturingSettler),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch(
+                "operate.utils.gnosis.estimate_transfer_tx_fee",
+                return_value=100_000,
+            ),
+        ):
+            from operate.wallet.master import (
+                InsufficientFundsException,  # pylint: disable=import-outside-toplevel
+            )
+
+            with pytest.raises(InsufficientFundsException):
+                drain_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    withdrawal_address="0xWithdrawal",
+                    chain_id=100,
+                )
+
+        assert len(amounts_seen) == 3
+        # Drain amount must shrink as multiplier widens
+        assert amounts_seen[0] > amounts_seen[1] > amounts_seen[2]
 
 
 # ---------------------------------------------------------------------------

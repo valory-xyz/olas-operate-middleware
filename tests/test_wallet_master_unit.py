@@ -1071,22 +1071,22 @@ class TestTransferFromEoa:
 
         assert result == "0xtxhash"
 
-    def test_drain_mode_returns_none_when_fee_exceeds_balance(
-        self, tmp_path: Path
-    ) -> None:
-        """Test that _transfer_from_eoa returns None when gas fee exceeds balance in drain mode (covers lines 315-324)."""
+    def test_drain_mode_raises_when_fee_exceeds_balance(self, tmp_path: Path) -> None:
+        """Test that _transfer_from_eoa raises InsufficientFundsException when gas fee exceeds balance in drain mode."""
         wallet = _make_wallet(tmp_path)
+        wallet._crypto = MagicMock()  # pylint: disable=protected-access
+        mock_api = MagicMock()
         # balance=50, tx_fee=80: balance - tx_fee = -30 < 50 <= 50, so drain branch
-        # amount becomes -30 which is <=0, so warning and return None
+        # drain_amount = 50 - 80*1.10 = -38 which is <=0, so raise immediately
         with (
             patch.object(wallet, "get_balance", return_value=50),
             patch("operate.wallet.master.estimate_transfer_tx_fee", return_value=80),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
         ):
-            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
-                SAFE_ADDR, 50, Chain.GNOSIS
-            )
-
-        assert result is None
+            with pytest.raises(InsufficientFundsException):
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 50, Chain.GNOSIS
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -1899,7 +1899,6 @@ class TestTransferFromEoaDrainModeRetry:
             patch(
                 "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
             ),
-            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
             patch.object(wallet, "ledger_api", return_value=mock_api),
             patch("operate.wallet.master.TxSettler", side_effect=settler_factory),
         ):
@@ -1909,6 +1908,10 @@ class TestTransferFromEoaDrainModeRetry:
             )
 
         assert result == "0xsuccesshash"
+        # estimate_transfer_tx_fee called once per attempt (3 total)
+        assert (
+            mock_api.get_transfer_transaction.call_count == 3
+        ), "Expected 3 fee estimation calls (one per retry attempt)"
 
     def test_drain_mode_raises_insufficient_funds_after_all_retries_fail(
         self, tmp_path: Path
@@ -1930,7 +1933,6 @@ class TestTransferFromEoaDrainModeRetry:
             patch(
                 "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
             ),
-            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
             patch.object(wallet, "ledger_api", return_value=mock_api),
             patch("operate.wallet.master.TxSettler", return_value=fail_settler),
         ):
@@ -1968,7 +1970,6 @@ class TestTransferFromEoaDrainModeRetry:
             patch(
                 "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
             ),
-            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
             patch.object(wallet, "ledger_api", return_value=mock_api),
             patch("operate.wallet.master.TxSettler", side_effect=counting_factory),
         ):
@@ -1979,6 +1980,56 @@ class TestTransferFromEoaDrainModeRetry:
 
         # Must not have retried — only one attempt before re-raise
         assert call_count["n"] == 1
+
+    def test_drain_mode_amounts_shrink_across_retry_attempts(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify drain amount decreases as the gas multiplier widens on each retry."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        amounts_seen: t.List[int] = []
+
+        class _CapturingSettler:
+            """Fake TxSettler that captures drain amount from tx_builder."""
+
+            def __init__(self, *, tx_builder: t.Callable, **_kw: t.Any) -> None:
+                self._tx_builder = tx_builder
+
+            def transact(self) -> "_CapturingSettler":
+                self._tx_builder()
+                raise ValueError("-32000 insufficient MaxFeePerGas")
+
+        mock_api = MagicMock()
+
+        def _fake_get_transfer_tx(**kwargs: t.Any) -> t.Dict:
+            amounts_seen.append(kwargs["amount"])
+            return {"tx": "data"}
+
+        mock_api.get_transfer_transaction.side_effect = _fake_get_transfer_tx
+        mock_api.update_with_gas_estimate.side_effect = lambda **kw: kw["transaction"]
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", _CapturingSettler),
+        ):
+            with pytest.raises(InsufficientFundsException):
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 1_000_000, Chain.GNOSIS
+                )
+
+        assert len(amounts_seen) == 3
+        # With balance=1_000_000, fee=100_000:
+        # attempt 1: 1_000_000 - 100_000*1.10 = 890_000
+        # attempt 2: 1_000_000 - 100_000*1.50 = 850_000
+        # attempt 3: 1_000_000 - 100_000*1.90 = 810_000
+        assert amounts_seen[0] > amounts_seen[1] > amounts_seen[2]
 
 
 class TestInsufficientFundsException:

@@ -348,31 +348,41 @@ class EthereumMasterWallet(
         chain: Chain,
         ledger_api: EthereumApi,
         balance: int,
-    ) -> t.Optional[str]:
+    ) -> str:
         """Drain EOA to `to` with EIP-1559 gas spike retry logic.
 
-        Re-estimates the fee on each attempt and widens the gas buffer by
-        EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP if the RPC rejects with an
-        insufficient-MaxFeePerGas error (-32000).  Raises
+        Re-estimates maxFeePerGas on each attempt and reserves a wider gas
+        budget (multiplier incremented by EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP)
+        after an RPC rejection.  This is a probabilistic mitigation — it
+        narrows the race window between fee estimation and broadcast but
+        cannot close it entirely.
+
+        Raises immediately if the pre-estimate shows the balance cannot
+        cover gas at the current multiplier.  Raises
         InsufficientFundsException after all retries are exhausted.
         """
         _max_retries: int = 3
         multiplier = DEFAULT_GAS_ESTIMATE_MULTIPLIER
-        for _attempt in range(_max_retries):
+        last_exc: t.Optional[Exception] = None
+        for attempt in range(_max_retries):
             fresh_fee = estimate_transfer_tx_fee(
                 chain=chain, sender_address=self.address, to=to
             )
             drain_amount = int(balance - fresh_fee * multiplier)
             if drain_amount <= 0:
-                multiplier += EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP
-                continue
+                raise InsufficientFundsException(
+                    f"Cannot drain EOA {self.address} on {chain.name}: "
+                    f"balance {balance} insufficient to cover gas fee "
+                    f"{fresh_fee} × {multiplier}.",
+                    chain=chain.value,
+                )
 
-            def _build_drain_tx(_amt: int = drain_amount) -> t.Dict:
+            def _build_drain_tx() -> t.Dict:
                 """Build drain transaction with current amount."""
                 tx = ledger_api.get_transfer_transaction(
                     sender_address=self.crypto.address,
                     destination_address=to,
-                    amount=_amt,
+                    amount=drain_amount,
                     tx_fee=0,
                     tx_nonce="0x",
                     chain_id=chain.id,
@@ -399,47 +409,59 @@ class EthereumMasterWallet(
                     .tx_hash
                 )
             except (ValueError, ChainInteractionError) as exc:
+                last_exc = exc
                 err_str = str(exc)
-                if "-32000" not in err_str and "insufficient" not in err_str.lower():
+                # EIP-1559 gas-spike RPC codes: geth returns -32000 with
+                # "insufficient MaxFeePerGas"; go-ethereum also uses
+                # "max fee per gas less than block base fee".
+                is_gas_error = (
+                    "-32000" in err_str
+                    or "insufficient maxfeepergas" in err_str.lower()
+                    or "insufficient funds for gas" in err_str.lower()
+                    or "max fee per gas less than block base fee" in err_str.lower()
+                )
+                if not is_gas_error:
                     raise
+                logger.warning(
+                    "EOA drain attempt %d/%d failed (multiplier=%.2f): %s — retrying",
+                    attempt + 1,
+                    _max_retries,
+                    multiplier,
+                    exc,
+                )
                 multiplier += EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP
 
         raise InsufficientFundsException(
             f"Cannot drain EOA {self.address} on {chain.name}: "
             f"insufficient funds for gas after {_max_retries} attempts.",
             chain=chain.value,
-        )
+        ) from last_exc
 
     def _transfer_from_eoa(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> t.Optional[str]:
-        """Transfer funds from EOA wallet."""
+    ) -> str:
+        """Transfer funds from EOA wallet.
+
+        Raises InsufficientFundsException when the balance is too low to
+        cover gas in drain mode.
+        """
         balance = self.get_balance(chain=chain, from_safe=False)
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
         is_drain_mode = balance - tx_fee <= amount <= balance
-        if is_drain_mode:
-            # we assume that the user wants to drain the EOA
-            # we also account for dust here because withdraw call use some EOA balance to drain the safes first
-            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
-            if amount <= 0:
-                logger.warning(
-                    f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
-                    f"Balance is {balance}, estimated fee is {tx_fee}. Not transferring."
-                )
-                return None
-
-        to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=False
-        )
 
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
 
         if is_drain_mode:
+            to = Web3.to_checksum_address(to)
             return self._drain_eoa_with_retry(
                 to=to, chain=chain, ledger_api=ledger_api, balance=balance
             )
+
+        to = self._pre_transfer_checks(
+            to=to, amount=amount, chain=chain, from_safe=False
+        )
 
         def _build_tx() -> t.Dict:
             """Build transaction"""

@@ -156,6 +156,9 @@ GAS_ESTIMATE_FALLBACK_ADDRESSES = [
     "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
 ]
 DEFAULT_GAS_ESTIMATE_MULTIPLIER = 1.10
+# Each retry adds 40% of the base fee as gas buffer. With
+# DEFAULT_GAS_ESTIMATE_MULTIPLIER=1.10 and max_retries=3, attempts use
+# multipliers 1.10, 1.50, 1.90 (covers up to ~73% post-estimate gas spikes).
 EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP = 0.40
 
 

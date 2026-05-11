@@ -589,15 +589,21 @@ def drain_eoa(
     chain_id: int,
 ) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
+    # Late import to avoid circular dependency with operate.wallet.master.
+    from operate.wallet.master import (
+        InsufficientFundsException,  # pylint: disable=import-outside-toplevel
+    )
+
     chain = Chain.from_id(chain_id)
 
     # Retry with increasing gas buffer to handle EIP-1559 gas spikes
     # between fee estimation and transaction broadcast.
     _max_retries: int = 3
     multiplier = DEFAULT_GAS_ESTIMATE_MULTIPLIER
-    for _attempt in range(_max_retries):
+    last_exc: t.Optional[Exception] = None
+    for attempt in range(_max_retries):
 
-        def _build_tx(_mult: float = multiplier) -> t.Dict:
+        def _build_tx() -> t.Dict:
             """Build transaction"""
             chain_fee = estimate_transfer_tx_fee(
                 chain=chain,
@@ -606,7 +612,9 @@ def drain_eoa(
                 ledger_api=ledger_api,
             )
 
-            amount = ledger_api.get_balance(crypto.address) - int(chain_fee * _mult)
+            amount = ledger_api.get_balance(crypto.address) - int(
+                chain_fee * multiplier
+            )
             if amount <= 0:
                 raise ChainInteractionError(
                     f"No balance to drain from wallet: {crypto.address}"
@@ -625,7 +633,7 @@ def drain_eoa(
             empty_tx["value"] = 0
             empty_tx = ledger_api.update_with_gas_estimate(
                 transaction=empty_tx,
-                raise_on_try=False,
+                raise_on_try=True,
             )
             tx["gas"] = empty_tx["gas"]
 
@@ -650,23 +658,40 @@ def drain_eoa(
                 .settle()
                 .tx_hash
             )
-        except ChainInteractionError as e:
+        except (ValueError, ChainInteractionError) as e:
             if "No balance to drain from wallet" in str(e):
                 logger.warning(
                     f"Failed to drain wallet {crypto.address} with error: {e}."
                 )
                 return None
 
+            last_exc = e
             err_str = str(e)
-            if "-32000" not in err_str and "insufficient" not in err_str.lower():
+            # EIP-1559 gas-spike RPC codes: geth returns -32000 with
+            # "insufficient MaxFeePerGas"; go-ethereum also uses
+            # "max fee per gas less than block base fee".
+            is_gas_error = (
+                "-32000" in err_str
+                or "insufficient maxfeepergas" in err_str.lower()
+                or "insufficient funds for gas" in err_str.lower()
+                or "max fee per gas less than block base fee" in err_str.lower()
+            )
+            if not is_gas_error:
                 raise
-
+            logger.warning(
+                "EOA drain attempt %d/%d failed (multiplier=%.2f): %s — retrying",
+                attempt + 1,
+                _max_retries,
+                multiplier,
+                e,
+            )
             multiplier += EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP
 
-    raise ChainInteractionError(
+    raise InsufficientFundsException(
         f"Failed to drain EOA {crypto.address} on chain {chain.name}: "
-        f"insufficient funds for gas after {_max_retries} attempts."
-    )
+        f"insufficient funds for gas after {_max_retries} attempts.",
+        chain=chain.value,
+    ) from last_exc
 
 
 def get_asset_balance(
