@@ -2655,7 +2655,7 @@ class TestCliCommands:
 
         mock_loop = MagicMock()
 
-        def _run_coro(coro):
+        def _run_coro(coro: Any) -> None:
             """Close the coroutine to avoid 'never awaited' warnings."""
             if hasattr(coro, "close"):
                 coro.close()
