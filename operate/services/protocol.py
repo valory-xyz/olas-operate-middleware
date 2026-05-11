@@ -1681,14 +1681,24 @@ class EthSafeTxBuilder(_ChainUtil):
             contract_address=token,
         )
 
+        transfer_data = erc20_instance.encode_abi(
+            abi_element_identifier="transfer",
+            args=[to, amount],
+        )
+        # Normalize to bytes — encode_abi() may return HexStr (str)
+        # depending on the web3/open-autonomy version, but the
+        # multisend contract's encode_data() requires bytes.
+        if isinstance(transfer_data, str):
+            hex_str = (
+                transfer_data[2:] if transfer_data.startswith("0x") else transfer_data
+            )
+            transfer_data = bytes.fromhex(hex_str)
+
         txs = []
         txs.append(
             {
                 "to": token,
-                "data": erc20_instance.encode_abi(
-                    abi_element_identifier="transfer",
-                    args=[to, amount],
-                ),
+                "data": transfer_data,
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
             }
