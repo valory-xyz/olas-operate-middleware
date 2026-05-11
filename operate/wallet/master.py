@@ -377,12 +377,12 @@ class EthereumMasterWallet(
                     chain=chain.value,
                 )
 
-            def _build_drain_tx() -> t.Dict:
+            def _build_drain_tx() -> t.Dict:  # noqa: B023  (consumed synchronously)
                 """Build drain transaction with current amount."""
                 tx = ledger_api.get_transfer_transaction(
                     sender_address=self.crypto.address,
                     destination_address=to,
-                    amount=drain_amount,
+                    amount=drain_amount,  # noqa: B023
                     tx_fee=0,
                     tx_nonce="0x",
                     chain_id=chain.id,

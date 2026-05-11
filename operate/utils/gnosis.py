@@ -603,7 +603,7 @@ def drain_eoa(
     last_exc: t.Optional[Exception] = None
     for attempt in range(_max_retries):
 
-        def _build_tx() -> t.Dict:
+        def _build_tx() -> t.Dict:  # noqa: B023  (consumed synchronously)
             """Build transaction"""
             chain_fee = estimate_transfer_tx_fee(
                 chain=chain,
@@ -613,7 +613,7 @@ def drain_eoa(
             )
 
             amount = ledger_api.get_balance(crypto.address) - int(
-                chain_fee * multiplier
+                chain_fee * multiplier  # noqa: B023
             )
             if amount <= 0:
                 raise ChainInteractionError(
