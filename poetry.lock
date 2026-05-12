@@ -4279,25 +4279,26 @@ markers = {main = "python_version == \"3.10\"", development = "python_full_versi
 
 [[package]]
 name = "tomte"
-version = "0.6.1"
+version = "0.7.0"
 description = "A library that wraps many useful tools (linters, analysers, etc) to keep Python code clean, secure, well-documented and optimised."
 optional = false
 python-versions = "<4,>=3.10"
 groups = ["development"]
 files = [
-    {file = "tomte-0.6.1-py3-none-any.whl", hash = "sha256:3fdd83a7f38bc3a43aa5ce24a2ce84c9a34904cf5887bff06c9cb781024ac59f"},
-    {file = "tomte-0.6.1.tar.gz", hash = "sha256:1e039fd94b1fdd0202c7a4dc01e9324e3786fb2ff18ac5bb6cce142edf9f779e"},
+    {file = "tomte-0.7.0-py3-none-any.whl", hash = "sha256:b127c7a14ca07a89d5fbb2c82b9d9ba581f13aee4f082a98261c794e589e1ab4"},
+    {file = "tomte-0.7.0.tar.gz", hash = "sha256:863e2144aefb13dd988b1c6650167469a82945aa445320d4a4ade41b2edf75e5"},
 ]
 
 [package.dependencies]
 click = {version = "8.3.1", optional = true, markers = "extra == \"black\" or extra == \"cli\" or extra == \"docs\""}
 requests = {version = "2.32.5", optional = true, markers = "extra == \"cli\""}
+tomli = {version = ">=2.0,<3", optional = true, markers = "python_version < \"3.11\" and extra == \"cli\""}
 tox = {version = "4.46.0", optional = true, markers = "extra == \"cli\" or extra == \"tox\""}
 
 [package.extras]
 bandit = ["bandit (==1.9.3)"]
 black = ["black (==26.1.0)", "click (==8.3.1)"]
-cli = ["click (==8.3.1)", "requests (==2.32.5)", "tox (==4.46.0)"]
+cli = ["click (==8.3.1)", "requests (==2.32.5)", "tomli (>=2.0,<3) ; python_version < \"3.11\"", "tox (==4.46.0)"]
 darglint = ["darglint (==1.8.1)"]
 docs = ["Markdown (==3.10.2)", "Pygments (==2.19.2)", "bs4 (==0.0.2)", "click (==8.3.1)", "markdown-include (==0.8.1)", "mkdocs (==1.6.1)", "mkdocs-macros-plugin (==1.5.0)", "mkdocs-material (==9.7.3)", "mkdocs-material-extensions (==1.3.1)", "mkdocs-redirects (==1.2.2)", "pydoc-markdown (==4.8.2)", "pydocstyle (==6.3.0)", "pymdown-extensions (==10.21)"]
 flake8 = ["flake8 (==7.3.0)", "flake8-bugbear (==25.11.29)", "flake8-docstrings (==1.7.0)", "flake8-eradicate (==1.5.0)", "flake8-isort (==7.0.0)", "flake8-pytest-style (==2.2.0)", "pydocstyle (==6.3.0)"]
@@ -5000,4 +5001,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "<3.15,>=3.10"
-content-hash = "e7fa0d504403b38f75927432ff108430d71ad77ea9aa35cc9d5334593f4f35e6"
+content-hash = "689e889aec0fd02a730ac3c71702bb4ecf12fcb1defffa482b7a3af8d9c7b435"
