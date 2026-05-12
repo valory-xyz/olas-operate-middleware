@@ -476,8 +476,8 @@ class TestDrainAgentsEOAs:
             # Must not raise — the handler catches and logs.
             manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
 
-        manager.logger.warning.assert_called_once()
-        warning_msg = manager.logger.warning.call_args[0][0]
+        manager.logger.warning.assert_called_once()  # type: ignore[attr-defined]
+        warning_msg = manager.logger.warning.call_args[0][0]  # type: ignore[attr-defined]
         assert AGENT_ADDR in warning_msg
 
     def test_estimate_fee_other_rpc_errors_propagate(self) -> None:
