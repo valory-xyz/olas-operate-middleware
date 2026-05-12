@@ -355,7 +355,17 @@ class EthereumMasterWallet(
                 )
 
             def _build_drain_tx() -> t.Dict:  # noqa: B023  (consumed synchronously)
-                """Build drain transaction with current amount."""
+                """Build drain transaction with current amount.
+
+                ``eth_estimateGas`` simulates the tx with the block gas limit
+                when ``tx.gas`` is unset, so calling it directly on a
+                value-bearing drain tx makes the RPC check
+                ``balance >= value + maxFeePerGas * block_gas_limit`` —
+                which always fails when ``value`` is near the full balance.
+                Estimate against a value=0 copy first, then graft the
+                resulting gas onto the real tx so the broadcast check uses
+                the actual 21000 (mirrors ``gnosis.drain_eoa``).
+                """
                 tx = ledger_api.get_transfer_transaction(
                     sender_address=self.crypto.address,
                     destination_address=to,
@@ -365,10 +375,14 @@ class EthereumMasterWallet(
                     chain_id=chain.id,
                     raise_on_try=True,
                 )
-                return ledger_api.update_with_gas_estimate(
-                    transaction=tx,
+                empty_tx = tx.copy()
+                empty_tx["value"] = 0
+                empty_tx = ledger_api.update_with_gas_estimate(
+                    transaction=empty_tx,
                     raise_on_try=True,
                 )
+                tx["gas"] = empty_tx["gas"]
+                return tx
 
             try:
                 return (

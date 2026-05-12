@@ -2012,10 +2012,13 @@ class TestTransferFromEoaDrainModeRetry:
 
         def _fake_get_transfer_tx(**kwargs: t.Any) -> t.Dict:
             amounts_seen.append(kwargs["amount"])
-            return {"tx": "data"}
+            return {"value": kwargs["amount"], "gas": 0}
 
         mock_api.get_transfer_transaction.side_effect = _fake_get_transfer_tx
-        mock_api.update_with_gas_estimate.side_effect = lambda **kw: kw["transaction"]
+        mock_api.update_with_gas_estimate.side_effect = lambda **kw: {
+            **kw["transaction"],
+            "gas": 21000,
+        }
 
         with (
             patch.object(wallet, "get_balance", return_value=1_000_000),
@@ -2036,6 +2039,99 @@ class TestTransferFromEoaDrainModeRetry:
         # attempt 2: 1_000_000 - 100_000*1.50 = 850_000
         # attempt 3: 1_000_000 - 100_000*1.90 = 810_000
         assert amounts_seen[0] > amounts_seen[1] > amounts_seen[2]
+
+    def test_drain_tx_estimates_gas_against_value_zero_copy(
+        self, tmp_path: Path
+    ) -> None:
+        """Gas estimation must run on a value=0 copy, not the value-bearing tx.
+
+        Regression test for the QA failure on Gnosis where calling
+        ``eth_estimateGas`` directly on the drain tx (with value≈balance and
+        gas=0) caused the RPC to simulate against the block gas limit and
+        reject with ``-32000 insufficient MaxFeePerGas for sender balance``.
+        The fix mirrors ``gnosis.drain_eoa``: estimate on a value=0 copy,
+        graft the resulting gas onto the real tx so the broadcast check
+        uses the real 21000.
+        """
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        captured: t.Dict[str, t.Any] = {}
+
+        class _BuilderInvokingSettler:
+            """Fake TxSettler that invokes ``tx_builder`` and records the result."""
+
+            def __init__(self, *, tx_builder: t.Callable, **_kw: t.Any) -> None:
+                self._tx_builder = tx_builder
+
+            def transact(self) -> "_BuilderInvokingSettler":
+                captured["built_tx"] = self._tx_builder()
+                return self
+
+            def settle(self) -> "_BuilderInvokingSettler":
+                return self
+
+            tx_hash = "0xok"
+
+        mock_api = MagicMock()
+
+        def _get_transfer_tx(**kwargs: t.Any) -> t.Dict:
+            # Real value-bearing tx as returned by aea_ledger_ethereum
+            return {
+                "from": EOA_ADDR,
+                "to": kwargs["destination_address"],
+                "value": kwargs["amount"],
+                "gas": 0,
+                "maxFeePerGas": 1_000_000_000,  # 1 gwei
+            }
+
+        def _update_gas(**kwargs: t.Any) -> t.Dict:
+            # Real RPC behaviour: estimate succeeds on value=0, fails on
+            # value-bearing tx with the QA error. The test fails (test crashes
+            # with that ValueError) if the fix is reverted.
+            tx = kwargs["transaction"]
+            captured.setdefault("update_calls", []).append(dict(tx))
+            if tx["value"] != 0:
+                raise ValueError(
+                    "{'code': -32000, 'message': "
+                    "'insufficient MaxFeePerGas for sender balance'}"
+                )
+            return {**tx, "gas": 21000}
+
+        mock_api.get_transfer_transaction.side_effect = _get_transfer_tx
+        mock_api.update_with_gas_estimate.side_effect = _update_gas
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee",
+                return_value=100_000,
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", _BuilderInvokingSettler),
+        ):
+            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                SAFE_ADDR, 1_000_000, Chain.GNOSIS
+            )
+
+        assert result == "0xok"
+        # update_with_gas_estimate must have been called exactly once with value=0.
+        update_calls = captured["update_calls"]
+        assert len(update_calls) == 1, (
+            f"Expected one gas-estimate call (on value=0 copy), "
+            f"got {len(update_calls)}"
+        )
+        assert update_calls[0]["value"] == 0, (
+            "Gas estimation called on value-bearing tx — block-gas-limit "
+            "simulation will reject this on Gnosis with -32000."
+        )
+        # Real tx returned by the builder keeps the drain value and gets the
+        # gas grafted from the estimate.
+        built_tx = captured["built_tx"]
+        assert built_tx["value"] > 0, "Drain tx must retain value after gas graft"
+        assert built_tx["gas"] == 21000, "Real tx must carry the estimated gas"
 
 
 class TestInsufficientFundsException:
