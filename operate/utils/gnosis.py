@@ -589,8 +589,15 @@ def drain_eoa(
     crypto: Crypto,
     withdrawal_address: str,
     chain_id: int,
-) -> t.Optional[str]:
-    """Drain all the native tokens from the crypto wallet."""
+) -> str:
+    """Drain all the native tokens from the crypto wallet.
+
+    Raises ``InsufficientFundsException`` when the balance cannot cover gas
+    at the current multiplier (immediate, before any RPC submission) or
+    after exhausting all retry attempts on EIP-1559 gas-spike rejections.
+    Callers that treat an empty EOA as a no-op should catch the exception
+    explicitly (mirrors ``EthereumMasterWallet._drain_eoa_with_retry``).
+    """
     chain = Chain.from_id(chain_id)
 
     # Retry with increasing gas buffer to handle EIP-1559 gas spikes
@@ -599,29 +606,28 @@ def drain_eoa(
     multiplier = DEFAULT_GAS_ESTIMATE_MULTIPLIER
     last_exc: t.Optional[Exception] = None
     for attempt in range(_max_retries):
+        chain_fee = estimate_transfer_tx_fee(
+            chain=chain,
+            sender_address=crypto.address,
+            to=withdrawal_address,
+            ledger_api=ledger_api,
+        )
+        balance = ledger_api.get_balance(crypto.address)
+        amount = balance - int(chain_fee * multiplier)
+        if amount <= 0:
+            raise InsufficientFundsException(
+                f"Cannot drain EOA {crypto.address} on {chain.name}: "
+                f"balance {balance} insufficient to cover gas fee "
+                f"{chain_fee} × {multiplier}.",
+                chain=chain.value,
+            )
 
         def _build_tx() -> t.Dict:  # noqa: B023  (consumed synchronously)
             """Build transaction"""
-            chain_fee = estimate_transfer_tx_fee(
-                chain=chain,
-                sender_address=crypto.address,
-                to=withdrawal_address,
-                ledger_api=ledger_api,
-            )
-
-            amount = ledger_api.get_balance(crypto.address) - int(
-                chain_fee
-                * multiplier  # noqa: B023  # pylint: disable=cell-var-from-loop
-            )
-            if amount <= 0:
-                raise ChainInteractionError(
-                    f"No balance to drain from wallet: {crypto.address}"
-                )
-
             tx = ledger_api.get_transfer_transaction(
                 sender_address=crypto.address,
                 destination_address=withdrawal_address,
-                amount=amount,
+                amount=amount,  # noqa: B023  # pylint: disable=cell-var-from-loop
                 tx_fee=0,
                 tx_nonce="0x",
                 chain_id=chain_id,
@@ -657,12 +663,6 @@ def drain_eoa(
                 .tx_hash
             )
         except (ValueError, ChainInteractionError) as e:
-            if "No balance to drain from wallet" in str(e):
-                logger.warning(
-                    f"Failed to drain wallet {crypto.address} with error: {e}."
-                )
-                return None
-
             last_exc = e
             if not is_gas_spike_error(str(e)):
                 raise
