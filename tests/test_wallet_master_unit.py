@@ -1071,22 +1071,22 @@ class TestTransferFromEoa:
 
         assert result == "0xtxhash"
 
-    def test_drain_mode_returns_none_when_fee_exceeds_balance(
-        self, tmp_path: Path
-    ) -> None:
-        """Test that _transfer_from_eoa returns None when gas fee exceeds balance in drain mode (covers lines 315-324)."""
+    def test_drain_mode_raises_when_fee_exceeds_balance(self, tmp_path: Path) -> None:
+        """Test that _transfer_from_eoa raises InsufficientFundsException when gas fee exceeds balance in drain mode."""
         wallet = _make_wallet(tmp_path)
+        wallet._crypto = MagicMock()  # pylint: disable=protected-access
+        mock_api = MagicMock()
         # balance=50, tx_fee=80: balance - tx_fee = -30 < 50 <= 50, so drain branch
-        # amount becomes -30 which is <=0, so warning and return None
+        # drain_amount = 50 - 80*1.10 = -38 which is <=0, so raise immediately
         with (
             patch.object(wallet, "get_balance", return_value=50),
             patch("operate.wallet.master.estimate_transfer_tx_fee", return_value=80),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
         ):
-            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
-                SAFE_ADDR, 50, Chain.GNOSIS
-            )
-
-        assert result is None
+            with pytest.raises(InsufficientFundsException):
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 50, Chain.GNOSIS
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -1857,6 +1857,281 @@ class TestMigrateFormatAddsCanonicalBackupOwner:
         assert mock_get_owners.call_count == 1
         result = json.loads((tmp_path / "ethereum.json").read_text(encoding="utf-8"))
         assert result["canonical_backup_owner"] is None
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – _transfer_from_eoa drain-mode retry (OPE-1677)
+# ---------------------------------------------------------------------------
+
+
+class TestTransferFromEoaDrainModeRetry:
+    """Tests for the drain-mode retry logic in _transfer_from_eoa (OPE-1677)."""
+
+    def test_drain_mode_retries_on_rpc_rejection_succeeds(self, tmp_path: Path) -> None:
+        """Retry loop succeeds on the third attempt when first two raise -32000."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+        mock_api.get_transfer_transaction.return_value = {"tx": "data"}
+        mock_api.update_with_gas_estimate.return_value = {"tx": "updated"}
+
+        rpc_error = ValueError("-32000 insufficient MaxFeePerGas for sender balance")
+        success_settler = MagicMock()
+        success_settler.transact.return_value = success_settler
+        success_settler.settle.return_value = success_settler
+        success_settler.tx_hash = "0xsuccesshash"
+
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = rpc_error
+
+        # Attempts 1 and 2 fail; attempt 3 succeeds
+        settler_instances = [fail_settler, fail_settler, success_settler]
+        settler_call_count = iter(settler_instances)
+
+        def settler_factory(**_kwargs: t.Any) -> MagicMock:
+            return next(settler_call_count)
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch(
+                "operate.wallet.master.TxSettler", side_effect=settler_factory
+            ) as mock_settler_cls,
+        ):
+            # balance=1_000_000, fee=100_000 → drain mode (amount=1_000_000)
+            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                SAFE_ADDR, 1_000_000, Chain.GNOSIS
+            )
+
+        assert result == "0xsuccesshash"
+        # TxSettler constructed once per retry attempt (3 total)
+        assert (
+            mock_settler_cls.call_count == 3
+        ), "Expected 3 TxSettler constructions (one per retry attempt)"
+
+    def test_drain_mode_raises_insufficient_funds_after_all_retries_fail(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that InsufficientFundsException is raised after all 3 drain-mode retries fail."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+
+        rpc_error = ValueError("-32000 insufficient MaxFeePerGas for sender balance")
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = rpc_error
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", return_value=fail_settler),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 1_000_000, Chain.GNOSIS
+                )
+
+        assert exc_info.value.chain == Chain.GNOSIS.value
+        assert (
+            exc_info.value.to_error_fields()["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        )
+        # Verify exception chaining preserves the original gas error
+        assert exc_info.value.__cause__ is rpc_error
+
+    def test_drain_mode_reraises_unrelated_exception(self, tmp_path: Path) -> None:
+        """A non-gas ValueError propagates immediately without retrying."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+
+        # Use ValueError (caught by the except block) with a non-gas message
+        # so the is_gas_error check is False and line 400 (raise) is hit.
+        unrelated_error = ValueError("unexpected network timeout")
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = unrelated_error
+
+        call_count = {"n": 0}
+
+        def counting_factory(**_kwargs: t.Any) -> MagicMock:
+            call_count["n"] += 1
+            return fail_settler
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", side_effect=counting_factory),
+        ):
+            with pytest.raises(ValueError, match="unexpected network timeout"):
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 1_000_000, Chain.GNOSIS
+                )
+
+        # Must not have retried — only one attempt before re-raise
+        assert call_count["n"] == 1
+
+    def test_drain_mode_amounts_shrink_across_retry_attempts(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify drain amount decreases as the gas multiplier widens on each retry."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        amounts_seen: t.List[int] = []
+
+        class _CapturingSettler:
+            """Fake TxSettler that captures drain amount from tx_builder."""
+
+            def __init__(self, *, tx_builder: t.Callable, **_kw: t.Any) -> None:
+                self._tx_builder = tx_builder
+
+            def transact(self) -> "_CapturingSettler":
+                self._tx_builder()
+                raise ValueError("-32000 insufficient MaxFeePerGas")
+
+        mock_api = MagicMock()
+
+        def _fake_get_transfer_tx(**kwargs: t.Any) -> t.Dict:
+            amounts_seen.append(kwargs["amount"])
+            return {"value": kwargs["amount"], "gas": 0}
+
+        mock_api.get_transfer_transaction.side_effect = _fake_get_transfer_tx
+        mock_api.update_with_gas_estimate.side_effect = lambda **kw: {
+            **kw["transaction"],
+            "gas": 21000,
+        }
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee", return_value=100_000
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", _CapturingSettler),
+        ):
+            with pytest.raises(InsufficientFundsException):
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 1_000_000, Chain.GNOSIS
+                )
+
+        assert len(amounts_seen) == 3
+        # With balance=1_000_000, fee=100_000:
+        # attempt 1: 1_000_000 - 100_000*1.10 = 890_000
+        # attempt 2: 1_000_000 - 100_000*1.50 = 850_000
+        # attempt 3: 1_000_000 - 100_000*1.90 = 810_000
+        assert amounts_seen[0] > amounts_seen[1] > amounts_seen[2]
+
+    def test_drain_tx_estimates_gas_against_value_zero_copy(
+        self, tmp_path: Path
+    ) -> None:
+        """Gas estimation must run on a value=0 copy, not the value-bearing tx.
+
+        Regression test for the QA failure on Gnosis where calling
+        ``eth_estimateGas`` directly on the drain tx (with value≈balance and
+        gas=0) caused the RPC to simulate against the block gas limit and
+        reject with ``-32000 insufficient MaxFeePerGas for sender balance``.
+        The fix mirrors ``gnosis.drain_eoa``: estimate on a value=0 copy,
+        graft the resulting gas onto the real tx so the broadcast check
+        uses the real 21000.
+        """
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        captured: t.Dict[str, t.Any] = {}
+
+        class _BuilderInvokingSettler:
+            """Fake TxSettler that invokes ``tx_builder`` and records the result."""
+
+            def __init__(self, *, tx_builder: t.Callable, **_kw: t.Any) -> None:
+                self._tx_builder = tx_builder
+
+            def transact(self) -> "_BuilderInvokingSettler":
+                captured["built_tx"] = self._tx_builder()
+                return self
+
+            def settle(self) -> "_BuilderInvokingSettler":
+                return self
+
+            tx_hash = "0xok"
+
+        mock_api = MagicMock()
+
+        def _get_transfer_tx(**kwargs: t.Any) -> t.Dict:
+            # Real value-bearing tx as returned by aea_ledger_ethereum
+            return {
+                "from": EOA_ADDR,
+                "to": kwargs["destination_address"],
+                "value": kwargs["amount"],
+                "gas": 0,
+                "maxFeePerGas": 1_000_000_000,  # 1 gwei
+            }
+
+        def _update_gas(**kwargs: t.Any) -> t.Dict:
+            # Real RPC behaviour: estimate succeeds on value=0, fails on
+            # value-bearing tx with the QA error. The test fails (test crashes
+            # with that ValueError) if the fix is reverted.
+            tx = kwargs["transaction"]
+            captured.setdefault("update_calls", []).append(dict(tx))
+            if tx["value"] != 0:
+                raise ValueError(
+                    "{'code': -32000, 'message': "
+                    "'insufficient MaxFeePerGas for sender balance'}"
+                )
+            return {**tx, "gas": 21000}
+
+        mock_api.get_transfer_transaction.side_effect = _get_transfer_tx
+        mock_api.update_with_gas_estimate.side_effect = _update_gas
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1_000_000),
+            patch(
+                "operate.wallet.master.estimate_transfer_tx_fee",
+                return_value=100_000,
+            ),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", _BuilderInvokingSettler),
+        ):
+            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                SAFE_ADDR, 1_000_000, Chain.GNOSIS
+            )
+
+        assert result == "0xok"
+        # update_with_gas_estimate must have been called exactly once with value=0.
+        update_calls = captured["update_calls"]
+        assert len(update_calls) == 1, (
+            f"Expected one gas-estimate call (on value=0 copy), "
+            f"got {len(update_calls)}"
+        )
+        assert update_calls[0]["value"] == 0, (
+            "Gas estimation called on value-bearing tx — block-gas-limit "
+            "simulation will reject this on Gnosis with -32000."
+        )
+        # Real tx returned by the builder keeps the drain value and gets the
+        # gas grafted from the estimate.
+        built_tx = captured["built_tx"]
+        assert built_tx["value"] > 0, "Drain tx must retain value after gas graft"
+        assert built_tx["gas"] == 21000, "Real tx must carry the estimated gas"
 
 
 class TestInsufficientFundsException:

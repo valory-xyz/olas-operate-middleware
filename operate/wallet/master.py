@@ -28,6 +28,7 @@ from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
+from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 from web3 import Account, Web3
 
@@ -37,15 +38,17 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     DEFAULT_GAS_ESTIMATE_MULTIPLIER,
+    EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP,
     get_default_ledger_api,
+    is_gas_spike_error,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import (
-    DEFAULT_EOA_TOPUPS,
     DUST,
     ERC20_TOKENS,
     format_asset_amount,
@@ -72,30 +75,6 @@ from operate.utils.gnosis import (
 )
 
 logger = setup_logger(name="master_wallet")
-
-
-# TODO Organize exceptions definition
-class InsufficientFundsException(Exception):
-    """Insufficient funds exception carrying the chain where gas is missing."""
-
-    def __init__(self, msg: str, chain: str) -> None:
-        """Initialise with message and the chain where gas was insufficient."""
-        super().__init__(msg, chain)
-        self.chain = chain
-
-    def __str__(self) -> str:
-        """Return only the human-readable message, not the full args tuple."""
-        return self.args[0]
-
-    def to_error_fields(self) -> t.Dict:
-        """Return structured error fields for merging into a JSONResponse body."""
-        return {
-            "error_code": "INSUFFICIENT_SIGNER_GAS",
-            "chain": self.chain,
-            "prefill_amount_wei": str(
-                DEFAULT_EOA_TOPUPS[Chain(self.chain)][ZERO_ADDRESS]
-            ),
-        }
 
 
 class MasterWallet(LocalResource):
@@ -340,30 +319,131 @@ class EthereumMasterWallet(
 
         return to
 
+    def _drain_eoa_with_retry(
+        self,
+        to: str,
+        chain: Chain,
+        ledger_api: EthereumApi,
+        balance: int,
+    ) -> str:
+        """Drain EOA to `to` with EIP-1559 gas spike retry logic.
+
+        Re-estimates maxFeePerGas on each attempt and reserves a wider gas
+        budget (multiplier incremented by EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP)
+        after an RPC rejection.  This is a probabilistic mitigation — it
+        narrows the race window between fee estimation and broadcast but
+        cannot close it entirely.
+
+        Raises immediately if the pre-estimate shows the balance cannot
+        cover gas at the current multiplier.  Raises
+        InsufficientFundsException after all retries are exhausted.
+        """
+        _max_retries: int = 3
+        multiplier = DEFAULT_GAS_ESTIMATE_MULTIPLIER
+        last_exc: t.Optional[Exception] = None
+        for attempt in range(_max_retries):
+            fresh_fee = estimate_transfer_tx_fee(
+                chain=chain, sender_address=self.address, to=to
+            )
+            drain_amount = int(balance - fresh_fee * multiplier)
+            if drain_amount <= 0:
+                raise InsufficientFundsException(
+                    f"Cannot drain EOA {self.address} on {chain.name}: "
+                    f"balance {balance} insufficient to cover gas fee "
+                    f"{fresh_fee} × {multiplier}.",
+                    chain=chain.value,
+                )
+
+            def _build_drain_tx() -> t.Dict:  # noqa: B023  (consumed synchronously)
+                """Build drain transaction with current amount.
+
+                ``eth_estimateGas`` simulates the tx with the block gas limit
+                when ``tx.gas`` is unset, so calling it directly on a
+                value-bearing drain tx makes the RPC check
+                ``balance >= value + maxFeePerGas * block_gas_limit`` —
+                which always fails when ``value`` is near the full balance.
+                Estimate against a value=0 copy first, then graft the
+                resulting gas onto the real tx so the broadcast check uses
+                the actual 21000 (mirrors ``gnosis.drain_eoa``).
+                """
+                tx = ledger_api.get_transfer_transaction(
+                    sender_address=self.crypto.address,
+                    destination_address=to,
+                    amount=drain_amount,  # noqa: B023  # pylint: disable=cell-var-from-loop
+                    tx_fee=0,
+                    tx_nonce="0x",
+                    chain_id=chain.id,
+                    raise_on_try=True,
+                )
+                empty_tx = tx.copy()
+                empty_tx["value"] = 0
+                empty_tx = ledger_api.update_with_gas_estimate(
+                    transaction=empty_tx,
+                    raise_on_try=True,
+                )
+                tx["gas"] = empty_tx["gas"]
+                return tx
+
+            try:
+                return (
+                    TxSettler(
+                        ledger_api=ledger_api,
+                        crypto=self.crypto,
+                        chain_type=chain,
+                        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                        retries=ON_CHAIN_INTERACT_RETRIES,
+                        sleep=ON_CHAIN_INTERACT_SLEEP,
+                        tx_builder=_build_drain_tx,
+                    )
+                    .transact()
+                    .settle()
+                    .tx_hash
+                )
+            except (ValueError, ChainInteractionError) as exc:
+                last_exc = exc
+                if not is_gas_spike_error(str(exc)):
+                    raise
+                logger.warning(
+                    "EOA drain attempt %d/%d failed (multiplier=%.2f): %s — retrying",
+                    attempt + 1,
+                    _max_retries,
+                    multiplier,
+                    exc,
+                )
+                multiplier += EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP
+
+        raise InsufficientFundsException(
+            f"Cannot drain EOA {self.address} on {chain.name}: "
+            f"insufficient funds for gas after {_max_retries} attempts.",
+            chain=chain.value,
+        ) from last_exc
+
     def _transfer_from_eoa(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> str:
-        """Transfer funds from EOA wallet."""
+        """Transfer funds from EOA wallet.
+
+        Raises InsufficientFundsException when the balance is too low to
+        cover gas — either in drain mode (after exhausting retry attempts)
+        or in normal mode (via ``_pre_transfer_checks`` / ``_check_balance``).
+        """
         balance = self.get_balance(chain=chain, from_safe=False)
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if balance - tx_fee <= amount <= balance:
-            # we assume that the user wants to drain the EOA
-            # we also account for dust here because withdraw call use some EOA balance to drain the safes first
-            amount = int(balance - tx_fee * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
-            if amount <= 0:
-                logger.warning(
-                    f"Not enough balance to cover gas fees for transfer of {amount} on chain {chain} from EOA {self.address}. "
-                    f"Balance is {balance}, estimated fee is {tx_fee}. Not transferring."
-                )
-                return None
+        is_drain_mode = balance - tx_fee <= amount <= balance
+
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+
+        if is_drain_mode:
+            to = Web3.to_checksum_address(to)
+            return self._drain_eoa_with_retry(
+                to=to, chain=chain, ledger_api=ledger_api, balance=balance
+            )
 
         to = self._pre_transfer_checks(
             to=to, amount=amount, chain=chain, from_safe=False
         )
-
-        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
 
         def _build_tx() -> t.Dict:
             """Build transaction"""
