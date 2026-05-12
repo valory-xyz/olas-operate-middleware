@@ -36,7 +36,17 @@ class TestGas(OnTestnet):
     @pytest.mark.parametrize(
         ("chain", "base_fee_per_gas"),
         [
-            (Chain.POLYGON, to_wei(4999, GWEI)),
+            pytest.param(
+                Chain.POLYGON,
+                to_wei(4999, GWEI),
+                marks=pytest.mark.xfail(
+                    reason=(
+                        "Polygon testnet eth_feeHistory frequently returns "
+                        "-32001 'not found'; tracked separately from this test."
+                    ),
+                    strict=False,
+                ),
+            ),
         ],
     )
     def test_high_gas_price(
