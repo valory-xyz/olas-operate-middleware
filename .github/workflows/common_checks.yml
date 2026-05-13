@@ -151,3 +151,21 @@ jobs:
         run: |
           pip install tomte[tox]==0.7.0
           tox -e integration-tests
+
+  all-checks-passed:
+    # Single aggregate gate referenced by branch protection on `main`.
+    # When adding/removing mandatory jobs, update `needs` here instead of editing branch protection.
+    name: All checks passed
+    needs:
+      - linter_checks
+      - unit-tests
+      - coverage
+      - integration-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          echo "$results" | python -c "import json,sys; r=json.load(sys.stdin); failed=[k for k,v in r.items() if v['result']!='success']; sys.exit(0 if not failed else (print('Failed jobs:', failed) or 1))"

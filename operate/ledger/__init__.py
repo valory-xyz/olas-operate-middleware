@@ -156,6 +156,24 @@ GAS_ESTIMATE_FALLBACK_ADDRESSES = [
     "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
 ]
 DEFAULT_GAS_ESTIMATE_MULTIPLIER = 1.10
+# Each drain-mode retry widens the gas buffer by this step so that
+# later attempts tolerate progressively larger post-estimate gas spikes.
+EOA_DRAIN_RETRY_GAS_MULTIPLIER_STEP = 0.40
+
+
+def is_gas_spike_error(err: str) -> bool:
+    """Return True when *err* looks like an EIP-1559 gas-spike RPC rejection.
+
+    Covers geth ``-32000 insufficient MaxFeePerGas`` and the go-ethereum
+    variant ``max fee per gas less than block base fee``.
+    """
+    lower = err.lower()
+    return (
+        "-32000" in err
+        or "insufficient maxfeepergas" in lower
+        or "insufficient funds for gas" in lower
+        or "max fee per gas less than block base fee" in lower
+    )
 
 
 # TODO backport to open aea/autonomy

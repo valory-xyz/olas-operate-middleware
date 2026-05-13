@@ -26,6 +26,7 @@ import pytest
 from autonomy.chain.exceptions import ChainInteractionError
 
 from operate.constants import ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
@@ -948,6 +949,7 @@ class TestDrainEoa:
     def test_success_returns_tx_hash(self) -> None:
         """Test that drain_eoa returns the tx_hash on a successful drain."""
         mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 10_000
         mock_crypto = MagicMock()
 
         mock_txsettler_cls = MagicMock()
@@ -959,6 +961,7 @@ class TestDrainEoa:
         with (
             patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
             patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
         ):
             result = drain_eoa(
                 ledger_api=mock_ledger,
@@ -969,33 +972,43 @@ class TestDrainEoa:
 
         assert result == "0xdrainhash"
 
-    def test_no_balance_returns_none(self) -> None:
-        """Test that drain_eoa returns None when wallet has no balance to drain."""
+    def test_no_balance_raises_insufficient_funds(self) -> None:
+        """drain_eoa raises InsufficientFundsException when balance <= gas reserve.
+
+        Mirrors EthereumMasterWallet._drain_eoa_with_retry — callers that
+        treat an empty EOA as a no-op must catch the exception explicitly.
+        """
         mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 50  # below 100 × 1.10
         mock_crypto = MagicMock()
         mock_crypto.address = "0xWalletAddr"
 
         mock_txsettler_cls = MagicMock()
-        mock_txsettler_cls.return_value.transact.side_effect = ChainInteractionError(
-            "No balance to drain from wallet: 0xWalletAddr"
-        )
 
         with (
             patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
             patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
         ):
-            result = drain_eoa(
-                ledger_api=mock_ledger,
-                crypto=mock_crypto,
-                withdrawal_address="0xWithdrawal",
-                chain_id=100,
-            )
+            with pytest.raises(
+                InsufficientFundsException, match="insufficient to cover gas fee"
+            ) as exc_info:
+                drain_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    withdrawal_address="0xWithdrawal",
+                    chain_id=100,
+                )
 
-        assert result is None
+        assert exc_info.value.chain == Chain.GNOSIS.value
+        # TxSettler must not have been constructed — the pre-check raises
+        # before the closure is built.
+        mock_txsettler_cls.assert_not_called()
 
     def test_other_chain_interaction_error_reraises(self) -> None:
         """Test that drain_eoa re-raises ChainInteractionError for non-balance errors."""
         mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 10_000
         mock_crypto = MagicMock()
         mock_crypto.address = "0xWalletAddr"
 
@@ -1007,6 +1020,7 @@ class TestDrainEoa:
         with (
             patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
             patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
         ):
             with pytest.raises(ChainInteractionError, match="Network error"):
                 drain_eoa(
@@ -1015,6 +1029,129 @@ class TestDrainEoa:
                     withdrawal_address="0xWithdrawal",
                     chain_id=100,
                 )
+
+        # Must not have retried — only one attempt before re-raise
+        assert mock_txsettler_cls.return_value.transact.call_count == 1
+
+    def test_drain_eoa_raises_after_max_retries_on_gas_error(self) -> None:
+        """drain_eoa raises InsufficientFundsException after all 3 attempts fail with -32000."""
+        mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 10_000
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+
+        gas_error = ChainInteractionError(
+            "-32000 insufficient MaxFeePerGas for sender balance"
+        )
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.side_effect = gas_error
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
+        ):
+            with pytest.raises(
+                InsufficientFundsException, match="insufficient funds for gas"
+            ) as exc_info:
+                drain_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    withdrawal_address="0xWithdrawal",
+                    chain_id=100,
+                )
+
+        # Should have attempted exactly 3 times
+        assert mock_txsettler_cls.return_value.transact.call_count == 3
+        # Verify exception chaining preserves the original gas error
+        assert exc_info.value.__cause__ is gas_error
+
+    def test_drain_eoa_retries_on_rpc_rejection_succeeds(self) -> None:
+        """Retry loop succeeds on second attempt after first raises -32000."""
+        mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 10_000
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+
+        gas_error = ChainInteractionError(
+            "-32000 insufficient MaxFeePerGas for sender balance"
+        )
+        success_settler = MagicMock()
+        success_settler.transact.return_value = success_settler
+        success_settler.settle.return_value = success_settler
+        success_settler.tx_hash = "0xsuccesshash"
+
+        fail_settler = MagicMock()
+        fail_settler.transact.side_effect = gas_error
+
+        settler_instances = iter([fail_settler, success_settler])
+
+        def settler_factory(**_kwargs: t.Any) -> MagicMock:
+            return next(settler_instances)
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", side_effect=settler_factory),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
+        ):
+            result = drain_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                withdrawal_address="0xWithdrawal",
+                chain_id=100,
+            )
+
+        assert result == "0xsuccesshash"
+
+    def test_drain_eoa_multiplier_escalation(self) -> None:
+        """Verify the drain amount shrinks across retry attempts as multiplier widens."""
+        mock_ledger = MagicMock()
+        mock_ledger.get_balance.return_value = 1_000_000
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+
+        amounts_seen: t.List[int] = []
+
+        class _CapturingSettler:
+            """Fake TxSettler that captures the drain amount from tx_builder."""
+
+            def __init__(self, *, tx_builder: t.Callable, **_kw: t.Any) -> None:
+                self._tx_builder = tx_builder
+
+            def transact(self) -> "_CapturingSettler":
+                self._tx_builder()
+                raise ChainInteractionError("-32000 insufficient MaxFeePerGas")
+
+        def _fake_get_transfer_tx(
+            **kwargs: t.Any,
+        ) -> t.Dict:
+            amounts_seen.append(kwargs["amount"])
+            return {"value": kwargs["amount"], "gas": 21000}
+
+        mock_ledger.get_transfer_transaction = _fake_get_transfer_tx
+        mock_ledger.update_with_gas_estimate.side_effect = lambda **kw: kw[
+            "transaction"
+        ]
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", _CapturingSettler),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch(
+                "operate.utils.gnosis.estimate_transfer_tx_fee",
+                return_value=100_000,
+            ),
+        ):
+            with pytest.raises(InsufficientFundsException):
+                drain_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    withdrawal_address="0xWithdrawal",
+                    chain_id=100,
+                )
+
+        assert len(amounts_seen) == 3
+        # Drain amount must shrink as multiplier widens
+        assert amounts_seen[0] > amounts_seen[1] > amounts_seen[2]
 
 
 # ---------------------------------------------------------------------------
@@ -1193,12 +1330,11 @@ class TestTransferBuildClosure:
 class TestDrainEoaBuildClosure:
     """Test the _build_tx() closure inside drain_eoa (lines 532-565)."""
 
-    def test_build_tx_closure_zero_balance_returns_none(self) -> None:
-        """Test _build_tx raises when balance <= fee, causing drain_eoa to return None."""
+    def test_build_tx_closure_zero_balance_raises(self) -> None:
+        """drain_eoa raises InsufficientFundsException when balance is zero."""
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
         mock_crypto.address = "0xWalletAddr"
-        # get_balance returns less than the fee → amount <= 0 → exception → None
         mock_ledger.get_balance.return_value = 0
 
         fake_settler_cls = _calling_txsettler_cls()
@@ -1208,14 +1344,13 @@ class TestDrainEoaBuildClosure:
             patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
             patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
         ):
-            result = drain_eoa(
-                ledger_api=mock_ledger,
-                crypto=mock_crypto,
-                withdrawal_address="0xWithdrawal",
-                chain_id=100,
-            )
-
-        assert result is None
+            with pytest.raises(InsufficientFundsException):
+                drain_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    withdrawal_address="0xWithdrawal",
+                    chain_id=100,
+                )
 
     def test_build_tx_closure_positive_balance_success(self) -> None:
         """Test _build_tx builds the drain transaction when balance exceeds fee."""

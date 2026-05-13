@@ -429,6 +429,57 @@ class TestDrainAgentsEOAs:
         ):
             manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
 
+    def test_drain_eoa_insufficient_funds_is_caught_and_logged(self) -> None:
+        """drain_agents_eoas catches InsufficientFundsException from drain_eoa.
+
+        After ERC20 drains succeed, the final native drain may fail because
+        gas spiked between estimation and broadcast. The handler logs a
+        warning and continues rather than aborting sibling drains.
+        """
+        from operate.wallet.master import InsufficientFundsException
+
+        manager = _make_manager()
+        service = _mock_service()
+
+        ledger_api = MagicMock()
+        ledger_api.get_balance.return_value = 500
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api",
+                return_value=ledger_api,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                return_value=0,
+            ),
+            patch(
+                "operate.services.funding_manager.get_asset_name",
+                return_value="xDAI",
+            ),
+            patch(
+                "operate.services.funding_manager.estimate_transfer_tx_fee",
+                return_value=10,
+            ),
+            patch("operate.services.funding_manager.transfer_erc20_from_eoa"),
+            patch(
+                "operate.services.funding_manager.drain_eoa",
+                side_effect=InsufficientFundsException(
+                    "insufficient MaxFeePerGas", chain="gnosis"
+                ),
+            ),
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {100: [TOKEN_ADDR]},
+            ),
+        ):
+            # Must not raise — the handler catches and logs.
+            manager.drain_agents_eoas(service, AGENT_ADDR, Chain.GNOSIS)
+
+        manager.logger.warning.assert_called_once()  # type: ignore[attr-defined]
+        warning_msg = manager.logger.warning.call_args[0][0]  # type: ignore[attr-defined]
+        assert AGENT_ADDR in warning_msg
+
     def test_estimate_fee_other_rpc_errors_propagate(self) -> None:
         """Web3RPCError unrelated to insufficient-funds must propagate."""
         from web3.exceptions import Web3RPCError

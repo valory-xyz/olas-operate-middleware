@@ -216,13 +216,20 @@ class FundingManager:
             self.logger.info(
                 f"Draining {balance} (approx) {get_currency_denom(chain)} from {agent_address} (agent) to {withdrawal_address}"
             )
-            drain_eoa(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                withdrawal_address=withdrawal_address,
-                chain_id=chain.id,
-            )
-            self.logger.info(f"{service.name} signer drained")
+            try:
+                drain_eoa(
+                    ledger_api=ledger_api,
+                    crypto=ethereum_crypto,
+                    withdrawal_address=withdrawal_address,
+                    chain_id=chain.id,
+                )
+                self.logger.info(f"{service.name} signer drained")
+            except InsufficientFundsException as exc:
+                # An empty agent EOA is normal during service teardown
+                # (the pre-flight check at line 184 already screens cases
+                # where remaining work depends on this drain succeeding).
+                # Log and continue rather than abort sibling drains.
+                self.logger.warning(f"Skipping drain of {agent_address}: {exc}")
 
     def drain_service_safe(  # pylint: disable=too-many-locals
         self, service: Service, withdrawal_address: str, chain: Chain
