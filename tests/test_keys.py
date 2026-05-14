@@ -33,6 +33,8 @@ from eth_account import Account
 from operate.keys import Key, KeysManager
 from operate.migration import MigrationManager
 
+from tests.conftest import reencrypt_key
+
 
 @pytest.fixture
 def keys_manager(temp_keys_dir: Path, password: Optional[str]) -> KeysManager:
@@ -58,17 +60,6 @@ def key_file(keys_manager: KeysManager, sample_key: Key) -> tuple[Path, Key]:
         encoding="utf-8",
     )
     return key_file_path, sample_key
-
-
-def _reencrypt_key(
-    manager: KeysManager, address: str, current_password: str, new_password: str
-) -> None:
-    """Rewrite ``address``'s on-disk key as if it were encrypted with ``new_password``."""
-    key = manager.get(address)
-    crypto = manager.private_key_to_crypto(key.private_key, current_password)
-    key.private_key = crypto.encrypt(password=new_password)
-    key.path = manager.path / address
-    key.store()
 
 
 class TestKeysManager:
@@ -285,7 +276,7 @@ class TestKeysManager:
         # Address B was already re-encrypted with the new password by a
         # previous partial update — and crucially its .bak was lost.
         address_b = keys_manager.create()
-        _reencrypt_key(keys_manager, address_b, password, new_password)
+        reencrypt_key(keys_manager, address_b, password, new_password)
         (keys_manager.path / f"{address_b}.bak").unlink()
 
         keys_manager.update_password(new_password)
@@ -306,10 +297,77 @@ class TestKeysManager:
         third_password = "something_else"  # nosec B105 - test fixture, not a secret
         address = keys_manager.create()
         # Re-encrypt with a *third* password — neither old nor new can open it.
-        _reencrypt_key(keys_manager, address, password, third_password)
+        reencrypt_key(keys_manager, address, password, third_password)
 
         with pytest.raises(ValueError, match="cannot be decrypted"):
             keys_manager.update_password(new_password)
+
+    def test_update_password_aborts_on_unrecoverable_key(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """An unrecoverable key aborts the iteration; abort is the documented contract."""
+        new_password = f"{password}_new"
+        third_password = "third_pw"  # nosec B105 - test fixture, not a secret
+        # Several recoverable keys plus one stuck on a third password.
+        recoverable = [keys_manager.create() for _ in range(3)]
+        unrecoverable = keys_manager.create()
+        reencrypt_key(keys_manager, unrecoverable, password, third_password)
+
+        with pytest.raises(ValueError, match="cannot be decrypted"):
+            keys_manager.update_password(new_password)
+
+        # Iteration order is filesystem-dependent: each recoverable key is
+        # either untouched (still openable with old password) or has been
+        # re-encrypted with new password — never both, never neither.
+        for address in recoverable:
+            key_json = json.loads(
+                (keys_manager.path / address).read_text(encoding="utf-8")
+            )
+            on_old = on_new = False
+            try:
+                keys_manager.private_key_to_crypto(key_json["private_key"], password)
+                on_old = True
+            except ValueError:
+                pass
+            try:
+                keys_manager.private_key_to_crypto(
+                    key_json["private_key"], new_password
+                )
+                on_new = True
+            except ValueError:
+                pass
+            assert on_old != on_new, f"{address} ended in an indeterminate state"
+
+    def test_update_password_preserves_existing_bak_for_migrated_key(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """An existing .bak is not overwritten on the already-migrated path."""
+        new_password = f"{password}_new"
+        address = keys_manager.create()
+        reencrypt_key(keys_manager, address, password, new_password)
+
+        backup_path = keys_manager.path / f"{address}.bak"
+        sentinel = '{"sentinel": true}'
+        backup_path.write_text(sentinel, encoding="utf-8")
+
+        keys_manager.update_password(new_password)
+
+        assert backup_path.read_text(encoding="utf-8") == sentinel
+
+    def test_private_key_to_crypto_temp_file_valueerror_is_logged(
+        self, keys_manager: KeysManager, key_file: tuple[Path, Key]
+    ) -> None:
+        """A ValueError from unrecoverable_delete is logged, not propagated."""
+        _, sample_key = key_file
+        with patch(
+            "operate.keys.unrecoverable_delete",
+            side_effect=ValueError("not a file"),
+        ):
+            crypto = keys_manager.get_crypto_instance(sample_key.address)
+
+        assert crypto is not None
+        assert crypto.address == sample_key.address
+        keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
 
     def test_update_password_skips_non_address_files(
         self, keys_manager: KeysManager, password: str

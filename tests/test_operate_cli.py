@@ -48,7 +48,7 @@ from operate.keys import KeysManager
 from operate.operate_types import LedgerType, Version
 from operate.services.service import SERVICE_CONFIG_PREFIX
 
-from tests.conftest import random_string
+from tests.conftest import random_string, reencrypt_key
 
 
 def random_mnemonic(num_words: int = 12) -> str:
@@ -57,17 +57,6 @@ def random_mnemonic(num_words: int = 12) -> str:
     w3.eth.account.enable_unaudited_hdwallet_features()
     _, mnemonic = w3.eth.account.create_with_mnemonic(num_words=num_words)
     return mnemonic
-
-
-def _reencrypt_key(
-    manager: KeysManager, address: str, current_password: str, new_password: str
-) -> None:
-    """Rewrite ``address``'s on-disk key as if it were encrypted with ``new_password``."""
-    key = manager.get(address)
-    crypto = manager.private_key_to_crypto(key.private_key, current_password)
-    key.private_key = crypto.encrypt(password=new_password)
-    key.path = manager.path / address
-    key.store()
 
 
 class TestOperateApp:
@@ -190,6 +179,32 @@ class TestOperateApp:
         assert not operate.user_account.is_valid(password1)
         assert not operate.wallet_manager.is_password_valid(password1)
 
+    def test_update_password_rejects_when_wallet_on_unknown_password(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """user.json passes auth but a stranger-password wallet still rejects the change."""
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+
+        password1 = random_string()
+        password2 = random_string()
+        stranger = random_string()
+
+        operate.create_user_account(password=password1)
+        operate.password = password1
+        operate.wallet_manager.create(LedgerType.ETHEREUM)
+
+        wallet = next(iter(operate.wallet_manager))
+        wallet.password = password1
+        wallet.update_password(stranger)
+        assert not operate.wallet_manager.is_password_valid(password1)
+        assert not operate.wallet_manager.is_password_valid(password2)
+        assert operate.user_account.is_valid(password1)
+
+        with pytest.raises(ValueError, match=rf"^{MSG_INVALID_PASSWORD}"):
+            operate.update_password(password1, password2)
+
     def test_update_password_converges_with_half_committed_agent_keys(
         self,
         tmp_path: Path,
@@ -212,7 +227,7 @@ class TestOperateApp:
         wallet = next(iter(operate.wallet_manager))
         wallet.password = password1
         wallet.update_password(password2)
-        _reencrypt_key(operate.keys_manager, address_new, password1, password2)
+        reencrypt_key(operate.keys_manager, address_new, password1, password2)
 
         operate.update_password(password1, password2)
 
