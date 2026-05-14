@@ -2547,7 +2547,9 @@ class TestCliCommands:
             patch("operate.cli.Server") as mock_server_cls,
             patch("operate.cli.Config") as mock_config_cls,
             patch("operate.cli.AppSingleInstance"),
+            patch("operate.cli.sys") as mock_sys,
         ):
+            mock_sys.platform = "linux"
             mock_app = MagicMock()
             mock_create_app.return_value = mock_app
             mock_server = MagicMock()
@@ -2574,7 +2576,9 @@ class TestCliCommands:
             patch("operate.cli.Server") as mock_server_cls,
             patch("operate.cli.Config") as mock_config_cls,
             patch("operate.cli.AppSingleInstance"),
+            patch("operate.cli.sys") as mock_sys,
         ):
+            mock_sys.platform = "linux"
             mock_app = MagicMock()
             mock_create_app.return_value = mock_app
             mock_server = MagicMock()
@@ -2590,6 +2594,86 @@ class TestCliCommands:
             )
 
         mock_server.run.assert_called_once()
+
+    def test_daemon_uses_selector_loop_server_on_windows(self) -> None:
+        """On Windows, _daemon instantiates _SelectorLoopServer instead of Server.
+
+        Patching sys inside operate.cli lets us simulate win32 on any CI OS.
+        Asserting on the chosen Server class proves the loop selection is
+        confined to the uvicorn customization layer and no global asyncio
+        policy is mutated.
+        """
+        fn = self._get_callback("_daemon")
+        assert fn is not None
+
+        with (
+            patch("operate.cli.create_app") as mock_create_app,
+            patch("operate.cli.Server") as mock_server_cls,
+            patch("operate.cli._SelectorLoopServer") as mock_selector_server_cls,
+            patch("operate.cli.Config") as mock_config_cls,
+            patch("operate.cli.AppSingleInstance"),
+            patch("operate.cli.sys") as mock_sys,
+        ):
+            mock_sys.platform = "win32"
+            mock_create_app.return_value = MagicMock()
+            mock_server_cls.return_value = MagicMock()
+            mock_selector_server_cls.return_value = MagicMock()
+            mock_config_cls.return_value = MagicMock()
+
+            fn(host="localhost", port=8000, ssl_keyfile="", ssl_certfile="", home=None)
+
+        mock_selector_server_cls.assert_called_once_with(mock_config_cls.return_value)
+        mock_server_cls.assert_not_called()
+
+    def test_daemon_uses_default_server_on_non_windows(self) -> None:
+        """On non-Windows, _daemon uses the stock uvicorn Server."""
+        fn = self._get_callback("_daemon")
+        assert fn is not None
+
+        with (
+            patch("operate.cli.create_app") as mock_create_app,
+            patch("operate.cli.Server") as mock_server_cls,
+            patch("operate.cli._SelectorLoopServer") as mock_selector_server_cls,
+            patch("operate.cli.Config") as mock_config_cls,
+            patch("operate.cli.AppSingleInstance"),
+            patch("operate.cli.sys") as mock_sys,
+        ):
+            mock_sys.platform = "linux"
+            mock_create_app.return_value = MagicMock()
+            mock_server_cls.return_value = MagicMock()
+            mock_selector_server_cls.return_value = MagicMock()
+            mock_config_cls.return_value = MagicMock()
+
+            fn(host="localhost", port=8000, ssl_keyfile="", ssl_certfile="", home=None)
+
+        mock_server_cls.assert_called_once_with(mock_config_cls.return_value)
+        mock_selector_server_cls.assert_not_called()
+
+    def test_selector_loop_server_run(self) -> None:
+        """Cover _SelectorLoopServer.run(): creates SelectorEventLoop, runs serve(), cleans up."""
+        from operate.cli import _SelectorLoopServer
+
+        mock_loop = MagicMock()
+
+        def _run_coro(coro: Any) -> None:
+            """Close the coroutine to avoid 'never awaited' warnings."""
+            if hasattr(coro, "close"):
+                coro.close()
+
+        mock_loop.run_until_complete = MagicMock(side_effect=_run_coro)
+
+        server = MagicMock(spec=_SelectorLoopServer)
+        server.serve = AsyncMock()
+
+        with (
+            patch("asyncio.SelectorEventLoop", return_value=mock_loop),
+            patch("asyncio.set_event_loop") as mock_set_loop,
+        ):
+            _SelectorLoopServer.run(server, sockets=None)
+
+        mock_set_loop.assert_any_call(mock_loop)
+        mock_set_loop.assert_any_call(None)
+        mock_loop.close.assert_called_once()
 
     def test_qs_start_command_body(self) -> None:
         """Cover lines 1840-1843: qs_start body."""

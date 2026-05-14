@@ -910,7 +910,6 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 "install",
                 f"open-autonomy[all]=={autonomy_version}",
                 f"open-aea-ledger-ethereum=={aea_version}",
-                f"open-aea-ledger-ethereum-flashbots=={aea_version}",
                 f"open-aea-ledger-cosmos=={aea_version}",
                 # Install tendermint dependencies
                 "flask",

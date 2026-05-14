@@ -162,6 +162,148 @@ class TestGnosisSafeTransaction:
         mock_contracts.gnosis_safe.get_raw_safe_transaction.assert_called_once()
         assert isinstance(result, dict)
 
+    def test_build_normalizes_hex_string_data_with_0x_prefix(self) -> None:
+        """Test build() converts '0x'-prefixed hex str data to bytes."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_ledger.api.to_checksum_address.return_value = "0x" + "a" * 40
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+
+        safe_tx = GnosisSafeTransaction(
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            chain_type=ChainType.GNOSIS,
+            safe="0x" + "b" * 40,
+        )
+        safe_tx.add({"to": "0x" + "d" * 40, "value": 0, "data": "0xaabbccdd"})
+
+        multisend_addr = "0x" + "c" * 40
+        safe_tx_hash_hex = "0x" + "aa" * 32
+
+        with patch(
+            "operate.services.protocol.registry_contracts"
+        ) as mock_contracts, patch(
+            "operate.services.protocol.ContractConfigs"
+        ) as mock_config, patch(
+            "operate.services.protocol.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.services.protocol.update_tx_with_gas_estimate"
+        ):
+            mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
+            mock_contracts.multisend.get_tx_data.return_value = {
+                "data": "0x" + "ab" * 16
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": safe_tx_hash_hex
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "to": multisend_addr,
+                "value": 0,
+                "data": b"",
+            }
+
+            safe_tx.build()
+
+        # Verify multisend was called with bytes data (normalized from str)
+        call_kwargs = mock_contracts.multisend.get_tx_data.call_args
+        normalized = call_kwargs.kwargs["multi_send_txs"]
+        assert isinstance(normalized[0]["data"], bytes)
+        assert normalized[0]["data"] == bytes.fromhex("aabbccdd")
+
+    def test_build_normalizes_hex_string_data_without_0x_prefix(self) -> None:
+        """Test build() converts raw hex str data (no 0x prefix) to bytes."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_ledger.api.to_checksum_address.return_value = "0x" + "a" * 40
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+
+        safe_tx = GnosisSafeTransaction(
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            chain_type=ChainType.GNOSIS,
+            safe="0x" + "b" * 40,
+        )
+        safe_tx.add({"to": "0x" + "d" * 40, "value": 0, "data": "aabbccdd"})
+
+        multisend_addr = "0x" + "c" * 40
+        safe_tx_hash_hex = "0x" + "aa" * 32
+
+        with patch(
+            "operate.services.protocol.registry_contracts"
+        ) as mock_contracts, patch(
+            "operate.services.protocol.ContractConfigs"
+        ) as mock_config, patch(
+            "operate.services.protocol.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.services.protocol.update_tx_with_gas_estimate"
+        ):
+            mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
+            mock_contracts.multisend.get_tx_data.return_value = {
+                "data": "0x" + "ab" * 16
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": safe_tx_hash_hex
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "to": multisend_addr,
+                "value": 0,
+                "data": b"",
+            }
+
+            safe_tx.build()
+
+        call_kwargs = mock_contracts.multisend.get_tx_data.call_args
+        normalized = call_kwargs.kwargs["multi_send_txs"]
+        assert isinstance(normalized[0]["data"], bytes)
+        assert normalized[0]["data"] == bytes.fromhex("aabbccdd")
+
+    def test_build_preserves_bytes_data_unchanged(self) -> None:
+        """Test build() leaves data alone when it is already bytes."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_ledger.api.to_checksum_address.return_value = "0x" + "a" * 40
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+
+        safe_tx = GnosisSafeTransaction(
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            chain_type=ChainType.GNOSIS,
+            safe="0x" + "b" * 40,
+        )
+        raw_bytes = bytes.fromhex("aabbccdd")
+        safe_tx.add({"to": "0x" + "d" * 40, "value": 0, "data": raw_bytes})
+
+        multisend_addr = "0x" + "c" * 40
+        safe_tx_hash_hex = "0x" + "aa" * 32
+
+        with patch(
+            "operate.services.protocol.registry_contracts"
+        ) as mock_contracts, patch(
+            "operate.services.protocol.ContractConfigs"
+        ) as mock_config, patch(
+            "operate.services.protocol.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.services.protocol.update_tx_with_gas_estimate"
+        ):
+            mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
+            mock_contracts.multisend.get_tx_data.return_value = {
+                "data": "0x" + "ab" * 16
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": safe_tx_hash_hex
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "to": multisend_addr,
+                "value": 0,
+                "data": b"",
+            }
+
+            safe_tx.build()
+
+        call_kwargs = mock_contracts.multisend.get_tx_data.call_args
+        normalized = call_kwargs.kwargs["multi_send_txs"]
+        assert normalized[0]["data"] is raw_bytes
+
 
 # ---------------------------------------------------------------------------
 # StakingManager

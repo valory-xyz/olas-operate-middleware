@@ -767,6 +767,11 @@ class TestBridgeManager:
         for request_status in refill_requirements["bridge_request_status"]:
             if request_status["message"] == "no routes found":
                 continue
+            message = (request_status.get("message") or "").lower()
+            if "liquidity" in message:
+                pytest.skip(
+                    f"External provider liquidity insufficient: {request_status['message']}"
+                )
 
             assert (
                 request_status["status"] == ProviderRequestStatus.QUOTE_DONE

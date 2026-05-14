@@ -126,11 +126,23 @@ class GnosisSafeTransaction:
 
     def build(self) -> t.Dict:
         """Build the transaction."""
+        # Normalize tx data fields to bytes — encode_abi() may return
+        # HexStr (str) depending on the web3/open-autonomy version, but
+        # the multisend contract's encode_data() requires bytes.
+        normalized_txs = []
+        for tx in self._txs:
+            tx_copy = dict(tx)
+            data = tx_copy.get("data", b"")
+            if isinstance(data, str):
+                hex_str = data[2:] if data.startswith("0x") else data
+                tx_copy["data"] = bytes.fromhex(hex_str)
+            normalized_txs.append(tx_copy)
+
         multisend_data = bytes.fromhex(
             registry_contracts.multisend.get_tx_data(
                 ledger_api=self.ledger_api,
                 contract_address=ContractConfigs.multisend.contracts[self.chain_type],
-                multi_send_txs=self._txs,
+                multi_send_txs=normalized_txs,
             ).get("data")[2:]
         )
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
@@ -1669,14 +1681,24 @@ class EthSafeTxBuilder(_ChainUtil):
             contract_address=token,
         )
 
+        transfer_data = erc20_instance.encode_abi(
+            abi_element_identifier="transfer",
+            args=[to, amount],
+        )
+        # Normalize to bytes — encode_abi() may return HexStr (str)
+        # depending on the web3/open-autonomy version, but the
+        # multisend contract's encode_data() requires bytes.
+        if isinstance(transfer_data, str):
+            hex_str = (
+                transfer_data[2:] if transfer_data.startswith("0x") else transfer_data
+            )
+            transfer_data = bytes.fromhex(hex_str)
+
         txs = []
         txs.append(
             {
                 "to": token,
-                "data": erc20_instance.encode_abi(
-                    abi_element_identifier="transfer",
-                    args=[to, amount],
-                ),
+                "data": transfer_data,
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
             }
