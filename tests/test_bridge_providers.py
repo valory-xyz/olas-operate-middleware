@@ -28,7 +28,6 @@ from unittest.mock import patch
 import pytest
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
-from hexbytes import HexBytes
 from web3 import Web3
 
 from operate.bridge.bridge_manager import (
@@ -555,13 +554,9 @@ def get_transfer_amount(
                 and Web3.to_checksum_address("0x" + log["topics"][2].to_0x_hex()[-40:])
                 == recipient
             ):
-                data = log["data"]
-                value = (
-                    int(data.to_0x_hex(), 16)
-                    if isinstance(data, HexBytes)
-                    else int(data, 16)
-                )
-                return value
+                # Web3.to_hex accepts bytes/HexBytes/int/str uniformly,
+                # so we don't need an isinstance dispatch on log["data"].
+                return int(Web3.to_hex(log["data"]), 16)
         return 0
 
 
