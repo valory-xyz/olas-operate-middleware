@@ -820,7 +820,17 @@ class EthereumMasterWallet(
         return mnemonic.split()
 
     def update_password(self, new_password: str) -> None:
-        """Updates password."""
+        """Updates password.
+
+        Idempotent: if the keystore is already encrypted with ``new_password``,
+        skip disk I/O and only sync in-memory state. Clearing ``self._crypto``
+        forces the next access to re-load with the new password.
+        """
+        if self.is_password_valid(new_password):
+            self._crypto = None
+            self.password = new_password
+            return
+
         create_backup(self.path / self._key)
         self._crypto = None
         (self.path / self._key).write_text(

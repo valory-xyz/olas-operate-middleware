@@ -21,6 +21,7 @@
 
 import hashlib
 import json
+import logging
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -43,6 +44,7 @@ from operate.constants import (
     USER_JSON,
     VERSION_FILE,
 )
+from operate.keys import KeysManager
 from operate.operate_types import LedgerType, Version
 from operate.services.service import SERVICE_CONFIG_PREFIX
 
@@ -55,6 +57,17 @@ def random_mnemonic(num_words: int = 12) -> str:
     w3.eth.account.enable_unaudited_hdwallet_features()
     _, mnemonic = w3.eth.account.create_with_mnemonic(num_words=num_words)
     return mnemonic
+
+
+def _reencrypt_key(
+    manager: KeysManager, address: str, current_password: str, new_password: str
+) -> None:
+    """Rewrite ``address``'s on-disk key as if it were encrypted with ``new_password``."""
+    key = manager.get(address)
+    crypto = manager.private_key_to_crypto(key.private_key, current_password)
+    key.private_key = crypto.encrypt(password=new_password)
+    key.path = manager.path / address
+    key.store()
 
 
 class TestOperateApp:
@@ -144,6 +157,99 @@ class TestOperateApp:
         invalid_mnemonic = random_mnemonic(num_words=15)
         with pytest.raises(ValueError, match=rf"^{MSG_INVALID_MNEMONIC}"):
             operate.update_password_with_mnemonic(invalid_mnemonic, password2)
+
+    def test_update_password_recovers_from_half_committed_state(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Retry converges when the master wallet is already on new_password."""
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+
+        password1 = random_string()
+        password2 = random_string()
+
+        operate.create_user_account(password=password1)
+        operate.password = password1
+        operate.wallet_manager.create(LedgerType.ETHEREUM)
+
+        # Simulate the half-committed state: master wallet re-encrypted to
+        # password2, but user.json still hashed for password1.
+        wallet = next(iter(operate.wallet_manager))
+        wallet.password = password1
+        wallet.update_password(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        assert not operate.wallet_manager.is_password_valid(password1)
+        assert operate.user_account.is_valid(password1)
+
+        # The retry must now succeed and bring everything to password2.
+        operate.update_password(password1, password2)
+
+        assert operate.user_account.is_valid(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        assert not operate.user_account.is_valid(password1)
+        assert not operate.wallet_manager.is_password_valid(password1)
+
+    def test_update_password_converges_with_half_committed_agent_keys(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """End-to-end recovery when some agent keys are already on new_password."""
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+
+        password1 = random_string()
+        password2 = random_string()
+
+        operate.create_user_account(password=password1)
+        operate.password = password1
+        operate.wallet_manager.create(LedgerType.ETHEREUM)
+        address_old = operate.keys_manager.create()
+        address_new = operate.keys_manager.create()
+
+        # Half-commit: master wallet on password2, one agent key on password2,
+        # user.json + the other agent key still on password1.
+        wallet = next(iter(operate.wallet_manager))
+        wallet.password = password1
+        wallet.update_password(password2)
+        _reencrypt_key(operate.keys_manager, address_new, password1, password2)
+
+        operate.update_password(password1, password2)
+
+        assert operate.user_account.is_valid(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        # Re-read via a fresh KeysManager so the assertions exercise the
+        # on-disk keystore rather than any in-memory state.
+        fresh = KeysManager(
+            path=operate.keys_manager.path,
+            logger=logging.getLogger(),
+            password=password2,
+        )
+        for address in (address_old, address_new):
+            decrypted = fresh.get(address).get_decrypted_json(password2)
+            assert decrypted["address"] == address
+
+    def test_master_wallet_update_password_is_idempotent(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Calling update_password twice with the same new password is safe."""
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+
+        password1 = random_string()
+        password2 = random_string()
+        operate.create_user_account(password=password1)
+        operate.password = password1
+        operate.wallet_manager.create(LedgerType.ETHEREUM)
+
+        wallet = next(iter(operate.wallet_manager))
+        wallet.password = password1
+        wallet.update_password(password2)
+        # Second call must not raise even though the keystore is no longer
+        # decryptable with the original self.password.
+        wallet.update_password(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
 
     def test_migrate_account(
         self,

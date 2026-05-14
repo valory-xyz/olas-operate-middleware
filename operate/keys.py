@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from aea_ledger_ethereum.ethereum import EthereumCrypto
+from web3 import Web3
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
@@ -79,29 +80,23 @@ class KeysManager:
         self, private_key: str, password: Optional[str]
     ) -> EthereumCrypto:
         """Convert private key string to EthereumCrypto instance."""
-        with tempfile.NamedTemporaryFile(
-            dir=self.path,
+        temp_file = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
             mode="w",
             suffix=".txt",
-            delete=False,  # Handle cleanup manually
-        ) as temp_file:
-            temp_file_name = temp_file.name
+            delete=False,
+        )
+        temp_file_name = temp_file.name
+        try:
             temp_file.write(private_key)
             temp_file.flush()
-            temp_file.close()  # Close the file before reading
-
-            # Set proper file permissions (readable by owner only)
+            temp_file.close()
             os.chmod(temp_file_name, 0o600)
-            crypto = EthereumCrypto(private_key_path=temp_file_name, password=password)
-
+            return EthereumCrypto(private_key_path=temp_file_name, password=password)
+        finally:
             try:
-                unrecoverable_delete(
-                    Path(temp_file.name)
-                )  # Clean up the temporary file
-            except OSError as e:
-                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
-
-        return crypto
+                unrecoverable_delete(Path(temp_file_name))
+            except (OSError, ValueError) as e:
+                self.logger.error(f"Failed to delete temp file {temp_file_name}: {e}")
 
     def get(self, key: str) -> Key:
         """Get key object."""
@@ -172,13 +167,47 @@ class KeysManager:
         os.remove(self.path / key)
 
     def update_password(self, new_password: str) -> None:
-        """Update password for all keys."""
+        """Update password for all keys.
+
+        Idempotent: a key already encrypted with ``new_password`` is detected
+        and skipped, so retrying a previously-interrupted update converges.
+        """
         for key_file in self.path.iterdir():
             if not key_file.is_file() or key_file.suffix == ".bak":
                 continue
+            if not Web3.is_address(key_file.name):
+                self.logger.warning(f"Skipping non-key file: {key_file}")
+                continue
 
             key = self.get(key_file.name)
-            crypto = self.get_crypto_instance(key_file.name)
+            try:
+                crypto = self.private_key_to_crypto(key.private_key, self.password)
+            except ValueError as primary_exc:
+                # Decrypt with new_password to detect a prior partial migration.
+                self.logger.info(
+                    "Key %s did not open with the current password (%s); "
+                    "checking new password.",
+                    key_file.name,
+                    primary_exc,
+                )
+                try:
+                    self.private_key_to_crypto(key.private_key, new_password)
+                except ValueError:
+                    raise ValueError(
+                        f"Key {key_file.name} cannot be decrypted with the "
+                        "current or the new password."
+                    ) from primary_exc
+
+                # The .bak written here is a post-migration snapshot
+                # (encrypted with new_password), not a rollback artifact.
+                backup_path = self.path / f"{key.address}.bak"
+                if not backup_path.exists():
+                    backup_path.write_text(
+                        json.dumps(key.json, indent=2),
+                        encoding="utf-8",
+                    )
+                continue
+
             encrypted_private_key = crypto.encrypt(password=new_password)
             key.private_key = encrypted_private_key
             key.path = self.path / key_file.name

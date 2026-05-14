@@ -264,18 +264,29 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         )
 
     def update_password(self, old_password: str, new_password: str) -> None:
-        """Updates current password"""
+        """Updates current password.
+
+        Authentication is anchored in ``user.json``. The wallet check accepts
+        either password so a daemon left half-committed by an interrupted run
+        can converge on retry — the wallet/keys updates are idempotent.
+        """
 
         if not new_password:
             raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
+        if not self.user_account.is_valid(old_password):
+            raise ValueError(MSG_INVALID_PASSWORD)
+
         if not (
-            self.user_account.is_valid(old_password)
-            and self.wallet_manager.is_password_valid(old_password)
+            self.wallet_manager.is_password_valid(old_password)
+            or self.wallet_manager.is_password_valid(new_password)
         ):
             raise ValueError(MSG_INVALID_PASSWORD)
 
         wallet_manager = self.wallet_manager
+        # KeysManager.update_password reads self.password as the
+        # current-password attempt; the manager-level idempotency relies on
+        # this being old_password so already-migrated keys take the fallback.
         wallet_manager.password = old_password
         wallet_manager.update_password(new_password)
         self._keys_manager.update_password(new_password)

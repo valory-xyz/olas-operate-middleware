@@ -60,6 +60,17 @@ def key_file(keys_manager: KeysManager, sample_key: Key) -> tuple[Path, Key]:
     return key_file_path, sample_key
 
 
+def _reencrypt_key(
+    manager: KeysManager, address: str, current_password: str, new_password: str
+) -> None:
+    """Rewrite ``address``'s on-disk key as if it were encrypted with ``new_password``."""
+    key = manager.get(address)
+    crypto = manager.private_key_to_crypto(key.private_key, current_password)
+    key.private_key = crypto.encrypt(password=new_password)
+    key.path = manager.path / address
+    key.store()
+
+
 class TestKeysManager:
     """Test cases for KeysManager class."""
 
@@ -125,26 +136,24 @@ class TestKeysManager:
         temp_files = [f for f in keys_manager.path.iterdir() if f.suffix == ".txt"]
         assert len(temp_files) == 0, "Temporary files should be cleaned up"
 
-    def test_get_crypto_instance_temp_file_in_correct_directory(
+    def test_get_crypto_instance_temp_file_outside_keys_dir(
         self, keys_manager: KeysManager, key_file: tuple[Path, Key]
     ) -> None:
-        """Test that temporary file is created in the correct directory."""
-        key_file_path, sample_key = key_file
+        """Temp file must be created outside the keys directory.
 
-        # Verify we start with just the key file
-        initial_files = list(keys_manager.path.iterdir())
-        assert len(initial_files) == 2  # key file + .bak file
+        Stray files inside the keys directory break update_password and
+        migrate_keys iteration, so the temp file must live elsewhere.
+        """
+        _, sample_key = key_file
 
-        # Use a mock to capture what directory the temp file is created in
         with patch(
             "tempfile.NamedTemporaryFile", wraps=tempfile.NamedTemporaryFile
         ) as mock_tempfile:
             keys_manager.get_crypto_instance(sample_key.address)
 
-            # Verify tempfile was called with the correct directory
             mock_tempfile.assert_called_once()
-            call_kwargs = mock_tempfile.call_args[1]
-            assert call_kwargs["dir"] == keys_manager.path
+            call_kwargs = mock_tempfile.call_args.kwargs
+            assert "dir" not in call_kwargs or call_kwargs["dir"] != keys_manager.path
             assert call_kwargs["mode"] == "w"
             assert call_kwargs["suffix"] == ".txt"
             assert call_kwargs["delete"] is False
@@ -263,6 +272,70 @@ class TestKeysManager:
             backup_path = keys_manager.path / f"{address}.bak"
             assert backup_path.is_file()
             assert backup_path.read_text() == json.dumps(key.json, indent=2)
+
+    def test_update_password_is_idempotent_for_already_migrated_keys(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """A key already encrypted with new_password is left untouched."""
+        new_password = f"{password}_new"
+
+        # Address A is on the old password (normal case).
+        address_a = keys_manager.create()
+
+        # Address B was already re-encrypted with the new password by a
+        # previous partial update — and crucially its .bak was lost.
+        address_b = keys_manager.create()
+        _reencrypt_key(keys_manager, address_b, password, new_password)
+        (keys_manager.path / f"{address_b}.bak").unlink()
+
+        keys_manager.update_password(new_password)
+
+        assert keys_manager.password == new_password
+        # Both keys now decrypt under the new password.
+        for address in (address_a, address_b):
+            decrypted = keys_manager.get(address).get_decrypted_json(new_password)
+            assert decrypted["address"] == address
+        # A .bak was reconstructed for the previously-migrated key.
+        assert (keys_manager.path / f"{address_b}.bak").is_file()
+
+    def test_update_password_raises_when_key_decrypts_with_neither_password(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """An unrecoverable key surfaces a clear error instead of crashing."""
+        new_password = f"{password}_new"
+        third_password = "something_else"  # nosec B105 - test fixture, not a secret
+        address = keys_manager.create()
+        # Re-encrypt with a *third* password — neither old nor new can open it.
+        _reencrypt_key(keys_manager, address, password, third_password)
+
+        with pytest.raises(ValueError, match="cannot be decrypted"):
+            keys_manager.update_password(new_password)
+
+    def test_update_password_skips_non_address_files(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """Non-address filenames are skipped; only EVM-address files are keys."""
+        address = keys_manager.create()
+
+        # Leaked temp keystore: valid JSON dict, no 'ledger' field.
+        stray = keys_manager.path / "tmpeqm29mt5.txt"
+        stray.write_text(
+            json.dumps({"address": address, "crypto": {}, "id": "x", "version": 3}),
+            encoding="utf-8",
+        )
+
+        new_password = f"{password}_new"
+        keys_manager.update_password(new_password)
+
+        assert keys_manager.password == new_password
+        # Key was still re-encrypted with the new password
+        key = keys_manager.get(address)
+        assert key.get_decrypted_json(password=new_password)["address"] == address
+        # Stray file is left untouched (caller's responsibility to clean up)
+        assert stray.exists()
+        keys_manager.logger.warning.assert_any_call(  # type: ignore[attr-defined]
+            f"Skipping non-key file: {stray}"
+        )
 
     def test_keys_manager_init_without_path_raises(self) -> None:
         """Test KeysManager raises ValueError when path kwarg is not provided."""
