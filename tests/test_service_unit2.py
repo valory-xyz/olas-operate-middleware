@@ -357,6 +357,133 @@ class TestServiceHelper:
 
 
 # ---------------------------------------------------------------------------
+# Regression: named env-var placeholders in Pearl deployments
+# ---------------------------------------------------------------------------
+
+
+class TestPearlNamedEnvVarRegression:
+    """Pin the upstream contract for Pearl named env-var placeholders.
+
+    Background: PR #432 removed a middleware-side workaround
+    (``_inject_named_env_vars_into_agent_json``) that was injecting named
+    placeholder defaults into ``agent.json`` after generation. Removal was
+    justified by open-autonomy 0.21.20
+    ([#2494](https://github.com/valory-xyz/open-autonomy/pull/2494)) shipping
+    ``Service._extract_named_env_var_defaults`` and merging the surfaced
+    names into the env-var dict inside ``process_component_overrides``.
+
+    These tests fail loudly if the upstream contract regresses, so the
+    Pearl-shaped named-template path (e.g. market-creator / market-resolver
+    using fully-qualified ``SKILL_*`` / ``CONNECTION_*`` names) keeps
+    working without re-introducing the middleware workaround.
+    """
+
+    def test_extract_named_env_var_defaults_finds_named_placeholders(self) -> None:
+        """Surface ``{NAME: default}`` for every Pearl-shaped placeholder.
+
+        Walks the override tree (top-level or deeply nested) and pulls out
+        each ``${NAME:type:default}`` entry by name.
+        """
+        from autonomy.configurations.base import Service as AutonomyService
+
+        pearl_override = {
+            "models": {
+                "params": {
+                    "args": {
+                        "message": "${HELLO_WORLD_MESSAGE:str:hi_default}",
+                        "nested": {
+                            "deep_key": "${DEEP_VAR:str:deep_default}",
+                        },
+                    }
+                }
+            },
+            "store_path": "${STORE_PATH:str:/data/store}",
+            "list_field": ["${LIST_VAR:str:list_default}"],
+        }
+
+        result = AutonomyService._extract_named_env_var_defaults(pearl_override)
+
+        assert result == {
+            "HELLO_WORLD_MESSAGE": "hi_default",
+            "DEEP_VAR": "deep_default",
+            "STORE_PATH": "/data/store",
+            "LIST_VAR": "list_default",
+        }
+
+    def test_extract_named_env_var_defaults_ignores_path_only_placeholders(
+        self,
+    ) -> None:
+        """Skip anonymous placeholders that have no leading ``NAME:`` segment.
+
+        Only the path-keyed entry built later by
+        ``generate_env_vars_recursively`` covers those.
+        """
+        from autonomy.configurations.base import Service as AutonomyService
+
+        anonymous_only = {"key": "${str:anon_default}"}
+
+        result = AutonomyService._extract_named_env_var_defaults(anonymous_only)
+
+        assert result == {}
+
+    def test_extract_named_env_var_defaults_handles_missing_default(self) -> None:
+        """Map a placeholder with no inline default (``${NAME:type}``) to ``None``.
+
+        Lets callers decide how to fill it (env override, skip, etc.).
+        """
+        from autonomy.configurations.base import Service as AutonomyService
+
+        no_default = {"key": "${REQUIRED_VAR:str}"}
+
+        result = AutonomyService._extract_named_env_var_defaults(no_default)
+
+        assert result == {"REQUIRED_VAR": None}
+
+    def test_host_deployment_generator_writes_named_env_vars_to_agent_json(
+        self, tmp_path: Path
+    ) -> None:
+        """Persist named env-var keys all the way to ``agent.json``.
+
+        When ``service_builder.generate_agent`` returns named env-var keys
+        (as upstream does after merging ``_extract_named_env_var_defaults``
+        output into ``env_var_dict``), they must land in ``agent.json`` for
+        the agent runner to consume. Pins the property the removed
+        ``_inject_named_env_vars_into_agent_json`` workaround used to
+        guarantee at the middleware layer.
+        """
+        mock_sb = MagicMock()
+        mock_sb.generate_agent.return_value = {
+            # Path-keyed entry from generate_env_vars_recursively
+            "SKILL_DUMMY_SKILL_MODELS_PARAMS_ARGS_MESSAGE": "hi_default",
+            # Named placeholder surfaced via _extract_named_env_var_defaults
+            "HELLO_WORLD_MESSAGE": "hi_default",
+            "STORE_PATH": "/data/store",
+            "ITEM_COUNT": 42,
+        }
+        mock_sb.keys = [{"private_key": "0xdeadbeef", "ledger": "ethereum"}]
+        mock_sb.multiledger = False
+
+        gen = HostDeploymentGenerator.__new__(HostDeploymentGenerator)
+        gen.service_builder = mock_sb  # type: ignore[attr-defined]
+        gen.build_dir = tmp_path / "build"  # type: ignore[attr-defined]
+
+        gen.generate()
+
+        agent_json = json.loads(
+            (tmp_path / "build" / "agent.json").read_text(encoding="utf-8")
+        )
+        # Named keys must be present alongside path-keyed entries — without
+        # this Pearl deployments using ${HELLO_WORLD_MESSAGE:str:hi_default}
+        # would silently fall back to YAML defaults at agent boot.
+        assert agent_json["HELLO_WORLD_MESSAGE"] == "hi_default"
+        assert agent_json["STORE_PATH"] == "/data/store"
+        assert agent_json["ITEM_COUNT"] == "42"  # str-coerced by generate()
+        assert (
+            agent_json["SKILL_DUMMY_SKILL_MODELS_PARAMS_ARGS_MESSAGE"] == "hi_default"
+        )
+
+
+# ---------------------------------------------------------------------------
 # tests for HostDeploymentGenerator (generate, _populate_keys, populate_private_keys)
 # ---------------------------------------------------------------------------
 

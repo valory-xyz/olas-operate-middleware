@@ -31,6 +31,7 @@ from operate.services.protocol import (
     MintManager,
     StakingManager,
     StakingState,
+    _normalize_tx_data_to_bytes,
 )
 
 # ---------------------------------------------------------------------------
@@ -58,6 +59,36 @@ class TestStakingState:
         assert StakingState(0) == StakingState.UNSTAKED
         assert StakingState(1) == StakingState.STAKED
         assert StakingState(2) == StakingState.EVICTED
+
+
+# ---------------------------------------------------------------------------
+# _normalize_tx_data_to_bytes helper
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeTxDataToBytes:
+    """Tests for the multisend tx data normalization helper."""
+
+    def test_passes_bytes_through_unchanged(self) -> None:
+        """Bytes input is returned as-is."""
+        data = b"\x12\x34\x56"
+        assert _normalize_tx_data_to_bytes(data) is data
+
+    def test_converts_hex_string_with_0x_prefix(self) -> None:
+        """Hex string with ``0x`` prefix is decoded to bytes."""
+        assert _normalize_tx_data_to_bytes("0xdeadbeef") == b"\xde\xad\xbe\xef"
+
+    def test_converts_raw_hex_string_without_prefix(self) -> None:
+        """Hex string without ``0x`` prefix is decoded to bytes."""
+        assert _normalize_tx_data_to_bytes("deadbeef") == b"\xde\xad\xbe\xef"
+
+    def test_handles_empty_string(self) -> None:
+        """Empty string converts to empty bytes."""
+        assert _normalize_tx_data_to_bytes("") == b""
+
+    def test_handles_empty_bytes(self) -> None:
+        """Empty bytes pass through."""
+        assert _normalize_tx_data_to_bytes(b"") == b""
 
 
 # ---------------------------------------------------------------------------
