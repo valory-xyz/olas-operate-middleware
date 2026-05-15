@@ -1656,8 +1656,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}",
-                    **e.to_error_fields(),
+                    "error": "Failed to terminate service and withdraw funds due to insufficient funds.",
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
