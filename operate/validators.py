@@ -24,6 +24,7 @@ contracts in one place so the two cannot drift between call sites.
 """
 
 import re
+from pathlib import Path
 
 # Operator-supplied filesystem-path validator. Rejects any value containing a
 # ``..`` traversal segment (anchored to a path-separator boundary) and any
@@ -33,3 +34,24 @@ import re
 SAFE_FS_PATH_RE: re.Pattern[str] = re.compile(
     r"\A(?!.*(?:^|/|\\)\.\.(?:/|\\|\Z))[A-Za-z0-9_./:\\ -]+\Z"
 )
+
+
+class UnsafePathError(ValueError):
+    """Raised when a path candidate fails ``SAFE_FS_PATH_RE`` validation."""
+
+
+def safe_resolved_path(value: str) -> Path:
+    """Return a resolved ``Path`` only if ``value`` is a safe filesystem path.
+
+    A "safe" value matches :data:`SAFE_FS_PATH_RE` — no ``..`` traversal
+    segments and only filesystem-safe characters. Unsafe inputs raise
+    :class:`UnsafePathError` *before* any ``pathlib.Path`` or filesystem
+    operation runs, giving static-analysis tools (CodeQL, SnykCode, etc.) a
+    single, narrow sanitisation boundary to reason about.
+
+    The barrier is intentionally inside this function so callers see one
+    sanitisation point rather than a regex check spread across modules.
+    """
+    if not isinstance(value, str) or not SAFE_FS_PATH_RE.fullmatch(value):
+        raise UnsafePathError(f"Unsafe filesystem path: {value!r}")
+    return Path(value).resolve()

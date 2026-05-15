@@ -45,7 +45,7 @@ import requests
 from flask import Flask, Response, jsonify, request
 from werkzeug.exceptions import InternalServerError, NotFound
 
-from operate.validators import SAFE_FS_PATH_RE
+from operate.validators import UnsafePathError, safe_resolved_path
 
 ENCODING = "utf-8"
 DEFAULT_LOG_FILE = "com.log"
@@ -489,9 +489,12 @@ class PeriodDumper:
         # we fall back to the default instead of resolving to the current
         # working directory and wiping it on the rmtree below.
         candidate = str(dump_dir) if dump_dir else "/tm_state"
-        if not SAFE_FS_PATH_RE.fullmatch(candidate):
-            raise ValueError(f"Unsafe tendermint state directory: {candidate!r}")
-        self.dump_dir = Path(candidate).resolve()
+        try:
+            self.dump_dir = safe_resolved_path(candidate)
+        except UnsafePathError as exc:
+            raise ValueError(
+                f"Unsafe tendermint state directory: {candidate!r}"
+            ) from exc
 
         if self.dump_dir.is_dir():
             rmtree_kwargs: Dict[str, Callable] = {}
@@ -552,7 +555,10 @@ def create_app(  # pylint: disable=too-many-statements
     )
     period_dumper = PeriodDumper(
         logger=app.logger,
-        dump_dir=Path(os.environ["TMSTATE"]),
+        # Validate the operator-supplied env var at the source so static
+        # analysers see a single sanitisation barrier between the untrusted
+        # input and any filesystem operation.
+        dump_dir=safe_resolved_path(os.environ["TMSTATE"]),
     )
     tendermint_node = TendermintNode(
         tendermint_params,
