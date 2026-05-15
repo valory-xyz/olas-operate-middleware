@@ -1572,6 +1572,22 @@ class TestServiceRoutes:
                 resp = c.get("/api/v2/service/nonexistent")
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
+    def test_invalid_service_config_id_rejected_by_route(self) -> None:
+        """Return 400 from ValidatedServiceRoute for malformed service_config_id."""
+        m = _make_mock_operate()
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                # ``.`` is not in the SERVICE_CONFIG_ID_RE character class but
+                # still routes to the {service_config_id} path parameter, so
+                # the rejection happens in ValidatedServiceRoute, not in
+                # Starlette's URL dispatcher.
+                resp = c.get("/api/v2/service/bad.id")
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            assert resp.json() == {"error": "Invalid service_config_id."}
+            # exists() should never have been queried for an invalid id
+            m.service_manager.return_value.exists.assert_not_called()
+
     def test_get_service_success(self) -> None:
         """Cover lines 1118-1126: GET /api/v2/service/{id} success."""
         m = _make_mock_operate()
