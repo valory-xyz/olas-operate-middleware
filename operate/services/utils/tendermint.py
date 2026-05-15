@@ -45,6 +45,8 @@ import requests
 from flask import Flask, Response, jsonify, request
 from werkzeug.exceptions import InternalServerError, NotFound
 
+from operate.validators import SAFE_FS_PATH_RE
+
 ENCODING = "utf-8"
 DEFAULT_LOG_FILE = "com.log"
 DEFAULT_TENDERMINT_LOG_FILE = "tendermint.log"
@@ -61,13 +63,6 @@ _TCP = "tcp://"
 ENCODING = "utf-8"
 DEFAULT_P2P_LISTEN_ADDRESS = f"{_TCP}0.0.0.0:26656"
 DEFAULT_RPC_LISTEN_ADDRESS = f"{_TCP}0.0.0.0:26657"
-
-# TMSTATE is supplied by the deployment infrastructure. The pattern keeps the
-# value to characters that cannot introduce ``..`` traversal segments before
-# the path is used to create or wipe the tendermint state directory.
-_SAFE_TM_STATE_DIR_RE = re.compile(
-    r"\A(?!.*(?:^|/|\\)\.\.(?:/|\\|\Z))[A-Za-z0-9_./:\\ -]+\Z"
-)
 
 IS_DEV_MODE = False
 
@@ -490,8 +485,11 @@ class PeriodDumper:
 
         self.resets = 0
         self.logger = logger
-        candidate = str(dump_dir) if dump_dir is not None else "/tm_state"
-        if not _SAFE_TM_STATE_DIR_RE.fullmatch(candidate):
+        # Treat empty/falsy ``dump_dir`` (``Path("")``, ``""``) as missing so
+        # we fall back to the default instead of resolving to the current
+        # working directory and wiping it on the rmtree below.
+        candidate = str(dump_dir) if dump_dir else "/tm_state"
+        if not SAFE_FS_PATH_RE.fullmatch(candidate):
             raise ValueError(f"Unsafe tendermint state directory: {candidate!r}")
         self.dump_dir = Path(candidate).resolve()
 

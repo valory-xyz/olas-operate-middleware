@@ -145,39 +145,43 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
 
 
 class ValidatedServiceRoute(APIRoute):
-    """APIRoute that validates ``service_config_id`` path params before dispatch.
+    """APIRoute that validates user-supplied path params before dispatch.
 
     Any route mounted on a router with ``route_class=ValidatedServiceRoute``
-    rejects requests whose ``service_config_id`` does not match
-    ``SERVICE_CONFIG_ID_RE`` with a 400 response, before the handler runs.
-    Endpoints without that path parameter are unaffected.
+    has each entry in ``PATH_PARAM_PATTERNS`` checked against the path value
+    of the same name; a value that fails its regex produces a 400 response
+    before the handler runs. Path params not listed here are unaffected.
     """
 
     # Service config IDs are generated as ``sc-<uuid4>`` but tests and legacy
-    # callers may use shorter alphanumeric tokens. The pattern restricts the
-    # value to characters that cannot introduce path-traversal segments, shell
-    # metacharacters, or scheme/host components when later used to build paths
-    # or command arguments.
-    SERVICE_CONFIG_ID_RE: t.ClassVar[t.Pattern[str]] = re.compile(
-        r"\A[A-Za-z0-9_-]{1,128}\Z"
-    )
+    # callers may use shorter alphanumeric tokens. Achievement IDs come from
+    # the keys of ``agent_performance.json`` and are likewise free-form
+    # strings. The pattern restricts the value to characters that cannot
+    # introduce path-traversal segments, shell metacharacters, or scheme/host
+    # components when later used to build paths or command arguments.
+    _ID_RE: t.ClassVar[t.Pattern[str]] = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
+    PATH_PARAM_PATTERNS: t.ClassVar[t.Mapping[str, t.Pattern[str]]] = {
+        "service_config_id": _ID_RE,
+        "achievement_id": _ID_RE,
+    }
 
     @staticmethod
-    def _invalid_response() -> JSONResponse:
-        """Return a 400 response for malformed service_config_id values."""
+    def _invalid_response(param_name: str) -> JSONResponse:
+        """Return a 400 response for a malformed path parameter."""
         return JSONResponse(
-            content={"error": "Invalid service_config_id."},
+            content={"error": f"Invalid {param_name}."},
             status_code=HTTPStatus.BAD_REQUEST,
         )
 
     def get_route_handler(self) -> t.Callable:  # type: ignore[type-arg]
-        """Wrap the default handler with service_config_id validation."""
+        """Wrap the default handler with path-param validation."""
         original_handler = super().get_route_handler()
 
         async def custom_handler(request: Request) -> JSONResponse:
-            sid = request.path_params.get("service_config_id")
-            if sid is not None and not self.SERVICE_CONFIG_ID_RE.fullmatch(sid):
-                return self._invalid_response()
+            for name, pattern in self.PATH_PARAM_PATTERNS.items():
+                value = request.path_params.get(name)
+                if value is not None and not pattern.fullmatch(value):
+                    return self._invalid_response(name)
             return await original_handler(request)
 
         return custom_handler

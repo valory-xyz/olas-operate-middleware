@@ -22,7 +22,6 @@
 import logging
 import os
 import platform
-import re
 import shutil
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -30,12 +29,7 @@ from typing import Dict, Optional
 
 import certifi
 
-# OPERATE_HOME is an operator-supplied directory. The pattern excludes ``..``
-# segments and characters that are unusual in filesystem paths so we can hand
-# the value to ``Path`` and ``shutil`` without flagging path-traversal risk.
-_SAFE_OPERATE_HOME_RE = re.compile(
-    r"\A(?!.*(?:^|/|\\)\.\.(?:/|\\|\Z))[A-Za-z0-9_./:\\ -]+\Z"
-)
+from operate.validators import SAFE_FS_PATH_RE
 
 try:
     # Prefer the distribution name if installed; fall back to the module name
@@ -81,10 +75,20 @@ def _clear_invalid_runtime_ca_bundle_env() -> None:
 def _get_stable_certifi_bundle_path() -> Path:
     """Return the stable on-disk location for the bundled certifi CA bundle."""
     operate_home_str = os.environ.get("OPERATE_HOME")
-    if operate_home_str and _SAFE_OPERATE_HOME_RE.fullmatch(operate_home_str):
-        operate_home = Path(operate_home_str).resolve()
+    default_home = (Path.home() / ".operate").resolve()
+    if not operate_home_str:
+        operate_home = default_home
+    elif not SAFE_FS_PATH_RE.fullmatch(operate_home_str):
+        # Surface the misconfiguration; falling back silently used to mask
+        # typos and traversal attempts (e.g. ``OPERATE_HOME=/etc/../tmp``).
+        logger.warning(
+            "OPERATE_HOME=%r rejected by safety check; falling back to %s",
+            operate_home_str,
+            default_home,
+        )
+        operate_home = default_home
     else:
-        operate_home = (Path.home() / ".operate").resolve()
+        operate_home = Path(operate_home_str).resolve()
     return operate_home / "certs" / "cacert.pem"
 
 
