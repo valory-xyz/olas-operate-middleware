@@ -579,6 +579,12 @@ class TestPeriodDumper:
         assert dump_dir.is_dir()
         assert dumper.resets == 0
 
+    def test_init_rejects_unsafe_dump_dir(self, tmp_path: Path) -> None:
+        """A dump_dir containing ``..`` segments is rejected before any I/O."""
+        unsafe_dir = tmp_path / ".." / "escape"
+        with pytest.raises(ValueError, match="Unsafe tendermint state directory"):
+            PeriodDumper(logger=self._make_logger(), dump_dir=unsafe_dir)
+
     def test_init_removes_existing_dir(self, tmp_path: Path) -> None:
         """Existing dump_dir removed and recreated (is empty after init)."""
         dump_dir = tmp_path / "tm_dump"

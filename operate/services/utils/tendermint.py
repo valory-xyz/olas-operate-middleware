@@ -62,6 +62,13 @@ ENCODING = "utf-8"
 DEFAULT_P2P_LISTEN_ADDRESS = f"{_TCP}0.0.0.0:26656"
 DEFAULT_RPC_LISTEN_ADDRESS = f"{_TCP}0.0.0.0:26657"
 
+# TMSTATE is supplied by the deployment infrastructure. The pattern keeps the
+# value to characters that cannot introduce ``..`` traversal segments before
+# the path is used to create or wipe the tendermint state directory.
+_SAFE_TM_STATE_DIR_RE = re.compile(
+    r"\A(?!.*(?:^|/|\\)\.\.(?:/|\\|\Z))[A-Za-z0-9_./:\\ -]+\Z"
+)
+
 IS_DEV_MODE = False
 
 logging.basicConfig(
@@ -483,7 +490,10 @@ class PeriodDumper:
 
         self.resets = 0
         self.logger = logger
-        self.dump_dir = Path(dump_dir or "/tm_state")
+        candidate = str(dump_dir) if dump_dir is not None else "/tm_state"
+        if not _SAFE_TM_STATE_DIR_RE.fullmatch(candidate):
+            raise ValueError(f"Unsafe tendermint state directory: {candidate!r}")
+        self.dump_dir = Path(candidate).resolve()
 
         if self.dump_dir.is_dir():
             rmtree_kwargs: Dict[str, Callable] = {}

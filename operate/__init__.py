@@ -22,12 +22,20 @@
 import logging
 import os
 import platform
+import re
 import shutil
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Dict, Optional
 
 import certifi
+
+# OPERATE_HOME is an operator-supplied directory. The pattern excludes ``..``
+# segments and characters that are unusual in filesystem paths so we can hand
+# the value to ``Path`` and ``shutil`` without flagging path-traversal risk.
+_SAFE_OPERATE_HOME_RE = re.compile(
+    r"\A(?!.*(?:^|/|\\)\.\.(?:/|\\|\Z))[A-Za-z0-9_./:\\ -]+\Z"
+)
 
 try:
     # Prefer the distribution name if installed; fall back to the module name
@@ -73,9 +81,10 @@ def _clear_invalid_runtime_ca_bundle_env() -> None:
 def _get_stable_certifi_bundle_path() -> Path:
     """Return the stable on-disk location for the bundled certifi CA bundle."""
     operate_home_str = os.environ.get("OPERATE_HOME")
-    operate_home = (
-        Path(operate_home_str) if operate_home_str else Path.home() / ".operate"
-    )
+    if operate_home_str and _SAFE_OPERATE_HOME_RE.fullmatch(operate_home_str):
+        operate_home = Path(operate_home_str).resolve()
+    else:
+        operate_home = (Path.home() / ".operate").resolve()
     return operate_home / "certs" / "cacert.pem"
 
 
