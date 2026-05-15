@@ -166,14 +166,35 @@ class KeysManager:
         """Delete key."""
         os.remove(self.path / key)
 
-    def update_password(self, new_password: str) -> None:
-        """Update password for all keys.
+    def discard_all(self) -> None:
+        """Mark every key file in the directory as discarded.
+
+        Used by the seed-phrase recovery flow: the user no longer has the
+        password these agent EOA keys are encrypted with, so they cannot
+        be recovered. Services that depended on them must re-establish
+        agent EOA authority via the safe recovery module.
+
+        Files are renamed (``<name>.lost``) rather than deleted so they
+        remain available for audit; the call is idempotent — files already
+        suffixed ``.lost`` are skipped.
+        """
+        for entry in self.path.iterdir():
+            if not entry.is_file() or entry.suffix == ".lost":
+                continue
+            entry.rename(entry.with_name(entry.name + ".lost"))
+
+    def update_password(self, new_password: str) -> list[str]:
+        """Re-encrypt all keys with ``new_password``; return unrecoverable filenames.
 
         Idempotent: a key already encrypted with ``new_password`` is detected
         and skipped, so retrying a previously-interrupted update converges.
+        A key that opens with neither the current nor the new password is
+        logged and reported back in the returned list; callers decide whether
+        to raise, warn, or surface the broken keys to the user.
         """
+        broken: list[str] = []
         for key_file in self.path.iterdir():
-            if not key_file.is_file() or key_file.suffix == ".bak":
+            if not key_file.is_file() or key_file.suffix in (".bak", ".lost"):
                 continue
             if not Web3.is_address(key_file.name):
                 self.logger.warning(f"Skipping non-key file: {key_file}")
@@ -193,10 +214,14 @@ class KeysManager:
                 try:
                     self.private_key_to_crypto(key.private_key, new_password)
                 except ValueError:
-                    raise ValueError(
-                        f"Key {key_file.name} cannot be decrypted with the "
-                        "current or the new password."
-                    ) from primary_exc
+                    self.logger.warning(
+                        "Key %s cannot be decrypted with the current or "
+                        "the new password; agent is unrecoverable and must "
+                        "be re-created.",
+                        key_file.name,
+                    )
+                    broken.append(key_file.name)
+                    continue
 
                 # The .bak written here is a post-migration snapshot
                 # (encrypted with new_password), not a rollback artifact.
@@ -220,3 +245,4 @@ class KeysManager:
             )
 
         self.password = new_password
+        return broken

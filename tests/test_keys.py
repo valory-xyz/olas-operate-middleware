@@ -289,54 +289,38 @@ class TestKeysManager:
         # A .bak was reconstructed for the previously-migrated key.
         assert (keys_manager.path / f"{address_b}.bak").is_file()
 
-    def test_update_password_raises_when_key_decrypts_with_neither_password(
+    def test_update_password_returns_unrecoverable_filenames(
         self, keys_manager: KeysManager, password: str
     ) -> None:
-        """An unrecoverable key surfaces a clear error instead of crashing."""
+        """An unrecoverable key is surfaced via the returned list, not raised."""
         new_password = f"{password}_new"
         third_password = "something_else"  # nosec B105 - test fixture, not a secret
         address = keys_manager.create()
         # Re-encrypt with a *third* password — neither old nor new can open it.
         reencrypt_key(keys_manager, address, password, third_password)
 
-        with pytest.raises(ValueError, match="cannot be decrypted"):
-            keys_manager.update_password(new_password)
+        broken = keys_manager.update_password(new_password)
 
-    def test_update_password_aborts_on_unrecoverable_key(
+        assert broken == [address]
+        # The bad key did not block self.password from advancing.
+        assert keys_manager.password == new_password
+
+    def test_update_password_continues_past_unrecoverable_keys(
         self, keys_manager: KeysManager, password: str
     ) -> None:
-        """An unrecoverable key aborts the iteration; abort is the documented contract."""
+        """A bad key does not abort iteration; recoverable keys still migrate."""
         new_password = f"{password}_new"
         third_password = "third_pw"  # nosec B105 - test fixture, not a secret
-        # Several recoverable keys plus one stuck on a third password.
         recoverable = [keys_manager.create() for _ in range(3)]
         unrecoverable = keys_manager.create()
         reencrypt_key(keys_manager, unrecoverable, password, third_password)
 
-        with pytest.raises(ValueError, match="cannot be decrypted"):
-            keys_manager.update_password(new_password)
+        broken = keys_manager.update_password(new_password)
 
-        # Iteration order is filesystem-dependent: each recoverable key is
-        # either untouched (still openable with old password) or has been
-        # re-encrypted with new password — never both, never neither.
+        assert broken == [unrecoverable]
         for address in recoverable:
-            key_json = json.loads(
-                (keys_manager.path / address).read_text(encoding="utf-8")
-            )
-            on_old = on_new = False
-            try:
-                keys_manager.private_key_to_crypto(key_json["private_key"], password)
-                on_old = True
-            except ValueError:
-                pass
-            try:
-                keys_manager.private_key_to_crypto(
-                    key_json["private_key"], new_password
-                )
-                on_new = True
-            except ValueError:
-                pass
-            assert on_old != on_new, f"{address} ended in an indeterminate state"
+            decrypted = keys_manager.get(address).get_decrypted_json(new_password)
+            assert decrypted["address"] == address
 
     def test_update_password_preserves_existing_bak_for_migrated_key(
         self, keys_manager: KeysManager, password: str
@@ -485,6 +469,41 @@ class TestKeysManager:
 
         assert not key_path.exists()
 
+    def test_discard_all_renames_every_file(self, keys_manager: KeysManager) -> None:
+        """discard_all appends .lost to every regular file; files are preserved."""
+        addresses = [keys_manager.create() for _ in range(2)]
+        keys_manager.get_private_key_file(addresses[0])  # creates `<addr>_private_key`
+        (keys_manager.path / "stray.txt").write_text("noise", encoding="utf-8")
+        original_names = {entry.name for entry in keys_manager.path.iterdir()}
+
+        keys_manager.discard_all()
+
+        renamed = {entry.name for entry in keys_manager.path.iterdir()}
+        assert renamed == {f"{name}.lost" for name in original_names}
+
+    def test_discard_all_is_idempotent(self, keys_manager: KeysManager) -> None:
+        """A second discard_all leaves already-.lost files untouched."""
+        keys_manager.create()
+        keys_manager.discard_all()
+        first_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
+
+        keys_manager.discard_all()
+
+        second_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
+        assert first_snapshot == second_snapshot
+
+    def test_update_password_skips_lost_files(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """update_password silently skips .lost files (no spurious warnings)."""
+        address = keys_manager.create()
+        (keys_manager.path / f"{address}.lost").write_text("ignored", encoding="utf-8")
+
+        broken = keys_manager.update_password(f"{password}_new")
+
+        assert broken == []
+        keys_manager.logger.warning.assert_not_called()  # type: ignore[attr-defined]
+
     def test_create_skips_writing_when_files_already_exist(
         self, keys_manager: KeysManager
     ) -> None:
@@ -508,3 +527,45 @@ class TestKeysManager:
         assert (keys_manager.path / address).read_text(
             encoding="utf-8"
         ) == original_content
+
+    def test_update_password_returns_empty_when_all_keys_decrypt_with_current(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """Happy path: keys all on current password, all migrate cleanly."""
+        addresses = [keys_manager.create() for _ in range(2)]
+        new_password = f"{password}_new"
+
+        broken = keys_manager.update_password(new_password)
+
+        assert broken == []
+        assert keys_manager.password == new_password
+        for address in addresses:
+            assert (
+                keys_manager.get(address).get_decrypted_json(new_password)["address"]
+                == address
+            )
+
+    def test_update_password_mixed_state_surfaces_only_unrecoverable(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """Mixed state: only the unrelated-password key is reported broken."""
+        new_password = f"{password}_new"
+        unrelated_password = "third_pw"  # nosec B105 - test fixture
+
+        address_current = keys_manager.create()
+        address_already_new = keys_manager.create()
+        reencrypt_key(keys_manager, address_already_new, password, new_password)
+        (keys_manager.path / f"{address_already_new}.bak").unlink()
+        address_unrecoverable = keys_manager.create()
+        reencrypt_key(keys_manager, address_unrecoverable, password, unrelated_password)
+
+        broken = keys_manager.update_password(new_password)
+
+        assert broken == [address_unrecoverable]
+        assert keys_manager.password == new_password
+        for address in (address_current, address_already_new):
+            assert (
+                keys_manager.get(address).get_decrypted_json(new_password)["address"]
+                == address
+            )
+        assert (keys_manager.path / f"{address_already_new}.bak").is_file()

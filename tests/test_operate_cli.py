@@ -205,6 +205,27 @@ class TestOperateApp:
         with pytest.raises(ValueError, match=rf"^{MSG_INVALID_PASSWORD}"):
             operate.update_password(password1, password2)
 
+    def test_update_password_raises_on_unrecoverable_agent_key(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """An agent key stuck on a forgotten password aborts the strict flow."""
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+
+        password1 = random_string()
+        password2 = random_string()
+        forgotten = "forgotten-" + random_string()  # nosec B105 - test fixture
+
+        operate.create_user_account(password=password1)
+        operate.password = password1
+        operate.wallet_manager.create(LedgerType.ETHEREUM)
+        address_lost = operate.keys_manager.create()
+        reencrypt_key(operate.keys_manager, address_lost, password1, forgotten)
+
+        with pytest.raises(ValueError, match="cannot be decrypted"):
+            operate.update_password(password1, password2)
+
     def test_update_password_converges_with_half_committed_agent_keys(
         self,
         tmp_path: Path,
@@ -412,6 +433,21 @@ class TestMnemonicReencryptionOnPasswordChange:
         wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
         assert wallet.decrypt_mnemonic(password=password2) == mnemonic.split()
 
+    def test_update_password_without_mnemonic_blob_is_no_op_for_mnemonic_step(
+        self, tmp_path: Path
+    ) -> None:
+        """A wallet missing its mnemonic blob still completes update_password."""
+        operate, password1, _ = self._setup_wallet_with_mnemonic(tmp_path)
+        wallet = next(iter(operate.wallet_manager))
+        wallet.mnemonic_path.unlink()
+        password2 = random_string()
+
+        operate.update_password(password1, password2)
+
+        assert operate.user_account.is_valid(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        assert not wallet.mnemonic_path.exists()
+
     def test_update_password_tolerates_wedged_mnemonic(self, tmp_path: Path) -> None:
         """A pre-fix wedge (mnemonic on a forgotten password) does not block update."""
         operate, password1, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
@@ -432,3 +468,27 @@ class TestMnemonicReencryptionOnPasswordChange:
         # resync it.
         with pytest.raises(Exception):  # noqa: B017,PT011 - any decrypt error qualifies
             wallet.decrypt_mnemonic(password=password2)
+
+    def test_update_password_with_mnemonic_discards_agent_keys(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Seed-phrase recovery discards agent EOA keys (unrecoverable by definition).
+
+        The safe recovery module re-establishes agent authority out-of-band;
+        the middleware's job here is to mark the unusable key files so the
+        recovery flow can take over while the originals remain on disk for
+        audit.
+        """
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        addresses = [operate.keys_manager.create(), operate.keys_manager.create()]
+
+        operate.update_password_with_mnemonic(mnemonic, password2)
+
+        assert operate.user_account.is_valid(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        for address in addresses:
+            assert not (operate.keys_manager.path / address).exists()
+            assert (operate.keys_manager.path / f"{address}.lost").is_file()
+            assert (operate.keys_manager.path / f"{address}.bak.lost").is_file()

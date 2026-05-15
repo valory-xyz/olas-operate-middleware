@@ -289,7 +289,12 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         # this being old_password so already-migrated keys take the fallback.
         wallet_manager.password = old_password
         wallet_manager.update_password(new_password)
-        self._keys_manager.update_password(new_password)
+        broken = self._keys_manager.update_password(new_password)
+        if broken:
+            raise ValueError(
+                "Some agent keys cannot be decrypted with the current or the "
+                f"new password: {', '.join(broken)}"
+            )
         self.user_account.update(old_password, new_password)
 
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
@@ -304,6 +309,11 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
 
         wallet_manager = self.wallet_manager
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
+        # The user reached the mnemonic flow because they no longer have the
+        # password agent EOA keys were encrypted with; mark them discarded so
+        # the caller can re-establish agent authority via the safe recovery
+        # module while the original files remain available for audit.
+        self._keys_manager.discard_all()
         self.user_account.force_update(new_password)
 
     def service_manager(
