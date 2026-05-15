@@ -826,6 +826,7 @@ class EthereumMasterWallet(
         skip disk I/O and only sync in-memory state. Clearing ``self._crypto``
         forces the next access to re-load with the new password.
         """
+        old_password = self.password
         if self.is_password_valid(new_password):
             self._crypto = None
             self.password = new_password
@@ -843,7 +844,35 @@ class EthereumMasterWallet(
             ),
             encoding="utf-8",
         )
+        self._reencrypt_mnemonic(old_password=old_password, new_password=new_password)
         self.password = new_password
+
+    def _reencrypt_mnemonic(self, old_password: str, new_password: str) -> None:
+        """Re-encrypt the on-disk mnemonic blob with ``new_password``.
+
+        Soft-fail: when the blob is missing or already on an unknown password
+        (existing wedge from a pre-fix release), log and continue so the rest
+        of the password change still completes.
+        """
+        if not self.mnemonic_path.exists():
+            return
+        try:
+            plaintext = EncryptedData.load(self.mnemonic_path).decrypt(old_password)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Could not decrypt mnemonic at %s with the current password; "
+                "leaving the blob untouched. Use the seed-phrase recovery "
+                "flow to resync. Underlying error: %s",
+                self.mnemonic_path,
+                exc,
+            )
+            return
+        create_backup(self.mnemonic_path)
+        EncryptedData.new(
+            path=self.mnemonic_path,
+            password=new_password,
+            plaintext_bytes=plaintext,
+        ).store()
 
     def is_mnemonic_valid(self, mnemonic: str) -> bool:
         """Verifies if the provided BIP-39 mnemonic is valid."""
@@ -880,6 +909,16 @@ class EthereumMasterWallet(
             ),
             encoding="utf-8",
         )
+        # Mnemonic recovery already has the plaintext in-hand — refresh the
+        # blob unconditionally so the user-supplied phrase is what's stored
+        # under the new password.
+        if self.mnemonic_path.exists():
+            create_backup(self.mnemonic_path)
+        EncryptedData.new(
+            path=self.mnemonic_path,
+            password=new_password,
+            plaintext_bytes=mnemonic.encode("utf-8"),
+        ).store()
         self.password = new_password
 
     def create_safe(

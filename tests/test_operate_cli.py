@@ -45,7 +45,7 @@ from operate.constants import (
     VERSION_FILE,
 )
 from operate.keys import KeysManager
-from operate.operate_types import LedgerType, Version
+from operate.operate_types import EncryptedData, LedgerType, Version
 from operate.services.service import SERVICE_CONFIG_PREFIX
 
 from tests.conftest import random_string, reencrypt_key
@@ -374,3 +374,61 @@ class TestOperateApp:
 
                 for agent_runner_path in service_path.glob(f"{AGENT_RUNNER_PREFIX}_*"):
                     assert not agent_runner_path.exists()
+
+
+class TestMnemonicReencryptionOnPasswordChange:
+    """The mnemonic blob must stay in sync with the user's current password."""
+
+    def _setup_wallet_with_mnemonic(
+        self, tmp_path: Path
+    ) -> tuple[OperateApp, str, str]:
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+        password1 = random_string()
+        operate.create_user_account(password=password1)
+        operate.password = password1
+        _, mnemonic_list = operate.wallet_manager.create(LedgerType.ETHEREUM)
+        return operate, password1, " ".join(mnemonic_list)
+
+    def test_update_password_reencrypts_mnemonic_blob(self, tmp_path: Path) -> None:
+        """update_password syncs the encrypted mnemonic to the new password."""
+        operate, password1, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+
+        operate.update_password(password1, password2)
+
+        wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+        assert wallet.decrypt_mnemonic(password=password2) == mnemonic.split()
+        with pytest.raises(Exception):  # noqa: B017,PT011 - any decrypt error qualifies
+            wallet.decrypt_mnemonic(password=password1)
+
+    def test_update_password_with_mnemonic_refreshes_blob(self, tmp_path: Path) -> None:
+        """update_password_with_mnemonic rewrites the blob under new_password."""
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+
+        operate.update_password_with_mnemonic(mnemonic, password2)
+
+        wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+        assert wallet.decrypt_mnemonic(password=password2) == mnemonic.split()
+
+    def test_update_password_tolerates_wedged_mnemonic(self, tmp_path: Path) -> None:
+        """A pre-fix wedge (mnemonic on a forgotten password) does not block update."""
+        operate, password1, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        wallet = next(iter(operate.wallet_manager))
+        forgotten = "forgotten-" + random_string()  # nosec B105 - test fixture
+        EncryptedData.new(
+            path=wallet.mnemonic_path,
+            password=forgotten,
+            plaintext_bytes=mnemonic.encode("utf-8"),
+        ).store()
+
+        operate.update_password(password1, password2)
+
+        assert operate.user_account.is_valid(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        # Wedged blob is left untouched; user must use seed-phrase recovery to
+        # resync it.
+        with pytest.raises(Exception):  # noqa: B017,PT011 - any decrypt error qualifies
+            wallet.decrypt_mnemonic(password=password2)
