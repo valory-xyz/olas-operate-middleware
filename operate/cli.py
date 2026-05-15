@@ -1724,7 +1724,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}",
+                    "error": "Failed to fund from Master Safe. Insufficient funds.",
                     **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
