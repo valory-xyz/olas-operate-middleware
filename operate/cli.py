@@ -1255,9 +1255,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Insufficient funds: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={
-                    "error": f"Failed to withdraw funds. Insufficient funds: {e}",
+                    "error": "Failed to withdraw funds due to insufficient funds.",
                     "transfer_txs": transfer_txs,
-                    **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
