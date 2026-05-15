@@ -167,21 +167,31 @@ class KeysManager:
         os.remove(self.path / key)
 
     def discard_all(self) -> None:
-        """Mark every key file in the directory as discarded.
+        """Mark every file in the keys directory as discarded.
 
         Used by the seed-phrase recovery flow: the user no longer has the
         password these agent EOA keys are encrypted with, so they cannot
         be recovered. Services that depended on them must re-establish
         agent EOA authority via the safe recovery module.
 
-        Files are renamed (``<name>.lost``) rather than deleted so they
-        remain available for audit; the call is idempotent — files already
-        suffixed ``.lost`` are skipped.
+        Every regular file is renamed by appending ``.lost`` — address-named
+        keystores, their ``.bak`` backups, plaintext ``_private_key``
+        sidecars, and any stray files alike. Originals remain on disk for
+        audit. The call is idempotent: files already suffixed ``.lost``
+        are skipped, and a per-entry rename failure is logged so a single
+        OS error doesn't leave the directory half-renamed.
         """
         for entry in self.path.iterdir():
             if not entry.is_file() or entry.suffix == ".lost":
                 continue
-            entry.rename(entry.with_name(entry.name + ".lost"))
+            try:
+                entry.rename(entry.with_name(entry.name + ".lost"))
+            except OSError as exc:
+                self.logger.error(
+                    "Failed to mark %s as discarded: %s",
+                    entry,
+                    type(exc).__name__,
+                )
 
     def update_password(self, new_password: str) -> list[str]:
         """Re-encrypt all keys with ``new_password``; return unrecoverable filenames.
@@ -205,11 +215,13 @@ class KeysManager:
                 crypto = self.private_key_to_crypto(key.private_key, self.password)
             except ValueError as primary_exc:
                 # Decrypt with new_password to detect a prior partial migration.
+                # Log the exception type only — crypto exception messages can
+                # echo passphrase bytes.
                 self.logger.info(
                     "Key %s did not open with the current password (%s); "
                     "checking new password.",
                     key_file.name,
-                    primary_exc,
+                    type(primary_exc).__name__,
                 )
                 try:
                     self.private_key_to_crypto(key.private_key, new_password)

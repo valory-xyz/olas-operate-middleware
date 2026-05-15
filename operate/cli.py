@@ -284,9 +284,9 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             raise ValueError(MSG_INVALID_PASSWORD)
 
         wallet_manager = self.wallet_manager
-        # KeysManager.update_password reads self.password as the
-        # current-password attempt; the manager-level idempotency relies on
-        # this being old_password so already-migrated keys take the fallback.
+        # wallet_manager and keys_manager both read self.password as the
+        # current-password attempt; pin it to old_password so already-
+        # migrated state takes the fallback path on retry.
         wallet_manager.password = old_password
         wallet_manager.update_password(new_password)
         broken = self._keys_manager.update_password(new_password)

@@ -30,6 +30,7 @@ from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
+from cryptography.fernet import InvalidToken
 from web3 import Account, Web3
 
 from operate.constants import (
@@ -847,24 +848,24 @@ class EthereumMasterWallet(
         self._reencrypt_mnemonic(old_password=old_password, new_password=new_password)
         self.password = new_password
 
-    def _reencrypt_mnemonic(self, old_password: str, new_password: str) -> None:
+    def _reencrypt_mnemonic(self, *, old_password: str, new_password: str) -> None:
         """Re-encrypt the on-disk mnemonic blob with ``new_password``.
 
-        Soft-fail: when the blob is missing or already on an unknown password
-        (existing wedge from a pre-fix release), log and continue so the rest
-        of the password change still completes.
+        Soft-fail for wrong-password only: if the blob can't be opened with
+        ``old_password`` (existing wedge from a pre-fix release), log and
+        continue so the rest of the password change still completes. Other
+        failures (corrupted blob, OS errors) propagate.
         """
         if not self.mnemonic_path.exists():
             return
         try:
             plaintext = EncryptedData.load(self.mnemonic_path).decrypt(old_password)
-        except Exception as exc:  # pylint: disable=broad-except
+        except InvalidToken:
             logger.warning(
                 "Could not decrypt mnemonic at %s with the current password; "
                 "leaving the blob untouched. Use the seed-phrase recovery "
-                "flow to resync. Underlying error: %s",
+                "flow to resync.",
                 self.mnemonic_path,
-                exc,
             )
             return
         create_backup(self.mnemonic_path)

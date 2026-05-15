@@ -492,6 +492,31 @@ class TestKeysManager:
         second_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
         assert first_snapshot == second_snapshot
 
+    def test_discard_all_logs_and_continues_on_rename_failure(
+        self, keys_manager: KeysManager
+    ) -> None:
+        """A per-entry OSError is logged; the loop keeps going for other files."""
+        keys_manager.create()
+        keys_manager.create()
+
+        real_rename = Path.rename
+        calls = {"failed": False}
+
+        def flaky_rename(self: Path, target: Path) -> Path:
+            if not calls["failed"]:
+                calls["failed"] = True
+                raise OSError("simulated rename failure")
+            return real_rename(self, target)
+
+        with patch.object(Path, "rename", flaky_rename):
+            keys_manager.discard_all()
+
+        remaining = list(keys_manager.path.iterdir())
+        # One file was left in place (the rename raised), the rest renamed.
+        assert any(entry.suffix == ".lost" for entry in remaining)
+        assert any(entry.suffix != ".lost" for entry in remaining)
+        keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
+
     def test_update_password_skips_lost_files(
         self, keys_manager: KeysManager, password: str
     ) -> None:
