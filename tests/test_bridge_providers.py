@@ -31,7 +31,6 @@ from deepdiff import DeepDiff
 from web3 import Web3
 
 from operate.bridge.bridge_manager import (
-    LiFiProvider,
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
     ProviderRequest,
 )
@@ -54,7 +53,7 @@ from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
-from operate.ledger.profiles import OLAS
+from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.serialization import BigInt
 
@@ -309,29 +308,6 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
         ProviderRequestStatus.EXECUTION_DONE,
         "0x48b3367c3dad388a1f0c1dec5063fe45969022975c53f212734285ac93c5e214",
         2148,
-    ),
-    # LiFiProvider - EXECUTION_DONE tests
-    (
-        LiFiProvider,
-        None,
-        {
-            "from": {
-                "chain": "gnosis",
-                "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                "token": "0x0000000000000000000000000000000000000000",  # nosec
-            },
-            "to": {
-                "chain": "base",
-                "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                "token": "0x0000000000000000000000000000000000000000",  # nosec
-                "amount": 380000000000000,
-            },
-        },
-        "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
-        "0xbd10fbe1321fc51c94f0bbb94bb9e467b180eedc6f7c942cf48a0321b6eaf8e4",
-        ProviderRequestStatus.EXECUTION_DONE,
-        "0x407a815ac865ea888f31d26c7105609c1337daed934c9e09bf2c6ebf448b30ed",
-        383,
     ),
     # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
     (
@@ -781,7 +757,6 @@ class TestProvider(OnTestnet):
         "provider_class",
         [
             RelayProvider,
-            LiFiProvider,
             NativeBridgeProvider,
         ],
     )
@@ -985,7 +960,6 @@ class TestProvider(OnTestnet):
         "provider_class",
         [
             RelayProvider,
-            LiFiProvider,
         ],
     )
     def test_bridge_error(
@@ -1156,10 +1130,6 @@ class TestProvider(OnTestnet):
         "provider_class",
         [
             RelayProvider,
-            pytest.param(
-                LiFiProvider,
-                marks=pytest.mark.xfail(reason="Flaky test."),
-            ),
             NativeBridgeProvider,
         ],
     )
@@ -1533,3 +1503,85 @@ class TestProvider(OnTestnet):
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
+
+
+# ---------------------------------------------------------------------------
+# TestRelayProviderUsdcRoutes — ETH→Base USDC and ETH→Optimism USDC
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestRelayProviderUsdcRoutes(OnTestnet):
+    """Integration tests for RelayProvider on USDC token-pair routes.
+
+    These routes were previously served by LiFi as the preferred provider.
+    After LiFi removal they fall through to Relay via the default fallback.
+    """
+
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
+    @pytest.mark.parametrize(
+        ("to_chain", "to_token"),
+        [
+            (Chain.BASE, USDC[Chain.BASE]),
+            (Chain.OPTIMISM, USDC[Chain.OPTIMISM]),
+        ],
+        ids=["eth-to-base-usdc", "eth-to-optimism-usdc"],
+    )
+    def test_relay_usdc_quote(
+        self,
+        tmp_path: Path,
+        password: str,
+        to_chain: Chain,
+        to_token: str,
+    ) -> None:
+        """test_relay_usdc_quote"""
+        operate = OperateApp(home=tmp_path / OPERATE_TEST)
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+
+        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+        params: t.Dict[str, t.Any] = {
+            "from": {
+                "chain": Chain.ETHEREUM.value,
+                "address": wallet_address,
+                "token": USDC[Chain.ETHEREUM],
+            },
+            "to": {
+                "chain": to_chain.value,
+                "address": wallet_address,
+                "token": to_token,
+                "amount": 1_000_000,  # 1 USDC (6 decimals)
+            },
+        }
+
+        provider = RelayProvider(
+            provider_id="test-relay-usdc",
+            wallet_manager=operate.wallet_manager,
+            logger=LOGGER,
+        )
+
+        # Create request
+        provider_request = provider.create_request(params)
+        assert provider_request.status == ProviderRequestStatus.CREATED
+
+        # Quote
+        provider.quote(provider_request)
+        assert provider_request.quote_data is not None
+        assert provider_request.status in (
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
+        )
+
+        if provider_request.status == ProviderRequestStatus.QUOTE_DONE:
+            assert provider_request.quote_data.eta is not None
+            assert provider_request.quote_data.eta >= 0
+
+        # Requirements
+        reqs = provider.requirements(provider_request)
+        assert Chain.ETHEREUM.value in reqs
