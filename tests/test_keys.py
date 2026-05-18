@@ -33,6 +33,8 @@ from eth_account import Account
 from operate.keys import Key, KeysManager
 from operate.migration import MigrationManager
 
+from tests.conftest import reencrypt_key
+
 
 @pytest.fixture
 def keys_manager(temp_keys_dir: Path, password: Optional[str]) -> KeysManager:
@@ -125,26 +127,24 @@ class TestKeysManager:
         temp_files = [f for f in keys_manager.path.iterdir() if f.suffix == ".txt"]
         assert len(temp_files) == 0, "Temporary files should be cleaned up"
 
-    def test_get_crypto_instance_temp_file_in_correct_directory(
+    def test_get_crypto_instance_temp_file_outside_keys_dir(
         self, keys_manager: KeysManager, key_file: tuple[Path, Key]
     ) -> None:
-        """Test that temporary file is created in the correct directory."""
-        key_file_path, sample_key = key_file
+        """Temp file must be created outside the keys directory.
 
-        # Verify we start with just the key file
-        initial_files = list(keys_manager.path.iterdir())
-        assert len(initial_files) == 2  # key file + .bak file
+        Stray files inside the keys directory break update_password and
+        migrate_keys iteration, so the temp file must live elsewhere.
+        """
+        _, sample_key = key_file
 
-        # Use a mock to capture what directory the temp file is created in
         with patch(
             "tempfile.NamedTemporaryFile", wraps=tempfile.NamedTemporaryFile
         ) as mock_tempfile:
             keys_manager.get_crypto_instance(sample_key.address)
 
-            # Verify tempfile was called with the correct directory
             mock_tempfile.assert_called_once()
-            call_kwargs = mock_tempfile.call_args[1]
-            assert call_kwargs["dir"] == keys_manager.path
+            call_kwargs = mock_tempfile.call_args.kwargs
+            assert "dir" not in call_kwargs or call_kwargs["dir"] != keys_manager.path
             assert call_kwargs["mode"] == "w"
             assert call_kwargs["suffix"] == ".txt"
             assert call_kwargs["delete"] is False
@@ -264,6 +264,121 @@ class TestKeysManager:
             assert backup_path.is_file()
             assert backup_path.read_text() == json.dumps(key.json, indent=2)
 
+    def test_update_password_is_idempotent_for_already_migrated_keys(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """A key already encrypted with new_password is left untouched."""
+        new_password = f"{password}_new"
+
+        # Address A is on the old password (normal case).
+        address_a = keys_manager.create()
+
+        # Address B was already re-encrypted with the new password by a
+        # previous partial update — and crucially its .bak was lost.
+        address_b = keys_manager.create()
+        reencrypt_key(keys_manager, address_b, password, new_password)
+        (keys_manager.path / f"{address_b}.bak").unlink()
+
+        keys_manager.update_password(new_password)
+
+        assert keys_manager.password == new_password
+        # Both keys now decrypt under the new password.
+        for address in (address_a, address_b):
+            decrypted = keys_manager.get(address).get_decrypted_json(new_password)
+            assert decrypted["address"] == address
+        # A .bak was reconstructed for the previously-migrated key.
+        assert (keys_manager.path / f"{address_b}.bak").is_file()
+
+    def test_update_password_returns_unrecoverable_filenames(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """An unrecoverable key is surfaced via the returned list, not raised."""
+        new_password = f"{password}_new"
+        third_password = "something_else"  # nosec B105 - test fixture, not a secret
+        address = keys_manager.create()
+        # Re-encrypt with a *third* password — neither old nor new can open it.
+        reencrypt_key(keys_manager, address, password, third_password)
+
+        broken = keys_manager.update_password(new_password)
+
+        assert broken == [address]
+        # The bad key did not block self.password from advancing.
+        assert keys_manager.password == new_password
+
+    def test_update_password_continues_past_unrecoverable_keys(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """A bad key does not abort iteration; recoverable keys still migrate."""
+        new_password = f"{password}_new"
+        third_password = "third_pw"  # nosec B105 - test fixture, not a secret
+        recoverable = [keys_manager.create() for _ in range(3)]
+        unrecoverable = keys_manager.create()
+        reencrypt_key(keys_manager, unrecoverable, password, third_password)
+
+        broken = keys_manager.update_password(new_password)
+
+        assert broken == [unrecoverable]
+        for address in recoverable:
+            decrypted = keys_manager.get(address).get_decrypted_json(new_password)
+            assert decrypted["address"] == address
+
+    def test_update_password_preserves_existing_bak_for_migrated_key(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """An existing .bak is not overwritten on the already-migrated path."""
+        new_password = f"{password}_new"
+        address = keys_manager.create()
+        reencrypt_key(keys_manager, address, password, new_password)
+
+        backup_path = keys_manager.path / f"{address}.bak"
+        sentinel = '{"sentinel": true}'
+        backup_path.write_text(sentinel, encoding="utf-8")
+
+        keys_manager.update_password(new_password)
+
+        assert backup_path.read_text(encoding="utf-8") == sentinel
+
+    def test_private_key_to_crypto_temp_file_valueerror_is_logged(
+        self, keys_manager: KeysManager, key_file: tuple[Path, Key]
+    ) -> None:
+        """A ValueError from unrecoverable_delete is logged, not propagated."""
+        _, sample_key = key_file
+        with patch(
+            "operate.keys.unrecoverable_delete",
+            side_effect=ValueError("not a file"),
+        ):
+            crypto = keys_manager.get_crypto_instance(sample_key.address)
+
+        assert crypto is not None
+        assert crypto.address == sample_key.address
+        keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
+
+    def test_update_password_skips_non_address_files(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """Non-address filenames are skipped; only EVM-address files are keys."""
+        address = keys_manager.create()
+
+        # Leaked temp keystore: valid JSON dict, no 'ledger' field.
+        stray = keys_manager.path / "tmpeqm29mt5.txt"
+        stray.write_text(
+            json.dumps({"address": address, "crypto": {}, "id": "x", "version": 3}),
+            encoding="utf-8",
+        )
+
+        new_password = f"{password}_new"
+        keys_manager.update_password(new_password)
+
+        assert keys_manager.password == new_password
+        # Key was still re-encrypted with the new password
+        key = keys_manager.get(address)
+        assert key.get_decrypted_json(password=new_password)["address"] == address
+        # Stray file is left untouched (caller's responsibility to clean up)
+        assert stray.exists()
+        keys_manager.logger.warning.assert_any_call(  # type: ignore[attr-defined]
+            f"Skipping non-key file: {stray}"
+        )
+
     def test_keys_manager_init_without_path_raises(self) -> None:
         """Test KeysManager raises ValueError when path kwarg is not provided."""
         with pytest.raises(ValueError, match="Path must be provided"):
@@ -272,21 +387,58 @@ class TestKeysManager:
     def test_private_key_to_crypto_temp_file_cleanup_failure_logs_error(
         self, keys_manager: KeysManager, key_file: tuple[Path, Key]
     ) -> None:
-        """Test that temp file cleanup failure logs error but does not propagate."""
+        """Cleanup failure logs error and falls back to os.remove."""
         _, sample_key = key_file
+        captured: dict[str, str] = {}
+
+        def capture_then_remove(path: Path) -> None:
+            captured["path"] = str(path)
+            raise OSError("cleanup failed")
 
         with patch(
-            "operate.keys.unrecoverable_delete",
-            side_effect=OSError("cleanup failed"),
+            "operate.keys.unrecoverable_delete", side_effect=capture_then_remove
         ):
-            # Should still return a valid crypto instance
             crypto = keys_manager.get_crypto_instance(sample_key.address)
 
         assert crypto is not None
         assert crypto.address == sample_key.address
         keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
-        error_msg = str(keys_manager.logger.error.call_args)  # type: ignore[attr-defined]
-        assert "Failed to delete temp file" in error_msg
+        error_msg = str(keys_manager.logger.error.call_args_list)  # type: ignore[attr-defined]
+        assert "Secure delete of temp key file" in error_msg
+        # os.remove fallback ran — file no longer on disk.
+        assert not Path(captured["path"]).exists()
+
+    def test_private_key_to_crypto_fallback_remove_failure_logs(
+        self, keys_manager: KeysManager, key_file: tuple[Path, Key]
+    ) -> None:
+        """If both deletes fail, both are logged AND the temp file stays on disk.
+
+        This is the security-relevant postcondition: a stranded plaintext
+        key file is the worst-case outcome the cleanup path warns about.
+        """
+        _, sample_key = key_file
+        captured: dict[str, str] = {}
+
+        def capture_then_raise_primary(path: Path) -> None:
+            captured["path"] = str(path)
+            raise OSError("primary")
+
+        with patch(
+            "operate.keys.unrecoverable_delete",
+            side_effect=capture_then_raise_primary,
+        ), patch("operate.keys.os.remove", side_effect=OSError("fallback")):
+            crypto = keys_manager.get_crypto_instance(sample_key.address)
+
+        assert crypto is not None
+        calls = str(keys_manager.logger.error.call_args_list)  # type: ignore[attr-defined]
+        assert "Secure delete of temp key file" in calls
+        assert "Fallback os.remove" in calls
+        # Both deletes failed; the plaintext-keyed scratch file remains.
+        try:
+            assert Path(captured["path"]).exists()
+        finally:
+            # Don't leak the simulated stranded key past this test.
+            Path(captured["path"]).unlink(missing_ok=True)
 
     def test_get_decrypted_without_password(self, temp_keys_dir: Path) -> None:
         """Test get_decrypted returns raw json dict when no password is set."""
@@ -354,6 +506,70 @@ class TestKeysManager:
 
         assert not key_path.exists()
 
+    def test_discard_all_renames_every_file(self, keys_manager: KeysManager) -> None:
+        """discard_all appends .lost to every regular file; files are preserved."""
+        addresses = [keys_manager.create() for _ in range(2)]
+        keys_manager.get_private_key_file(addresses[0])  # creates `<addr>_private_key`
+        (keys_manager.path / "stray.txt").write_text("noise", encoding="utf-8")
+        original_names = {entry.name for entry in keys_manager.path.iterdir()}
+
+        failed = keys_manager.discard_all()
+
+        assert failed == []
+        renamed = {entry.name for entry in keys_manager.path.iterdir()}
+        assert renamed == {f"{name}.lost" for name in original_names}
+
+    def test_discard_all_is_idempotent(self, keys_manager: KeysManager) -> None:
+        """A second discard_all leaves already-.lost files untouched."""
+        keys_manager.create()
+        assert keys_manager.discard_all() == []
+        first_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
+
+        assert keys_manager.discard_all() == []
+
+        second_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
+        assert first_snapshot == second_snapshot
+
+    def test_discard_all_returns_paths_that_failed_to_rename(
+        self, keys_manager: KeysManager
+    ) -> None:
+        """A per-entry OSError is logged AND surfaced via the return value."""
+        keys_manager.create()
+        keys_manager.create()
+
+        real_rename = Path.rename
+        calls = {"failed": False}
+
+        def flaky_rename(self: Path, target: Path) -> Path:
+            if not calls["failed"]:
+                calls["failed"] = True
+                raise OSError("simulated rename failure")
+            return real_rename(self, target)
+
+        with patch.object(Path, "rename", flaky_rename):
+            failed = keys_manager.discard_all()
+
+        remaining = list(keys_manager.path.iterdir())
+        # One file was left in place (the rename raised), the rest renamed.
+        assert any(entry.suffix == ".lost" for entry in remaining)
+        assert any(entry.suffix != ".lost" for entry in remaining)
+        keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
+        # The failed name must match a file that still has no .lost suffix.
+        assert len(failed) == 1
+        assert (keys_manager.path / failed[0]).exists()
+
+    def test_update_password_skips_lost_files(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """update_password silently skips .lost files (no spurious warnings)."""
+        address = keys_manager.create()
+        (keys_manager.path / f"{address}.lost").write_text("ignored", encoding="utf-8")
+
+        broken = keys_manager.update_password(f"{password}_new")
+
+        assert broken == []
+        keys_manager.logger.warning.assert_not_called()  # type: ignore[attr-defined]
+
     def test_create_skips_writing_when_files_already_exist(
         self, keys_manager: KeysManager
     ) -> None:
@@ -377,3 +593,45 @@ class TestKeysManager:
         assert (keys_manager.path / address).read_text(
             encoding="utf-8"
         ) == original_content
+
+    def test_update_password_returns_empty_when_all_keys_decrypt_with_current(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """Happy path: keys all on current password, all migrate cleanly."""
+        addresses = [keys_manager.create() for _ in range(2)]
+        new_password = f"{password}_new"
+
+        broken = keys_manager.update_password(new_password)
+
+        assert broken == []
+        assert keys_manager.password == new_password
+        for address in addresses:
+            assert (
+                keys_manager.get(address).get_decrypted_json(new_password)["address"]
+                == address
+            )
+
+    def test_update_password_mixed_state_surfaces_only_unrecoverable(
+        self, keys_manager: KeysManager, password: str
+    ) -> None:
+        """Mixed state: only the unrelated-password key is reported broken."""
+        new_password = f"{password}_new"
+        unrelated_password = "third_pw"  # nosec B105 - test fixture
+
+        address_current = keys_manager.create()
+        address_already_new = keys_manager.create()
+        reencrypt_key(keys_manager, address_already_new, password, new_password)
+        (keys_manager.path / f"{address_already_new}.bak").unlink()
+        address_unrecoverable = keys_manager.create()
+        reencrypt_key(keys_manager, address_unrecoverable, password, unrelated_password)
+
+        broken = keys_manager.update_password(new_password)
+
+        assert broken == [address_unrecoverable]
+        assert keys_manager.password == new_password
+        for address in (address_current, address_already_new):
+            assert (
+                keys_manager.get(address).get_decrypted_json(new_password)["address"]
+                == address
+            )
+        assert (keys_manager.path / f"{address_already_new}.bak").is_file()

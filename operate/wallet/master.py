@@ -30,6 +30,7 @@ from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
+from cryptography.fernet import InvalidToken
 from web3 import Account, Web3
 
 from operate.constants import (
@@ -820,7 +821,24 @@ class EthereumMasterWallet(
         return mnemonic.split()
 
     def update_password(self, new_password: str) -> None:
-        """Updates password."""
+        """Updates password.
+
+        Idempotent: if the keystore is already encrypted with ``new_password``,
+        skip the keystore rewrite. The mnemonic blob is always reconciled —
+        a previous run may have crashed between the keystore rewrite and the
+        blob rewrite, so the idempotent path must still complete that step.
+        Clearing ``self._crypto`` forces the next access to re-load with the
+        new password.
+        """
+        old_password = self.password
+        if self.is_password_valid(new_password):
+            self._reencrypt_mnemonic(
+                old_password=old_password, new_password=new_password
+            )
+            self._crypto = None
+            self.password = new_password
+            return
+
         create_backup(self.path / self._key)
         self._crypto = None
         (self.path / self._key).write_text(
@@ -833,7 +851,36 @@ class EthereumMasterWallet(
             ),
             encoding="utf-8",
         )
+        self._reencrypt_mnemonic(old_password=old_password, new_password=new_password)
         self.password = new_password
+
+    def _reencrypt_mnemonic(self, *, old_password: str, new_password: str) -> None:
+        """Re-encrypt the on-disk mnemonic blob with ``new_password``.
+
+        Soft-fail for wrong-password only: if the blob can't be opened
+        with ``old_password`` (a wedge state where the mnemonic was last
+        encrypted with a different password than the keystore), log and
+        continue so the rest of the password change still completes.
+        Other failures (corrupted blob, OS errors) propagate.
+        """
+        if not self.mnemonic_path.exists():
+            return
+        try:
+            plaintext = EncryptedData.load(self.mnemonic_path).decrypt(old_password)
+        except InvalidToken:
+            logger.warning(
+                "Could not decrypt mnemonic at %s with the current password; "
+                "leaving the blob untouched. Use the seed-phrase recovery "
+                "flow to resync.",
+                self.mnemonic_path,
+            )
+            return
+        create_backup(self.mnemonic_path)
+        EncryptedData.new(
+            path=self.mnemonic_path,
+            password=new_password,
+            plaintext_bytes=plaintext,
+        ).store()
 
     def is_mnemonic_valid(self, mnemonic: str) -> bool:
         """Verifies if the provided BIP-39 mnemonic is valid."""
@@ -870,6 +917,16 @@ class EthereumMasterWallet(
             ),
             encoding="utf-8",
         )
+        # Mnemonic recovery already has the plaintext in-hand — refresh the
+        # blob unconditionally so the user-supplied phrase is what's stored
+        # under the new password.
+        if self.mnemonic_path.exists():
+            create_backup(self.mnemonic_path)
+        EncryptedData.new(
+            path=self.mnemonic_path,
+            password=new_password,
+            plaintext_bytes=mnemonic.encode("utf-8"),
+        ).store()
         self.password = new_password
 
     def create_safe(

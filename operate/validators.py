@@ -35,6 +35,19 @@ SAFE_FS_PATH_RE: re.Pattern[str] = re.compile(
     r"\A(?!.*(?:^|/|\\)\.\.(?:/|\\|\Z))[A-Za-z0-9_./:\\ -]+\Z"
 )
 
+# Safe-identifier pattern for free-form URL path parameters such as
+# ``service_config_id`` and ``achievement_id``. Both originate from different
+# producers (service_config_id is an internally-generated ``sc-<uuid4>``;
+# achievement_id is a free-form key from ``agent_performance.json``) but
+# share the same security contract: the value reaches filesystem paths and
+# subprocess argument lists, so it must contain no path-traversal segments,
+# shell metacharacters, scheme/host components, or whitespace. Exported as
+# both a string (for ``fastapi.Path(pattern=...)`` declarations that CodeQL
+# recognises as a taint sanitiser) and a compiled :class:`re.Pattern` (for
+# pre-dispatch validation in ``ValidatedServiceRoute``).
+SAFE_ID_PATTERN: str = r"^[A-Za-z0-9_-]{1,128}$"
+SAFE_ID_RE: re.Pattern[str] = re.compile(SAFE_ID_PATTERN)
+
 
 class UnsafePathError(ValueError):
     """Raised when a path candidate fails ``SAFE_FS_PATH_RE`` validation."""

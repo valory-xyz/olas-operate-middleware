@@ -24,7 +24,6 @@ import atexit
 import enum
 import multiprocessing
 import os
-import re
 import shutil
 import signal
 import sys
@@ -41,7 +40,9 @@ from types import FrameType
 import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
-from fastapi import APIRouter, FastAPI, Query, Request
+from fastapi import APIRouter, FastAPI
+from fastapi import Path as FastApiPath
+from fastapi import Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -109,6 +110,7 @@ from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import gas_fees_spent_in_tx, get_assets_balances
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
+from operate.validators import SAFE_ID_PATTERN, SAFE_ID_RE
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
@@ -151,18 +153,18 @@ class ValidatedServiceRoute(APIRoute):
     has each entry in ``PATH_PARAM_PATTERNS`` checked against the path value
     of the same name; a value that fails its regex produces a 400 response
     before the handler runs. Path params not listed here are unaffected.
+
+    The same :data:`SAFE_ID_PATTERN` is also declared per-handler via
+    ``fastapi.Path(pattern=...)`` so CodeQL recognises a taint-sanitisation
+    barrier at the function signature; this middleware exists to keep the
+    400 + ``{"error": ...}`` response contract uniform across the API
+    (FastAPI/pydantic's native rejection would otherwise emit a 422 with
+    a verbose pydantic error envelope).
     """
 
-    # Service config IDs are generated as ``sc-<uuid4>`` but tests and legacy
-    # callers may use shorter alphanumeric tokens. Achievement IDs come from
-    # the keys of ``agent_performance.json`` and are likewise free-form
-    # strings. The pattern restricts the value to characters that cannot
-    # introduce path-traversal segments, shell metacharacters, or scheme/host
-    # components when later used to build paths or command arguments.
-    _ID_RE: t.ClassVar[t.Pattern[str]] = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
     PATH_PARAM_PATTERNS: t.ClassVar[t.Mapping[str, t.Pattern[str]]] = {
-        "service_config_id": _ID_RE,
-        "achievement_id": _ID_RE,
+        "service_config_id": SAFE_ID_RE,
+        "achievement_id": SAFE_ID_RE,
     }
 
     @staticmethod
@@ -309,25 +311,51 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         )
 
     def update_password(self, old_password: str, new_password: str) -> None:
-        """Updates current password"""
+        """Updates current password.
+
+        Authentication is anchored in ``user.json``. The wallet check accepts
+        either password so a daemon left half-committed by an interrupted run
+        can converge on retry — the wallet/keys updates are idempotent.
+        """
 
         if not new_password:
             raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
+        if not self.user_account.is_valid(old_password):
+            raise ValueError(MSG_INVALID_PASSWORD)
+
         if not (
-            self.user_account.is_valid(old_password)
-            and self.wallet_manager.is_password_valid(old_password)
+            self.wallet_manager.is_password_valid(old_password)
+            or self.wallet_manager.is_password_valid(new_password)
         ):
             raise ValueError(MSG_INVALID_PASSWORD)
 
-        wallet_manager = self.wallet_manager
-        wallet_manager.password = old_password
-        wallet_manager.update_password(new_password)
-        self._keys_manager.update_password(new_password)
+        # Both managers read their own ``password`` attribute as the
+        # current-password attempt; pin both to old_password so an
+        # already-migrated keystore or key file takes the fallback path
+        # on a retry that follows a partially-applied previous attempt.
+        self.wallet_manager.password = old_password
+        self._keys_manager.password = old_password
+        self.wallet_manager.update_password(new_password)
+        broken = self._keys_manager.update_password(new_password)
+        if broken:
+            raise ValueError(
+                "Some agent keys cannot be decrypted with the current or the "
+                f"new password: {', '.join(broken)}"
+            )
         self.user_account.update(old_password, new_password)
 
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
-        """Updates current password using the mnemonic"""
+        """Updates current password using the mnemonic.
+
+        The seed-phrase flow is for users who no longer have the password
+        agent EOA keys were encrypted with. Agent keys are marked
+        discarded (renamed ``.lost``) so the caller can re-establish agent
+        authority via the safe recovery module; the original files remain
+        on disk for audit. Discard runs last so a failure in the wallet
+        rewrite or the ``user.json`` update doesn't leave the directory in
+        a half-renamed state.
+        """
 
         if not new_password:
             raise ValueError(MSG_NEW_PASSWORD_MISSING)
@@ -336,9 +364,19 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
             raise ValueError(MSG_INVALID_MNEMONIC)
 
-        wallet_manager = self.wallet_manager
-        wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
+        self.wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
         self.user_account.force_update(new_password)
+        failed = self._keys_manager.discard_all()
+        if failed:
+            # Wallet + user.json are already on new_password by this point;
+            # only the discard step partially failed. Re-running the
+            # seed-phrase flow is safe: wallet/user updates are idempotent
+            # and discard_all skips files already marked .lost.
+            raise ValueError(
+                "Could not mark the following agent keys as discarded; "
+                "retry the seed-phrase recovery flow to finish the "
+                f"discard step: {', '.join(failed)}"
+            )
 
     def service_manager(
         self, skip_dependency_check: t.Optional[bool] = False
@@ -1362,10 +1400,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output)
 
     @service_router.get("/api/v2/service/{service_config_id}")
-    async def _get_service(request: Request) -> JSONResponse:
+    async def _get_service(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Get a service."""
-        service_config_id = request.path_params["service_config_id"]
-
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
         return JSONResponse(
@@ -1379,10 +1417,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @service_router.get("/api/v2/service/{service_config_id}/deployment")
-    async def _get_service_deployment(request: Request) -> JSONResponse:
+    async def _get_service_deployment(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Get a service deployment."""
-        service_config_id = request.path_params["service_config_id"]
-
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
@@ -1393,12 +1431,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @service_router.get("/api/v2/service/{service_config_id}/achievements")
     async def _get_service_achievements(
-        request: Request,
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
         include_acknowledged: bool = Query(False),  # noqa: B008
     ) -> JSONResponse:
         """Get the service achievements."""
-        service_config_id = request.path_params["service_config_id"]
-
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
@@ -1413,20 +1449,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @service_router.post(
         "/api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge"
     )
-    async def _acknowledge_achievement(request: Request) -> JSONResponse:
+    async def _acknowledge_achievement(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        achievement_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Update a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
 
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
         service = operate.service_manager().load(service_config_id=service_config_id)
-
-        achievement_id = request.path_params["achievement_id"]
 
         try:
             service.acknowledge_achievement(
@@ -1455,10 +1491,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @service_router.get("/api/v2/service/{service_config_id}/agent_performance")
-    async def _get_agent_performance(request: Request) -> JSONResponse:
+    async def _get_agent_performance(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Get the service refill requirements."""
-        service_config_id = request.path_params["service_config_id"]
-
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
@@ -1469,10 +1505,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @service_router.get("/api/v2/service/{service_config_id}/funding_requirements")
-    async def _get_funding_requirements(request: Request) -> JSONResponse:
+    async def _get_funding_requirements(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Get the service refill requirements."""
-        service_config_id = request.path_params["service_config_id"]
-
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
@@ -1484,10 +1520,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # TODO deprecate
     @service_router.get("/api/v2/service/{service_config_id}/refill_requirements")
-    async def _get_refill_requirements(request: Request) -> JSONResponse:
+    async def _get_refill_requirements(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Get the service refill requirements."""
-        service_config_id = request.path_params["service_config_id"]
-
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
@@ -1509,14 +1545,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @service_router.post("/api/v2/service/{service_config_id}")
-    async def _deploy_and_run_service(request: Request) -> JSONResponse:
+    async def _deploy_and_run_service(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Deploy a service."""
         logger.info("Deploy and run service")
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
         pause_all_services()
-        service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
 
         if not manager.exists(service_config_id=service_config_id):
@@ -1543,12 +1580,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @service_router.put("/api/v2/service/{service_config_id}")
     @service_router.patch("/api/v2/service/{service_config_id}")
-    async def _update_service(request: Request) -> JSONResponse:
+    async def _update_service(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        request: Request,
+    ) -> JSONResponse:
         """Update a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
 
         if not manager.exists(service_config_id=service_config_id):
@@ -1578,12 +1617,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @service_router.post("/api/v2/service/{service_config_id}/deployment/stop")
-    async def _stop_service_locally(request: Request) -> JSONResponse:
+    async def _stop_service_locally(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Stop a service deployment."""
 
         # No authentication required to stop services.
 
-        service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
 
         if not manager.exists(service_config_id=service_config_id):
@@ -1600,13 +1640,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # TODO Deprecate
     @service_router.post("/api/v2/service/{service_config_id}/onchain/withdraw")
-    async def _withdraw_onchain(request: Request) -> JSONResponse:
+    async def _withdraw_onchain(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        request: Request,
+    ) -> JSONResponse:
         """Withdraw all the funds from a service."""
 
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        service_config_id = request.path_params["service_config_id"]
         service_manager = operate.service_manager()
 
         if not service_manager.exists(service_config_id=service_config_id):
@@ -1672,13 +1714,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"error": None, "message": "Withdrawal successful"})
 
     @service_router.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
-    async def _terminate_and_withdraw(request: Request) -> JSONResponse:
+    async def _terminate_and_withdraw(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
         """Terminate the service and withdraw all the funds to Master Safe"""
 
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        service_config_id = request.path_params["service_config_id"]
         service_manager = operate.service_manager()
         wallet_manager = operate.wallet_manager
 
@@ -1732,6 +1775,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @service_router.post("/api/v2/service/{service_config_id}/fund")
     async def fund_service(  # pylint: disable=too-many-return-statements
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
         request: Request,
     ) -> JSONResponse:
         """Fund agent or service safe via Master Safe"""
@@ -1739,7 +1783,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        service_config_id = request.path_params["service_config_id"]
         service_manager = operate.service_manager()
 
         if not service_manager.exists(service_config_id=service_config_id):

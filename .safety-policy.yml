@@ -1,0 +1,9 @@
+# Safety policy file (safety 2.x format).
+#
+# Stub created to satisfy `safety check`, which began requiring this file to
+# exist even when ignore IDs are supplied via CLI `-i` flags. The actual
+# ignored vulnerability IDs live in tox.ini under [testenv:safety] so they
+# stay co-located with the rest of the CI invocation.
+security:
+  ignore-vulnerabilities: {}
+  continue-on-vulnerability-error: False

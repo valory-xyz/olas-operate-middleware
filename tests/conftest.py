@@ -184,6 +184,17 @@ def random_mnemonic(num_words: int = 12) -> str:
     return mnemonic
 
 
+def reencrypt_key(
+    manager: KeysManager, address: str, current_password: str, new_password: str
+) -> None:
+    """Rewrite ``address``'s on-disk key as if it were encrypted with ``new_password``."""
+    key = manager.get(address)
+    crypto = manager.private_key_to_crypto(key.private_key, current_password)
+    key.private_key = crypto.encrypt(password=new_password)
+    key.path = manager.path / address
+    key.store()
+
+
 def tenderly_add_balance(
     chain: Chain,
     recipient: str,

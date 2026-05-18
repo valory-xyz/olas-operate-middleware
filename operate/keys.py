@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from aea_ledger_ethereum.ethereum import EthereumCrypto
+from web3 import Web3
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
@@ -78,30 +79,57 @@ class KeysManager:
     def private_key_to_crypto(
         self, private_key: str, password: Optional[str]
     ) -> EthereumCrypto:
-        """Convert private key string to EthereumCrypto instance."""
-        with tempfile.NamedTemporaryFile(
-            dir=self.path,
+        """Convert private key string to EthereumCrypto instance.
+
+        The scratch file lives in the system temp directory (not the keys
+        directory) so it cannot pollute the keystore iteration.
+        """
+        temp_file = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
             mode="w",
             suffix=".txt",
-            delete=False,  # Handle cleanup manually
-        ) as temp_file:
-            temp_file_name = temp_file.name
+            delete=False,
+        )
+        temp_file_name = temp_file.name
+        try:
             temp_file.write(private_key)
             temp_file.flush()
-            temp_file.close()  # Close the file before reading
-
-            # Set proper file permissions (readable by owner only)
+            temp_file.close()
             os.chmod(temp_file_name, 0o600)
-            crypto = EthereumCrypto(private_key_path=temp_file_name, password=password)
+            return EthereumCrypto(private_key_path=temp_file_name, password=password)
+        finally:
+            self._delete_temp_key_file(Path(temp_file_name))
 
-            try:
-                unrecoverable_delete(
-                    Path(temp_file.name)
-                )  # Clean up the temporary file
-            except OSError as e:
-                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
+    def _delete_temp_key_file(self, path: Path) -> None:
+        """Best-effort wipe of a scratch private-key file.
 
-        return crypto
+        Prefer ``unrecoverable_delete`` so the bytes are overwritten before
+        the inode is freed. If that step raises, fall back to ``os.remove``
+        — leaving plaintext key material on disk is worse than skipping
+        the overwrite. Both attempts log the path and full exception so an
+        operator can act on a stranded scratch file.
+        """
+        try:
+            unrecoverable_delete(path)
+            return
+        except (OSError, ValueError) as exc:
+            self.logger.error(
+                "Secure delete of temp key file %s failed (%s: %s); "
+                "falling back to os.remove to avoid leaving plaintext "
+                "key material on disk.",
+                path,
+                type(exc).__name__,
+                exc,
+            )
+        try:
+            os.remove(path)
+        except OSError as fallback_exc:
+            self.logger.error(
+                "Fallback os.remove of %s also failed (%s: %s); "
+                "plaintext private key may remain on disk.",
+                path,
+                type(fallback_exc).__name__,
+                fallback_exc,
+            )
 
     def get(self, key: str) -> Key:
         """Get key object."""
@@ -171,14 +199,90 @@ class KeysManager:
         """Delete key."""
         os.remove(self.path / key)
 
-    def update_password(self, new_password: str) -> None:
-        """Update password for all keys."""
+    def discard_all(self) -> list[str]:
+        """Mark every file in the keys directory as discarded.
+
+        Used by the seed-phrase recovery flow: the user no longer has the
+        password these agent EOA keys are encrypted with, so they cannot
+        be recovered. Services that depended on them must re-establish
+        agent EOA authority via the safe recovery module.
+
+        Every regular file is renamed by appending ``.lost`` — address-named
+        keystores, their ``.bak`` backups, plaintext ``_private_key``
+        sidecars, and any stray files alike. Originals remain on disk for
+        audit. The call is idempotent: files already suffixed ``.lost``
+        are skipped. Per-entry rename failures are logged and returned so
+        callers can surface them to the user instead of silently leaving
+        active keys behind.
+        """
+        failed: list[str] = []
+        for entry in self.path.iterdir():
+            if not entry.is_file() or entry.suffix == ".lost":
+                continue
+            try:
+                entry.rename(entry.with_name(entry.name + ".lost"))
+            except OSError as exc:
+                self.logger.error(
+                    "Failed to mark %s as discarded (%s: %s)",
+                    entry,
+                    type(exc).__name__,
+                    exc,
+                )
+                failed.append(entry.name)
+        return failed
+
+    def update_password(self, new_password: str) -> list[str]:
+        """Re-encrypt all keys with ``new_password``; return unrecoverable filenames.
+
+        Idempotent: a key already encrypted with ``new_password`` is detected
+        and skipped, so retrying a previously-interrupted update converges.
+        A key that opens with neither the current nor the new password is
+        logged and reported back in the returned list; callers decide whether
+        to raise, warn, or surface the broken keys to the user.
+        """
+        broken: list[str] = []
         for key_file in self.path.iterdir():
-            if not key_file.is_file() or key_file.suffix == ".bak":
+            if not key_file.is_file() or key_file.suffix in (".bak", ".lost"):
+                continue
+            if not Web3.is_address(key_file.name):
+                self.logger.warning(f"Skipping non-key file: {key_file}")
                 continue
 
             key = self.get(key_file.name)
-            crypto = self.get_crypto_instance(key_file.name)
+            try:
+                crypto = self.private_key_to_crypto(key.private_key, self.password)
+            except ValueError as primary_exc:
+                # Decrypt with new_password to detect a prior partial migration.
+                # Log the exception type only — crypto exception messages can
+                # echo passphrase bytes.
+                self.logger.info(
+                    "Key %s did not open with the current password (%s); "
+                    "checking new password.",
+                    key_file.name,
+                    type(primary_exc).__name__,
+                )
+                try:
+                    self.private_key_to_crypto(key.private_key, new_password)
+                except ValueError:
+                    self.logger.warning(
+                        "Key %s cannot be decrypted with the current or "
+                        "the new password; agent is unrecoverable and must "
+                        "be re-created.",
+                        key_file.name,
+                    )
+                    broken.append(key_file.name)
+                    continue
+
+                # The .bak written here is a post-migration snapshot
+                # (encrypted with new_password), not a rollback artifact.
+                backup_path = self.path / f"{key.address}.bak"
+                if not backup_path.exists():
+                    backup_path.write_text(
+                        json.dumps(key.json, indent=2),
+                        encoding="utf-8",
+                    )
+                continue
+
             encrypted_private_key = crypto.encrypt(password=new_password)
             key.private_key = encrypted_private_key
             key.path = self.path / key_file.name
@@ -191,3 +295,4 @@ class KeysManager:
             )
 
         self.password = new_password
+        return broken
