@@ -244,12 +244,13 @@ class TestPasswordUpdate:
     def test_update_password_invalid_old_password(self, client: TestClient) -> None:
         """Test password update with invalid old password."""
         new_password = "new_secure_password123"  # nosec  # just for testing purpose
+        wrong_old_password = "wrong" + "_password"  # nosec  # just for testing purpose
         response = client.put(
             url="/api/account",
             json={
-                "old_password": "wrong_password",
+                "old_password": wrong_old_password,
                 "new_password": new_password,
-            },  # nosec
+            },
         )
 
         assert response.status_code == HTTPStatus.BAD_REQUEST

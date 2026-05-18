@@ -24,6 +24,7 @@ import atexit
 import enum
 import multiprocessing
 import os
+import re
 import shutil
 import signal
 import sys
@@ -40,9 +41,10 @@ from types import FrameType
 import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
-from fastapi import FastAPI, Query, Request
+from fastapi import APIRouter, FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from typing_extensions import Annotated
 from uvicorn.config import Config
@@ -140,6 +142,49 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
         content={"error": f"Service {service_config_id} not found"},
         status_code=HTTPStatus.NOT_FOUND,
     )
+
+
+class ValidatedServiceRoute(APIRoute):
+    """APIRoute that validates user-supplied path params before dispatch.
+
+    Any route mounted on a router with ``route_class=ValidatedServiceRoute``
+    has each entry in ``PATH_PARAM_PATTERNS`` checked against the path value
+    of the same name; a value that fails its regex produces a 400 response
+    before the handler runs. Path params not listed here are unaffected.
+    """
+
+    # Service config IDs are generated as ``sc-<uuid4>`` but tests and legacy
+    # callers may use shorter alphanumeric tokens. Achievement IDs come from
+    # the keys of ``agent_performance.json`` and are likewise free-form
+    # strings. The pattern restricts the value to characters that cannot
+    # introduce path-traversal segments, shell metacharacters, or scheme/host
+    # components when later used to build paths or command arguments.
+    _ID_RE: t.ClassVar[t.Pattern[str]] = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
+    PATH_PARAM_PATTERNS: t.ClassVar[t.Mapping[str, t.Pattern[str]]] = {
+        "service_config_id": _ID_RE,
+        "achievement_id": _ID_RE,
+    }
+
+    @staticmethod
+    def _invalid_response(param_name: str) -> JSONResponse:
+        """Return a 400 response for a malformed path parameter."""
+        return JSONResponse(
+            content={"error": f"Invalid {param_name}."},
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+
+    def get_route_handler(self) -> t.Callable:  # type: ignore[type-arg]
+        """Wrap the default handler with path-param validation."""
+        original_handler = super().get_route_handler()
+
+        async def custom_handler(request: Request) -> JSONResponse:
+            for name, pattern in self.PATH_PARAM_PATTERNS.items():
+                value = request.path_params.get(name)
+                if value is not None and not pattern.fullmatch(value):
+                    return self._invalid_response(name)
+            return await original_handler(request)
+
+        return custom_handler
 
 
 class CreateSafeStatus(str, enum.Enum):
@@ -533,6 +578,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             await watchdog.stop()
 
     app = FastAPI(lifespan=lifespan)
+
+    # Sub-router carrying every endpoint that reads a ``service_config_id``
+    # from the URL path. ``ValidatedServiceRoute`` rejects malformed values
+    # before the handler runs, so individual handlers do not need to repeat
+    # the check.
+    service_router = APIRouter(route_class=ValidatedServiceRoute)
 
     app.add_middleware(
         CORSMiddleware,
@@ -1276,7 +1327,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Insufficient funds: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={
-                    "error": f"Failed to withdraw funds. Insufficient funds: {e}",
+                    "error": "Failed to withdraw funds due to insufficient funds.",
                     "transfer_txs": transfer_txs,
                     **e.to_error_fields(),
                 },
@@ -1331,7 +1382,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(content=output)
 
-    @app.get("/api/v2/service/{service_config_id}")
+    @service_router.get("/api/v2/service/{service_config_id}")
     async def _get_service(request: Request) -> JSONResponse:
         """Get a service."""
         service_config_id = request.path_params["service_config_id"]
@@ -1348,7 +1399,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         )
 
-    @app.get("/api/v2/service/{service_config_id}/deployment")
+    @service_router.get("/api/v2/service/{service_config_id}/deployment")
     async def _get_service_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
         service_config_id = request.path_params["service_config_id"]
@@ -1361,7 +1412,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         deployment_json["healthcheck"] = service.get_latest_healthcheck()
         return JSONResponse(content=deployment_json)
 
-    @app.get("/api/v2/service/{service_config_id}/achievements")
+    @service_router.get("/api/v2/service/{service_config_id}/achievements")
     async def _get_service_achievements(
         request: Request,
         include_acknowledged: bool = Query(False),  # noqa: B008
@@ -1380,7 +1431,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(content=achievements_json)
 
-    @app.post(
+    @service_router.post(
         "/api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge"
     )
     async def _acknowledge_achievement(request: Request) -> JSONResponse:
@@ -1424,7 +1475,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             }
         )
 
-    @app.get("/api/v2/service/{service_config_id}/agent_performance")
+    @service_router.get("/api/v2/service/{service_config_id}/agent_performance")
     async def _get_agent_performance(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1438,7 +1489,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .get_agent_performance()
         )
 
-    @app.get("/api/v2/service/{service_config_id}/funding_requirements")
+    @service_router.get("/api/v2/service/{service_config_id}/funding_requirements")
     async def _get_funding_requirements(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1453,7 +1504,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     # TODO deprecate
-    @app.get("/api/v2/service/{service_config_id}/refill_requirements")
+    @service_router.get("/api/v2/service/{service_config_id}/refill_requirements")
     async def _get_refill_requirements(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1478,7 +1529,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(content=output.json)
 
-    @app.post("/api/v2/service/{service_config_id}")
+    @service_router.post("/api/v2/service/{service_config_id}")
     async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Deploy a service."""
         logger.info("Deploy and run service")
@@ -1511,8 +1562,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         )
 
-    @app.put("/api/v2/service/{service_config_id}")
-    @app.patch("/api/v2/service/{service_config_id}")
+    @service_router.put("/api/v2/service/{service_config_id}")
+    @service_router.patch("/api/v2/service/{service_config_id}")
     async def _update_service(request: Request) -> JSONResponse:
         """Update a service."""
         if operate.password is None:
@@ -1547,7 +1598,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(content=output.json)
 
-    @app.post("/api/v2/service/{service_config_id}/deployment/stop")
+    @service_router.post("/api/v2/service/{service_config_id}/deployment/stop")
     async def _stop_service_locally(request: Request) -> JSONResponse:
         """Stop a service deployment."""
 
@@ -1569,7 +1620,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=deployment.json)
 
     # TODO Deprecate
-    @app.post("/api/v2/service/{service_config_id}/onchain/withdraw")
+    @service_router.post("/api/v2/service/{service_config_id}/onchain/withdraw")
     async def _withdraw_onchain(request: Request) -> JSONResponse:
         """Withdraw all the funds from a service."""
 
@@ -1641,7 +1692,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(content={"error": None, "message": "Withdrawal successful"})
 
-    @app.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
+    @service_router.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
     async def _terminate_and_withdraw(request: Request) -> JSONResponse:
         """Terminate the service and withdraw all the funds to Master Safe"""
 
@@ -1677,7 +1728,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}",
+                    "error": "Failed to terminate service and withdraw funds due to insufficient funds.",
                     **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
@@ -1700,7 +1751,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             }
         )
 
-    @app.post("/api/v2/service/{service_config_id}/fund")
+    @service_router.post("/api/v2/service/{service_config_id}/fund")
     async def fund_service(  # pylint: disable=too-many-return-statements
         request: Request,
     ) -> JSONResponse:
@@ -1745,7 +1796,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}",
+                    "error": "Failed to fund from Master Safe. Insufficient funds.",
                     **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
@@ -2115,6 +2166,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             mnemonic = ""
             del mnemonic
 
+    app.include_router(service_router)
     return app
 
 

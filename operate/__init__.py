@@ -29,6 +29,8 @@ from typing import Dict, Optional
 
 import certifi
 
+from operate.validators import UnsafePathError, safe_resolved_path
+
 try:
     # Prefer the distribution name if installed; fall back to the module name
     __version__ = version("olas-operate-middleware")
@@ -73,10 +75,20 @@ def _clear_invalid_runtime_ca_bundle_env() -> None:
 def _get_stable_certifi_bundle_path() -> Path:
     """Return the stable on-disk location for the bundled certifi CA bundle."""
     operate_home_str = os.environ.get("OPERATE_HOME")
-    operate_home = (
-        Path(operate_home_str) if operate_home_str else Path.home() / ".operate"
-    )
-    return operate_home / "certs" / "cacert.pem"
+    if operate_home_str:
+        try:
+            return safe_resolved_path(operate_home_str) / "certs" / "cacert.pem"
+        except UnsafePathError:
+            # Surface the misconfiguration; falling back silently used to mask
+            # typos and traversal attempts (e.g. ``OPERATE_HOME=/etc/../tmp``).
+            logger.warning(
+                "OPERATE_HOME=%r rejected by safety check; falling back to ~/.operate",
+                operate_home_str,
+            )
+    # ``Path.home()`` is computed only when needed so test environments that
+    # wipe the env vars (which Windows needs for home resolution) can still
+    # exercise the OPERATE_HOME branch without tripping on the default lookup.
+    return (Path.home() / ".operate").resolve() / "certs" / "cacert.pem"
 
 
 def _materialize_certifi_bundle(certifi_bundle: str) -> Optional[str]:

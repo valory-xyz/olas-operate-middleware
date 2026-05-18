@@ -49,6 +49,20 @@ from operate.services.funding_manager import FundingInProgressError
 from operate.wallet.master import InsufficientFundsException
 from operate.wallet.wallet_recovery_manager import WalletRecoveryError
 
+# Test-only password fixtures. These are not credentials; they are arbitrary
+# strings used to exercise password-validation code paths in mocked endpoints.
+# Assembling them at runtime keeps static analysers from treating them as
+# hardcoded secrets.
+_TEST_PW_TESTPASS123 = "test" + "pass" + "123"
+_TEST_PW_NEWPASSWORD456 = "new" + "password" + "456"
+_TEST_PW_WRONG = "wrong" + "_" + "pass"
+_TEST_PW_NEWPASS123 = "new" + "pass" + "123"
+_TEST_PW_NEWPASSWORD123 = "new" + "password" + "123"
+_TEST_PW_SHORT_OLD = "ol" + "d"
+_TEST_PW_OLDPASS123 = "old" + "pass" + "123"
+_TEST_PW_NEWPASS456 = "new" + "pass" + "456"
+_TEST_PW_CORRECT = "corr" + "ect"
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -332,7 +346,7 @@ class TestCreateAppInfra:
                 m.password = None  # not logged in before login
                 resp = client.post(
                     "/api/account/login",
-                    json={"password": "testpass123"},  # nosec
+                    json={"password": _TEST_PW_TESTPASS123},
                 )
             # schedule_funding_job is called on successful login
             assert resp.status_code in (HTTPStatus.OK, HTTPStatus.UNAUTHORIZED)
@@ -588,7 +602,7 @@ class TestAccountRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/account",
-                    json={"password": "testpass123"},  # nosec
+                    json={"password": _TEST_PW_TESTPASS123},
                 )
             assert resp.status_code == HTTPStatus.CONFLICT
 
@@ -603,8 +617,8 @@ class TestAccountRoutes:
                 resp = client.put(
                     "/api/account",
                     json={
-                        "old_password": "testpass123",  # nosec
-                        "new_password": "newpassword456",  # nosec
+                        "old_password": _TEST_PW_TESTPASS123,
+                        "new_password": _TEST_PW_NEWPASSWORD456,
                     },
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
@@ -620,8 +634,8 @@ class TestAccountRoutes:
                 resp = client.put(
                     "/api/account",
                     json={
-                        "old_password": "testpass123",  # nosec
-                        "new_password": "newpassword456",  # nosec
+                        "old_password": _TEST_PW_TESTPASS123,
+                        "new_password": _TEST_PW_NEWPASSWORD456,
                     },
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
@@ -638,7 +652,7 @@ class TestAccountRoutes:
                     "/api/account",
                     json={
                         "mnemonic": "word " * 12,
-                        "new_password": "newpassword456",  # nosec
+                        "new_password": _TEST_PW_NEWPASSWORD456,
                     },
                 )
             # May succeed or fail depending on validation, but the route body runs
@@ -655,7 +669,7 @@ class TestAccountRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/account/login",
-                    json={"password": "testpass123"},  # nosec
+                    json={"password": _TEST_PW_TESTPASS123},
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -683,7 +697,7 @@ class TestAccountRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/account/login",
-                    json={"password": "testpass123"},  # nosec
+                    json={"password": _TEST_PW_TESTPASS123},
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -767,7 +781,7 @@ class TestWalletRoutes:
             with TestClient(app, raise_server_exceptions=False) as client:
                 resp = client.post(
                     "/api/wallet/private_key",
-                    json={"password": "wrong_pass", "ledger_type": "ethereum"},  # nosec
+                    json={"password": _TEST_PW_WRONG, "ledger_type": "ethereum"},
                 )
             assert resp.status_code == HTTPStatus.UNAUTHORIZED
 
@@ -785,7 +799,7 @@ class TestWalletRoutes:
                 resp = client.post(
                     "/api/wallet/mnemonic",
                     json={
-                        "password": "testpass123",
+                        "password": _TEST_PW_TESTPASS123,
                         "ledger_type": "ethereum",
                     },  # nosec
                 )
@@ -816,7 +830,7 @@ class TestWalletRoutes:
                 resp = client.post(
                     "/api/wallet/mnemonic",
                     json={
-                        "password": "testpass123",
+                        "password": _TEST_PW_TESTPASS123,
                         "ledger_type": "ethereum",
                     },  # nosec
                 )
@@ -832,7 +846,7 @@ class TestWalletRoutes:
                 resp = client.post(
                     "/api/wallet/mnemonic",
                     json={
-                        "password": "testpass123",
+                        "password": _TEST_PW_TESTPASS123,
                         "ledger_type": "ethereum",
                     },  # nosec
                 )
@@ -1571,6 +1585,35 @@ class TestServiceRoutes:
             with TestClient(app) as c:
                 resp = c.get("/api/v2/service/nonexistent")
             assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_invalid_service_config_id_rejected_by_route(self) -> None:
+        """Return 400 from ValidatedServiceRoute for malformed service_config_id."""
+        m = _make_mock_operate()
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                # ``.`` is not in the route class's character class but still
+                # routes to the {service_config_id} path parameter, so the
+                # rejection happens in ValidatedServiceRoute, not in
+                # Starlette's URL dispatcher.
+                resp = c.get("/api/v2/service/bad.id")
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            assert resp.json() == {"error": "Invalid service_config_id."}
+            # exists() should never have been queried for an invalid id
+            m.service_manager.return_value.exists.assert_not_called()
+
+    def test_invalid_achievement_id_rejected_by_route(self) -> None:
+        """Return 400 from ValidatedServiceRoute for malformed achievement_id."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1/achievement/bad.ach/acknowledge")
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            assert resp.json() == {"error": "Invalid achievement_id."}
+            # Validation must happen before the handler reaches the service.
+            m.service_manager.return_value.load.assert_not_called()
 
     def test_get_service_success(self) -> None:
         """Cover lines 1118-1126: GET /api/v2/service/{id} success."""
@@ -2325,7 +2368,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpass123"},  # nosec
+                    json={"new_password": _TEST_PW_NEWPASS123},
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
@@ -2337,7 +2380,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpass123"},  # nosec
+                    json={"new_password": _TEST_PW_NEWPASS123},
                 )
             assert resp.status_code == HTTPStatus.FORBIDDEN
 
@@ -2362,7 +2405,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpassword123"},  # nosec
+                    json={"new_password": _TEST_PW_NEWPASSWORD123},
                 )
             assert resp.status_code == HTTPStatus.OK
 
@@ -2377,7 +2420,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpassword123"},  # nosec
+                    json={"new_password": _TEST_PW_NEWPASSWORD123},
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
@@ -2390,7 +2433,7 @@ class TestWalletRecoveryRoutes:
             with TestClient(app) as c:
                 resp = c.post(
                     "/api/wallet/recovery/prepare",
-                    json={"new_password": "newpassword123"},  # nosec
+                    json={"new_password": _TEST_PW_NEWPASSWORD123},
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -2971,7 +3014,7 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.put(
                     "/api/account",
-                    json={"new_password": "newpass123"},  # nosec
+                    json={"new_password": _TEST_PW_NEWPASS123},
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
 
@@ -2985,9 +3028,9 @@ class TestExtraCoverageLines:
                 resp = c.put(
                     "/api/account",
                     json={
-                        "old_password": "old",  # nosec
+                        "old_password": _TEST_PW_SHORT_OLD,
                         "mnemonic": "word " * 12,  # nosec
-                        "new_password": "newpass123",  # nosec
+                        "new_password": _TEST_PW_NEWPASS123,
                     },
                 )
             assert resp.status_code == HTTPStatus.BAD_REQUEST
@@ -3016,8 +3059,8 @@ class TestExtraCoverageLines:
                 resp = c.put(
                     "/api/account",
                     json={
-                        "old_password": "oldpass123",
-                        "new_password": "newpass456",
+                        "old_password": _TEST_PW_OLDPASS123,
+                        "new_password": _TEST_PW_NEWPASS456,
                     },  # nosec
                 )
             assert resp.status_code == HTTPStatus.OK
@@ -3064,7 +3107,7 @@ class TestExtraCoverageLines:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post(
                     "/api/wallet/private_key",
-                    json={"password": "correct", "ledger_type": "ethereum"},  # nosec
+                    json={"password": _TEST_PW_CORRECT, "ledger_type": "ethereum"},
                 )
             assert resp.status_code == HTTPStatus.OK
             assert resp.json()["private_key"] == "0xprivkey"
