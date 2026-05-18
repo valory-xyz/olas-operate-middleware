@@ -48,11 +48,11 @@ jobs:
         uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
 
       # Snyk's Python scanner doesn't yet recognize uv.lock as a target
-      # file, so export a requirements.txt and install the deps for snyk
-      # to introspect (snyk monitor with --file=requirements.txt needs
-      # the packages installed; with just the file it errors out with
-      # "Missing required packages"). Use setup-python so uv installs
-      # into a non-externally-managed interpreter.
+      # file, so export a pip-style requirements.txt and install the
+      # deps into the snyk runner's Python (without the install the
+      # snyk pip plugin errors with "Missing required packages").
+      # setup-python lands a non-externally-managed interpreter that
+      # snyk can introspect.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -62,7 +62,7 @@ jobs:
       - name: Export and install requirements.txt for snyk
         run: |
           uv export --frozen --no-emit-project --format requirements-txt --no-hashes > requirements.txt
-          uv pip install --system -r requirements.txt
+          python -m pip install -r requirements.txt
 
         # Runs Snyk Code (SAST) analysis and uploads result into GitHub.
         # Use || true to not fail the pipeline
