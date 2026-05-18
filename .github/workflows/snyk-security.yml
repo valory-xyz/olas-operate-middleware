@@ -58,7 +58,7 @@ jobs:
       - name: Prepare snyk venv
         run: |
           uv export --frozen --no-emit-project --format requirements-txt --no-hashes > requirements.txt
-          uv venv .snyk-venv
+          uv venv --seed .snyk-venv
           .snyk-venv/bin/python -m pip install -r requirements.txt
 
         # Runs Snyk Code (SAST) analysis and uploads result into GitHub.
