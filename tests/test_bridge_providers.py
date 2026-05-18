@@ -31,7 +31,6 @@ from deepdiff import DeepDiff
 from web3 import Web3
 
 from operate.bridge.bridge_manager import (
-    LiFiProvider,
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
     ProviderRequest,
 )
@@ -309,29 +308,6 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
         ProviderRequestStatus.EXECUTION_DONE,
         "0x48b3367c3dad388a1f0c1dec5063fe45969022975c53f212734285ac93c5e214",
         2148,
-    ),
-    # LiFiProvider - EXECUTION_DONE tests
-    (
-        LiFiProvider,
-        None,
-        {
-            "from": {
-                "chain": "gnosis",
-                "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                "token": "0x0000000000000000000000000000000000000000",  # nosec
-            },
-            "to": {
-                "chain": "base",
-                "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                "token": "0x0000000000000000000000000000000000000000",  # nosec
-                "amount": 380000000000000,
-            },
-        },
-        "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
-        "0xbd10fbe1321fc51c94f0bbb94bb9e467b180eedc6f7c942cf48a0321b6eaf8e4",
-        ProviderRequestStatus.EXECUTION_DONE,
-        "0x407a815ac865ea888f31d26c7105609c1337daed934c9e09bf2c6ebf448b30ed",
-        383,
     ),
     # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
     (
@@ -781,7 +757,6 @@ class TestProvider(OnTestnet):
         "provider_class",
         [
             RelayProvider,
-            LiFiProvider,
             NativeBridgeProvider,
         ],
     )
@@ -985,7 +960,6 @@ class TestProvider(OnTestnet):
         "provider_class",
         [
             RelayProvider,
-            LiFiProvider,
         ],
     )
     def test_bridge_error(
@@ -1156,10 +1130,6 @@ class TestProvider(OnTestnet):
         "provider_class",
         [
             RelayProvider,
-            pytest.param(
-                LiFiProvider,
-                marks=pytest.mark.xfail(reason="Flaky test."),
-            ),
             NativeBridgeProvider,
         ],
     )
