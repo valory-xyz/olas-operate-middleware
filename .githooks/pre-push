@@ -4,7 +4,7 @@
 
 echo "Running pre-push linting checks..."
 
-uv sync --all-groups --frozen && uv run tox -p -e flake8 -e pylint && uv run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy -e safety
+uv sync --all-groups && uv run tox -p -e flake8 -e pylint && uv run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 RESULT=$?
 
 if [ $RESULT -ne 0 ]; then
