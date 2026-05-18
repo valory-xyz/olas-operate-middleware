@@ -73,7 +73,7 @@ jobs:
 
         # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
       - name: Snyk Open Source monitor
-        run: snyk monitor --command=python3 --file=requirements.txt --package-manager=pip
+        run: snyk monitor --command=python3 --file=requirements.txt --package-manager=pip -d
 
       # Disabled because this repo does not use IaC or Docker yet
 
