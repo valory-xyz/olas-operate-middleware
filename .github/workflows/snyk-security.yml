@@ -47,11 +47,22 @@ jobs:
         # In this case we want to upload the SAST issues to GitHub Code Scanning
         uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
 
-        # For Snyk Open Source you must first set up the development environment for your application's dependencies
-        # For example for Node
-        #- uses: actions/setup-node@v4
-        #  with:
-        #    node-version: 20
+      # Snyk's Python plugin doesn't yet detect uv.lock. Stand up
+      # setup-python's interpreter, install the runtime deps into it,
+      # and point snyk at python3 so pip_resolve introspects the same
+      # interpreter that holds the packages.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
+      - name: Export runtime requirements for snyk
+        run: |
+          uv export --frozen --no-hashes --no-dev --format requirements-txt -o requirements.txt
+          python -m pip install -r requirements.txt
 
         # Runs Snyk Code (SAST) analysis and uploads result into GitHub.
         # Use || true to not fail the pipeline
@@ -60,16 +71,8 @@ jobs:
         continue-on-error: true
 
         # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
-        # Snyk's Python plugin doesn't yet detect uv.lock, and the
-        # export-to-requirements + --command=<venv-python> workaround
-        # still trips snyk's pip_resolve with "Missing required
-        # packages". GitHub Dependabot already covers Python SCA and
-        # understands uv.lock natively, so this step is allowed to
-        # fail until snyk ships native uv support or this workflow is
-        # replaced.
       - name: Snyk Open Source monitor
-        run: snyk monitor --all-projects
-        continue-on-error: true
+        run: snyk monitor --command=python3 --file=requirements.txt --package-manager=pip
 
       # Disabled because this repo does not use IaC or Docker yet
 
