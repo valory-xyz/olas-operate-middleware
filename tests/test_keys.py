@@ -423,10 +423,13 @@ class TestKeysManager:
             captured["path"] = str(path)
             raise OSError("primary")
 
-        with patch(
-            "operate.keys.unrecoverable_delete",
-            side_effect=capture_then_raise_primary,
-        ), patch("operate.keys.os.remove", side_effect=OSError("fallback")):
+        with (
+            patch(
+                "operate.keys.unrecoverable_delete",
+                side_effect=capture_then_raise_primary,
+            ),
+            patch("operate.keys.os.remove", side_effect=OSError("fallback")),
+        ):
             crypto = keys_manager.get_crypto_instance(sample_key.address)
 
         assert crypto is not None
