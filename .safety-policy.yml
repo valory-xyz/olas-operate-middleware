@@ -1,0 +1,14 @@
+security:
+  ignore-vulnerabilities:
+    37524: {reason: "legacy carryover from -i flag"}
+    38038: {reason: "legacy carryover from -i flag"}
+    37776: {reason: "legacy carryover from -i flag"}
+    38039: {reason: "legacy carryover from -i flag"}
+    39621: {reason: "legacy carryover from -i flag"}
+    40291: {reason: "legacy carryover from -i flag"}
+    39706: {reason: "legacy carryover from -i flag"}
+    41002: {reason: "legacy carryover from -i flag"}
+    51358: {reason: "legacy carryover from -i flag"}
+    51499: {reason: "legacy carryover from -i flag"}
+    67599: {reason: "legacy carryover from -i flag"}
+    70612: {reason: "legacy carryover from -i flag"}

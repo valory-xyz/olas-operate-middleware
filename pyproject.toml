@@ -3,6 +3,10 @@ name = "olas-operate-middleware"
 version = "0.15.21"
 description = ""
 license = "Apache-2.0"
+authors = [
+    {name = "David Vilela", email = "dvilelaf@gmail.com"},
+    {name = "Viraj Patel", email = "vptl185@gmail.com"},
+]
 requires-python = "<3.15,>=3.10"
 readme = "README.md"
 dependencies = [
@@ -51,12 +55,6 @@ default-groups = "all"
 [tool.uv.build-backend]
 module-name = ["operate"]
 module-root = ""
-source-include = [
-    "operate/data/acn/*",
-    "operate/data/contracts/*",
-    "operate/data/contracts/staking_token/*",
-    "operate/data/contracts/staking_token/build/*",
-]
 
 [build-system]
 requires = ["uv_build>=0.11.2,<0.12.0"]

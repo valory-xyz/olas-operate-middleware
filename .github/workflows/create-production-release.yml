@@ -65,7 +65,7 @@ jobs:
 
       - name: Bump version in pyproject.toml
         run: |
-          uv version "${{ steps.compute.outputs.next_version }}"
+          uv version --frozen "${{ steps.compute.outputs.next_version }}"
           git diff pyproject.toml
 
       - name: Commit version bump and push to main
