@@ -1524,7 +1524,7 @@ class TestRelayProviderUsdcRoutes(OnTestnet):
         reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
     )
     @pytest.mark.parametrize(
-        "to_chain, to_token",
+        ("to_chain", "to_token"),
         [
             (Chain.BASE, USDC[Chain.BASE]),
             (Chain.OPTIMISM, USDC[Chain.OPTIMISM]),
@@ -1538,7 +1538,7 @@ class TestRelayProviderUsdcRoutes(OnTestnet):
         to_chain: Chain,
         to_token: str,
     ) -> None:
-        """RelayProvider can quote ETH→Base/Optimism USDC routes."""
+        """test_relay_usdc_quote"""
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
