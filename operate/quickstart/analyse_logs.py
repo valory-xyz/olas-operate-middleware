@@ -52,7 +52,7 @@ def find_build_directory(config_file: Path, operate: "OperateApp") -> Path:
 def run_analysis(logs_dir: Path, **kwargs: str) -> None:
     """Run the log analysis command."""
     command: List[Union[str, Path]] = [
-        "poetry",
+        "uv",
         "run",
         "autonomy",
         "analyse",

@@ -931,7 +931,7 @@ class TestRunAnalysis:
         run_analysis(logs_dir)
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert "poetry" in cmd
+        assert "uv" in cmd
         assert "--from-dir" in cmd
 
     @patch("operate.quickstart.analyse_logs.subprocess.run")
@@ -983,7 +983,7 @@ class TestRunAnalysis:
     def test_file_not_found_exits(self, mock_run: MagicMock, tmp_path: Path) -> None:
         """File not found causes sys.exit(1)."""
         logs_dir = tmp_path / "logs"
-        mock_run.side_effect = FileNotFoundError("poetry not found")
+        mock_run.side_effect = FileNotFoundError("uv not found")
 
         with pytest.raises(SystemExit) as exc_info:
             run_analysis(logs_dir)

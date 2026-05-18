@@ -8,7 +8,7 @@ if [ -n "$STAGED_PY_FILES" ]; then
     echo "Running pre-commit formatting..."
     
     # Run formatting via tox
-    poetry install && poetry run tox -p -e black -e isort
+    uv sync --all-groups --frozen && uv run tox -p -e black -e isort
     RESULT=$?
     
     if [ $RESULT -ne 0 ]; then
