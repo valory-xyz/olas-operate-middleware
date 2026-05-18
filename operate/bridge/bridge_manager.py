@@ -31,7 +31,6 @@ from typing import cast
 from deepdiff import DeepDiff
 from web3 import Web3
 
-from operate.bridge.providers.lifi_provider import LiFiProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
@@ -40,7 +39,6 @@ from operate.bridge.providers.native_bridge_provider import (
 from operate.bridge.providers.provider import Provider, ProviderRequest
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.constants import ZERO_ADDRESS
-from operate.ledger.profiles import USDC
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
@@ -50,7 +48,6 @@ DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60
 EXECUTED_BUNDLES_PATH = "executed"
 BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
-LIFI_PROVIDER_ID = "lifi-provider"
 RELAY_PROVIDER_ID = "relay-provider"
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
@@ -98,18 +95,6 @@ NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
 
 # Routes are defined as the tuples (from_chain, from_token, to_chain, to_token)
 PREFERRED_ROUTES = {
-    (
-        Chain.ETHEREUM,
-        USDC[Chain.ETHEREUM],
-        Chain.OPTIMISM,
-        USDC[Chain.OPTIMISM],
-    ): LIFI_PROVIDER_ID,
-    (
-        Chain.ETHEREUM,
-        USDC[Chain.ETHEREUM],
-        Chain.BASE,
-        USDC[Chain.BASE],
-    ): LIFI_PROVIDER_ID,
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
 }
 
@@ -223,16 +208,26 @@ class BridgeManager:
 
         self._providers: t.Dict[str, Provider] = {}
         self._providers.update(self._native_bridge_providers)
-        self._providers[LIFI_PROVIDER_ID] = LiFiProvider(
-            provider_id=LIFI_PROVIDER_ID,
-            wallet_manager=wallet_manager,
-            logger=logger,
-        )
         self._providers[RELAY_PROVIDER_ID] = RelayProvider(
             provider_id=RELAY_PROVIDER_ID,
             wallet_manager=wallet_manager,
             logger=logger,
         )
+
+        # Clear any cached bundle that references a removed provider (e.g. lifi-provider)
+        # to prevent KeyError on execute_bundle after upgrade.
+        if self.data.last_requested_bundle:
+            stale_providers = {
+                req.provider_id
+                for req in self.data.last_requested_bundle.provider_requests
+                if req.provider_id not in self._providers
+            }
+            if stale_providers:
+                self.logger.warning(
+                    f"[BRIDGE MANAGER] Clearing cached bundle: unknown providers {stale_providers}."
+                )
+                self.data.last_requested_bundle = None
+                self._store_data()
 
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
@@ -437,6 +432,26 @@ class BridgeManager:
 
         provider_request_status = []
         for request in bundle.provider_requests:
+            if request.provider_id not in self._providers:
+                # Historical bundle from a removed provider (e.g. lifi-provider).
+                # Return the stored terminal status without a live refresh.
+                tx_hash = None
+                if request.execution_data and request.execution_data.from_tx_hash:
+                    tx_hash = request.execution_data.from_tx_hash
+                eta = request.quote_data.eta if request.quote_data else None
+                message = (
+                    request.execution_data.message if request.execution_data else None
+                )
+                provider_request_status.append(
+                    {
+                        "eta": eta,
+                        "explorer_link": None,
+                        "message": message,
+                        "status": request.status.value,
+                        "tx_hash": tx_hash,
+                    }
+                )
+                continue
             provider = self._providers[request.provider_id]
             provider_request_status.append(provider.status_json(request))
 
