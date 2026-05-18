@@ -47,7 +47,6 @@ development = [
 
 [tool.uv]
 default-groups = "all"
-prerelease = "allow"
 
 [tool.uv.build-backend]
 module-name = ["operate"]
