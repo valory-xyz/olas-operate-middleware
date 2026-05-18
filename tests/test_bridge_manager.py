@@ -691,7 +691,7 @@ class TestBridgeManagerStaleCacheMigration:
     def test_stale_provider_bundle_is_cleared_on_init(self, tmp_path: Path) -> None:
         """__init__ clears last_requested_bundle when it references an unknown provider."""
         stale_request = _make_provider_request_real(
-            provider_id="lifi-provider",
+            provider_id="removed-provider",
             status=ProviderRequestStatus.QUOTE_DONE,
         )
         bundle = ProviderRequestBundle(
@@ -773,8 +773,8 @@ class TestBridgeManagerUnknownProviderGuard:
         """get_status_json returns stored status for a bundle with an unknown provider_id."""
         manager = _make_bridge_manager(tmp_path)
 
-        lifi_request = ProviderRequest(
-            id="r-lifi-historical",
+        removed_request = ProviderRequest(
+            id="r-removed-historical",
             params={
                 "from": {
                     "chain": "ethereum",
@@ -788,7 +788,7 @@ class TestBridgeManagerUnknownProviderGuard:
                     "amount": 1000,
                 },
             },
-            provider_id="lifi-provider",
+            provider_id="removed-provider",
             status=ProviderRequestStatus.EXECUTION_DONE,
             quote_data=QuoteData(
                 eta=300,
@@ -808,9 +808,9 @@ class TestBridgeManagerUnknownProviderGuard:
         )
 
         bundle = ProviderRequestBundle(
-            id="rb-historical-lifi",
-            requests_params=[lifi_request.params],
-            provider_requests=[lifi_request],
+            id="rb-historical-removed",
+            requests_params=[removed_request.params],
+            provider_requests=[removed_request],
             timestamp=int(time.time()),
         )
 
@@ -824,7 +824,7 @@ class TestBridgeManagerUnknownProviderGuard:
 
         result = manager.get_status_json(bundle.id)
 
-        assert result["id"] == "rb-historical-lifi"
+        assert result["id"] == "rb-historical-removed"
         assert len(result["bridge_request_status"]) == 1
         status = result["bridge_request_status"][0]
         assert status["status"] == ProviderRequestStatus.EXECUTION_DONE.value
@@ -836,8 +836,8 @@ class TestBridgeManagerUnknownProviderGuard:
         """get_status_json returns status with None fields when execution_data is absent."""
         manager = _make_bridge_manager(tmp_path)
 
-        lifi_request = ProviderRequest(
-            id="r-lifi-quoted",
+        removed_request = ProviderRequest(
+            id="r-removed-quoted",
             params={
                 "from": {
                     "chain": "ethereum",
@@ -851,7 +851,7 @@ class TestBridgeManagerUnknownProviderGuard:
                     "amount": 500,
                 },
             },
-            provider_id="lifi-provider",
+            provider_id="removed-provider",
             status=ProviderRequestStatus.QUOTE_DONE,
             quote_data=QuoteData(
                 eta=300,
@@ -864,9 +864,9 @@ class TestBridgeManagerUnknownProviderGuard:
         )
 
         bundle = ProviderRequestBundle(
-            id="rb-historical-lifi-no-exec",
-            requests_params=[lifi_request.params],
-            provider_requests=[lifi_request],
+            id="rb-historical-removed-no-exec",
+            requests_params=[removed_request.params],
+            provider_requests=[removed_request],
             timestamp=int(time.time()),
         )
 

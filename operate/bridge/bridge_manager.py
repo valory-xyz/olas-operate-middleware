@@ -214,7 +214,7 @@ class BridgeManager:
             logger=logger,
         )
 
-        # Clear any cached bundle that references a removed provider (e.g. lifi-provider)
+        # Clear any cached bundle that references a provider removed in a prior version
         # to prevent KeyError on execute_bundle after upgrade.
         if self.data.last_requested_bundle:
             stale_providers = {
@@ -433,7 +433,7 @@ class BridgeManager:
         provider_request_status = []
         for request in bundle.provider_requests:
             if request.provider_id not in self._providers:
-                # Historical bundle from a removed provider (e.g. lifi-provider).
+                # Historical bundle from a provider removed in a prior version.
                 # Return the stored terminal status without a live refresh.
                 tx_hash = None
                 if request.execution_data and request.execution_data.from_tx_hash:
