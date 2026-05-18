@@ -772,6 +772,15 @@ class TestBridgeManager:
                 pytest.skip(
                     f"External provider liquidity insufficient: {request_status['message']}"
                 )
+            if "swap impact is too high" in message:
+                # Relay rejects the quote when current market depth on the
+                # target chain produces an unworkable price impact (the
+                # SWAP_IMPACT_TOO_HIGH error). It's a real liquidity
+                # condition, not a code regression — skip until depth
+                # recovers, the same way we skip "liquidity" above.
+                pytest.skip(
+                    f"External provider swap impact too high: {request_status['message']}"
+                )
 
             assert (
                 request_status["status"] == ProviderRequestStatus.QUOTE_DONE
