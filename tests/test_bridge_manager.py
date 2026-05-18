@@ -34,7 +34,12 @@ from operate.bridge.bridge_manager import (
     EXECUTED_BUNDLES_PATH,
     ProviderRequestBundle,
 )
-from operate.bridge.providers.provider import ProviderRequest, ProviderRequestStatus
+from operate.bridge.providers.provider import (
+    ExecutionData,
+    ProviderRequest,
+    ProviderRequestStatus,
+    QuoteData,
+)
 from operate.operate_types import Chain
 
 # ---------------------------------------------------------------------------
@@ -643,12 +648,10 @@ class TestBridgeManagerInit:
     def test_init_creates_directories_and_initializes_providers(
         self, tmp_path: Path
     ) -> None:
-        """BridgeManager.__init__ creates dirs and sets up providers (lines 200-237)."""
+        """BridgeManager.__init__ creates dirs and sets up providers."""
         with patch(
             "operate.bridge.bridge_manager.BridgeManagerData.load",
         ) as mock_load, patch(
-            "operate.bridge.bridge_manager.LiFiProvider",
-        ) as mock_lifi, patch(
             "operate.bridge.bridge_manager.RelayProvider",
         ) as mock_relay, patch(
             "operate.bridge.bridge_manager.NativeBridgeProvider",
@@ -661,7 +664,6 @@ class TestBridgeManagerInit:
             from operate.bridge.bridge_manager import (  # pylint: disable=import-outside-toplevel
                 BridgeManager,
                 EXECUTED_BUNDLES_PATH,
-                LIFI_PROVIDER_ID,
                 RELAY_PROVIDER_ID,
             )
 
@@ -673,13 +675,215 @@ class TestBridgeManagerInit:
 
         assert (tmp_path / EXECUTED_BUNDLES_PATH).exists()
         assert (
-            LIFI_PROVIDER_ID in manager._providers
-        )  # pylint: disable=protected-access
-        assert (
             RELAY_PROVIDER_ID in manager._providers
         )  # pylint: disable=protected-access
-        mock_lifi.assert_called_once()
         mock_relay.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestBridgeManagerStaleCacheMigration
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeManagerStaleCacheMigration:
+    """Tests for the stale-provider cache guard in BridgeManager.__init__."""
+
+    def test_stale_provider_bundle_is_cleared_on_init(self, tmp_path: Path) -> None:
+        """__init__ clears last_requested_bundle when it references an unknown provider."""
+        stale_request = _make_provider_request_real(
+            provider_id="lifi-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-stale-test",
+            requests_params=[stale_request.params],
+            provider_requests=[stale_request],
+            timestamp=int(time.time()),
+        )
+
+        mock_data = MagicMock(spec=BridgeManagerData)
+        mock_data.last_requested_bundle = bundle
+
+        with patch(
+            "operate.bridge.bridge_manager.BridgeManagerData.load",
+            return_value=mock_data,
+        ), patch(
+            "operate.bridge.bridge_manager.RelayProvider",
+        ), patch(
+            "operate.bridge.bridge_manager.NativeBridgeProvider",
+        ), patch(
+            "operate.bridge.bridge_manager.OptimismContractAdaptor",
+        ), patch(
+            "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+        ):
+            manager = BridgeManager(
+                path=tmp_path,
+                wallet_manager=MagicMock(),
+                logger=MagicMock(),
+            )
+
+        assert manager.data.last_requested_bundle is None
+
+    def test_valid_provider_bundle_is_kept_on_init(self, tmp_path: Path) -> None:
+        """__init__ keeps last_requested_bundle when all providers are known."""
+        valid_request = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-valid-test",
+            requests_params=[valid_request.params],
+            provider_requests=[valid_request],
+            timestamp=int(time.time()),
+        )
+
+        mock_data = MagicMock(spec=BridgeManagerData)
+        mock_data.last_requested_bundle = bundle
+
+        with patch(
+            "operate.bridge.bridge_manager.BridgeManagerData.load",
+            return_value=mock_data,
+        ), patch(
+            "operate.bridge.bridge_manager.RelayProvider",
+        ), patch(
+            "operate.bridge.bridge_manager.NativeBridgeProvider",
+        ), patch(
+            "operate.bridge.bridge_manager.OptimismContractAdaptor",
+        ), patch(
+            "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+        ):
+            manager = BridgeManager(
+                path=tmp_path,
+                wallet_manager=MagicMock(),
+                logger=MagicMock(),
+            )
+
+        assert manager.data.last_requested_bundle is bundle
+
+
+# ---------------------------------------------------------------------------
+# TestBridgeManagerUnknownProviderGuard
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeManagerUnknownProviderGuard:
+    """Tests for the unknown-provider guard in BridgeManager.get_status_json."""
+
+    def test_unknown_provider_returns_stored_status(self, tmp_path: Path) -> None:
+        """get_status_json returns stored status for a bundle with an unknown provider_id."""
+        manager = _make_bridge_manager(tmp_path)
+
+        lifi_request = ProviderRequest(
+            id="r-lifi-historical",
+            params={
+                "from": {
+                    "chain": "ethereum",
+                    "address": "0x" + "a" * 40,
+                    "token": "0x" + "0" * 40,
+                },
+                "to": {
+                    "chain": "base",
+                    "address": "0x" + "b" * 40,
+                    "token": "0x" + "0" * 40,
+                    "amount": 1000,
+                },
+            },
+            provider_id="lifi-provider",
+            status=ProviderRequestStatus.EXECUTION_DONE,
+            quote_data=QuoteData(
+                eta=300,
+                elapsed_time=1.0,
+                message=None,
+                provider_data=None,
+                timestamp=int(time.time()),
+            ),
+            execution_data=ExecutionData(
+                elapsed_time=120.0,
+                message=None,
+                timestamp=int(time.time()),
+                from_tx_hash="0x" + "cc" * 32,
+                to_tx_hash="0x" + "dd" * 32,
+                provider_data=None,
+            ),
+        )
+
+        bundle = ProviderRequestBundle(
+            id="rb-historical-lifi",
+            requests_params=[lifi_request.params],
+            provider_requests=[lifi_request],
+            timestamp=int(time.time()),
+        )
+
+        # Store bundle as an executed bundle on disk
+        executed_dir = tmp_path / EXECUTED_BUNDLES_PATH
+        executed_dir.mkdir(exist_ok=True)
+        bundle.path = executed_dir / f"{bundle.id}.json"
+        bundle.store()
+
+        manager.data.last_requested_bundle = None
+
+        result = manager.get_status_json(bundle.id)
+
+        assert result["id"] == "rb-historical-lifi"
+        assert len(result["bridge_request_status"]) == 1
+        status = result["bridge_request_status"][0]
+        assert status["status"] == ProviderRequestStatus.EXECUTION_DONE.value
+        assert status["tx_hash"] == "0x" + "cc" * 32
+        assert status["explorer_link"] is None
+        assert status["eta"] == 300
+
+    def test_unknown_provider_no_execution_data(self, tmp_path: Path) -> None:
+        """get_status_json returns status with None fields when execution_data is absent."""
+        manager = _make_bridge_manager(tmp_path)
+
+        lifi_request = ProviderRequest(
+            id="r-lifi-quoted",
+            params={
+                "from": {
+                    "chain": "ethereum",
+                    "address": "0x" + "a" * 40,
+                    "token": "0x" + "0" * 40,
+                },
+                "to": {
+                    "chain": "base",
+                    "address": "0x" + "b" * 40,
+                    "token": "0x" + "0" * 40,
+                    "amount": 500,
+                },
+            },
+            provider_id="lifi-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+            quote_data=QuoteData(
+                eta=300,
+                elapsed_time=1.0,
+                message=None,
+                provider_data=None,
+                timestamp=int(time.time()),
+            ),
+            execution_data=None,
+        )
+
+        bundle = ProviderRequestBundle(
+            id="rb-historical-lifi-no-exec",
+            requests_params=[lifi_request.params],
+            provider_requests=[lifi_request],
+            timestamp=int(time.time()),
+        )
+
+        executed_dir = tmp_path / EXECUTED_BUNDLES_PATH
+        executed_dir.mkdir(exist_ok=True)
+        bundle.path = executed_dir / f"{bundle.id}.json"
+        bundle.store()
+
+        manager.data.last_requested_bundle = None
+
+        result = manager.get_status_json(bundle.id)
+
+        status = result["bridge_request_status"][0]
+        assert status["status"] == ProviderRequestStatus.QUOTE_DONE.value
+        assert status["tx_hash"] is None
+        assert status["message"] is None
+        assert status["explorer_link"] is None
 
 
 # ---------------------------------------------------------------------------
