@@ -28,6 +28,8 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - uses: astral-sh/setup-uv@v6
+      with:
+        version: "0.11.14"
     - name: Install dependencies
       run:  |
         sudo apt-get update --fix-missing
@@ -68,6 +70,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
 
       - name: Run unit tests
         run: |
@@ -86,6 +90,8 @@ jobs:
         with:
           python-version: "3.14"
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
 
       - name: Run unit tests with coverage
         run: |
@@ -131,6 +137,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
 
       - name: Run integration tests
         env:

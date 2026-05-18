@@ -24,13 +24,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update --fix-missing
           sudo apt-get autoremove
           sudo apt-get autoclean
-          uv sync --all-groups --frozen
           python --version
 
       - name: Build wheels and source tarball
