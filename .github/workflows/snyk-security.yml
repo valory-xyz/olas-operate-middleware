@@ -51,7 +51,12 @@ jobs:
       # file, so export a requirements.txt and install the deps for snyk
       # to introspect (snyk monitor with --file=requirements.txt needs
       # the packages installed; with just the file it errors out with
-      # "Missing required packages").
+      # "Missing required packages"). Use setup-python so uv installs
+      # into a non-externally-managed interpreter.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Install uv
         uses: astral-sh/setup-uv@v6
       - name: Export and install requirements.txt for snyk
