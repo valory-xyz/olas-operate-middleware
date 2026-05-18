@@ -387,21 +387,58 @@ class TestKeysManager:
     def test_private_key_to_crypto_temp_file_cleanup_failure_logs_error(
         self, keys_manager: KeysManager, key_file: tuple[Path, Key]
     ) -> None:
-        """Test that temp file cleanup failure logs error but does not propagate."""
+        """Cleanup failure logs error and falls back to os.remove."""
         _, sample_key = key_file
+        captured: dict[str, str] = {}
+
+        def capture_then_remove(path: Path) -> None:
+            captured["path"] = str(path)
+            raise OSError("cleanup failed")
 
         with patch(
-            "operate.keys.unrecoverable_delete",
-            side_effect=OSError("cleanup failed"),
+            "operate.keys.unrecoverable_delete", side_effect=capture_then_remove
         ):
-            # Should still return a valid crypto instance
             crypto = keys_manager.get_crypto_instance(sample_key.address)
 
         assert crypto is not None
         assert crypto.address == sample_key.address
         keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
-        error_msg = str(keys_manager.logger.error.call_args)  # type: ignore[attr-defined]
-        assert "Failed to delete temp file" in error_msg
+        error_msg = str(keys_manager.logger.error.call_args_list)  # type: ignore[attr-defined]
+        assert "Secure delete of temp key file" in error_msg
+        # os.remove fallback ran — file no longer on disk.
+        assert not Path(captured["path"]).exists()
+
+    def test_private_key_to_crypto_fallback_remove_failure_logs(
+        self, keys_manager: KeysManager, key_file: tuple[Path, Key]
+    ) -> None:
+        """If both deletes fail, both are logged AND the temp file stays on disk.
+
+        This is the security-relevant postcondition: a stranded plaintext
+        key file is the worst-case outcome the cleanup path warns about.
+        """
+        _, sample_key = key_file
+        captured: dict[str, str] = {}
+
+        def capture_then_raise_primary(path: Path) -> None:
+            captured["path"] = str(path)
+            raise OSError("primary")
+
+        with patch(
+            "operate.keys.unrecoverable_delete",
+            side_effect=capture_then_raise_primary,
+        ), patch("operate.keys.os.remove", side_effect=OSError("fallback")):
+            crypto = keys_manager.get_crypto_instance(sample_key.address)
+
+        assert crypto is not None
+        calls = str(keys_manager.logger.error.call_args_list)  # type: ignore[attr-defined]
+        assert "Secure delete of temp key file" in calls
+        assert "Fallback os.remove" in calls
+        # Both deletes failed; the plaintext-keyed scratch file remains.
+        try:
+            assert Path(captured["path"]).exists()
+        finally:
+            # Don't leak the simulated stranded key past this test.
+            Path(captured["path"]).unlink(missing_ok=True)
 
     def test_get_decrypted_without_password(self, temp_keys_dir: Path) -> None:
         """Test get_decrypted returns raw json dict when no password is set."""
@@ -476,26 +513,27 @@ class TestKeysManager:
         (keys_manager.path / "stray.txt").write_text("noise", encoding="utf-8")
         original_names = {entry.name for entry in keys_manager.path.iterdir()}
 
-        keys_manager.discard_all()
+        failed = keys_manager.discard_all()
 
+        assert failed == []
         renamed = {entry.name for entry in keys_manager.path.iterdir()}
         assert renamed == {f"{name}.lost" for name in original_names}
 
     def test_discard_all_is_idempotent(self, keys_manager: KeysManager) -> None:
         """A second discard_all leaves already-.lost files untouched."""
         keys_manager.create()
-        keys_manager.discard_all()
+        assert keys_manager.discard_all() == []
         first_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
 
-        keys_manager.discard_all()
+        assert keys_manager.discard_all() == []
 
         second_snapshot = sorted(entry.name for entry in keys_manager.path.iterdir())
         assert first_snapshot == second_snapshot
 
-    def test_discard_all_logs_and_continues_on_rename_failure(
+    def test_discard_all_returns_paths_that_failed_to_rename(
         self, keys_manager: KeysManager
     ) -> None:
-        """A per-entry OSError is logged; the loop keeps going for other files."""
+        """A per-entry OSError is logged AND surfaced via the return value."""
         keys_manager.create()
         keys_manager.create()
 
@@ -509,13 +547,16 @@ class TestKeysManager:
             return real_rename(self, target)
 
         with patch.object(Path, "rename", flaky_rename):
-            keys_manager.discard_all()
+            failed = keys_manager.discard_all()
 
         remaining = list(keys_manager.path.iterdir())
         # One file was left in place (the rename raised), the rest renamed.
         assert any(entry.suffix == ".lost" for entry in remaining)
         assert any(entry.suffix != ".lost" for entry in remaining)
         keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
+        # The failed name must match a file that still has no .lost suffix.
+        assert len(failed) == 1
+        assert (keys_manager.path / failed[0]).exists()
 
     def test_update_password_skips_lost_files(
         self, keys_manager: KeysManager, password: str

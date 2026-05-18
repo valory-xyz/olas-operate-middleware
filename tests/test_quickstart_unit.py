@@ -1358,6 +1358,7 @@ class TestResetPassword:
         operate = MagicMock()
         operate._path = tmp_path
         operate.user_account.is_valid.return_value = True
+        operate.keys_manager.update_password.return_value = []
 
         from operate.constants import USER_JSON
 
@@ -1372,6 +1373,47 @@ class TestResetPassword:
         operate.keys_manager.update_password.assert_called_once_with(
             new_password="newpass"  # nosec B105,B106
         )
+
+    @patch("builtins.print")
+    @patch("operate.quickstart.reset_password.UserAccount")
+    @patch(
+        "operate.quickstart.reset_password.ask_confirm_password",
+        return_value="newpass",
+    )
+    @patch(
+        "operate.quickstart.reset_password.ask_or_get_from_env",
+        return_value="oldpass",
+    )
+    @patch("operate.quickstart.reset_password.print_section")
+    @patch("operate.quickstart.reset_password.print_title")
+    def test_broken_keys_emit_warning(
+        self,
+        mock_title: MagicMock,
+        mock_section: MagicMock,
+        mock_ask_env: MagicMock,
+        mock_confirm: MagicMock,
+        mock_ua: MagicMock,
+        mock_print: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """A non-empty broken-keys list must be surfaced as a printed warning."""
+        operate = MagicMock()
+        operate._path = tmp_path
+        operate.user_account.is_valid.return_value = True
+        operate.keys_manager.update_password.return_value = ["0xabc", "0xdef"]
+
+        from operate.constants import USER_JSON
+
+        (tmp_path / USER_JSON).touch()
+
+        reset_password(operate)
+
+        warning_calls = [
+            str(call)
+            for call in mock_print.call_args_list
+            if "WARNING" in str(call) and "0xabc" in str(call) and "0xdef" in str(call)
+        ]
+        assert warning_calls, "Expected WARNING with broken key names to be printed"
 
     @patch("operate.quickstart.reset_password.UserAccount")
     @patch(
@@ -1397,6 +1439,7 @@ class TestResetPassword:
         operate = MagicMock()
         operate._path = tmp_path
         operate.user_account.is_valid.side_effect = [False, True]
+        operate.keys_manager.update_password.return_value = []
 
         from operate.constants import USER_JSON
 

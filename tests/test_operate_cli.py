@@ -30,6 +30,7 @@ from uuid import uuid4
 
 import argon2
 import pytest
+from eth_account import Account
 from web3 import Web3
 
 from operate.cli import OperateApp
@@ -449,7 +450,7 @@ class TestMnemonicReencryptionOnPasswordChange:
         assert not wallet.mnemonic_path.exists()
 
     def test_update_password_tolerates_wedged_mnemonic(self, tmp_path: Path) -> None:
-        """A pre-fix wedge (mnemonic on a forgotten password) does not block update."""
+        """Wedged blob (mnemonic encrypted under a forgotten password) doesn't block update."""
         operate, password1, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
         password2 = random_string()
         wallet = next(iter(operate.wallet_manager))
@@ -492,3 +493,74 @@ class TestMnemonicReencryptionOnPasswordChange:
             assert not (operate.keys_manager.path / address).exists()
             assert (operate.keys_manager.path / f"{address}.lost").is_file()
             assert (operate.keys_manager.path / f"{address}.bak.lost").is_file()
+
+    def test_update_password_idempotent_path_still_reencrypts_mnemonic(
+        self, tmp_path: Path
+    ) -> None:
+        """Idempotent retry must rewrite the blob even when the keystore is in sync.
+
+        Simulates a crash between the keystore rewrite and the mnemonic
+        rewrite: keystore is on password2, blob is still on password1. A
+        retry with (password1, password2) must finish the blob rewrite,
+        not skip it via the idempotent short-circuit.
+        """
+        operate, password1, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        wallet = next(iter(operate.wallet_manager))
+        wallet.password = password1
+        # Pre-rotate the keystore only, leaving the blob on password1.
+        wallet.path.joinpath(wallet._key).write_text(  # type: ignore[attr-defined]
+            json.dumps(
+                Account.encrypt(
+                    private_key=wallet.crypto.private_key,  # pylint: disable=protected-access
+                    password=password2,
+                ),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        assert wallet.is_password_valid(password2)
+
+        operate.update_password(password1, password2)
+
+        reloaded = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+        assert reloaded.decrypt_mnemonic(password=password2) == mnemonic.split()
+
+    def test_update_password_with_mnemonic_raises_when_discard_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """A real rename OSError must propagate as ValueError from the seed-phrase flow."""
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        address = operate.keys_manager.create()
+
+        real_rename = Path.rename
+        calls = {"failed": False}
+
+        def flaky_rename(self: Path, target: Path) -> Path:
+            # Only intercept the discard_all renames (target ends in
+            # `.lost`); other Path.rename calls from resource storage
+            # must continue to work.
+            if str(target).endswith(".lost") and not calls["failed"]:
+                calls["failed"] = True
+                raise OSError("simulated rename failure")
+            return real_rename(self, target)
+
+        with patch.object(Path, "rename", flaky_rename):
+            with pytest.raises(ValueError, match="discard"):
+                operate.update_password_with_mnemonic(mnemonic, password2)
+
+        # Wallet + user.json updates committed before discard_all, so the
+        # partial-failure surface is: both auth surfaces on the new
+        # password, one key file still not renamed.
+        assert operate.user_account.is_valid(password2)
+        assert operate.wallet_manager.is_password_valid(password2)
+        remaining = list(operate.keys_manager.path.iterdir())
+        assert any(entry.suffix != ".lost" for entry in remaining)
+        assert any(entry.suffix == ".lost" for entry in remaining)
+        # Retry must converge: with rename working normally, discard_all
+        # finishes the .lost rename for the previously-stuck file.
+        operate.update_password_with_mnemonic(mnemonic, password2)
+        for entry in operate.keys_manager.path.iterdir():
+            assert entry.suffix == ".lost"
+        assert (operate.keys_manager.path / f"{address}.lost").is_file()

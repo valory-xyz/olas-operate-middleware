@@ -64,6 +64,12 @@ def reset_password(operate: "OperateApp") -> None:
     print('Resetting password of "ethereum" wallet...')
     operate.password = old_password
     operate.wallet_manager.update_password(new_password=new_password)
-    operate.keys_manager.update_password(new_password=new_password)
+    broken = operate.keys_manager.update_password(new_password=new_password)
+    if broken:
+        print(
+            "WARNING: the following agent keys could not be re-encrypted "
+            "and remain unusable; the corresponding agents must be "
+            f"re-created via the safe recovery flow: {', '.join(broken)}"
+        )
 
     print_section("Password reset done!")

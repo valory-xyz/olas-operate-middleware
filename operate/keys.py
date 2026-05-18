@@ -79,7 +79,11 @@ class KeysManager:
     def private_key_to_crypto(
         self, private_key: str, password: Optional[str]
     ) -> EthereumCrypto:
-        """Convert private key string to EthereumCrypto instance."""
+        """Convert private key string to EthereumCrypto instance.
+
+        The scratch file lives in the system temp directory (not the keys
+        directory) so it cannot pollute the keystore iteration.
+        """
         temp_file = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
             mode="w",
             suffix=".txt",
@@ -93,10 +97,39 @@ class KeysManager:
             os.chmod(temp_file_name, 0o600)
             return EthereumCrypto(private_key_path=temp_file_name, password=password)
         finally:
-            try:
-                unrecoverable_delete(Path(temp_file_name))
-            except (OSError, ValueError) as e:
-                self.logger.error(f"Failed to delete temp file {temp_file_name}: {e}")
+            self._delete_temp_key_file(Path(temp_file_name))
+
+    def _delete_temp_key_file(self, path: Path) -> None:
+        """Best-effort wipe of a scratch private-key file.
+
+        Prefer ``unrecoverable_delete`` so the bytes are overwritten before
+        the inode is freed. If that step raises, fall back to ``os.remove``
+        — leaving plaintext key material on disk is worse than skipping
+        the overwrite. Both attempts log the path and full exception so an
+        operator can act on a stranded scratch file.
+        """
+        try:
+            unrecoverable_delete(path)
+            return
+        except (OSError, ValueError) as exc:
+            self.logger.error(
+                "Secure delete of temp key file %s failed (%s: %s); "
+                "falling back to os.remove to avoid leaving plaintext "
+                "key material on disk.",
+                path,
+                type(exc).__name__,
+                exc,
+            )
+        try:
+            os.remove(path)
+        except OSError as fallback_exc:
+            self.logger.error(
+                "Fallback os.remove of %s also failed (%s: %s); "
+                "plaintext private key may remain on disk.",
+                path,
+                type(fallback_exc).__name__,
+                fallback_exc,
+            )
 
     def get(self, key: str) -> Key:
         """Get key object."""
@@ -166,7 +199,7 @@ class KeysManager:
         """Delete key."""
         os.remove(self.path / key)
 
-    def discard_all(self) -> None:
+    def discard_all(self) -> list[str]:
         """Mark every file in the keys directory as discarded.
 
         Used by the seed-phrase recovery flow: the user no longer has the
@@ -178,9 +211,11 @@ class KeysManager:
         keystores, their ``.bak`` backups, plaintext ``_private_key``
         sidecars, and any stray files alike. Originals remain on disk for
         audit. The call is idempotent: files already suffixed ``.lost``
-        are skipped, and a per-entry rename failure is logged so a single
-        OS error doesn't leave the directory half-renamed.
+        are skipped. Per-entry rename failures are logged and returned so
+        callers can surface them to the user instead of silently leaving
+        active keys behind.
         """
+        failed: list[str] = []
         for entry in self.path.iterdir():
             if not entry.is_file() or entry.suffix == ".lost":
                 continue
@@ -188,10 +223,13 @@ class KeysManager:
                 entry.rename(entry.with_name(entry.name + ".lost"))
             except OSError as exc:
                 self.logger.error(
-                    "Failed to mark %s as discarded: %s",
+                    "Failed to mark %s as discarded (%s: %s)",
                     entry,
                     type(exc).__name__,
+                    exc,
                 )
+                failed.append(entry.name)
+        return failed
 
     def update_password(self, new_password: str) -> list[str]:
         """Re-encrypt all keys with ``new_password``; return unrecoverable filenames.

@@ -824,11 +824,17 @@ class EthereumMasterWallet(
         """Updates password.
 
         Idempotent: if the keystore is already encrypted with ``new_password``,
-        skip disk I/O and only sync in-memory state. Clearing ``self._crypto``
-        forces the next access to re-load with the new password.
+        skip the keystore rewrite. The mnemonic blob is always reconciled —
+        a previous run may have crashed between the keystore rewrite and the
+        blob rewrite, so the idempotent path must still complete that step.
+        Clearing ``self._crypto`` forces the next access to re-load with the
+        new password.
         """
         old_password = self.password
         if self.is_password_valid(new_password):
+            self._reencrypt_mnemonic(
+                old_password=old_password, new_password=new_password
+            )
             self._crypto = None
             self.password = new_password
             return
@@ -851,10 +857,11 @@ class EthereumMasterWallet(
     def _reencrypt_mnemonic(self, *, old_password: str, new_password: str) -> None:
         """Re-encrypt the on-disk mnemonic blob with ``new_password``.
 
-        Soft-fail for wrong-password only: if the blob can't be opened with
-        ``old_password`` (existing wedge from a pre-fix release), log and
-        continue so the rest of the password change still completes. Other
-        failures (corrupted blob, OS errors) propagate.
+        Soft-fail for wrong-password only: if the blob can't be opened
+        with ``old_password`` (a wedge state where the mnemonic was last
+        encrypted with a different password than the keystore), log and
+        continue so the rest of the password change still completes.
+        Other failures (corrupted blob, OS errors) propagate.
         """
         if not self.mnemonic_path.exists():
             return

@@ -330,12 +330,13 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         ):
             raise ValueError(MSG_INVALID_PASSWORD)
 
-        wallet_manager = self.wallet_manager
-        # wallet_manager and keys_manager both read self.password as the
-        # current-password attempt; pin it to old_password so already-
-        # migrated state takes the fallback path on retry.
-        wallet_manager.password = old_password
-        wallet_manager.update_password(new_password)
+        # Both managers read their own ``password`` attribute as the
+        # current-password attempt; pin both to old_password so an
+        # already-migrated keystore or key file takes the fallback path
+        # on a retry that follows a partially-applied previous attempt.
+        self.wallet_manager.password = old_password
+        self._keys_manager.password = old_password
+        self.wallet_manager.update_password(new_password)
         broken = self._keys_manager.update_password(new_password)
         if broken:
             raise ValueError(
@@ -345,7 +346,16 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self.user_account.update(old_password, new_password)
 
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
-        """Updates current password using the mnemonic"""
+        """Updates current password using the mnemonic.
+
+        The seed-phrase flow is for users who no longer have the password
+        agent EOA keys were encrypted with. Agent keys are marked
+        discarded (renamed ``.lost``) so the caller can re-establish agent
+        authority via the safe recovery module; the original files remain
+        on disk for audit. Discard runs last so a failure in the wallet
+        rewrite or the ``user.json`` update doesn't leave the directory in
+        a half-renamed state.
+        """
 
         if not new_password:
             raise ValueError(MSG_NEW_PASSWORD_MISSING)
@@ -354,14 +364,19 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
             raise ValueError(MSG_INVALID_MNEMONIC)
 
-        wallet_manager = self.wallet_manager
-        wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
-        # The user reached the mnemonic flow because they no longer have the
-        # password agent EOA keys were encrypted with; mark them discarded so
-        # the caller can re-establish agent authority via the safe recovery
-        # module while the original files remain available for audit.
-        self._keys_manager.discard_all()
+        self.wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
         self.user_account.force_update(new_password)
+        failed = self._keys_manager.discard_all()
+        if failed:
+            # Wallet + user.json are already on new_password by this point;
+            # only the discard step partially failed. Re-running the
+            # seed-phrase flow is safe: wallet/user updates are idempotent
+            # and discard_all skips files already marked .lost.
+            raise ValueError(
+                "Could not mark the following agent keys as discarded; "
+                "retry the seed-phrase recovery flow to finish the "
+                f"discard step: {', '.join(failed)}"
+            )
 
     def service_manager(
         self, skip_dependency_check: t.Optional[bool] = False
