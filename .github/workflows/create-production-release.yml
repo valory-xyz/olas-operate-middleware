@@ -42,8 +42,10 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install Poetry
-        run: python -m pip install --upgrade pip poetry
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
 
       - name: Configure git identity
         run: |
@@ -63,14 +65,15 @@ jobs:
             echo "previous_tag=$(jq -r .previous_tag /tmp/version.json)"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Bump version in pyproject.toml
+      - name: Bump version in pyproject.toml and uv.lock
         run: |
-          poetry version "${{ steps.compute.outputs.next_version }}"
-          git diff pyproject.toml
+          uv version --frozen "${{ steps.compute.outputs.next_version }}"
+          uv lock
+          git diff pyproject.toml uv.lock
 
       - name: Commit version bump and push to main
         run: |
-          git add pyproject.toml
+          git add pyproject.toml uv.lock
           git commit -m "chore: bump version to ${{ steps.compute.outputs.next_version }} in pyproject.toml"
           git push origin main
 

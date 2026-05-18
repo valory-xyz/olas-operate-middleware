@@ -136,11 +136,12 @@ class TestWalletRecoveryManagerStatus:
             side_effect=lambda: iter([mock_wallet])
         )
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],
+        with (
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
         ):
             result = manager.status()
 
@@ -207,11 +208,12 @@ class TestPrepareRecovery:
             side_effect=lambda: iter([mock_wallet])
         )
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[EOA_ADDR],  # Only master, no backup owner
+        with (
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[EOA_ADDR],  # Only master, no backup owner
+            ),
         ):
             with pytest.raises(WalletRecoveryError, match="backup owner"):
                 manager.prepare_recovery("new_pass")  # nosec B106
@@ -243,24 +245,27 @@ class TestPrepareRecovery:
 
         manager.service_manager.get_all_services.return_value = ([], None)
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[BACKUP_ADDR, NEW_EOA_ADDR],  # wallet.address absent → warning
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.UserAccount"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.KeysManager"
-        ), patch.object(
-            manager.data, "store"
-        ), patch.object(
-            manager,
-            "_load_bundle",
-            return_value={"status": WalletRecoveryStatus.PREPARED},
+        with (
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[
+                    BACKUP_ADDR,
+                    NEW_EOA_ADDR,
+                ],  # wallet.address absent → warning
+            ),
+            patch("operate.wallet.wallet_recovery_manager.UserAccount"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.KeysManager"),
+            patch.object(manager.data, "store"),
+            patch.object(
+                manager,
+                "_load_bundle",
+                return_value={"status": WalletRecoveryStatus.PREPARED},
+            ),
         ):
             result = manager.prepare_recovery("new_pass")  # nosec B106
 
@@ -283,20 +288,23 @@ class TestPrepareRecovery:
             side_effect=lambda: iter([mock_wallet])
         )
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],
-        ), patch.object(
-            manager,
-            "status",
-            return_value={"num_safes_with_new_wallet": 1},
-        ), patch.object(
-            manager,
-            "_load_bundle",
-            return_value={"status": WalletRecoveryStatus.IN_PROGRESS},
-        ) as mock_load:
+        with (
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch.object(
+                manager,
+                "status",
+                return_value={"num_safes_with_new_wallet": 1},
+            ),
+            patch.object(
+                manager,
+                "_load_bundle",
+                return_value={"status": WalletRecoveryStatus.IN_PROGRESS},
+            ) as mock_load,
+        ):
             result = manager.prepare_recovery("new_pass")  # nosec B106
 
         mock_load.assert_called_once_with(
@@ -331,25 +339,25 @@ class TestPrepareRecovery:
         mock_service.agent_addresses = [EOA_ADDR]
         manager.service_manager.get_all_services.return_value = ([mock_service], None)
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.UserAccount"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.KeysManager"
-        ), patch.object(
-            manager.data, "store"
-        ), patch.object(
-            manager,
-            "_load_bundle",
-            return_value={"status": WalletRecoveryStatus.PREPARED},
-        ) as mock_load:
+        with (
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch("operate.wallet.wallet_recovery_manager.UserAccount"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.KeysManager"),
+            patch.object(manager.data, "store"),
+            patch.object(
+                manager,
+                "_load_bundle",
+                return_value={"status": WalletRecoveryStatus.PREPARED},
+            ) as mock_load,
+        ):
             result = manager.prepare_recovery("new_pass")  # nosec B106
 
         mock_load.assert_called_once()
@@ -372,10 +380,9 @@ class TestLoadBundle:
         mock_user_account = MagicMock()
         mock_user_account.is_valid.return_value = False
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.UserAccount"
-        ) as mock_ua_cls, patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager"
+        with (
+            patch("operate.wallet.wallet_recovery_manager.UserAccount") as mock_ua_cls,
+            patch("operate.wallet.wallet_recovery_manager.MasterWalletManager"),
         ):
             mock_ua_cls.load.return_value = mock_user_account
             with pytest.raises(ValueError, match="Password"):
@@ -408,18 +415,19 @@ class TestLoadBundle:
         mock_new_wm = MagicMock()
         mock_new_wm.__iter__ = MagicMock(side_effect=lambda: iter([mock_new_wallet]))
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.UserAccount"
-        ) as mock_ua_cls, patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            # EOA_ADDR is old wallet, NEW_EOA_ADDR is new wallet, BACKUP_ADDR is backup
-            # new_wallet.address NOT in [EOA_ADDR, BACKUP_ADDR] → num_safes_with_new_wallet = 0
-            return_value=[EOA_ADDR, BACKUP_ADDR],
+        with (
+            patch("operate.wallet.wallet_recovery_manager.UserAccount") as mock_ua_cls,
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                # EOA_ADDR is old wallet, NEW_EOA_ADDR is new wallet, BACKUP_ADDR is backup
+                # new_wallet.address NOT in [EOA_ADDR, BACKUP_ADDR] → num_safes_with_new_wallet = 0
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
         ):
             mock_ua_cls.load.return_value = mock_user_account
             result = manager._load_bundle(
@@ -476,16 +484,17 @@ class TestLoadBundle:
             side_effect=lambda: iter([mock_old_wallet1, mock_old_wallet2])
         )
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.UserAccount"
-        ) as mock_ua_cls, patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            side_effect=owners_side_effect,
+        with (
+            patch("operate.wallet.wallet_recovery_manager.UserAccount") as mock_ua_cls,
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                side_effect=owners_side_effect,
+            ),
         ):
             mock_ua_cls.load.return_value = mock_user_account
             result = manager._load_bundle(
@@ -522,16 +531,21 @@ class TestLoadBundle:
         mock_new_wm = MagicMock()
         mock_new_wm.__iter__ = MagicMock(side_effect=lambda: iter([mock_new_wallet]))
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.UserAccount"
-        ) as mock_ua_cls, patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[EOA_ADDR, NEW_EOA_ADDR, BACKUP_ADDR],  # new wallet present
+        with (
+            patch("operate.wallet.wallet_recovery_manager.UserAccount") as mock_ua_cls,
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[
+                    EOA_ADDR,
+                    NEW_EOA_ADDR,
+                    BACKUP_ADDR,
+                ],  # new wallet present
+            ),
         ):
             mock_ua_cls.load.return_value = mock_user_account
             result = manager._load_bundle(
@@ -574,18 +588,21 @@ class TestRecoveryRequirements:
         mock_new_wm = MagicMock()
         mock_new_wm.__iter__ = MagicMock(side_effect=lambda: iter([mock_new_wallet]))
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            # new_wallet not in owners → pending swap
-            return_value=[EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_asset_balance",
-            return_value=0,
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                # new_wallet not in owners → pending swap
+                return_value=[EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_asset_balance",
+                return_value=0,
+            ),
         ):
             result = manager.recovery_requirements()
 
@@ -618,18 +635,21 @@ class TestRecoveryRequirements:
         mock_new_wm = MagicMock()
         mock_new_wm.__iter__ = MagicMock(side_effect=lambda: iter([mock_new_wallet]))
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            # EOA_ADDR only → backup_owners = {} (len=0, not 1) → warning
-            return_value=[EOA_ADDR],
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_asset_balance",
-            return_value=0,
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                # EOA_ADDR only → backup_owners = {} (len=0, not 1) → warning
+                return_value=[EOA_ADDR],
+            ),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_asset_balance",
+                return_value=0,
+            ),
         ):
             manager.recovery_requirements()
 
@@ -752,14 +772,16 @@ class TestCompleteRecovery:
         mock_new_wm = MagicMock()
         mock_new_wm.__iter__ = MagicMock(side_effect=lambda: iter([mock_new_wallet]))
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[EOA_ADDR, BACKUP_ADDR],  # new wallet NOT in owners
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[EOA_ADDR, BACKUP_ADDR],  # new wallet NOT in owners
+            ),
         ):
             with pytest.raises(WalletRecoveryError, match="Incorrect owners"):
                 manager.complete_recovery()
@@ -796,23 +818,21 @@ class TestCompleteRecovery:
         manager.data.new_agent_keys = {}
         manager.service_manager.get_all_services.return_value = ([], None)
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            # new_wallet in owners, old wallet NOT in owners → no inconsistency
-            return_value=[NEW_EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "shutil.move"
-        ), patch(
-            "shutil.copytree"
-        ), patch(
-            "shutil.copy2"
-        ), patch.object(
-            manager.data, "store"
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                # new_wallet in owners, old wallet NOT in owners → no inconsistency
+                return_value=[NEW_EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch("shutil.move"),
+            patch("shutil.copytree"),
+            patch("shutil.copy2"),
+            patch.object(manager.data, "store"),
         ):
             manager.complete_recovery()
 
@@ -863,22 +883,20 @@ class TestCompleteRecovery:
         manager.data.new_agent_keys = {"svc-id": {EOA_ADDR: NEW_EOA_ADDR}}
         manager.service_manager.get_all_services.return_value = ([mock_service], None)
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[NEW_EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "shutil.move"
-        ), patch(
-            "shutil.copytree"
-        ), patch(
-            "shutil.copy2"
-        ), patch.object(
-            manager.data, "store"
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[NEW_EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch("shutil.move"),
+            patch("shutil.copytree"),
+            patch("shutil.copy2"),
+            patch.object(manager.data, "store"),
         ):
             manager.complete_recovery()
 
@@ -912,14 +930,16 @@ class TestCompleteRecovery:
         mock_new_wm.__iter__ = MagicMock(side_effect=lambda: iter([mock_new_wallet]))
 
         # new_wallet in owners, old wallet also in owners → inconsistent (raises by default)
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[NEW_EOA_ADDR, EOA_ADDR],  # old wallet still in owners
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[NEW_EOA_ADDR, EOA_ADDR],  # old wallet still in owners
+            ),
         ):
             with pytest.raises(WalletRecoveryError, match="Inconsistent owners"):
                 manager.complete_recovery()  # default raise_if_inconsistent_owners=True
@@ -963,22 +983,20 @@ class TestCompleteRecovery:
         # len(3) != 2 → triggers line 465 (_report_issue for len != 2)
         # wallet.address (EOA_ADDR) in owners → triggers line 461 (_report_issue for inconsistent)
         # all_backup_owners = {EOA_ADDR, BACKUP_ADDR} (len=2 != 1) → triggers line 471
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[NEW_EOA_ADDR, EOA_ADDR, BACKUP_ADDR],  # 3 owners
-        ), patch(
-            "shutil.move"
-        ), patch(
-            "shutil.copytree"
-        ), patch(
-            "shutil.copy2"
-        ), patch.object(
-            manager.data, "store"
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[NEW_EOA_ADDR, EOA_ADDR, BACKUP_ADDR],  # 3 owners
+            ),
+            patch("shutil.move"),
+            patch("shutil.copytree"),
+            patch("shutil.copy2"),
+            patch.object(manager.data, "store"),
         ):
             manager.complete_recovery(raise_if_inconsistent_owners=False)
 
@@ -1018,16 +1036,17 @@ class TestCompleteRecovery:
         manager.data.new_agent_keys = {}
         manager.service_manager.get_all_services.return_value = ([], None)
 
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[NEW_EOA_ADDR, BACKUP_ADDR],
-        ), patch(
-            "shutil.move", side_effect=OSError("disk error")
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[NEW_EOA_ADDR, BACKUP_ADDR],
+            ),
+            patch("shutil.move", side_effect=OSError("disk error")),
         ):
             with pytest.raises(RuntimeError):
                 manager.complete_recovery()
@@ -1070,22 +1089,20 @@ class TestCompleteRecovery:
         manager.logger = logger_mock
 
         # old wallet address is still in owners → inconsistent
-        with patch(
-            "operate.wallet.wallet_recovery_manager.MasterWalletManager",
-            return_value=mock_new_wm,
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_default_ledger_api"
-        ), patch(
-            "operate.wallet.wallet_recovery_manager.get_owners",
-            return_value=[NEW_EOA_ADDR, EOA_ADDR],  # old wallet still in owners
-        ), patch(
-            "shutil.move"
-        ), patch(
-            "shutil.copytree"
-        ), patch(
-            "shutil.copy2"
-        ), patch.object(
-            manager.data, "store"
+        with (
+            patch(
+                "operate.wallet.wallet_recovery_manager.MasterWalletManager",
+                return_value=mock_new_wm,
+            ),
+            patch("operate.wallet.wallet_recovery_manager.get_default_ledger_api"),
+            patch(
+                "operate.wallet.wallet_recovery_manager.get_owners",
+                return_value=[NEW_EOA_ADDR, EOA_ADDR],  # old wallet still in owners
+            ),
+            patch("shutil.move"),
+            patch("shutil.copytree"),
+            patch("shutil.copy2"),
+            patch.object(manager.data, "store"),
         ):
             manager.complete_recovery(raise_if_inconsistent_owners=False)
 

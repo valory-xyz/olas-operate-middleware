@@ -222,9 +222,10 @@ class TestTendermintNode:
         """write_to_log=False: log() calls _write_to_console but not _write_to_file."""
         params = self._make_params()
         node = TendermintNode(params=params, write_to_log=False)
-        with patch.object(node, "_write_to_console") as mock_console, patch.object(
-            node, "_write_to_file"
-        ) as mock_file:
+        with (
+            patch.object(node, "_write_to_console") as mock_console,
+            patch.object(node, "_write_to_file") as mock_file,
+        ):
             node.log("test message\n")
         mock_console.assert_called_once_with(line="test message\n")
         mock_file.assert_not_called()
@@ -233,9 +234,10 @@ class TestTendermintNode:
         """write_to_log=True: log() calls both _write_to_console and _write_to_file."""
         params = self._make_params()
         node = TendermintNode(params=params, write_to_log=True)
-        with patch.object(node, "_write_to_console") as mock_console, patch.object(
-            node, "_write_to_file"
-        ) as mock_file:
+        with (
+            patch.object(node, "_write_to_console") as mock_console,
+            patch.object(node, "_write_to_file") as mock_file,
+        ):
             node.log("test message\n")
         mock_console.assert_called_once_with(line="test message\n")
         mock_file.assert_called_once_with(line="test message\n")
@@ -607,10 +609,13 @@ class TestPeriodDumper:
         fake_signature = MagicMock()
         fake_signature.parameters = {"path": object(), "onerror": object()}
 
-        with patch(
-            "operate.services.utils.tendermint.inspect.signature",
-            return_value=fake_signature,
-        ), patch("operate.services.utils.tendermint.shutil.rmtree") as mock_rmtree:
+        with (
+            patch(
+                "operate.services.utils.tendermint.inspect.signature",
+                return_value=fake_signature,
+            ),
+            patch("operate.services.utils.tendermint.shutil.rmtree") as mock_rmtree,
+        ):
             PeriodDumper(logger=self._make_logger(), dump_dir=dump_dir)
 
         kwargs = mock_rmtree.call_args.kwargs
@@ -629,10 +634,13 @@ class TestPeriodDumper:
             "onexc": object(),
         }
 
-        with patch(
-            "operate.services.utils.tendermint.inspect.signature",
-            return_value=fake_signature,
-        ), patch("operate.services.utils.tendermint.shutil.rmtree") as mock_rmtree:
+        with (
+            patch(
+                "operate.services.utils.tendermint.inspect.signature",
+                return_value=fake_signature,
+            ),
+            patch("operate.services.utils.tendermint.shutil.rmtree") as mock_rmtree,
+        ):
             PeriodDumper(logger=self._make_logger(), dump_dir=dump_dir)
 
         kwargs = mock_rmtree.call_args.kwargs

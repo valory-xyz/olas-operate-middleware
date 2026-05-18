@@ -164,14 +164,11 @@ class TestGnosisSafeTransaction:
         multisend_addr = "0x" + "c" * 40
         safe_tx_hash_hex = "0x" + "aa" * 32  # 64 hex chars after stripping 0x
 
-        with patch(
-            "operate.services.protocol.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_config, patch(
-            "operate.services.protocol.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.services.protocol.update_tx_with_gas_estimate"
+        with (
+            patch("operate.services.protocol.registry_contracts") as mock_contracts,
+            patch("operate.services.protocol.ContractConfigs") as mock_config,
+            patch("operate.services.protocol.update_tx_with_gas_pricing"),
+            patch("operate.services.protocol.update_tx_with_gas_estimate"),
         ):
             mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
             mock_contracts.multisend.get_tx_data.return_value = {
@@ -211,14 +208,11 @@ class TestGnosisSafeTransaction:
         multisend_addr = "0x" + "c" * 40
         safe_tx_hash_hex = "0x" + "aa" * 32
 
-        with patch(
-            "operate.services.protocol.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_config, patch(
-            "operate.services.protocol.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.services.protocol.update_tx_with_gas_estimate"
+        with (
+            patch("operate.services.protocol.registry_contracts") as mock_contracts,
+            patch("operate.services.protocol.ContractConfigs") as mock_config,
+            patch("operate.services.protocol.update_tx_with_gas_pricing"),
+            patch("operate.services.protocol.update_tx_with_gas_estimate"),
         ):
             mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
             mock_contracts.multisend.get_tx_data.return_value = {
@@ -259,14 +253,11 @@ class TestGnosisSafeTransaction:
         multisend_addr = "0x" + "c" * 40
         safe_tx_hash_hex = "0x" + "aa" * 32
 
-        with patch(
-            "operate.services.protocol.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_config, patch(
-            "operate.services.protocol.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.services.protocol.update_tx_with_gas_estimate"
+        with (
+            patch("operate.services.protocol.registry_contracts") as mock_contracts,
+            patch("operate.services.protocol.ContractConfigs") as mock_config,
+            patch("operate.services.protocol.update_tx_with_gas_pricing"),
+            patch("operate.services.protocol.update_tx_with_gas_estimate"),
         ):
             mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
             mock_contracts.multisend.get_tx_data.return_value = {
@@ -307,14 +298,11 @@ class TestGnosisSafeTransaction:
         multisend_addr = "0x" + "c" * 40
         safe_tx_hash_hex = "0x" + "aa" * 32
 
-        with patch(
-            "operate.services.protocol.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_config, patch(
-            "operate.services.protocol.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.services.protocol.update_tx_with_gas_estimate"
+        with (
+            patch("operate.services.protocol.registry_contracts") as mock_contracts,
+            patch("operate.services.protocol.ContractConfigs") as mock_config,
+            patch("operate.services.protocol.update_tx_with_gas_pricing"),
+            patch("operate.services.protocol.update_tx_with_gas_estimate"),
         ):
             mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
             mock_contracts.multisend.get_tx_data.return_value = {

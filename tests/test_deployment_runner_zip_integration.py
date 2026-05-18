@@ -70,15 +70,12 @@ def test_setup_agent_uses_zip(tmp_path: Path) -> None:
     runner = HostPythonHostDeploymentRunner(working_dir, is_aea=True)
 
     # Mock only network dependencies, let file operations work normally
-    with patch.object(
-        AgentAssetManager, "get_agent_code_path"
-    ) as mock_get_path, patch.object(
-        AgentAssetManager, "extract_agent_zip"
-    ) as mock_extract, patch.object(
-        runner, "_run_aea_command"
-    ) as mock_aea_cmd, patch.object(
-        runner, "_prepare_agent_env"
-    ) as mock_prepare_env:
+    with (
+        patch.object(AgentAssetManager, "get_agent_code_path") as mock_get_path,
+        patch.object(AgentAssetManager, "extract_agent_zip") as mock_extract,
+        patch.object(runner, "_run_aea_command") as mock_aea_cmd,
+        patch.object(runner, "_prepare_agent_env") as mock_prepare_env,
+    ):
 
         # Setup mocks
         mock_get_path.return_value = str(dummy_zip_path)
@@ -231,9 +228,11 @@ class TestRealGitHubDownload:
         runner = HostPythonHostDeploymentRunner(working_dir, is_aea=True)
 
         # Mock only aea commands to avoid real installations
-        with patch.object(runner, "_run_aea_command") as mock_aea_cmd, patch.object(
-            runner, "_run_cmd"
-        ), patch.object(runner, "_prepare_agent_env") as mock_prepare_env:
+        with (
+            patch.object(runner, "_run_aea_command") as mock_aea_cmd,
+            patch.object(runner, "_run_cmd"),
+            patch.object(runner, "_prepare_agent_env") as mock_prepare_env,
+        ):
 
             mock_prepare_env.return_value = {"AEA_AGENT": "valory/trader:0.1.0"}
 

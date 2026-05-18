@@ -156,8 +156,9 @@ def test_store_windows_permission_error_cleanup(tmp_path: Path) -> None:
         except (FileNotFoundError, OSError, PermissionError):
             pass
 
-    with patch("operate.resource.platform.system", return_value="Windows"), patch(
-        "operate.resource.safe_file_operation", side_effect=mock_safe_file_op
+    with (
+        patch("operate.resource.platform.system", return_value="Windows"),
+        patch("operate.resource.safe_file_operation", side_effect=mock_safe_file_op),
     ):
         try:
             key.store()

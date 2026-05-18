@@ -74,11 +74,12 @@ class TestShutdownPreviousInstance:
     def test_port_already_free(self) -> None:
         """Test that no action is taken when port is already free."""
         instance = AppSingleInstance(port_number=8080)
-        with patch.object(
-            AppSingleInstance, "is_port_in_use", return_value=False
-        ), patch.object(
-            AppSingleInstance, "try_shutdown_with_endpoint"
-        ) as mock_endpoint:
+        with (
+            patch.object(AppSingleInstance, "is_port_in_use", return_value=False),
+            patch.object(
+                AppSingleInstance, "try_shutdown_with_endpoint"
+            ) as mock_endpoint,
+        ):
             instance.shutdown_previous_instance()
         mock_endpoint.assert_not_called()
 
@@ -92,11 +93,12 @@ class TestShutdownPreviousInstance:
             call_count[0] += 1
             return idx == 0  # True on first call, False on second
 
-        with patch.object(
-            AppSingleInstance, "is_port_in_use", side_effect=is_in_use
-        ), patch.object(
-            AppSingleInstance, "try_shutdown_with_endpoint"
-        ) as mock_endpoint:
+        with (
+            patch.object(AppSingleInstance, "is_port_in_use", side_effect=is_in_use),
+            patch.object(
+                AppSingleInstance, "try_shutdown_with_endpoint"
+            ) as mock_endpoint,
+        ):
             instance.shutdown_previous_instance()
         mock_endpoint.assert_called_once()
 
@@ -110,21 +112,21 @@ class TestShutdownPreviousInstance:
             call_count[0] += 1
             return idx < 2  # True for first two calls, False on third
 
-        with patch.object(
-            AppSingleInstance, "is_port_in_use", side_effect=is_in_use
-        ), patch.object(AppSingleInstance, "try_shutdown_with_endpoint"), patch.object(
-            AppSingleInstance, "try_kill_proc_using_port"
-        ) as mock_kill:
+        with (
+            patch.object(AppSingleInstance, "is_port_in_use", side_effect=is_in_use),
+            patch.object(AppSingleInstance, "try_shutdown_with_endpoint"),
+            patch.object(AppSingleInstance, "try_kill_proc_using_port") as mock_kill,
+        ):
             instance.shutdown_previous_instance()
         mock_kill.assert_called_once()
 
     def test_raises_when_port_still_occupied(self) -> None:
         """Test RuntimeError when the port cannot be freed."""
         instance = AppSingleInstance(port_number=8080)
-        with patch.object(
-            AppSingleInstance, "is_port_in_use", return_value=True
-        ), patch.object(AppSingleInstance, "try_shutdown_with_endpoint"), patch.object(
-            AppSingleInstance, "try_kill_proc_using_port"
+        with (
+            patch.object(AppSingleInstance, "is_port_in_use", return_value=True),
+            patch.object(AppSingleInstance, "try_shutdown_with_endpoint"),
+            patch.object(AppSingleInstance, "try_kill_proc_using_port"),
         ):
             with pytest.raises(RuntimeError, match="Port 8080 is in use"):
                 instance.shutdown_previous_instance()
@@ -136,8 +138,9 @@ class TestTryShutdownWithEndpoint:
     def test_https_success(self) -> None:
         """Test that a successful HTTPS request shuts down the previous instance."""
         instance = AppSingleInstance(port_number=8080)
-        with patch("operate.utils.single_instance.requests.get") as mock_get, patch(
-            "operate.utils.single_instance.time.sleep"
+        with (
+            patch("operate.utils.single_instance.requests.get") as mock_get,
+            patch("operate.utils.single_instance.time.sleep"),
         ):
             instance.try_shutdown_with_endpoint()
         mock_get.assert_called_once()
@@ -145,23 +148,29 @@ class TestTryShutdownWithEndpoint:
     def test_ssl_error_fallback_to_http(self) -> None:
         """Test HTTP fallback when HTTPS fails with SSLError."""
         instance = AppSingleInstance(port_number=8080)
-        with patch(
-            "operate.utils.single_instance.requests.get",
-            side_effect=[requests.exceptions.SSLError("ssl"), MagicMock()],
-        ) as mock_get, patch("operate.utils.single_instance.time.sleep"):
+        with (
+            patch(
+                "operate.utils.single_instance.requests.get",
+                side_effect=[requests.exceptions.SSLError("ssl"), MagicMock()],
+            ) as mock_get,
+            patch("operate.utils.single_instance.time.sleep"),
+        ):
             instance.try_shutdown_with_endpoint()
         assert mock_get.call_count == 2
 
     def test_ssl_error_http_fallback_also_fails(self) -> None:
         """Test that HTTP fallback failure is handled without raising."""
         instance = AppSingleInstance(port_number=8080)
-        with patch(
-            "operate.utils.single_instance.requests.get",
-            side_effect=[
-                requests.exceptions.SSLError("ssl"),
-                Exception("http fail"),
-            ],
-        ), patch("operate.utils.single_instance.time.sleep"):
+        with (
+            patch(
+                "operate.utils.single_instance.requests.get",
+                side_effect=[
+                    requests.exceptions.SSLError("ssl"),
+                    Exception("http fail"),
+                ],
+            ),
+            patch("operate.utils.single_instance.time.sleep"),
+        ):
             instance.try_shutdown_with_endpoint()  # should not raise
 
     def test_general_exception_handled(self) -> None:
@@ -183,10 +192,13 @@ class TestTryKillProcUsingPort:
         mock_conn = MagicMock()
         mock_conn.laddr.port = 9999
         mock_conn.status = psutil.CONN_LISTEN
-        with patch(
-            "operate.utils.single_instance.psutil.net_connections",
-            return_value=[mock_conn],
-        ), patch.object(AppSingleInstance, "kill_process_tree") as mock_kill:
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.net_connections",
+                return_value=[mock_conn],
+            ),
+            patch.object(AppSingleInstance, "kill_process_tree") as mock_kill,
+        ):
             instance.try_kill_proc_using_port()
         mock_kill.assert_not_called()
 
@@ -197,10 +209,13 @@ class TestTryKillProcUsingPort:
         mock_conn.laddr.port = 8080
         mock_conn.status = psutil.CONN_LISTEN
         mock_conn.pid = None
-        with patch(
-            "operate.utils.single_instance.psutil.net_connections",
-            return_value=[mock_conn],
-        ), patch.object(AppSingleInstance, "kill_process_tree") as mock_kill:
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.net_connections",
+                return_value=[mock_conn],
+            ),
+            patch.object(AppSingleInstance, "kill_process_tree") as mock_kill,
+        ):
             instance.try_kill_proc_using_port()
         mock_kill.assert_not_called()
 
@@ -211,11 +226,13 @@ class TestTryKillProcUsingPort:
         mock_conn.laddr.port = 8080
         mock_conn.status = psutil.CONN_LISTEN
         mock_conn.pid = 1234
-        with patch(
-            "operate.utils.single_instance.psutil.net_connections",
-            return_value=[mock_conn],
-        ), patch.object(AppSingleInstance, "kill_process_tree") as mock_kill, patch(
-            "operate.utils.single_instance.time.sleep"
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.net_connections",
+                return_value=[mock_conn],
+            ),
+            patch.object(AppSingleInstance, "kill_process_tree") as mock_kill,
+            patch("operate.utils.single_instance.time.sleep"),
         ):
             instance.try_kill_proc_using_port()
         mock_kill.assert_called_once_with(1234)
@@ -227,13 +244,16 @@ class TestTryKillProcUsingPort:
         mock_conn.laddr.port = 8080
         mock_conn.status = psutil.CONN_LISTEN
         mock_conn.pid = 1234
-        with patch(
-            "operate.utils.single_instance.psutil.net_connections",
-            return_value=[mock_conn],
-        ), patch.object(
-            AppSingleInstance,
-            "kill_process_tree",
-            side_effect=Exception("kill failed"),
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.net_connections",
+                return_value=[mock_conn],
+            ),
+            patch.object(
+                AppSingleInstance,
+                "kill_process_tree",
+                side_effect=Exception("kill failed"),
+            ),
         ):
             instance.try_kill_proc_using_port()  # should not raise
 
@@ -248,11 +268,14 @@ class TestKillProcessTree:
         mock_parent = MagicMock()
         mock_parent.children.return_value = [mock_child]
         mock_parent.wait.return_value = None
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch(
-            "operate.utils.single_instance.psutil.wait_procs",
-            return_value=([], []),
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch(
+                "operate.utils.single_instance.psutil.wait_procs",
+                return_value=([], []),
+            ),
         ):
             instance.kill_process_tree(1234)
         mock_child.terminate.assert_called_once()
@@ -264,11 +287,14 @@ class TestKillProcessTree:
         mock_parent = MagicMock()
         mock_parent.children.return_value = []
         mock_parent.wait.side_effect = psutil.TimeoutExpired(3)
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch(
-            "operate.utils.single_instance.psutil.wait_procs",
-            return_value=([], []),
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch(
+                "operate.utils.single_instance.psutil.wait_procs",
+                return_value=([], []),
+            ),
         ):
             instance.kill_process_tree(1234)
         mock_parent.kill.assert_called_once()
@@ -280,11 +306,14 @@ class TestKillProcessTree:
         mock_parent = MagicMock()
         mock_parent.children.return_value = [mock_child_alive]
         mock_parent.wait.return_value = None
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch(
-            "operate.utils.single_instance.psutil.wait_procs",
-            return_value=([], [mock_child_alive]),  # one child still alive
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch(
+                "operate.utils.single_instance.psutil.wait_procs",
+                return_value=([], [mock_child_alive]),  # one child still alive
+            ),
         ):
             instance.kill_process_tree(1234)
         mock_child_alive.kill.assert_called_once()
@@ -328,9 +357,12 @@ class TestParentWatchdog:
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
         mock_parent = MagicMock()
         mock_parent.is_running.return_value = True
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch("os.getppid", return_value=1234):
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch("os.getppid", return_value=1234),
+        ):
             task = watchdog.start()
             assert task is not None
             await asyncio.sleep(0)  # let task reach its asyncio.sleep(0)
@@ -342,9 +374,12 @@ class TestParentWatchdog:
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
         mock_parent = MagicMock()
         mock_parent.is_running.return_value = True
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch("os.getppid", return_value=1234):
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch("os.getppid", return_value=1234),
+        ):
             task1 = watchdog.start()
             task2 = watchdog.start()
             assert task1 is task2
@@ -357,9 +392,12 @@ class TestParentWatchdog:
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
         mock_parent = MagicMock()
         mock_parent.is_running.return_value = True
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch("os.getppid", return_value=1234):
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch("os.getppid", return_value=1234),
+        ):
             watchdog.start()
             await asyncio.sleep(0)  # task reaches asyncio.sleep(0)
             await watchdog.stop()  # cancel via _fut_waiter, exits cleanly
@@ -381,9 +419,12 @@ class TestParentWatchdog:
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
         mock_parent = MagicMock()
         mock_parent.is_running.return_value = False
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch("os.getppid", return_value=2):
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch("os.getppid", return_value=2),
+        ):
             task = asyncio.create_task(watchdog._watch_loop())
             await task  # completes after break
         on_exit.assert_called_once()
@@ -392,10 +433,13 @@ class TestParentWatchdog:
         """Test that the callback is invoked when the parent PID does not exist."""
         on_exit = AsyncMock()
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
-        with patch(
-            "operate.utils.single_instance.psutil.Process",
-            side_effect=psutil.NoSuchProcess(pid=1234),
-        ), patch("os.getppid", return_value=1234):
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process",
+                side_effect=psutil.NoSuchProcess(pid=1234),
+            ),
+            patch("os.getppid", return_value=1234),
+        ):
             task = asyncio.create_task(watchdog._watch_loop())
             await task  # completes after break
         on_exit.assert_called_once()
@@ -406,9 +450,12 @@ class TestParentWatchdog:
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
         mock_parent = MagicMock()
         mock_parent.is_running.return_value = True
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch("os.getppid", return_value=1234):
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch("os.getppid", return_value=1234),
+        ):
             task = asyncio.create_task(watchdog._watch_loop())
             await asyncio.sleep(0)  # let the task reach asyncio.sleep(0)
             task.cancel()  # cancels via _fut_waiter; task handles CancelledError
@@ -432,10 +479,13 @@ class TestParentWatchdog:
             return mock_parent
 
         mock_logger = MagicMock()
-        with patch(
-            "operate.utils.single_instance.psutil.Process", side_effect=flaky_process
-        ), patch("os.getppid", return_value=1234), patch(
-            "operate.utils.single_instance.logger", mock_logger
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process",
+                side_effect=flaky_process,
+            ),
+            patch("os.getppid", return_value=1234),
+            patch("operate.utils.single_instance.logger", mock_logger),
         ):
             task = asyncio.create_task(watchdog._watch_loop())
             await task  # first iteration logs error, second exits via _stopping
@@ -455,13 +505,16 @@ class TestParentWatchdog:
             raise RuntimeError("sleep exploded")
 
         mock_logger = MagicMock()
-        with patch(
-            "operate.utils.single_instance.psutil.Process", return_value=mock_parent
-        ), patch("os.getppid", return_value=1234), patch(
-            "operate.utils.single_instance.asyncio.sleep",
-            side_effect=_failing_sleep,
-        ), patch(
-            "operate.utils.single_instance.logger", mock_logger
+        with (
+            patch(
+                "operate.utils.single_instance.psutil.Process", return_value=mock_parent
+            ),
+            patch("os.getppid", return_value=1234),
+            patch(
+                "operate.utils.single_instance.asyncio.sleep",
+                side_effect=_failing_sleep,
+            ),
+            patch("operate.utils.single_instance.logger", mock_logger),
         ):
             task = asyncio.create_task(watchdog._watch_loop())
             await task  # outer except Exception catches RuntimeError; task finishes
