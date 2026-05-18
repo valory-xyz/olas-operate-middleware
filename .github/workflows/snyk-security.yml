@@ -47,11 +47,12 @@ jobs:
         # In this case we want to upload the SAST issues to GitHub Code Scanning
         uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
 
-        # For Snyk Open Source you must first set up the development environment for your application's dependencies
-        # For example for Node
-        #- uses: actions/setup-node@v4
-        #  with:
-        #    node-version: 20
+      # Snyk's Python scanner doesn't yet recognize uv.lock as a target
+      # file, so export a requirements.txt for it to scan.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Export requirements.txt from uv.lock
+        run: uv export --frozen --no-emit-project --format requirements-txt > requirements.txt
 
         # Runs Snyk Code (SAST) analysis and uploads result into GitHub.
         # Use || true to not fail the pipeline
@@ -61,7 +62,7 @@ jobs:
 
         # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
       - name: Snyk Open Source monitor
-        run: snyk monitor --all-projects
+        run: snyk monitor --file=requirements.txt
 
       # Disabled because this repo does not use IaC or Docker yet
 
