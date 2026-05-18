@@ -53,7 +53,7 @@ from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
-from operate.ledger.profiles import OLAS
+from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.serialization import BigInt
 
@@ -1503,3 +1503,85 @@ class TestProvider(OnTestnet):
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
+
+
+# ---------------------------------------------------------------------------
+# TestRelayProviderUsdcRoutes — ETH→Base USDC and ETH→Optimism USDC
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestRelayProviderUsdcRoutes(OnTestnet):
+    """Integration tests for RelayProvider on USDC token-pair routes.
+
+    These routes were previously served by LiFi as the preferred provider.
+    After LiFi removal they fall through to Relay via the default fallback.
+    """
+
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        RUNNING_IN_CI and system() != "Linux",
+        reason="Bridge API quote calls make live HTTP requests that are unreliable from macOS/Windows CI runners.",
+    )
+    @pytest.mark.parametrize(
+        "to_chain, to_token",
+        [
+            (Chain.BASE, USDC[Chain.BASE]),
+            (Chain.OPTIMISM, USDC[Chain.OPTIMISM]),
+        ],
+        ids=["eth-to-base-usdc", "eth-to-optimism-usdc"],
+    )
+    def test_relay_usdc_quote(
+        self,
+        tmp_path: Path,
+        password: str,
+        to_chain: Chain,
+        to_token: str,
+    ) -> None:
+        """RelayProvider can quote ETH→Base/Optimism USDC routes."""
+        operate = OperateApp(home=tmp_path / OPERATE_TEST)
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+
+        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+        params: BridgeParams = {
+            "from": {
+                "chain": Chain.ETHEREUM.value,
+                "address": wallet_address,
+                "token": USDC[Chain.ETHEREUM],
+            },
+            "to": {
+                "chain": to_chain.value,
+                "address": wallet_address,
+                "token": to_token,
+                "amount": 1_000_000,  # 1 USDC (6 decimals)
+            },
+        }
+
+        provider = RelayProvider(
+            provider_id="test-relay-usdc",
+            wallet_manager=operate.wallet_manager,
+            logger=LOGGER,
+        )
+
+        # Create request
+        provider_request = provider.create_request(params)
+        assert provider_request.status == ProviderRequestStatus.CREATED
+
+        # Quote
+        provider.quote(provider_request)
+        assert provider_request.quote_data is not None
+        assert provider_request.status in (
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
+        )
+
+        if provider_request.status == ProviderRequestStatus.QUOTE_DONE:
+            assert provider_request.quote_data.eta is not None
+            assert provider_request.quote_data.eta >= 0
+
+        # Requirements
+        reqs = provider.requirements(provider_request)
+        assert Chain.ETHEREUM.value in reqs

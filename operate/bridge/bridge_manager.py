@@ -432,26 +432,6 @@ class BridgeManager:
 
         provider_request_status = []
         for request in bundle.provider_requests:
-            if request.provider_id not in self._providers:
-                # Historical bundle from a provider removed in a prior version.
-                # Return the stored terminal status without a live refresh.
-                tx_hash = None
-                if request.execution_data and request.execution_data.from_tx_hash:
-                    tx_hash = request.execution_data.from_tx_hash
-                eta = request.quote_data.eta if request.quote_data else None
-                message = (
-                    request.execution_data.message if request.execution_data else None
-                )
-                provider_request_status.append(
-                    {
-                        "eta": eta,
-                        "explorer_link": None,
-                        "message": message,
-                        "status": request.status.value,
-                        "tx_hash": tx_hash,
-                    }
-                )
-                continue
             provider = self._providers[request.provider_id]
             provider_request_status.append(provider.status_json(request))
 

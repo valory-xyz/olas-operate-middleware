@@ -35,10 +35,8 @@ from operate.bridge.bridge_manager import (
     ProviderRequestBundle,
 )
 from operate.bridge.providers.provider import (
-    ExecutionData,
     ProviderRequest,
     ProviderRequestStatus,
-    QuoteData,
 )
 from operate.operate_types import Chain
 
@@ -759,131 +757,6 @@ class TestBridgeManagerStaleCacheMigration:
             )
 
         assert manager.data.last_requested_bundle is bundle
-
-
-# ---------------------------------------------------------------------------
-# TestBridgeManagerUnknownProviderGuard
-# ---------------------------------------------------------------------------
-
-
-class TestBridgeManagerUnknownProviderGuard:
-    """Tests for the unknown-provider guard in BridgeManager.get_status_json."""
-
-    def test_unknown_provider_returns_stored_status(self, tmp_path: Path) -> None:
-        """get_status_json returns stored status for a bundle with an unknown provider_id."""
-        manager = _make_bridge_manager(tmp_path)
-
-        removed_request = ProviderRequest(
-            id="r-removed-historical",
-            params={
-                "from": {
-                    "chain": "ethereum",
-                    "address": "0x" + "a" * 40,
-                    "token": "0x" + "0" * 40,
-                },
-                "to": {
-                    "chain": "base",
-                    "address": "0x" + "b" * 40,
-                    "token": "0x" + "0" * 40,
-                    "amount": 1000,
-                },
-            },
-            provider_id="removed-provider",
-            status=ProviderRequestStatus.EXECUTION_DONE,
-            quote_data=QuoteData(
-                eta=300,
-                elapsed_time=1.0,
-                message=None,
-                provider_data=None,
-                timestamp=int(time.time()),
-            ),
-            execution_data=ExecutionData(
-                elapsed_time=120.0,
-                message=None,
-                timestamp=int(time.time()),
-                from_tx_hash="0x" + "cc" * 32,
-                to_tx_hash="0x" + "dd" * 32,
-                provider_data=None,
-            ),
-        )
-
-        bundle = ProviderRequestBundle(
-            id="rb-historical-removed",
-            requests_params=[removed_request.params],
-            provider_requests=[removed_request],
-            timestamp=int(time.time()),
-        )
-
-        # Store bundle as an executed bundle on disk
-        executed_dir = tmp_path / EXECUTED_BUNDLES_PATH
-        executed_dir.mkdir(exist_ok=True)
-        bundle.path = executed_dir / f"{bundle.id}.json"
-        bundle.store()
-
-        manager.data.last_requested_bundle = None
-
-        result = manager.get_status_json(bundle.id)
-
-        assert result["id"] == "rb-historical-removed"
-        assert len(result["bridge_request_status"]) == 1
-        status = result["bridge_request_status"][0]
-        assert status["status"] == ProviderRequestStatus.EXECUTION_DONE.value
-        assert status["tx_hash"] == "0x" + "cc" * 32
-        assert status["explorer_link"] is None
-        assert status["eta"] == 300
-
-    def test_unknown_provider_no_execution_data(self, tmp_path: Path) -> None:
-        """get_status_json returns status with None fields when execution_data is absent."""
-        manager = _make_bridge_manager(tmp_path)
-
-        removed_request = ProviderRequest(
-            id="r-removed-quoted",
-            params={
-                "from": {
-                    "chain": "ethereum",
-                    "address": "0x" + "a" * 40,
-                    "token": "0x" + "0" * 40,
-                },
-                "to": {
-                    "chain": "base",
-                    "address": "0x" + "b" * 40,
-                    "token": "0x" + "0" * 40,
-                    "amount": 500,
-                },
-            },
-            provider_id="removed-provider",
-            status=ProviderRequestStatus.QUOTE_DONE,
-            quote_data=QuoteData(
-                eta=300,
-                elapsed_time=1.0,
-                message=None,
-                provider_data=None,
-                timestamp=int(time.time()),
-            ),
-            execution_data=None,
-        )
-
-        bundle = ProviderRequestBundle(
-            id="rb-historical-removed-no-exec",
-            requests_params=[removed_request.params],
-            provider_requests=[removed_request],
-            timestamp=int(time.time()),
-        )
-
-        executed_dir = tmp_path / EXECUTED_BUNDLES_PATH
-        executed_dir.mkdir(exist_ok=True)
-        bundle.path = executed_dir / f"{bundle.id}.json"
-        bundle.store()
-
-        manager.data.last_requested_bundle = None
-
-        result = manager.get_status_json(bundle.id)
-
-        status = result["bridge_request_status"][0]
-        assert status["status"] == ProviderRequestStatus.QUOTE_DONE.value
-        assert status["tx_hash"] is None
-        assert status["message"] is None
-        assert status["explorer_link"] is None
 
 
 # ---------------------------------------------------------------------------
