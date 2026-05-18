@@ -51,7 +51,7 @@ are stored in `tests/cassettes/` and committed to git.
    - Records API calls from Relay provider (`https://api.relay.link/requests/v2`)
    - Records RPC calls to Optimism Tenderly endpoint
    - Cassettes stored in: `tests/cassettes/test_bridge_providers/TestProvider.test_update_execution_status_failure_then_success[...].yaml`
-   - Covers RelayProvider, LiFiProvider, and NativeBridgeProvider
+   - Covers RelayProvider and NativeBridgeProvider
    
 **Cassette Matching Strategy**:
 The VCR configuration in `tests/conftest.py` matches requests on:
