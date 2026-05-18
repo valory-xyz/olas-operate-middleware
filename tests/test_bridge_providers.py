@@ -1546,7 +1546,7 @@ class TestRelayProviderUsdcRoutes(OnTestnet):
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
-        params: BridgeParams = {
+        params: t.Dict[str, t.Any] = {
             "from": {
                 "chain": Chain.ETHEREUM.value,
                 "address": wallet_address,
