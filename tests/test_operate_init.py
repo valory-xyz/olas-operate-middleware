@@ -256,3 +256,33 @@ class TestOperateInitPlatformBranches:
         ):
             result = operate_module.get_runtime_ca_bundle_env()
         assert result == {}
+
+    def test_get_stable_certifi_bundle_path_falls_back_to_home_when_env_unset(
+        self,
+    ) -> None:
+        """When OPERATE_HOME is unset, the fallback path is rooted at ~/.operate."""
+        # Preserve the rest of the environment so ``Path.home()`` can resolve
+        # on Windows, where it depends on USERPROFILE / HOMEDRIVE+HOMEPATH.
+        env_without_operate_home = {
+            k: v for k, v in os.environ.items() if k != "OPERATE_HOME"
+        }
+        with patch.dict(os.environ, env_without_operate_home, clear=True):
+            path = operate_module._get_stable_certifi_bundle_path()
+        # ``Path.home() / ".operate"`` is the documented default; the exact
+        # resolved prefix depends on the test machine, so we only assert the
+        # tail of the path matches what the function builds.
+        assert path.parts[-2:] == ("certs", "cacert.pem")
+        assert path.parent.parent.name == ".operate"
+
+    def test_get_stable_certifi_bundle_path_falls_back_when_env_unsafe(self) -> None:
+        """An OPERATE_HOME containing ``..`` is rejected and falls back to default."""
+        unsafe_env = "/tmp/../etc"  # nosec B108 - test fixture for path validation
+        # Same Windows-friendly env preservation as the previous test.
+        env_with_unsafe_home = {
+            **{k: v for k, v in os.environ.items() if k != "OPERATE_HOME"},
+            "OPERATE_HOME": unsafe_env,
+        }
+        with patch.dict(os.environ, env_with_unsafe_home, clear=True):
+            path = operate_module._get_stable_certifi_bundle_path()
+        assert path.parts[-2:] == ("certs", "cacert.pem")
+        assert path.parent.parent.name == ".operate"
