@@ -61,8 +61,9 @@ jobs:
           version: "0.11.14"
       - name: Export runtime requirements for snyk
         run: |
-          uv export --frozen --no-hashes --no-dev --format requirements-txt -o requirements.txt
+          uv export --frozen --no-hashes --no-dev --no-emit-project --format requirements-txt -o requirements.txt
           python -m pip install -r requirements.txt
+          python -m pip list
 
         # Runs Snyk Code (SAST) analysis and uploads result into GitHub.
         # Use || true to not fail the pipeline
