@@ -1631,9 +1631,10 @@ class TestTerminateService:
         manager._get_on_chain_state.return_value = OnChainState.PRE_REGISTRATION
 
         template_data = {"name": "Test Service"}
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(template_data))
-        ), patch("builtins.print") as mock_print:
+        with (
+            patch("builtins.open", mock_open(read_data=json.dumps(template_data))),
+            patch("builtins.print") as mock_print,
+        ):
             terminate_service(operate, "/fake/path.json")
 
         manager.terminate_service_on_chain_from_safe.assert_called_once()
@@ -1680,9 +1681,10 @@ class TestTerminateService:
         manager._get_on_chain_state.return_value = OnChainState.DEPLOYED
 
         template_data = {"name": "Test Service"}
-        with patch(
-            "builtins.open", mock_open(read_data=json.dumps(template_data))
-        ), patch("builtins.print") as mock_print:
+        with (
+            patch("builtins.open", mock_open(read_data=json.dumps(template_data))),
+            patch("builtins.print") as mock_print,
+        ):
             terminate_service(operate, "/fake/path.json")
 
         manager.terminate_service_on_chain_from_safe.assert_called_once()
