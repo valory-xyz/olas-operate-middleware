@@ -90,7 +90,7 @@ def run_analysis(logs_dir: Path, **kwargs: str) -> None:
         print(f"Command failed with exit code {e.returncode}")
         sys.exit(e.returncode)
     except FileNotFoundError:
-        print("Poetry or autonomy not found. Ensure they are installed and accessible.")
+        print("uv or autonomy not found. Ensure they are installed and accessible.")
         sys.exit(1)
 
 
