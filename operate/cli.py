@@ -363,6 +363,12 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         whose ``agent_addresses`` still references a now-``.lost``
         address fails to start with ``FileNotFoundError`` inside
         ``_build_host``.
+
+        Retry semantics: this flow is retryable but not orphan-free. A
+        crash between step 2 and the end of step 3 leaves freshly minted
+        keys on disk that the next retry will re-``.lost`` and then
+        replace. Services still converge to a valid state; the cost is
+        ``.lost`` clutter in the keys directory.
         """
 
         if not new_password:
@@ -376,10 +382,11 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self.user_account.force_update(new_password)
         failed = self._keys_manager.discard_all()
         if failed:
-            # Wallet + user.json are already on new_password by this point;
-            # only the discard step partially failed. Re-running the
-            # seed-phrase flow is safe: wallet/user updates are idempotent
-            # and discard_all skips files already marked .lost.
+            # Wallet + user.json are already on new_password by this point,
+            # but the rotation loop hasn't run, so no agent keys were
+            # minted. Re-running the seed-phrase flow is safe in this
+            # narrow case: wallet/user updates are idempotent and
+            # discard_all skips files already marked .lost.
             raise ValueError(
                 "Could not mark the following agent keys as discarded; "
                 "retry the seed-phrase recovery flow to finish the "
@@ -390,7 +397,17 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         # service can decrypt them on start. Pin keys_manager explicitly
         # rather than relying on the login state at the caller.
         self._keys_manager.password = new_password
-        all_services, _ = self.service_manager().get_all_services()
+        all_services, all_loaded = self.service_manager().get_all_services()
+        if not all_loaded:
+            # ServiceManager already logged the per-service load failure;
+            # surface it here too so the operator knows some services were
+            # NOT rotated and will still hit FileNotFoundError on start.
+            logger.warning(
+                "Some service configs failed to load during agent EOA "
+                "rotation; their agent_addresses still point at .lost "
+                "key files and will fail to start. Fix the service "
+                "configs and re-run the seed-phrase recovery flow."
+            )
         for service in all_services:
             if not service.agent_addresses:
                 continue

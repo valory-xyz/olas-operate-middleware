@@ -564,6 +564,77 @@ class TestMnemonicReencryptionOnPasswordChange:
         assert empty_service.agent_addresses == []
         empty_service.store.assert_not_called()
 
+    def test_update_password_with_mnemonic_rotates_multi_agent_service(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A service with multiple agent slots gets the right count of fresh, distinct EOAs."""
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        old_addresses = [
+            operate.keys_manager.create(),
+            operate.keys_manager.create(),
+            operate.keys_manager.create(),
+        ]
+        service = MagicMock(spec=["agent_addresses", "store"])
+        service.agent_addresses = list(old_addresses)
+
+        service_manager_stub = MagicMock()
+        service_manager_stub.get_all_services.return_value = ([service], True)
+        with patch.object(
+            operate, "service_manager", return_value=service_manager_stub
+        ):
+            operate.update_password_with_mnemonic(mnemonic, password2)
+
+        assert len(service.agent_addresses) == len(old_addresses)
+        # Each new address is distinct from every old one and from every
+        # other new one.
+        assert len(set(service.agent_addresses)) == len(old_addresses)
+        assert set(service.agent_addresses).isdisjoint(set(old_addresses))
+        for new_address in service.agent_addresses:
+            assert (operate.keys_manager.path / new_address).is_file()
+        service.store.assert_called_once()
+
+    def test_update_password_with_mnemonic_warns_when_a_service_fails_to_load(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """``get_all_services`` returning ``success=False`` must surface a warning.
+
+        The loadable services are still rotated; the unloadable ones are
+        skipped. The operator must be told because the unloadable
+        services will keep hitting ``FileNotFoundError`` on start.
+        """
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        old_address = operate.keys_manager.create()
+        loadable_service = MagicMock(spec=["agent_addresses", "store"])
+        loadable_service.agent_addresses = [old_address]
+
+        service_manager_stub = MagicMock()
+        # success=False signals that at least one service directory
+        # failed to load and is missing from the returned list.
+        service_manager_stub.get_all_services.return_value = (
+            [loadable_service],
+            False,
+        )
+        with caplog.at_level(logging.WARNING, logger="operate"):
+            with patch.object(
+                operate, "service_manager", return_value=service_manager_stub
+            ):
+                operate.update_password_with_mnemonic(mnemonic, password2)
+
+        assert any(
+            "service configs failed to load" in record.message
+            for record in caplog.records
+        )
+        # The loadable service must still be rotated.
+        [new_address] = loadable_service.agent_addresses
+        assert new_address != old_address
+        assert (operate.keys_manager.path / new_address).is_file()
+        loadable_service.store.assert_called_once()
+
     def test_update_password_idempotent_path_still_reencrypts_mnemonic(
         self, tmp_path: Path
     ) -> None:
