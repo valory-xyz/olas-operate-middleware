@@ -25,7 +25,7 @@ import logging
 import shutil
 from pathlib import Path
 from typing import Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import argon2
@@ -476,10 +476,9 @@ class TestMnemonicReencryptionOnPasswordChange:
     ) -> None:
         """Seed-phrase recovery discards agent EOA keys (unrecoverable by definition).
 
-        The safe recovery module re-establishes agent authority out-of-band;
-        the middleware's job here is to mark the unusable key files so the
-        recovery flow can take over while the originals remain on disk for
-        audit.
+        The original key files remain on disk for audit, but every entry
+        in any service's ``agent_addresses`` is replaced with a freshly
+        minted EOA encrypted under the new password.
         """
         operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
         password2 = random_string()
@@ -493,6 +492,77 @@ class TestMnemonicReencryptionOnPasswordChange:
             assert not (operate.keys_manager.path / address).exists()
             assert (operate.keys_manager.path / f"{address}.lost").is_file()
             assert (operate.keys_manager.path / f"{address}.bak.lost").is_file()
+
+    def test_update_password_with_mnemonic_rotates_service_agent_addresses(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Each service's agent_addresses are replaced with freshly minted EOAs.
+
+        Pearl's seed-phrase password change loses access to existing
+        agent EOA keys. Without rotation, the service config still
+        references the (now ``.lost``) addresses and Service.build
+        fails with ``FileNotFoundError`` on next start. The new flow
+        mints a replacement per slot and rewrites the service config.
+        """
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+        old_agent_a = operate.keys_manager.create()
+        old_agent_b = operate.keys_manager.create()
+        # Two services to prove the rotation walks all of them.
+        service_a = MagicMock(spec=["agent_addresses", "store"])
+        service_a.agent_addresses = [old_agent_a]
+        service_b = MagicMock(spec=["agent_addresses", "store"])
+        service_b.agent_addresses = [old_agent_b]
+
+        service_manager_stub = MagicMock()
+        service_manager_stub.get_all_services.return_value = (
+            [service_a, service_b],
+            True,
+        )
+        with patch.object(
+            operate, "service_manager", return_value=service_manager_stub
+        ):
+            operate.update_password_with_mnemonic(mnemonic, password2)
+
+        for old, service in ((old_agent_a, service_a), (old_agent_b, service_b)):
+            # Old key files are .lost; the new agent address is fresh and
+            # has a real keystore on disk encrypted under password2.
+            assert (operate.keys_manager.path / f"{old}.lost").is_file()
+            assert not (operate.keys_manager.path / old).exists()
+            [new_address] = service.agent_addresses
+            assert new_address != old
+            new_key_path = operate.keys_manager.path / new_address
+            assert new_key_path.is_file()
+            # decrypt with new password proves the file is usable.
+            assert (
+                operate.keys_manager.get(new_address).get_decrypted_json(
+                    password=password2
+                )["address"]
+                == new_address
+            )
+            service.store.assert_called_once()
+
+    def test_update_password_with_mnemonic_skips_services_without_agent_addresses(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Services with empty agent_addresses are not rewritten."""
+        operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
+        password2 = random_string()
+
+        empty_service = MagicMock(spec=["agent_addresses", "store"])
+        empty_service.agent_addresses = []
+
+        service_manager_stub = MagicMock()
+        service_manager_stub.get_all_services.return_value = ([empty_service], True)
+        with patch.object(
+            operate, "service_manager", return_value=service_manager_stub
+        ):
+            operate.update_password_with_mnemonic(mnemonic, password2)
+
+        assert empty_service.agent_addresses == []
+        empty_service.store.assert_not_called()
 
     def test_update_password_idempotent_path_still_reencrypts_mnemonic(
         self, tmp_path: Path
