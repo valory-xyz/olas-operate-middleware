@@ -210,17 +210,19 @@ class KeysManager:
         Every regular file is renamed by appending ``.lost`` — address-named
         keystores, their ``.bak`` backups, plaintext ``_private_key``
         sidecars, and any stray files alike. Originals remain on disk for
-        audit. The call is idempotent: files already suffixed ``.lost``
-        are skipped. Per-entry rename failures are logged and returned so
-        callers can surface them to the user instead of silently leaving
-        active keys behind.
+        audit. ``Path.replace`` is used (not ``Path.rename``) so a stale
+        ``.lost`` artefact from a previous rotation gets overwritten
+        instead of triggering ``FileExistsError`` on Windows. The call
+        is idempotent: files already suffixed ``.lost`` are skipped.
+        Per-entry failures are logged and returned so callers can surface
+        them to the user instead of silently leaving active keys behind.
         """
         failed: list[str] = []
         for entry in self.path.iterdir():
             if not entry.is_file() or entry.suffix == ".lost":
                 continue
             try:
-                entry.rename(entry.with_name(entry.name + ".lost"))
+                entry.replace(entry.with_name(entry.name + ".lost"))
             except OSError as exc:
                 self.logger.error(
                     "Failed to mark %s as discarded (%s: %s)",

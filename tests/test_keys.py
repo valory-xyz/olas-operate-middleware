@@ -537,26 +537,52 @@ class TestKeysManager:
         keys_manager.create()
         keys_manager.create()
 
-        real_rename = Path.rename
+        real_replace = Path.replace
         calls = {"failed": False}
 
-        def flaky_rename(self: Path, target: Path) -> Path:
+        def flaky_replace(self: Path, target: Path) -> Path:
             if not calls["failed"]:
                 calls["failed"] = True
-                raise OSError("simulated rename failure")
-            return real_rename(self, target)
+                raise OSError("simulated replace failure")
+            return real_replace(self, target)
 
-        with patch.object(Path, "rename", flaky_rename):
+        with patch.object(Path, "replace", flaky_replace):
             failed = keys_manager.discard_all()
 
         remaining = list(keys_manager.path.iterdir())
-        # One file was left in place (the rename raised), the rest renamed.
+        # One file was left in place (the replace raised), the rest renamed.
         assert any(entry.suffix == ".lost" for entry in remaining)
         assert any(entry.suffix != ".lost" for entry in remaining)
         keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
         # The failed name must match a file that still has no .lost suffix.
         assert len(failed) == 1
         assert (keys_manager.path / failed[0]).exists()
+
+    def test_discard_all_overwrites_stale_lost_destination(
+        self, keys_manager: KeysManager
+    ) -> None:
+        """A pre-existing ``.lost`` artefact must not block discard on retry.
+
+        Regression for the Windows-specific failure surfaced by QA:
+        ``Path.rename`` raises ``FileExistsError`` (WinError 183) when
+        the destination already exists. POSIX silently overwrites, so
+        Linux/macOS test runners hid the bug. Switching to ``Path.replace``
+        gives cross-platform overwrite semantics. The check below would
+        fail on Windows if ``discard_all`` were ever reverted to ``rename``.
+        """
+        address = keys_manager.create()
+        # Simulate a prior rotation that already produced a `.bak.lost`.
+        stale_lost = keys_manager.path / f"{address}.bak.lost"
+        stale_lost.write_text("stale", encoding="utf-8")
+
+        failed = keys_manager.discard_all()
+
+        assert failed == []
+        # Fresh `.bak` is gone (renamed over the stale one); the .lost
+        # destination now holds the just-discarded content, not "stale".
+        assert not (keys_manager.path / f"{address}.bak").exists()
+        assert stale_lost.is_file()
+        assert stale_lost.read_text(encoding="utf-8") != "stale"
 
     def test_update_password_skips_lost_files(
         self, keys_manager: KeysManager, password: str

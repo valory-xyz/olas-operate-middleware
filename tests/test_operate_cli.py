@@ -670,24 +670,24 @@ class TestMnemonicReencryptionOnPasswordChange:
     def test_update_password_with_mnemonic_raises_when_discard_fails(
         self, tmp_path: Path
     ) -> None:
-        """A real rename OSError must propagate as ValueError from the seed-phrase flow."""
+        """A real replace OSError must propagate as ValueError from the seed-phrase flow."""
         operate, _, mnemonic = self._setup_wallet_with_mnemonic(tmp_path)
         password2 = random_string()
         address = operate.keys_manager.create()
 
-        real_rename = Path.rename
+        real_replace = Path.replace
         calls = {"failed": False}
 
-        def flaky_rename(self: Path, target: Path) -> Path:
-            # Only intercept the discard_all renames (target ends in
-            # `.lost`); other Path.rename calls from resource storage
+        def flaky_replace(self: Path, target: Path) -> Path:
+            # Only intercept the discard_all replaces (target ends in
+            # `.lost`); other Path.replace calls from resource storage
             # must continue to work.
             if str(target).endswith(".lost") and not calls["failed"]:
                 calls["failed"] = True
-                raise OSError("simulated rename failure")
-            return real_rename(self, target)
+                raise OSError("simulated replace failure")
+            return real_replace(self, target)
 
-        with patch.object(Path, "rename", flaky_rename):
+        with patch.object(Path, "replace", flaky_replace):
             with pytest.raises(ValueError, match="discard"):
                 operate.update_password_with_mnemonic(mnemonic, password2)
 
@@ -699,7 +699,7 @@ class TestMnemonicReencryptionOnPasswordChange:
         remaining = list(operate.keys_manager.path.iterdir())
         assert any(entry.suffix != ".lost" for entry in remaining)
         assert any(entry.suffix == ".lost" for entry in remaining)
-        # Retry must converge: with rename working normally, discard_all
+        # Retry must converge: with replace working normally, discard_all
         # finishes the .lost rename for the previously-stuck file.
         operate.update_password_with_mnemonic(mnemonic, password2)
         for entry in operate.keys_manager.path.iterdir():
