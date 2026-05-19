@@ -1573,14 +1573,9 @@ class TestRelayProviderUsdcRoutes(OnTestnet):
         # Quote
         provider.quote(provider_request)
         assert provider_request.quote_data is not None
-        assert provider_request.status in (
-            ProviderRequestStatus.QUOTE_DONE,
-            ProviderRequestStatus.QUOTE_FAILED,
-        )
-
-        if provider_request.status == ProviderRequestStatus.QUOTE_DONE:
-            assert provider_request.quote_data.eta is not None
-            assert provider_request.quote_data.eta >= 0
+        assert provider_request.status == ProviderRequestStatus.QUOTE_DONE
+        assert provider_request.quote_data.eta is not None
+        assert provider_request.quote_data.eta >= 0
 
         # Requirements
         reqs = provider.requirements(provider_request)
