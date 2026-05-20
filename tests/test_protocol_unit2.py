@@ -165,15 +165,17 @@ class TestStakingManagerGetStakingParams:
         mock_dual_instance = MagicMock()
         mock_staking_instance = MagicMock()
 
-        with patch(
-            "operate.services.protocol.get_default_ledger_api", return_value=mock_ledger
-        ) as mock_default, patch.object(
-            StakingManager, "dual_staking_ctr"
-        ) as mock_dual_ctr, patch.object(
-            StakingManager, "staking_ctr"
-        ) as mock_staking_ctr, patch(
-            "operate.services.protocol.concurrent_execute",
-            return_value=self._make_concurrent_execute_return(),
+        with (
+            patch(
+                "operate.services.protocol.get_default_ledger_api",
+                return_value=mock_ledger,
+            ) as mock_default,
+            patch.object(StakingManager, "dual_staking_ctr") as mock_dual_ctr,
+            patch.object(StakingManager, "staking_ctr") as mock_staking_ctr,
+            patch(
+                "operate.services.protocol.concurrent_execute",
+                return_value=self._make_concurrent_execute_return(),
+            ),
         ):
             mock_dual_ctr.get_instance.return_value = mock_dual_instance
             mock_staking_ctr.get_instance.return_value = mock_staking_instance
@@ -190,15 +192,17 @@ class TestStakingManagerGetStakingParams:
         mock_dual_instance = MagicMock()
         mock_staking_instance = MagicMock()
 
-        with patch(
-            "operate.services.protocol.make_chain_ledger_api", return_value=mock_ledger
-        ) as mock_make, patch.object(
-            StakingManager, "dual_staking_ctr"
-        ) as mock_dual_ctr, patch.object(
-            StakingManager, "staking_ctr"
-        ) as mock_staking_ctr, patch(
-            "operate.services.protocol.concurrent_execute",
-            return_value=self._make_concurrent_execute_return(),
+        with (
+            patch(
+                "operate.services.protocol.make_chain_ledger_api",
+                return_value=mock_ledger,
+            ) as mock_make,
+            patch.object(StakingManager, "dual_staking_ctr") as mock_dual_ctr,
+            patch.object(StakingManager, "staking_ctr") as mock_staking_ctr,
+            patch(
+                "operate.services.protocol.concurrent_execute",
+                return_value=self._make_concurrent_execute_return(),
+            ),
         ):
             mock_dual_ctr.get_instance.return_value = mock_dual_instance
             mock_staking_ctr.get_instance.return_value = mock_staking_instance
@@ -213,13 +217,14 @@ class TestStakingManagerGetStakingParams:
         """When dual_staking_ctr raises, the function continues with None lambdas."""
         mock_staking_instance = MagicMock()
 
-        with patch("operate.services.protocol.get_default_ledger_api"), patch.object(
-            StakingManager, "dual_staking_ctr"
-        ) as mock_dual_ctr, patch.object(
-            StakingManager, "staking_ctr"
-        ) as mock_staking_ctr, patch(
-            "operate.services.protocol.concurrent_execute",
-            return_value=self._make_concurrent_execute_return(),
+        with (
+            patch("operate.services.protocol.get_default_ledger_api"),
+            patch.object(StakingManager, "dual_staking_ctr") as mock_dual_ctr,
+            patch.object(StakingManager, "staking_ctr") as mock_staking_ctr,
+            patch(
+                "operate.services.protocol.concurrent_execute",
+                return_value=self._make_concurrent_execute_return(),
+            ),
         ):
             mock_dual_ctr.get_instance.side_effect = Exception("not dual staking")
             mock_staking_ctr.get_instance.return_value = mock_staking_instance
@@ -234,13 +239,14 @@ class TestStakingManagerGetStakingParams:
         mock_dual_instance = MagicMock()
         mock_staking_instance = MagicMock()
 
-        with patch("operate.services.protocol.get_default_ledger_api"), patch.object(
-            StakingManager, "dual_staking_ctr"
-        ) as mock_dual_ctr, patch.object(
-            StakingManager, "staking_ctr"
-        ) as mock_staking_ctr, patch(
-            "operate.services.protocol.concurrent_execute",
-            return_value=self._make_concurrent_execute_return("0xSecondToken", 500),
+        with (
+            patch("operate.services.protocol.get_default_ledger_api"),
+            patch.object(StakingManager, "dual_staking_ctr") as mock_dual_ctr,
+            patch.object(StakingManager, "staking_ctr") as mock_staking_ctr,
+            patch(
+                "operate.services.protocol.concurrent_execute",
+                return_value=self._make_concurrent_execute_return("0xSecondToken", 500),
+            ),
         ):
             mock_dual_ctr.get_instance.return_value = mock_dual_instance
             mock_staking_ctr.get_instance.return_value = mock_staking_instance
@@ -255,13 +261,14 @@ class TestStakingManagerGetStakingParams:
         mock_dual_instance = MagicMock()
         mock_staking_instance = MagicMock()
 
-        with patch("operate.services.protocol.get_default_ledger_api"), patch.object(
-            StakingManager, "dual_staking_ctr"
-        ) as mock_dual_ctr, patch.object(
-            StakingManager, "staking_ctr"
-        ) as mock_staking_ctr, patch(
-            "operate.services.protocol.concurrent_execute",
-            return_value=self._make_concurrent_execute_return(None, 500),
+        with (
+            patch("operate.services.protocol.get_default_ledger_api"),
+            patch.object(StakingManager, "dual_staking_ctr") as mock_dual_ctr,
+            patch.object(StakingManager, "staking_ctr") as mock_staking_ctr,
+            patch(
+                "operate.services.protocol.concurrent_execute",
+                return_value=self._make_concurrent_execute_return(None, 500),
+            ),
         ):
             mock_dual_ctr.get_instance.return_value = mock_dual_instance
             mock_staking_ctr.get_instance.return_value = mock_staking_instance
@@ -276,21 +283,22 @@ class TestStakingManagerGetStakingParams:
         mock_dual_instance = MagicMock()
         mock_staking_instance = MagicMock()
 
-        with patch("operate.services.protocol.get_default_ledger_api"), patch.object(
-            StakingManager, "dual_staking_ctr"
-        ) as mock_dual_ctr, patch.object(
-            StakingManager, "staking_ctr"
-        ) as mock_staking_ctr, patch(
-            "operate.services.protocol.concurrent_execute",
-            return_value=(
-                None,  # agent_ids (required field)
-                _SERVICE_REGISTRY,
-                "0xToken",
-                "0xSRTU",
-                1000,
-                "0xChecker",
-                None,
-                None,
+        with (
+            patch("operate.services.protocol.get_default_ledger_api"),
+            patch.object(StakingManager, "dual_staking_ctr") as mock_dual_ctr,
+            patch.object(StakingManager, "staking_ctr") as mock_staking_ctr,
+            patch(
+                "operate.services.protocol.concurrent_execute",
+                return_value=(
+                    None,  # agent_ids (required field)
+                    _SERVICE_REGISTRY,
+                    "0xToken",
+                    "0xSRTU",
+                    1000,
+                    "0xChecker",
+                    None,
+                    None,
+                ),
             ),
         ):
             mock_dual_ctr.get_instance.return_value = mock_dual_instance
@@ -337,9 +345,10 @@ class TestCheckStakingCompatibility:
     def test_raises_when_no_slots_available(self) -> None:
         """Raises ValueError when no staking slots are available."""
         mgr = self._make_manager()
-        with patch.object(
-            mgr, "staking_state", return_value=StakingState.UNSTAKED
-        ), patch.object(mgr, "slots_available", return_value=False):
+        with (
+            patch.object(mgr, "staking_state", return_value=StakingState.UNSTAKED),
+            patch.object(mgr, "slots_available", return_value=False),
+        ):
             with pytest.raises(ValueError, match="No sataking slots"):
                 mgr.check_staking_compatibility(
                     service_id=1, staking_contract=_STAKING_CONTRACT
@@ -348,9 +357,10 @@ class TestCheckStakingCompatibility:
     def test_passes_when_unstaked_and_slots_available(self) -> None:
         """Does not raise when service is UNSTAKED and slots are available."""
         mgr = self._make_manager()
-        with patch.object(
-            mgr, "staking_state", return_value=StakingState.UNSTAKED
-        ), patch.object(mgr, "slots_available", return_value=True):
+        with (
+            patch.object(mgr, "staking_state", return_value=StakingState.UNSTAKED),
+            patch.object(mgr, "slots_available", return_value=True),
+        ):
             mgr.check_staking_compatibility(
                 service_id=1, staking_contract=_STAKING_CONTRACT
             )
@@ -414,20 +424,21 @@ class TestCheckIfUnstakingPossible:
         mock_staking_ctr_instance.available_rewards.return_value = {"data": 1000}
         mock_staking_ctr_instance.get_min_staking_duration.return_value = {"data": 500}
 
-        with patch.object(
-            mgr, "staking_state", return_value=StakingState.STAKED
-        ), patch.object(
-            mgr, "service_info", return_value=[None, None, None, 1000]
-        ), patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch.object(
-            type(mgr),
-            "staking_ctr",
-            new_callable=PropertyMock,
-            return_value=mock_staking_ctr_instance,
+        with (
+            patch.object(mgr, "staking_state", return_value=StakingState.STAKED),
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr_instance,
+            ),
         ):
             with pytest.raises(ValueError, match="cannot be unstaked yet"):
                 mgr.check_if_unstaking_possible(
@@ -444,20 +455,21 @@ class TestCheckIfUnstakingPossible:
         mock_staking_ctr_instance.available_rewards.return_value = {"data": 1000}
         mock_staking_ctr_instance.get_min_staking_duration.return_value = {"data": 100}
 
-        with patch.object(
-            mgr, "staking_state", return_value=StakingState.STAKED
-        ), patch.object(
-            mgr, "service_info", return_value=[None, None, None, 1000]
-        ), patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch.object(
-            type(mgr),
-            "staking_ctr",
-            new_callable=PropertyMock,
-            return_value=mock_staking_ctr_instance,
+        with (
+            patch.object(mgr, "staking_state", return_value=StakingState.STAKED),
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr_instance,
+            ),
         ):
             # staked_duration = 2000 - 1000 = 1000 >= min_duration 100 -> ok
             mgr.check_if_unstaking_possible(
@@ -474,20 +486,21 @@ class TestCheckIfUnstakingPossible:
         mock_staking_ctr_instance.available_rewards.return_value = {"data": 0}
         mock_staking_ctr_instance.get_min_staking_duration.return_value = {"data": 9999}
 
-        with patch.object(
-            mgr, "staking_state", return_value=StakingState.STAKED
-        ), patch.object(
-            mgr, "service_info", return_value=[None, None, None, 1000]
-        ), patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch.object(
-            type(mgr),
-            "staking_ctr",
-            new_callable=PropertyMock,
-            return_value=mock_staking_ctr_instance,
+        with (
+            patch.object(mgr, "staking_state", return_value=StakingState.STAKED),
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr_instance,
+            ),
         ):
             # available_rewards == 0 -> condition False -> no raise
             mgr.check_if_unstaking_possible(
@@ -523,9 +536,10 @@ class TestStakingManagerTxDataMethods:
         mock_erc20_ctr = MagicMock()
         mock_erc20_ctr.get_instance.return_value = mock_erc20_instance
 
-        with patch.object(mgr, "check_staking_compatibility"), patch(
-            "operate.services.protocol.registry_contracts"
-        ) as mock_rc:
+        with (
+            patch.object(mgr, "check_staking_compatibility"),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+        ):
             mock_rc.erc20.get_instance.return_value = mock_erc20_instance
             result = mgr.get_stake_approval_tx_data(
                 service_id=1,
@@ -557,10 +571,20 @@ class TestStakingManagerTxDataMethods:
         mock_ctr = self._mock_staking_ctr(mgr)
         mock_ctr.get_instance.return_value = mock_instance
 
-        with patch.object(mgr, "check_staking_compatibility"), patch.object(
-            type(mgr), "staking_ctr", new_callable=PropertyMock, return_value=mock_ctr
-        ), patch.object(
-            type(mgr), "ledger_api", new_callable=PropertyMock, return_value=MagicMock()
+        with (
+            patch.object(mgr, "check_staking_compatibility"),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_ctr,
+            ),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
         ):
             result = mgr.get_stake_tx_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -576,10 +600,20 @@ class TestStakingManagerTxDataMethods:
         mock_ctr = self._mock_staking_ctr(mgr)
         mock_ctr.get_instance.return_value = mock_instance
 
-        with patch.object(mgr, "check_if_unstaking_possible"), patch.object(
-            type(mgr), "staking_ctr", new_callable=PropertyMock, return_value=mock_ctr
-        ), patch.object(
-            type(mgr), "ledger_api", new_callable=PropertyMock, return_value=MagicMock()
+        with (
+            patch.object(mgr, "check_if_unstaking_possible"),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_ctr,
+            ),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
         ):
             result = mgr.get_unstake_tx_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -595,10 +629,19 @@ class TestStakingManagerTxDataMethods:
         mock_ctr = MagicMock()
         mock_ctr.get_instance.return_value = mock_instance
 
-        with patch.object(
-            type(mgr), "staking_ctr", new_callable=PropertyMock, return_value=mock_ctr
-        ), patch.object(
-            type(mgr), "ledger_api", new_callable=PropertyMock, return_value=MagicMock()
+        with (
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_ctr,
+            ),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
         ):
             result = mgr.get_claim_tx_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -617,10 +660,19 @@ class TestStakingManagerTxDataMethods:
         mock_ctr = MagicMock()
         mock_ctr.get_instance.return_value = mock_instance
 
-        with patch.object(
-            type(mgr), "staking_ctr", new_callable=PropertyMock, return_value=mock_ctr
-        ), patch.object(
-            type(mgr), "ledger_api", new_callable=PropertyMock, return_value=MagicMock()
+        with (
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_ctr,
+            ),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
         ):
             result = mgr.get_forced_unstake_tx_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -657,16 +709,19 @@ class TestGetCurrentStakingProgram:
         mock_sr_instance = MagicMock()
         mock_sr_instance.functions.ownerOf.return_value.call.return_value = "0xOwner"
 
-        with patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.registry_contracts") as mock_rc, patch(
-            "operate.services.protocol.CONTRACTS",
-            {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
-        ), patch.object(
-            mgr, "staking_state", side_effect=Exception("not staking")
+        with (
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch(
+                "operate.services.protocol.CONTRACTS",
+                {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
+            ),
+            patch.object(mgr, "staking_state", side_effect=Exception("not staking")),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
             result = mgr.get_current_staking_program(service_id=1)
@@ -680,16 +735,19 @@ class TestGetCurrentStakingProgram:
         mock_sr_instance = MagicMock()
         mock_sr_instance.functions.ownerOf.return_value.call.return_value = "0xOwner"
 
-        with patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.registry_contracts") as mock_rc, patch(
-            "operate.services.protocol.CONTRACTS",
-            {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
-        ), patch.object(
-            mgr, "staking_state", return_value=StakingState.UNSTAKED
+        with (
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch(
+                "operate.services.protocol.CONTRACTS",
+                {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
+            ),
+            patch.object(mgr, "staking_state", return_value=StakingState.UNSTAKED),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
             result = mgr.get_current_staking_program(service_id=1)
@@ -705,18 +763,20 @@ class TestGetCurrentStakingProgram:
 
         staking = {OperateChain.GNOSIS: {"my_program": "0xProgram1"}}
 
-        with patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.registry_contracts") as mock_rc, patch(
-            "operate.services.protocol.CONTRACTS",
-            {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
-        ), patch(
-            "operate.services.protocol.STAKING", staking
-        ), patch.object(
-            mgr, "staking_state", return_value=StakingState.STAKED
+        with (
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch(
+                "operate.services.protocol.CONTRACTS",
+                {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
+            ),
+            patch("operate.services.protocol.STAKING", staking),
+            patch.object(mgr, "staking_state", return_value=StakingState.STAKED),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
             result = mgr.get_current_staking_program(service_id=1)
@@ -741,18 +801,20 @@ class TestGetCurrentStakingProgram:
                 return StakingState.STAKED  # First call: service_owner check
             return StakingState.STAKED  # Fallback call
 
-        with patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.registry_contracts") as mock_rc, patch(
-            "operate.services.protocol.CONTRACTS",
-            {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
-        ), patch(
-            "operate.services.protocol.STAKING", staking
-        ), patch.object(
-            mgr, "staking_state", side_effect=_staking_state
+        with (
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch(
+                "operate.services.protocol.CONTRACTS",
+                {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
+            ),
+            patch("operate.services.protocol.STAKING", staking),
+            patch.object(mgr, "staking_state", side_effect=_staking_state),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
             result = mgr.get_current_staking_program(service_id=1)
@@ -775,18 +837,20 @@ class TestGetCurrentStakingProgram:
                 return StakingState.STAKED
             return StakingState.UNSTAKED  # fallback loop: prog -> 0xKnown -> UNSTAKED
 
-        with patch.object(
-            type(mgr),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.registry_contracts") as mock_rc, patch(
-            "operate.services.protocol.CONTRACTS",
-            {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
-        ), patch(
-            "operate.services.protocol.STAKING", staking
-        ), patch.object(
-            mgr, "staking_state", side_effect=_staking_state
+        with (
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch(
+                "operate.services.protocol.CONTRACTS",
+                {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
+            ),
+            patch("operate.services.protocol.STAKING", staking),
+            patch.object(mgr, "staking_state", side_effect=_staking_state),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
             result = mgr.get_current_staking_program(service_id=1)
@@ -809,9 +873,10 @@ class TestChainUtilPatch:
         mock_contract_cfg = MagicMock()
         mock_contract_cfg.contracts = {}
 
-        with patch("operate.services.protocol.ChainConfigs") as mock_cc, patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_ccc:
+        with (
+            patch("operate.services.protocol.ChainConfigs") as mock_cc,
+            patch("operate.services.protocol.ContractConfigs") as mock_ccc,
+        ):
             mock_cc.get.return_value = mock_chain_cfg
             mock_ccc.get.return_value = mock_contract_cfg
             cu._patch()
@@ -834,9 +899,10 @@ class TestChainUtilPatch:
                 contract_cfg_map[name] = m
             return contract_cfg_map[name]
 
-        with patch("operate.services.protocol.ChainConfigs") as mock_cc, patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_ccc:
+        with (
+            patch("operate.services.protocol.ChainConfigs") as mock_cc,
+            patch("operate.services.protocol.ContractConfigs") as mock_ccc,
+        ):
             mock_cc.get.return_value = mock_chain_cfg
             mock_ccc.get.side_effect = _get_contract
             cu._patch()
@@ -868,12 +934,15 @@ class TestChainUtilSafe:
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.eth.chain_id = 100
 
-        with patch.object(
-            type(cu),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.OperateChain") as mock_oc:
+        with (
+            patch.object(
+                type(cu),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.OperateChain") as mock_oc,
+        ):
             mock_oc.from_id.return_value = mock_chain
             result = cu.safe
 
@@ -893,12 +962,15 @@ class TestChainUtilSafe:
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.eth.chain_id = 100
 
-        with patch.object(
-            type(cu),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.OperateChain"):
+        with (
+            patch.object(
+                type(cu),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.OperateChain"),
+        ):
             with pytest.raises(ValueError, match="Safes not initialized"):
                 cu.safe  # pylint: disable=pointless-statement
 
@@ -917,12 +989,15 @@ class TestChainUtilSafe:
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.eth.chain_id = 100
 
-        with patch.object(
-            type(cu),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=mock_ledger_api,
-        ), patch("operate.services.protocol.OperateChain") as mock_oc:
+        with (
+            patch.object(
+                type(cu),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.services.protocol.OperateChain") as mock_oc,
+        ):
             mock_oc.from_id.return_value = mock_chain
             with pytest.raises(ValueError, match="Safe for chain type"):
                 cu.safe  # pylint: disable=pointless-statement
@@ -962,8 +1037,9 @@ class TestChainUtilStakingMethods:
         mock_sm = MagicMock()
         mock_sm.slots_available.return_value = True
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.staking_slots_available(_STAKING_CONTRACT)
 
@@ -975,8 +1051,9 @@ class TestChainUtilStakingMethods:
         mock_sm = MagicMock()
         mock_sm.available_rewards.return_value = 500
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.staking_rewards_available(_STAKING_CONTRACT)
 
@@ -988,8 +1065,9 @@ class TestChainUtilStakingMethods:
         mock_sm = MagicMock()
         mock_sm.available_rewards.return_value = 0
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.staking_rewards_available(_STAKING_CONTRACT)
 
@@ -1001,8 +1079,9 @@ class TestChainUtilStakingMethods:
         mock_sm = MagicMock()
         mock_sm.claimable_rewards.return_value = 100
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.staking_rewards_claimable(_STAKING_CONTRACT, service_id=1)
 
@@ -1014,8 +1093,9 @@ class TestChainUtilStakingMethods:
         mock_sm = MagicMock()
         mock_sm.claimable_rewards.return_value = 0
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.staking_rewards_claimable(_STAKING_CONTRACT, service_id=1)
 
@@ -1027,8 +1107,9 @@ class TestChainUtilStakingMethods:
         mock_sm = MagicMock()
         mock_sm.staking_state.return_value = StakingState.STAKED
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.staking_status(service_id=1, staking_contract=_STAKING_CONTRACT)
 
@@ -1049,8 +1130,9 @@ class TestChainUtilStakingMethods:
             "staking_contract": _STAKING_CONTRACT
         }
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = cu.get_staking_params(staking_contract=_STAKING_CONTRACT)
 
@@ -1069,10 +1151,12 @@ class TestChainUtilStakingMethods:
         cu = _make_chain_util()
         mock_ledger_api = MagicMock()
 
-        with patch.object(cu, "_patch"), patch(
-            "operate.services.protocol.OnChainHelper"
-        ) as mock_och, patch(
-            "operate.services.protocol.get_token_deposit_amount", return_value=5000
+        with (
+            patch.object(cu, "_patch"),
+            patch("operate.services.protocol.OnChainHelper") as mock_och,
+            patch(
+                "operate.services.protocol.get_token_deposit_amount", return_value=5000
+            ),
         ):
             mock_och.get_ledger_and_crypto_objects.return_value = (
                 mock_ledger_api,
@@ -1113,9 +1197,10 @@ class TestEthSafeTxBuilderNewTx:
         builder = _make_eth_safe_tx_builder()
         mock_crypto = MagicMock()
 
-        with patch(
-            "operate.services.protocol.EthSafeTxBuilder._new_tx"
-        ) as mock_inner, patch("operate.services.protocol.OperateChain"):
+        with (
+            patch("operate.services.protocol.EthSafeTxBuilder._new_tx") as mock_inner,
+            patch("operate.services.protocol.OperateChain"),
+        ):
             mock_inner.return_value = MagicMock(spec=GnosisSafeTransaction)
             builder.new_tx(crypto=mock_crypto, safe=_SAFE_ADDRESS)
 
@@ -1129,15 +1214,15 @@ class TestEthSafeTxBuilderNewTx:
         builder = _make_eth_safe_tx_builder()
         mock_self_crypto = MagicMock()
 
-        with patch(
-            "operate.services.protocol.EthSafeTxBuilder._new_tx"
-        ) as mock_inner, patch.object(
-            type(builder),
-            "crypto",
-            new_callable=PropertyMock,
-            return_value=mock_self_crypto,
-        ), patch(
-            "operate.services.protocol.OperateChain"
+        with (
+            patch("operate.services.protocol.EthSafeTxBuilder._new_tx") as mock_inner,
+            patch.object(
+                type(builder),
+                "crypto",
+                new_callable=PropertyMock,
+                return_value=mock_self_crypto,
+            ),
+            patch("operate.services.protocol.OperateChain"),
         ):
             mock_inner.return_value = MagicMock(spec=GnosisSafeTransaction)
             builder.new_tx(safe=_SAFE_ADDRESS)
@@ -1168,21 +1253,26 @@ class TestGetDeployDataFromSafe:
         mock_smi = MagicMock()
         mock_smi.encode_abi.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=mock_smi,
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch(
-            "operate.services.protocol.get_deployment_payload", return_value="payload"
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=mock_smi,
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch(
+                "operate.services.protocol.get_deployment_payload",
+                return_value="payload",
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xGSPF"}
             result = builder.get_deploy_data_from_safe(
                 service_id=1,
@@ -1201,22 +1291,26 @@ class TestGetDeployDataFromSafe:
         mock_smi = MagicMock()
         mock_smi.encode_abi.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=mock_smi,
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch(
-            "operate.services.protocol.get_deployment_with_recovery_payload",
-            return_value="payload_recovery",
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=mock_smi,
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch(
+                "operate.services.protocol.get_deployment_with_recovery_payload",
+                return_value="payload_recovery",
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xSMRM"}
             result = builder.get_deploy_data_from_safe(
                 service_id=1,
@@ -1232,16 +1326,20 @@ class TestGetDeployDataFromSafe:
         """Raises ValueError when poly safe requested but no agent_eoa_crypto."""
         builder = _make_eth_safe_tx_builder()
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
         ):
             with pytest.raises(ValueError, match="Crypto object must be provided"):
                 builder.get_deploy_data_from_safe(
@@ -1257,16 +1355,20 @@ class TestGetDeployDataFromSafe:
         """Raises ValueError when poly safe without recovery module."""
         builder = _make_eth_safe_tx_builder()
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
         ):
             with pytest.raises(
                 ValueError, match="without recovery module is not supported"
@@ -1286,27 +1388,32 @@ class TestGetDeployDataFromSafe:
         mock_smi.encode_abi.return_value = _ENCODED
         mock_crypto = MagicMock()
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=mock_smi,
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch.object(
-            type(builder),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch(
-            "operate.services.protocol.get_poly_safe_deployment_payload",
-            return_value="poly_payload",
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=mock_smi,
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "operate.services.protocol.get_poly_safe_deployment_payload",
+                return_value="poly_payload",
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xPolySafe"}
             result = builder.get_deploy_data_from_safe(
                 service_id=1,
@@ -1331,27 +1438,32 @@ class TestGetDeployDataFromSafe:
             "value": 0,
         }
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=mock_smi,
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch.object(
-            type(builder),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch(
-            "operate.services.protocol.get_reuse_multisig_from_safe_payload",
-            return_value=("some_payload", approve_hash_msg, None),
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=mock_smi,
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "operate.services.protocol.get_reuse_multisig_from_safe_payload",
+                return_value=("some_payload", approve_hash_msg, None),
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xGSSAM"}
             result = builder.get_deploy_data_from_safe(
                 service_id=1,
@@ -1367,27 +1479,32 @@ class TestGetDeployDataFromSafe:
         """Raises ValueError when get_reuse_multisig_from_safe_payload returns None payload."""
         builder = _make_eth_safe_tx_builder()
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch.object(
-            type(builder),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch(
-            "operate.services.protocol.get_reuse_multisig_from_safe_payload",
-            return_value=(None, None, "No previous deployment"),
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "operate.services.protocol.get_reuse_multisig_from_safe_payload",
+                return_value=(None, None, "No previous deployment"),
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xGSSAM"}
             with pytest.raises(ValueError, match="No previous deployment"):
                 builder.get_deploy_data_from_safe(
@@ -1403,27 +1520,32 @@ class TestGetDeployDataFromSafe:
         mock_smi = MagicMock()
         mock_smi.encode_abi.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=mock_smi,
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch.object(
-            type(builder),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch(
-            "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
-            return_value=("recovery_payload", None),
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=mock_smi,
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
+                return_value=("recovery_payload", None),
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xRM"}
             result = builder.get_deploy_data_from_safe(
                 service_id=1,
@@ -1438,27 +1560,32 @@ class TestGetDeployDataFromSafe:
         """Raises ValueError when recovery payload is None."""
         builder = _make_eth_safe_tx_builder()
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder),
-            "service_manager_instance",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch.object(
-            type(builder),
-            "service_manager_address",
-            new_callable=PropertyMock,
-            return_value="0xSM",
-        ), patch.object(
-            type(builder),
-            "ledger_api",
-            new_callable=PropertyMock,
-            return_value=MagicMock(),
-        ), patch(
-            "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
-            return_value=(None, "not terminated"),
-        ), patch(
-            "operate.services.protocol.ContractConfigs"
-        ) as mock_cc:
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
+                return_value=(None, "not terminated"),
+            ),
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
             mock_cc.get.return_value.contracts = {builder.chain_type: "0xRM"}
             with pytest.raises(ValueError, match="not terminated"):
                 builder.get_deploy_data_from_safe(
@@ -1491,9 +1618,16 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.get_stake_approval_tx_data.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch.object(
-            type(builder), "safe", new_callable=PropertyMock, return_value=_SAFE_ADDRESS
-        ), patch("operate.services.protocol.StakingManager", return_value=mock_sm):
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "safe",
+                new_callable=PropertyMock,
+                return_value=_SAFE_ADDRESS,
+            ),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
+        ):
             result = builder.get_staking_approval_data(
                 service_id=1,
                 service_registry=_SERVICE_REGISTRY,
@@ -1509,8 +1643,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.get_stake_tx_data.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.get_staking_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -1524,8 +1659,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.get_unstake_tx_data.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.get_unstaking_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT, force=False
@@ -1541,8 +1677,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.get_forced_unstake_tx_data.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.get_unstaking_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT, force=True
@@ -1558,8 +1695,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.get_claim_tx_data.return_value = _ENCODED
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.get_claiming_data(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -1574,8 +1712,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.slots_available.return_value = False
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.staking_slots_available(_STAKING_CONTRACT)
 
@@ -1587,8 +1726,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.check_if_unstaking_possible.return_value = None  # no exception
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.can_unstake(
                 service_id=1, staking_contract=_STAKING_CONTRACT
@@ -1602,8 +1742,9 @@ class TestEthSafeTxBuilderStakingDataMethods:
         mock_sm = MagicMock()
         mock_sm.check_if_unstaking_possible.side_effect = ValueError("not ready")
 
-        with patch.object(builder, "_patch"), patch(
-            "operate.services.protocol.StakingManager", return_value=mock_sm
+        with (
+            patch.object(builder, "_patch"),
+            patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.can_unstake(
                 service_id=1, staking_contract=_STAKING_CONTRACT

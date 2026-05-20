@@ -105,26 +105,25 @@ Master EOA → Master Safe → Agent Safe/EOA → Service Operations
 ### Most Common Commands
 ```bash
 # Install dependencies
-poetry install
+uv sync --all-groups
 
 # Run the recommended local test suite
-poetry run tox -e unit-tests
+uv run tox -e unit-tests
 
 # Run the main verification checks before finishing code changes
-poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+uv run tox -p -e flake8 -e pylint && uv run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 ```
 
 ### Daily Workflow
-1. Make changes and run focused unit tests with `poetry run tox -e unit-tests -- tests/test_my_module.py -v`
-2. Run `poetry run tox -e unit-tests` before considering the change complete
+1. Make changes and run focused unit tests with `uv run tox -e unit-tests -- tests/test_my_module.py -v`
+2. Run `uv run tox -e unit-tests` before considering the change complete
 3. Run the full lint/type/security suite before committing or opening a PR
-4. Run `poetry run tox -e integration-tests -- tests/test_x.py::test_function_name -v` only for RPC-dependent behavior when testnet env vars are available
+4. Run `uv run tox -e integration-tests -- tests/test_x.py::test_function_name -v` only for RPC-dependent behavior when testnet env vars are available
 
 ### Environment Setup
 ```bash
-poetry install
-poetry self add poetry-plugin-shell
-poetry shell
+uv sync --all-groups
+source .venv/bin/activate
 ```
 
 ### Code Quality
@@ -134,11 +133,11 @@ poetry shell
 
 ```bash
 # Required before commit/PR
-poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
-poetry run tox -e unit-tests
+uv run tox -p -e flake8 -e pylint && uv run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+uv run tox -e unit-tests
 
 # Quick dev check
-poetry run tox -p -e black-check -e flake8 -e mypy
+uv run tox -p -e black-check -e flake8 -e mypy
 ```
 
 ### Testing
@@ -146,21 +145,21 @@ For detailed coverage and gap analysis, see [TESTING.md](TESTING.md).
 
 ```bash
 # Recommended local suite
-poetry run tox -e unit-tests
+uv run tox -e unit-tests
 
 # Integration tests (requires testnet RPC env vars)
-poetry run tox -e integration-tests
+uv run tox -e integration-tests
 
 # All tests
-poetry run tox -e all-tests
+uv run tox -e all-tests
 
 # Targeted unit test file/function
-poetry run tox -e unit-tests -- tests/test_services_service.py -v
-poetry run tox -e unit-tests -- tests/test_services_service.py::test_function_name -v
+uv run tox -e unit-tests -- tests/test_services_service.py -v
+uv run tox -e unit-tests -- tests/test_services_service.py::test_function_name -v
 ```
 
 **Important:**
-- Prefer `poetry run tox -e unit-tests` locally for the standard unit/integration suites; use direct `pytest` when following documented repository workflows that require it (for example, VCR cassette recording/replay)
+- Prefer `uv run tox -e unit-tests` locally for the standard unit/integration suites; use direct `pytest` when following documented repository workflows that require it (for example, VCR cassette recording/replay)
 - Unit tests run without network/RPC dependencies
 - Integration tests are marked with `@pytest.mark.integration` and are slow; run selectively
 - For transaction-related code changes that modify or add a blockchain transaction flow, run or add a Tenderly-backed integration test for the new flow when `.env` RPC/test credentials are available
@@ -223,7 +222,7 @@ operate daemon
 
 **Bridge Management (`operate/bridge/`)**
 - `bridge_manager.py`: Orchestrates cross-chain token transfers
-- `providers/`: LiFi, Relay, and native bridge implementations
+- `providers/`: Relay and native bridge implementations
 
 **Ledger Integration (`operate/ledger/`)**
 - `profiles.py`: Chain configs, RPC endpoints, and token addresses

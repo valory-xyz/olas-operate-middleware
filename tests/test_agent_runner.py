@@ -92,8 +92,9 @@ class TestAgentAssetManagerExecutableName:
 
     def test_darwin_arm64(self) -> None:
         """Test executable name for macOS arm64."""
-        with patch("platform.system", return_value="Darwin"), patch(
-            "platform.machine", return_value="arm64"
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch("platform.machine", return_value="arm64"),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert "macos" in name
@@ -101,8 +102,9 @@ class TestAgentAssetManagerExecutableName:
 
     def test_darwin_x86_64(self) -> None:
         """Test executable name for macOS x86_64."""
-        with patch("platform.system", return_value="Darwin"), patch(
-            "platform.machine", return_value="x86_64"
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch("platform.machine", return_value="x86_64"),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert "macos" in name
@@ -110,8 +112,9 @@ class TestAgentAssetManagerExecutableName:
 
     def test_linux_x86_64(self) -> None:
         """Test executable name for Linux x86_64."""
-        with patch("platform.system", return_value="Linux"), patch(
-            "platform.machine", return_value="x86_64"
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("platform.machine", return_value="x86_64"),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert "linux" in name
@@ -119,11 +122,13 @@ class TestAgentAssetManagerExecutableName:
 
     def test_windows_x86_64(self) -> None:
         """Test executable name for Windows x86_64."""
-        with patch("platform.system", return_value="Windows"), patch(
-            "platform.machine", return_value="x86_64"
-        ), patch(
-            "operate.services.agent_assets.sysconfig.get_platform",
-            return_value="win-amd64",
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch("platform.machine", return_value="x86_64"),
+            patch(
+                "operate.services.agent_assets.sysconfig.get_platform",
+                return_value="win-amd64",
+            ),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert "windows" in name
@@ -132,65 +137,75 @@ class TestAgentAssetManagerExecutableName:
 
     def test_windows_arm64_host_with_x64_python_uses_x64_runner(self) -> None:
         """Test Windows ARM host uses x64 runner when Python environment is x64."""
-        with patch("platform.system", return_value="Windows"), patch(
-            "platform.machine", return_value="arm64"
-        ), patch(
-            "operate.services.agent_assets.sysconfig.get_platform",
-            return_value="win-amd64",
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch("platform.machine", return_value="arm64"),
+            patch(
+                "operate.services.agent_assets.sysconfig.get_platform",
+                return_value="win-amd64",
+            ),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert name == "agent_runner_windows_x64.exe"
 
     def test_windows_arm64_python_raises(self) -> None:
         """Test that native Windows arm64 Python remains unsupported."""
-        with patch("platform.system", return_value="Windows"), patch(
-            "platform.machine", return_value="arm64"
-        ), patch(
-            "operate.services.agent_assets.sysconfig.get_platform",
-            return_value="win-arm64",
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch("platform.machine", return_value="arm64"),
+            patch(
+                "operate.services.agent_assets.sysconfig.get_platform",
+                return_value="win-arm64",
+            ),
         ):
             with pytest.raises(ValueError, match="Windows arm64 is not supported"):
                 AgentAssetManager.get_agent_runner_executable_name()
 
     def test_unsupported_platform_raises(self) -> None:
         """Test that an unsupported platform raises ValueError."""
-        with patch("platform.system", return_value="FreeBSD"), patch(
-            "platform.machine", return_value="x86_64"
+        with (
+            patch("platform.system", return_value="FreeBSD"),
+            patch("platform.machine", return_value="x86_64"),
         ):
             with pytest.raises(ValueError, match="Platform not supported"):
                 AgentAssetManager.get_agent_runner_executable_name()
 
     def test_linux_arm64(self) -> None:
         """Test executable name for Linux arm64 (arm64 machine string)."""
-        with patch("platform.system", return_value="Linux"), patch(
-            "platform.machine", return_value="arm64"
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("platform.machine", return_value="arm64"),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert name == "agent_runner_linux_arm64"
 
     def test_linux_aarch64(self) -> None:
         """Test executable name for Linux aarch64 (Raspberry Pi OS 64-bit)."""
-        with patch("platform.system", return_value="Linux"), patch(
-            "platform.machine", return_value="aarch64"
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("platform.machine", return_value="aarch64"),
         ):
             name = AgentAssetManager.get_agent_runner_executable_name()
         assert name == "agent_runner_linux_arm64"
 
     def test_unsupported_arch_raises(self) -> None:
         """Test that an unsupported architecture raises ValueError."""
-        with patch("platform.system", return_value="Linux"), patch(
-            "platform.machine", return_value="mips"
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("platform.machine", return_value="mips"),
         ):
             with pytest.raises(ValueError, match="unsupported arch"):
                 AgentAssetManager.get_agent_runner_executable_name()
 
     def test_windows_unknown_python_platform_raises(self) -> None:
         """Test that unknown Windows Python platform raises ValueError."""
-        with patch("platform.system", return_value="Windows"), patch(
-            "platform.machine", return_value="x86_64"
-        ), patch(
-            "operate.services.agent_assets.sysconfig.get_platform",
-            return_value="win32",
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch("platform.machine", return_value="x86_64"),
+            patch(
+                "operate.services.agent_assets.sysconfig.get_platform",
+                return_value="win32",
+            ),
         ):
             with pytest.raises(ValueError, match="unsupported Windows Python platform"):
                 AgentAssetManager.get_agent_runner_executable_name()
@@ -216,15 +231,15 @@ class TestAgentAssetManagerMethods:
         (tmp_path / "config.json").write_text(json.dumps(config))
 
         AgentAssetManager._runner_environment_logged = False
-        with patch.object(
-            AgentAssetManager, "update_agent_release_asset"
-        ), patch.object(AgentAssetManager.logger, "info") as mock_info, patch(
-            "platform.system", return_value="Windows"
-        ), patch(
-            "platform.machine", return_value="arm64"
-        ), patch(
-            "operate.services.agent_assets.sysconfig.get_platform",
-            return_value="win-amd64",
+        with (
+            patch.object(AgentAssetManager, "update_agent_release_asset"),
+            patch.object(AgentAssetManager.logger, "info") as mock_info,
+            patch("platform.system", return_value="Windows"),
+            patch("platform.machine", return_value="arm64"),
+            patch(
+                "operate.services.agent_assets.sysconfig.get_platform",
+                return_value="win-amd64",
+            ),
         ):
             path = AgentAssetManager.get_agent_runner_path(tmp_path)
             second_path = AgentAssetManager.get_agent_runner_path(tmp_path)
@@ -307,9 +322,12 @@ class TestAgentAssetManagerMethods:
             "http://example.com/runner",
             "sha256:HASH",
         )
-        with patch.object(
-            AgentAssetManager, "get_local_file_sha256", return_value="sha256:HASH"
-        ), patch.object(AgentAssetManager, "download_file") as mock_dl:
+        with (
+            patch.object(
+                AgentAssetManager, "get_local_file_sha256", return_value="sha256:HASH"
+            ),
+            patch.object(AgentAssetManager, "download_file") as mock_dl,
+        ):
             AgentAssetManager.update_agent_release_asset(
                 target_path=target,
                 agent_release_asset_name="runner",
@@ -331,12 +349,14 @@ class TestAgentAssetManagerMethods:
         )
         # First call: existing file hash (OLD → mismatch triggers download)
         # Second call: downloaded file hash (NEW → matches remote, passes verification)
-        with patch.object(
-            AgentAssetManager,
-            "get_local_file_sha256",
-            side_effect=["sha256:OLD", "sha256:NEW"],
-        ), patch.object(AgentAssetManager, "download_file") as mock_dl, patch(
-            "operate.services.agent_assets.shutil.copy2"
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                side_effect=["sha256:OLD", "sha256:NEW"],
+            ),
+            patch.object(AgentAssetManager, "download_file") as mock_dl,
+            patch("operate.services.agent_assets.shutil.copy2"),
         ):
             AgentAssetManager.update_agent_release_asset(
                 target_path=target,
@@ -362,13 +382,17 @@ class TestAgentAssetManagerMethods:
             dst.write_bytes(b"downloaded")
 
         # Mock get_local_file_sha256 to return matching hash for downloaded file
-        with patch.object(
-            AgentAssetManager,
-            "get_local_file_sha256",
-            return_value="sha256:HASH",
-        ), patch.object(AgentAssetManager, "download_file") as mock_dl, patch(
-            "operate.services.agent_assets.shutil.copy2",
-            side_effect=_create_target,
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                return_value="sha256:HASH",
+            ),
+            patch.object(AgentAssetManager, "download_file") as mock_dl,
+            patch(
+                "operate.services.agent_assets.shutil.copy2",
+                side_effect=_create_target,
+            ),
         ):
             AgentAssetManager.update_agent_release_asset(
                 target_path=target,
@@ -389,11 +413,14 @@ class TestAgentAssetManagerMethods:
             "sha256:EXPECTED",
         )
         # Downloaded file hash doesn't match the remote hash
-        with patch.object(
-            AgentAssetManager,
-            "get_local_file_sha256",
-            return_value="sha256:CORRUPT",
-        ), patch.object(AgentAssetManager, "download_file"):
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                return_value="sha256:CORRUPT",
+            ),
+            patch.object(AgentAssetManager, "download_file"),
+        ):
             with pytest.raises(ValueError, match="Hash verification failed"):
                 AgentAssetManager.update_agent_release_asset(
                     target_path=target,
@@ -417,13 +444,17 @@ class TestAgentAssetManagerMethods:
         def _create_target(src: Any, dst: Any) -> None:
             target.write_bytes(b"binary")
 
-        with patch.object(
-            AgentAssetManager,
-            "get_local_file_sha256",
-            return_value="sha256:HASH",
-        ), patch.object(AgentAssetManager, "download_file"), patch(
-            "operate.services.agent_assets.shutil.copy2",
-            side_effect=_create_target,
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                return_value="sha256:HASH",
+            ),
+            patch.object(AgentAssetManager, "download_file"),
+            patch(
+                "operate.services.agent_assets.shutil.copy2",
+                side_effect=_create_target,
+            ),
         ):
             AgentAssetManager.update_agent_release_asset(
                 target_path=target,
@@ -444,12 +475,15 @@ class TestAgentAssetManagerMethods:
             "http://example.com/runner",
             "sha256:NEW",
         )
-        with patch.object(
-            AgentAssetManager, "get_local_file_sha256", return_value="sha256:OLD"
-        ), patch.object(
-            AgentAssetManager,
-            "download_file",
-            side_effect=RuntimeError("download failed"),
+        with (
+            patch.object(
+                AgentAssetManager, "get_local_file_sha256", return_value="sha256:OLD"
+            ),
+            patch.object(
+                AgentAssetManager,
+                "download_file",
+                side_effect=RuntimeError("download failed"),
+            ),
         ):
             with pytest.raises(RuntimeError, match="download failed"):
                 AgentAssetManager.update_agent_release_asset(
@@ -473,11 +507,14 @@ class TestAgentAssetManagerMethods:
             }
         }
         (tmp_path / "config.json").write_text(json.dumps(config))
-        with patch.object(
-            AgentAssetManager,
-            "get_agent_runner_executable_name",
-            return_value="runner_linux_x64",
-        ), patch.object(AgentAssetManager, "update_agent_release_asset"):
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_agent_runner_executable_name",
+                return_value="runner_linux_x64",
+            ),
+            patch.object(AgentAssetManager, "update_agent_release_asset"),
+        ):
             result = AgentAssetManager.get_agent_runner_path(tmp_path)
         assert result == str(tmp_path / "runner_linux_x64")
 
@@ -494,11 +531,14 @@ class TestAgentAssetManagerMethods:
             }
         }
         (tmp_path / "config.json").write_text(json.dumps(config))
-        with patch.object(
-            AgentAssetManager,
-            "get_agent_runner_executable_name",
-            return_value="runner_linux_x64",
-        ), patch.object(AgentAssetManager, "update_agent_release_asset"):
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_agent_runner_executable_name",
+                return_value="runner_linux_x64",
+            ),
+            patch.object(AgentAssetManager, "update_agent_release_asset"),
+        ):
             result = get_agent_runner_path(tmp_path)
         assert result == str(tmp_path / "runner_linux_x64")
 
@@ -562,19 +602,23 @@ class TestAgentAssetManagerMethods:
         )
 
         # Simulate hash mismatch to trigger download
-        with patch.object(
-            AgentAssetManager,
-            "get_local_file_sha256",
-            side_effect=[
-                "sha256:OLD",
-                "sha256:NEW",
-            ],  # First call for existing file, second for downloaded
-        ), patch.object(
-            AgentAssetManager,
-            "download_file",
-        ), patch(
-            "operate.services.agent_assets.shutil.copy2",
-            side_effect=Exception("Copy failed"),
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                side_effect=[
+                    "sha256:OLD",
+                    "sha256:NEW",
+                ],  # First call for existing file, second for downloaded
+            ),
+            patch.object(
+                AgentAssetManager,
+                "download_file",
+            ),
+            patch(
+                "operate.services.agent_assets.shutil.copy2",
+                side_effect=Exception("Copy failed"),
+            ),
         ):
             with pytest.raises(Exception, match="Copy failed"):
                 AgentAssetManager.update_agent_release_asset(
@@ -599,14 +643,17 @@ class TestAgentAssetManagerMethods:
         )
 
         # Simulate download failure
-        with patch.object(
-            AgentAssetManager,
-            "get_local_file_sha256",
-            return_value="sha256:HASH",
-        ), patch.object(
-            AgentAssetManager,
-            "download_file",
-            side_effect=Exception("Download failed"),
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                return_value="sha256:HASH",
+            ),
+            patch.object(
+                AgentAssetManager,
+                "download_file",
+                side_effect=Exception("Download failed"),
+            ),
         ):
             with pytest.raises(Exception, match="Download failed"):
                 AgentAssetManager.update_agent_release_asset(

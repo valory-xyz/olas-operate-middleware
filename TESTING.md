@@ -9,7 +9,7 @@ This document describes the test coverage, gaps, and testing strategy for the Ol
 ### Unit Tests (1,639 tests, ~2 minutes)
 Fast tests with no external dependencies. Run with:
 ```bash
-poetry run tox -e unit-tests
+uv run tox -e unit-tests
 ```
 
 ### Integration Tests (262 tests, takes too long, run very selectively)
@@ -22,7 +22,7 @@ export GNOSIS_TESTNET_RPC="https://..."
 export OPTIMISM_TESTNET_RPC="https://..."
 export POLYGON_TESTNET_RPC="https://..."
 
-poetry run tox -e integration-tests -- path/to/test -v
+uv run tox -e integration-tests -- path/to/test -v
 ```
 
 By default, runs with `pytest-xdist` in parallel (`-n auto`). CI overrides this with `-n 8`.
@@ -31,7 +31,7 @@ For debugging or narrower parallelism, override locally:
 ```bash
 export CI=true
 export PYTEST_XDIST_WORKERS=2
-poetry run tox -e integration-tests -- path/to/test -v
+uv run tox -e integration-tests -- path/to/test -v
 ```
 
 ### Recorded HTTP tests (pytest-recording)
@@ -51,7 +51,7 @@ are stored in `tests/cassettes/` and committed to git.
    - Records API calls from Relay provider (`https://api.relay.link/requests/v2`)
    - Records RPC calls to Optimism Tenderly endpoint
    - Cassettes stored in: `tests/cassettes/test_bridge_providers/TestProvider.test_update_execution_status_failure_then_success[...].yaml`
-   - Covers RelayProvider, LiFiProvider, and NativeBridgeProvider
+   - Covers RelayProvider and NativeBridgeProvider
    
 **Cassette Matching Strategy**:
 The VCR configuration in `tests/conftest.py` matches requests on:
@@ -64,13 +64,13 @@ This ensures different RPC payloads (e.g., different block numbers) match the co
 When API behavior changes, re-record cassettes with:
 ```bash
 # Record all cassettes for a specific test
-poetry run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp --record-mode=once -v
+uv run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp --record-mode=once -v
 
 # Record for the other test
-poetry run pytest tests/test_bridge_providers.py::TestProvider::test_update_execution_status_failure_then_success --record-mode=once -v
+uv run pytest tests/test_bridge_providers.py::TestProvider::test_update_execution_status_failure_then_success --record-mode=once -v
 
 # Record all cassettes at once
-poetry run pytest tests/test_bridge_providers.py -k "vcr" --record-mode=once -v
+uv run pytest tests/test_bridge_providers.py -k "vcr" --record-mode=once -v
 ```
 
 ## Working with VCR Tests
@@ -92,10 +92,10 @@ We use `pytest-recording` (a pytest plugin wrapping VCR.py) to implement this pa
 **Normal test execution** (using cassettes):
 ```bash
 # Run specific VCR test
-poetry run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp -v
+uv run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp -v
 
 # Run all VCR tests
-poetry run pytest tests/test_bridge_providers.py -m vcr -v
+uv run pytest tests/test_bridge_providers.py -m vcr -v
 ```
 
 Tests with recorded cassettes run automatically in replay mode—no special flags needed.
@@ -117,7 +117,7 @@ Tests with recorded cassettes run automatically in replay mode—no special flag
 
 2. **Record with `--record-mode=once`**:
    ```bash
-   poetry run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp --record-mode=once -v
+   uv run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp --record-mode=once -v
    ```
 
 3. **Verify cassettes were created**:
@@ -127,7 +127,7 @@ Tests with recorded cassettes run automatically in replay mode—no special flag
 
 4. **Test replay works**:
    ```bash
-   poetry run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp -v
+   uv run pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp -v
    ```
 
 **Record modes:**
@@ -201,7 +201,7 @@ CannotOverwriteExistingCassetteException
 ```
 **Solution**: Record the cassette:
 ```bash
-poetry run pytest tests/test_file.py::test_name --record-mode=once
+uv run pytest tests/test_file.py::test_name --record-mode=once
 ```
 
 **Problem: Test passes on first run but fails on replay**
@@ -344,13 +344,13 @@ Tests are marked for easy filtering:
 Run specific categories:
 ```bash
 # Only unit tests
-poetry run pytest -m "unit"
+uv run pytest -m "unit"
 
 # Only integration tests
-poetry run pytest -m "integration"
+uv run pytest -m "integration"
 
 # Exclude integration tests
-poetry run pytest -m "not integration"
+uv run pytest -m "not integration"
 ```
 
 ## CI/CD Testing Strategy

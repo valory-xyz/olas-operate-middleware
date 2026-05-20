@@ -101,46 +101,46 @@ The project uses several tools to maintain code quality. All are configured in `
 
 1. **Black**: Code formatting
    ```bash
-   poetry run tox -e black      # Format code
-   poetry run tox -e black-check # Check formatting
+   uv run tox -e black      # Format code
+   uv run tox -e black-check # Check formatting
    ```
 
 2. **isort**: Import sorting
    ```bash
-   poetry run tox -e isort       # Sort imports
-   poetry run tox -e isort-check # Check imports
+   uv run tox -e isort       # Sort imports
+   uv run tox -e isort-check # Check imports
    ```
 
 3. **Flake8**: Linting
    ```bash
-   poetry run tox -e flake8
+   uv run tox -e flake8
    ```
 
 4. **MyPy**: Type checking
    ```bash
-   poetry run tox -e mypy
+   uv run tox -e mypy
    ```
 
 5. **Pylint**: Code analysis
    ```bash
-   poetry run tox -e pylint
+   uv run tox -e pylint
    ```
 
 6. **Bandit**: Security checks
    ```bash
-   poetry run tox -e bandit
+   uv run tox -e bandit
    ```
 
 7. **Safety**: Dependency vulnerability checks
    ```bash
-   poetry run tox -e safety
+   uv run tox -e safety
    ```
 
 ### Running All Checks
 
 ```bash
 # Run all quality checks
-poetry run tox -p -e flake8 -e pylint && poetry run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
+uv run tox -p -e flake8 -e pylint && uv run tox -p -e black-check -e isort-check -e bandit -e safety -e mypy
 ```
 
 **Git hooks**: Enable with `git config core.hooksPath .githooks`.
@@ -199,7 +199,7 @@ git commit -m "test: add VCR cassette for test_api_call"
 ```
 
 **When to use VCR:**
-- ✅ Testing external API integrations (Relay, LiFi, CoinGecko)
+- ✅ Testing external API integrations (Relay, CoinGecko)
 - ✅ Testing RPC calls to blockchain nodes
 - ✅ Tests that are slow due to network latency
 - ✅ Tests that fail intermittently due to network issues
@@ -237,10 +237,10 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
 2. **Run all checks locally:**
    ```bash
    # Format code
-   poetry run tox -p -e black -e isort
+   uv run tox -p -e black -e isort
    
    # Run quality checks
-   poetry run tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+   uv run tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
    ```
    
    **Note**: The pre-push hook will automatically run these checks when you push, blocking the push if any checks fail. Running locally first is recommended to avoid CI failures.
@@ -314,20 +314,19 @@ For detailed VCR documentation, see the "Working with VCR Tests" section in [TES
 
 ## Troubleshooting
 
-### Issue: Import errors after `poetry install`
+### Issue: Import errors after `uv sync --all-groups`
 **Solution**: Make sure you've activated the virtual environment:
 ```bash
-poetry self add poetry-plugin-shell
-poetry shell
+source .venv/bin/activate
 ```
 
 ### Issue: Tests fail with "OPERATE home directory not found"
 **Solution**: Tests use temporary directories. Ensure `tmp_path` fixtures are being used.
 
 ### Issue: Type checking fails
-**Solution**: Run `poetry run tox -e mypy` to see detailed type errors:
+**Solution**: Run `uv run tox -e mypy` to see detailed type errors:
 ```bash
-poetry run tox -e mypy
+uv run tox -e mypy
 ```
 
 ### Getting Help

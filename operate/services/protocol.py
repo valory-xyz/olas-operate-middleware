@@ -1169,8 +1169,9 @@ class OnChainManager(_ChainUtil):
 
         manager.publish_metadata()
 
-        with tempfile.TemporaryDirectory() as temp, contextlib.redirect_stdout(
-            io.StringIO()
+        with (
+            tempfile.TemporaryDirectory() as temp,
+            contextlib.redirect_stdout(io.StringIO()),
         ):
             with cd(temp):
                 kwargs = dict(

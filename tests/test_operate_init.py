@@ -73,9 +73,11 @@ class TestOperateInitPlatformBranches:
     def test_darwin_branch_with_system_bundle(self) -> None:
         """Darwin branch exports CA bundle for both requests and urllib clients."""
         darwin_bundle = "/etc/ssl/cert.pem"
-        with patch("platform.system", return_value="Darwin"), patch(
-            "os.path.exists", return_value=True
-        ), patch.dict(os.environ, {}, clear=False):
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch("os.path.exists", return_value=True),
+            patch.dict(os.environ, {}, clear=False),
+        ):
             env_copy = dict(os.environ)
             env_copy.pop("REQUESTS_CA_BUNDLE", None)
             env_copy.pop("SSL_CERT_FILE", None)
@@ -87,9 +89,11 @@ class TestOperateInitPlatformBranches:
     def test_linux_branch_with_system_bundle(self) -> None:
         """Linux branch exports CA bundle for both requests and urllib clients."""
         linux_bundle = "/etc/ssl/certs/ca-certificates.crt"
-        with patch("platform.system", return_value="Linux"), patch(
-            "os.path.exists", return_value=True
-        ), patch.dict(os.environ, {}, clear=False):
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("os.path.exists", return_value=True),
+            patch.dict(os.environ, {}, clear=False),
+        ):
             env_copy = dict(os.environ)
             env_copy.pop("REQUESTS_CA_BUNDLE", None)
             env_copy.pop("SSL_CERT_FILE", None)
@@ -109,9 +113,11 @@ class TestOperateInitPlatformBranches:
         import certifi
 
         certifi_path = certifi.where()
-        with patch("platform.system", return_value="FreeBSD"), patch(
-            "os.path.exists", return_value=True
-        ), patch.dict(os.environ, {}, clear=False):
+        with (
+            patch("platform.system", return_value="FreeBSD"),
+            patch("os.path.exists", return_value=True),
+            patch.dict(os.environ, {}, clear=False),
+        ):
             env_copy = dict(os.environ)
             env_copy.pop("REQUESTS_CA_BUNDLE", None)
             env_copy.pop("SSL_CERT_FILE", None)
@@ -131,12 +137,14 @@ class TestOperateInitPlatformBranches:
         operate_home = tmp_path / "operate-home"
         expected_bundle = operate_home / "certs" / "cacert.pem"
 
-        with patch("platform.system", return_value="FreeBSD"), patch(
-            "certifi.where", return_value=str(certifi_bundle)
-        ), patch.dict(
-            os.environ,
-            {"OPERATE_HOME": str(operate_home)},
-            clear=True,
+        with (
+            patch("platform.system", return_value="FreeBSD"),
+            patch("certifi.where", return_value=str(certifi_bundle)),
+            patch.dict(
+                os.environ,
+                {"OPERATE_HOME": str(operate_home)},
+                clear=True,
+            ),
         ):
             importlib.reload(operate_module)
             assert os.environ.get("REQUESTS_CA_BUNDLE") == str(expected_bundle)
@@ -151,15 +159,17 @@ class TestOperateInitPlatformBranches:
         def exists(path: str) -> bool:
             return path in {linux_bundle, pyinstaller_bundle}
 
-        with patch("platform.system", return_value="Linux"), patch(
-            "os.path.exists", side_effect=exists
-        ), patch.dict(
-            os.environ,
-            {
-                "REQUESTS_CA_BUNDLE": pyinstaller_bundle,
-                "SSL_CERT_FILE": pyinstaller_bundle,
-            },
-            clear=True,
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("os.path.exists", side_effect=exists),
+            patch.dict(
+                os.environ,
+                {
+                    "REQUESTS_CA_BUNDLE": pyinstaller_bundle,
+                    "SSL_CERT_FILE": pyinstaller_bundle,
+                },
+                clear=True,
+            ),
         ):
             importlib.reload(operate_module)
             assert os.environ.get("REQUESTS_CA_BUNDLE") == linux_bundle
@@ -167,8 +177,9 @@ class TestOperateInitPlatformBranches:
 
     def test_windows_branch_leaves_file_based_bundle_env_unset(self) -> None:
         """Windows branch relies on the system trust store instead of bundle files."""
-        with patch("platform.system", return_value="Windows"), patch.dict(
-            os.environ, {}, clear=True
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch.dict(os.environ, {}, clear=True),
         ):
             importlib.reload(operate_module)
             assert "REQUESTS_CA_BUNDLE" not in os.environ
@@ -176,15 +187,17 @@ class TestOperateInitPlatformBranches:
 
     def test_windows_branch_clears_stale_file_based_bundle_env(self) -> None:
         """Windows branch removes stale file-based CA bundle env vars."""
-        with patch("platform.system", return_value="Windows"), patch(
-            "os.path.exists", return_value=False
-        ), patch.dict(
-            os.environ,
-            {
-                "REQUESTS_CA_BUNDLE": "/tmp/_MEI123/cacert.pem",  # nosec B108
-                "SSL_CERT_FILE": "/tmp/_MEI123/cacert.pem",  # nosec B108
-            },
-            clear=True,
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch("os.path.exists", return_value=False),
+            patch.dict(
+                os.environ,
+                {
+                    "REQUESTS_CA_BUNDLE": "/tmp/_MEI123/cacert.pem",  # nosec B108
+                    "SSL_CERT_FILE": "/tmp/_MEI123/cacert.pem",  # nosec B108
+                },
+                clear=True,
+            ),
         ):
             importlib.reload(operate_module)
             assert "REQUESTS_CA_BUNDLE" not in os.environ
@@ -197,15 +210,17 @@ class TestOperateInitPlatformBranches:
         def exists(path: str) -> bool:
             return path == linux_bundle
 
-        with patch("platform.system", return_value="Linux"), patch(
-            "os.path.exists", side_effect=exists
-        ), patch.dict(
-            os.environ,
-            {
-                "REQUESTS_CA_BUNDLE": linux_bundle,
-                "SSL_CERT_FILE": "/dead/_MEI123/cacert.pem",
-            },
-            clear=True,
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("os.path.exists", side_effect=exists),
+            patch.dict(
+                os.environ,
+                {
+                    "REQUESTS_CA_BUNDLE": linux_bundle,
+                    "SSL_CERT_FILE": "/dead/_MEI123/cacert.pem",
+                },
+                clear=True,
+            ),
         ):
             importlib.reload(operate_module)
             assert os.environ.get("REQUESTS_CA_BUNDLE") == linux_bundle
@@ -213,10 +228,11 @@ class TestOperateInitPlatformBranches:
 
     def test_unknown_os_branch_no_bundle_logs_warning(self, caplog: Any) -> None:
         """Unknown OS branch logs warning when no CA bundle is available (lines 65-66, 72)."""
-        with caplog.at_level(logging.WARNING, logger="operate"), patch(
-            "platform.system", return_value="FreeBSD"
-        ), patch("os.path.exists", return_value=False), patch.dict(
-            os.environ, {}, clear=True
+        with (
+            caplog.at_level(logging.WARNING, logger="operate"),
+            patch("platform.system", return_value="FreeBSD"),
+            patch("os.path.exists", return_value=False),
+            patch.dict(os.environ, {}, clear=True),
         ):
             importlib.reload(operate_module)
         assert "No CA certificate bundle available" in caplog.text
@@ -231,14 +247,16 @@ class TestOperateInitPlatformBranches:
         certifi_bundle.write_text("bundle-data", encoding="utf-8")
         operate_home = tmp_path / "operate-home"
 
-        with caplog.at_level(logging.WARNING, logger="operate"), patch(
-            "platform.system", return_value="FreeBSD"
-        ), patch("operate.certifi.where", return_value=str(certifi_bundle)), patch(
-            "operate.shutil.copyfile", side_effect=OSError("disk full")
-        ), patch.dict(
-            os.environ,
-            {"OPERATE_HOME": str(operate_home)},
-            clear=True,
+        with (
+            caplog.at_level(logging.WARNING, logger="operate"),
+            patch("platform.system", return_value="FreeBSD"),
+            patch("operate.certifi.where", return_value=str(certifi_bundle)),
+            patch("operate.shutil.copyfile", side_effect=OSError("disk full")),
+            patch.dict(
+                os.environ,
+                {"OPERATE_HOME": str(operate_home)},
+                clear=True,
+            ),
         ):
             importlib.reload(operate_module)
             assert "REQUESTS_CA_BUNDLE" not in os.environ
@@ -247,12 +265,11 @@ class TestOperateInitPlatformBranches:
 
     def test_get_runtime_ca_bundle_env_returns_empty_when_no_bundle(self) -> None:
         """get_runtime_ca_bundle_env returns {} when no CA bundle is available (line 126)."""
-        with patch("platform.system", return_value="FreeBSD"), patch(
-            "operate.os.path.exists", return_value=False
-        ), patch(
-            "operate.certifi.where", return_value="/nonexistent/cacert.pem"
-        ), patch.dict(
-            os.environ, {}, clear=True
+        with (
+            patch("platform.system", return_value="FreeBSD"),
+            patch("operate.os.path.exists", return_value=False),
+            patch("operate.certifi.where", return_value="/nonexistent/cacert.pem"),
+            patch.dict(os.environ, {}, clear=True),
         ):
             result = operate_module.get_runtime_ca_bundle_env()
         assert result == {}

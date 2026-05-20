@@ -34,7 +34,10 @@ from operate.bridge.bridge_manager import (
     EXECUTED_BUNDLES_PATH,
     ProviderRequestBundle,
 )
-from operate.bridge.providers.provider import ProviderRequest, ProviderRequestStatus
+from operate.bridge.providers.provider import (
+    ProviderRequest,
+    ProviderRequestStatus,
+)
 from operate.operate_types import Chain
 
 # ---------------------------------------------------------------------------
@@ -330,8 +333,9 @@ class TestBridgeManagerGetUpdatedBundle:
             mock_provider  # pylint: disable=protected-access
         )
 
-        with patch.object(manager, "quote_bundle"), patch.object(
-            manager, "_store_data"
+        with (
+            patch.object(manager, "quote_bundle"),
+            patch.object(manager, "_store_data"),
         ):
             bundle = manager._get_updated_bundle(  # pylint: disable=protected-access
                 requests_params, force_update=False
@@ -347,8 +351,9 @@ class TestBridgeManagerGetUpdatedBundle:
         existing_bundle = _make_real_bundle(requests_params=requests_params)
         manager.data.last_requested_bundle = existing_bundle
 
-        with patch.object(manager, "quote_bundle") as mock_quote, patch.object(
-            manager, "_store_data"
+        with (
+            patch.object(manager, "quote_bundle") as mock_quote,
+            patch.object(manager, "_store_data"),
         ):
             result = manager._get_updated_bundle(  # pylint: disable=protected-access
                 requests_params, force_update=True
@@ -366,8 +371,9 @@ class TestBridgeManagerGetUpdatedBundle:
         old_bundle.timestamp = int(time.time()) - DEFAULT_BUNDLE_VALIDITY_PERIOD - 60
         manager.data.last_requested_bundle = old_bundle
 
-        with patch.object(manager, "quote_bundle") as mock_quote, patch.object(
-            manager, "_store_data"
+        with (
+            patch.object(manager, "quote_bundle") as mock_quote,
+            patch.object(manager, "_store_data"),
         ):
             result = manager._get_updated_bundle(  # pylint: disable=protected-access
                 requests_params, force_update=False
@@ -405,8 +411,9 @@ class TestBridgeManagerGetUpdatedBundle:
             mock_provider  # pylint: disable=protected-access
         )
 
-        with patch.object(manager, "quote_bundle"), patch.object(
-            manager, "_store_data"
+        with (
+            patch.object(manager, "quote_bundle"),
+            patch.object(manager, "_store_data"),
         ):
             result = manager._get_updated_bundle(  # pylint: disable=protected-access
                 new_params, force_update=False
@@ -506,13 +513,17 @@ class TestBridgeManagerExecuteBundle:
 
         expected_status = {"id": bundle_id, "bridge_request_status": []}
 
-        with patch.object(
-            manager,
-            "bridge_refill_requirements",
-            return_value={"is_refill_required": False},
-        ), patch.object(manager, "_store_data"), patch.object(
-            manager, "get_status_json", return_value=expected_status
-        ) as mock_get_status:
+        with (
+            patch.object(
+                manager,
+                "bridge_refill_requirements",
+                return_value={"is_refill_required": False},
+            ),
+            patch.object(manager, "_store_data"),
+            patch.object(
+                manager, "get_status_json", return_value=expected_status
+            ) as mock_get_status,
+        ):
             result = manager.execute_bundle(bundle_id)
 
         mock_get_status.assert_called_once_with(bundle_id)
@@ -643,25 +654,28 @@ class TestBridgeManagerInit:
     def test_init_creates_directories_and_initializes_providers(
         self, tmp_path: Path
     ) -> None:
-        """BridgeManager.__init__ creates dirs and sets up providers (lines 200-237)."""
-        with patch(
-            "operate.bridge.bridge_manager.BridgeManagerData.load",
-        ) as mock_load, patch(
-            "operate.bridge.bridge_manager.LiFiProvider",
-        ) as mock_lifi, patch(
-            "operate.bridge.bridge_manager.RelayProvider",
-        ) as mock_relay, patch(
-            "operate.bridge.bridge_manager.NativeBridgeProvider",
-        ), patch(
-            "operate.bridge.bridge_manager.OptimismContractAdaptor",
-        ), patch(
-            "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+        """BridgeManager.__init__ creates dirs and sets up providers."""
+        with (
+            patch(
+                "operate.bridge.bridge_manager.BridgeManagerData.load",
+            ) as mock_load,
+            patch(
+                "operate.bridge.bridge_manager.RelayProvider",
+            ) as mock_relay,
+            patch(
+                "operate.bridge.bridge_manager.NativeBridgeProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OptimismContractAdaptor",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+            ),
         ):
             mock_load.return_value = MagicMock()
             from operate.bridge.bridge_manager import (  # pylint: disable=import-outside-toplevel
                 BridgeManager,
                 EXECUTED_BUNDLES_PATH,
-                LIFI_PROVIDER_ID,
                 RELAY_PROVIDER_ID,
             )
 
@@ -673,13 +687,102 @@ class TestBridgeManagerInit:
 
         assert (tmp_path / EXECUTED_BUNDLES_PATH).exists()
         assert (
-            LIFI_PROVIDER_ID in manager._providers
-        )  # pylint: disable=protected-access
-        assert (
             RELAY_PROVIDER_ID in manager._providers
         )  # pylint: disable=protected-access
-        mock_lifi.assert_called_once()
         mock_relay.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestBridgeManagerStaleCacheMigration
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeManagerStaleCacheMigration:
+    """Tests for the stale-provider cache guard in BridgeManager.__init__."""
+
+    def test_stale_provider_bundle_is_cleared_on_init(self, tmp_path: Path) -> None:
+        """__init__ clears last_requested_bundle when it references an unknown provider."""
+        stale_request = _make_provider_request_real(
+            provider_id="removed-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-stale-test",
+            requests_params=[stale_request.params],
+            provider_requests=[stale_request],
+            timestamp=int(time.time()),
+        )
+
+        mock_data = MagicMock(spec=BridgeManagerData)
+        mock_data.last_requested_bundle = bundle
+
+        with (
+            patch(
+                "operate.bridge.bridge_manager.BridgeManagerData.load",
+                return_value=mock_data,
+            ),
+            patch(
+                "operate.bridge.bridge_manager.RelayProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.NativeBridgeProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OptimismContractAdaptor",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+            ),
+        ):
+            manager = BridgeManager(
+                path=tmp_path,
+                wallet_manager=MagicMock(),
+                logger=MagicMock(),
+            )
+
+        assert manager.data.last_requested_bundle is None
+
+    def test_valid_provider_bundle_is_kept_on_init(self, tmp_path: Path) -> None:
+        """__init__ keeps last_requested_bundle when all providers are known."""
+        valid_request = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-valid-test",
+            requests_params=[valid_request.params],
+            provider_requests=[valid_request],
+            timestamp=int(time.time()),
+        )
+
+        mock_data = MagicMock(spec=BridgeManagerData)
+        mock_data.last_requested_bundle = bundle
+
+        with (
+            patch(
+                "operate.bridge.bridge_manager.BridgeManagerData.load",
+                return_value=mock_data,
+            ),
+            patch(
+                "operate.bridge.bridge_manager.RelayProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.NativeBridgeProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OptimismContractAdaptor",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+            ),
+        ):
+            manager = BridgeManager(
+                path=tmp_path,
+                wallet_manager=MagicMock(),
+                logger=MagicMock(),
+            )
+
+        assert manager.data.last_requested_bundle is bundle
 
 
 # ---------------------------------------------------------------------------
@@ -746,8 +849,9 @@ class TestBridgeManagerGetUpdatedBundleNativeLoop:
             }
         ]
 
-        with patch.object(manager, "quote_bundle"), patch.object(
-            manager, "_store_data"
+        with (
+            patch.object(manager, "quote_bundle"),
+            patch.object(manager, "_store_data"),
         ):
             bundle = manager._get_updated_bundle(requests_params, force_update=False)
 
@@ -841,17 +945,18 @@ class TestBridgeManagerBridgeRefillRequirements:
         mock_shortfalls.json = {}
         mock_shortfalls.values.return_value = []
 
-        with patch.object(manager, "_sanitize"), patch.object(
-            manager, "_raise_if_invalid"
-        ), patch.object(
-            manager, "_get_updated_bundle", return_value=bundle
-        ), patch.object(
-            manager, "bridge_total_requirements", return_value=mock_total_reqs
-        ), patch.object(
-            manager, "get_status_json", return_value=mock_status
-        ), patch(
-            "operate.bridge.bridge_manager.ChainAmounts.shortfalls",
-            return_value=mock_shortfalls,
+        with (
+            patch.object(manager, "_sanitize"),
+            patch.object(manager, "_raise_if_invalid"),
+            patch.object(manager, "_get_updated_bundle", return_value=bundle),
+            patch.object(
+                manager, "bridge_total_requirements", return_value=mock_total_reqs
+            ),
+            patch.object(manager, "get_status_json", return_value=mock_status),
+            patch(
+                "operate.bridge.bridge_manager.ChainAmounts.shortfalls",
+                return_value=mock_shortfalls,
+            ),
         ):
             result = manager.bridge_refill_requirements([])
 
@@ -880,12 +985,14 @@ class TestBridgeManagerExecuteBundleAdditional:
 
         expected_status: t.Dict = {"id": bundle_id, "bridge_request_status": []}
 
-        with patch.object(
-            manager,
-            "bridge_refill_requirements",
-            return_value={"is_refill_required": True},
-        ), patch.object(manager, "_store_data"), patch.object(
-            manager, "get_status_json", return_value=expected_status
+        with (
+            patch.object(
+                manager,
+                "bridge_refill_requirements",
+                return_value={"is_refill_required": True},
+            ),
+            patch.object(manager, "_store_data"),
+            patch.object(manager, "get_status_json", return_value=expected_status),
         ):
             result = manager.execute_bundle(bundle_id)
 
@@ -945,21 +1052,23 @@ class TestBridgeRefillRequirementsWithChains:
         mock_ledger_api = MagicMock()
         manager.wallet_manager.load.return_value.ledger_api.return_value = mock_ledger_api  # type: ignore[union-attr]
 
-        with patch.object(manager, "_sanitize"), patch.object(
-            manager, "_raise_if_invalid"
-        ), patch.object(
-            manager, "_get_updated_bundle", return_value=bundle
-        ), patch.object(
-            manager, "bridge_total_requirements", return_value=mock_total_reqs
-        ), patch.object(
-            manager, "get_status_json", return_value=mock_status
-        ), patch(
-            "operate.bridge.bridge_manager.ChainAmounts.shortfalls",
-            return_value=mock_shortfalls,
-        ), patch(
-            "operate.bridge.bridge_manager.get_assets_balances",
-            return_value={},
-        ) as mock_get_balances:
+        with (
+            patch.object(manager, "_sanitize"),
+            patch.object(manager, "_raise_if_invalid"),
+            patch.object(manager, "_get_updated_bundle", return_value=bundle),
+            patch.object(
+                manager, "bridge_total_requirements", return_value=mock_total_reqs
+            ),
+            patch.object(manager, "get_status_json", return_value=mock_status),
+            patch(
+                "operate.bridge.bridge_manager.ChainAmounts.shortfalls",
+                return_value=mock_shortfalls,
+            ),
+            patch(
+                "operate.bridge.bridge_manager.get_assets_balances",
+                return_value={},
+            ) as mock_get_balances,
+        ):
             result = manager.bridge_refill_requirements([])
 
         assert "id" in result

@@ -52,7 +52,7 @@ def find_build_directory(config_file: Path, operate: "OperateApp") -> Path:
 def run_analysis(logs_dir: Path, **kwargs: str) -> None:
     """Run the log analysis command."""
     command: List[Union[str, Path]] = [
-        "poetry",
+        "uv",
         "run",
         "autonomy",
         "analyse",
@@ -90,7 +90,7 @@ def run_analysis(logs_dir: Path, **kwargs: str) -> None:
         print(f"Command failed with exit code {e.returncode}")
         sys.exit(e.returncode)
     except FileNotFoundError:
-        print("Poetry or autonomy not found. Ensure they are installed and accessible.")
+        print("uv or autonomy not found. Ensure they are installed and accessible.")
         sys.exit(1)
 
 
