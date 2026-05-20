@@ -45,6 +45,7 @@ from autonomy.chain.constants import (
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
+from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
@@ -71,8 +72,10 @@ from operate.constants import (
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     get_default_ledger_api,
+    is_gas_spike_error,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
@@ -210,22 +213,30 @@ class GnosisSafeTransaction:
         update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
-    def settle(self) -> TxReceipt:  # pragma: no cover
+    def settle(self) -> TxReceipt:
         """Settle the transaction."""
-        return (
-            TxSettler(
-                ledger_api=self.ledger_api,
-                crypto=self.crypto,
-                chain_type=self.chain_type,
-                tx_builder=self.build,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
+        try:
+            return (
+                TxSettler(
+                    ledger_api=self.ledger_api,
+                    crypto=self.crypto,
+                    chain_type=self.chain_type,
+                    tx_builder=self.build,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                )
+                .transact()
+                .settle()
+                .tx_receipt
             )
-            .transact()
-            .settle()
-            .tx_receipt
-        )
+        except (ValueError, ChainInteractionError) as exc:
+            if is_gas_spike_error(str(exc)):
+                raise InsufficientFundsException(
+                    f"Insufficient gas to settle Safe transaction on {self.chain_type.value}: {exc}",
+                    chain=self.chain_type.value,
+                ) from exc
+            raise
 
 
 class StakingManager:
