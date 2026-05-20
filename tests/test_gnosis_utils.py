@@ -479,7 +479,7 @@ class TestSendSafeTxs:
         assert result == "0xanotherhash"
 
     def test_gas_error_raises_insufficient_funds(self) -> None:
-        """ValueError with gas message is re-raised as InsufficientFundsException."""
+        """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
         mock_crypto.address = "0xCryptoAddress"
@@ -507,7 +507,7 @@ class TestSendSafeTxs:
         assert exc_info.value.chain == "gnosis"
 
     def test_chain_interaction_gas_error_raises_insufficient_funds(self) -> None:
-        """ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
+        """Verify ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
         mock_crypto.address = "0xCryptoAddress"
@@ -535,7 +535,7 @@ class TestSendSafeTxs:
         assert exc_info.value.chain == "gnosis"
 
     def test_non_gas_error_propagates(self) -> None:
-        """ValueError not related to gas propagates unchanged."""
+        """Verify ValueError not related to gas propagates unchanged."""
         mock_ledger = MagicMock()
         mock_crypto = MagicMock()
         mock_crypto.address = "0xCryptoAddress"

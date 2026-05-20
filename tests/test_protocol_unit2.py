@@ -1626,7 +1626,7 @@ class TestGnosisSafeTransactionSettle:
         )
 
     def test_settle_gas_error_raises_insufficient_funds(self) -> None:
-        """ValueError with gas message is re-raised as InsufficientFundsException."""
+        """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
         gst = self._make_gst()
         mock_txsettler_cls = MagicMock()
         mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
@@ -1643,7 +1643,7 @@ class TestGnosisSafeTransactionSettle:
     def test_settle_chain_interaction_gas_error_raises_insufficient_funds(
         self,
     ) -> None:
-        """ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
+        """Verify ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
         gst = self._make_gst()
         mock_txsettler_cls = MagicMock()
         mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
@@ -1657,7 +1657,7 @@ class TestGnosisSafeTransactionSettle:
         assert exc_info.value.chain == "gnosis"
 
     def test_settle_non_gas_error_propagates(self) -> None:
-        """ValueError not related to gas propagates unchanged."""
+        """Verify ValueError not related to gas propagates unchanged."""
         gst = self._make_gst()
         mock_txsettler_cls = MagicMock()
         mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
