@@ -1847,6 +1847,23 @@ class TestServiceRoutes:
                 resp = c.post("/api/v2/service/svc1", json={})
             assert resp.status_code == HTTPStatus.OK
 
+    def test_deploy_service_insufficient_funds(self) -> None:
+        """Cover lines 1612-1616: deploy returns 400 on InsufficientFundsException."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            InsufficientFundsException("no gas for gnosis", chain="gnosis")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+            assert body["chain"] == "gnosis"
+            assert "prefill_amount_wei" in body
+
     def test_update_service_not_logged_in(self) -> None:
         """Cover line 1291."""
         m = _make_mock_operate()

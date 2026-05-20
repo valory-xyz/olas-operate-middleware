@@ -457,6 +457,66 @@ class TestProviderBase:
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
         assert req.execution_data is not None
 
+    def test_execute_gas_spike_sets_execution_failed(self) -> None:
+        """execute() converts gas spike ValueError to InsufficientFundsException, caught by outer handler (lines 421-425)."""
+        tx: t.Dict[str, t.Any] = {
+            "to": "0x" + "a" * 40,
+            "gas": 21_000,
+            "value": 0,
+            "data": "0x",
+        }
+        provider = _ConcreteProvider(txs_to_return=[("bridge_tx", tx)])
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        mock_settler = MagicMock()
+        mock_settler.transact.side_effect = ValueError(
+            "insufficient funds for gas * price + value"
+        )
+
+        with patch(
+            "operate.bridge.providers.provider.TxSettler",
+            return_value=mock_settler,
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
+            mock_ledger = MagicMock()
+            mock_ledger.api.eth.get_transaction_count.return_value = 0
+            mock_api.return_value = mock_ledger
+            provider.execute(req)
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+        assert req.execution_data is not None
+        assert "Insufficient gas" in (req.execution_data.message or "")
+
+    def test_execute_non_gas_error_sets_execution_failed(self) -> None:
+        """execute() lets non-gas ValueError propagate to generic handler (lines 420, 426)."""
+        tx: t.Dict[str, t.Any] = {
+            "to": "0x" + "a" * 40,
+            "gas": 21_000,
+            "value": 0,
+            "data": "0x",
+        }
+        provider = _ConcreteProvider(txs_to_return=[("bridge_tx", tx)])
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        mock_settler = MagicMock()
+        mock_settler.transact.side_effect = ValueError("contract reverted")
+
+        with patch(
+            "operate.bridge.providers.provider.TxSettler",
+            return_value=mock_settler,
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
+            mock_ledger = MagicMock()
+            mock_ledger.api.eth.get_transaction_count.return_value = 0
+            mock_api.return_value = mock_ledger
+            provider.execute(req)
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
     def test_status_json_no_quote_data(self) -> None:
         """status_json() returns message=None when no quote_data (line 485)."""
         provider = _ConcreteProvider()

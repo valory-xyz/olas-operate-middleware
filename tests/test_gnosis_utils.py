@@ -422,6 +422,71 @@ class TestCreateSafe:
         assert tx_hash == "0xtxhash"
 
 
+class TestCreateSafeGasSpike:
+    """Tests for create_safe gas spike error handling (lines 207-213)."""
+
+    def test_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("insufficient funds for gas * price + value")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                create_safe(mock_ledger, mock_crypto, salt_nonce=12345)
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_chain_interaction_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ChainInteractionError with gas message is re-raised."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ChainInteractionError("max fee per gas less than block base fee")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                create_safe(mock_ledger, mock_crypto, salt_nonce=12345)
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_non_gas_error_propagates(self) -> None:
+        """Verify ValueError not related to gas propagates unchanged."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("contract reverted")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(ValueError, match="contract reverted"):
+                create_safe(mock_ledger, mock_crypto, salt_nonce=12345)
+
+
 class TestSendSafeTxs:
     """Tests for send_safe_txs."""
 
@@ -774,6 +839,60 @@ class TestTransfer:
 
         assert result == "0xhash"
 
+    def test_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+        mock_ledger.api.to_checksum_address.return_value = "0xCryptoAddress"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("insufficient funds for gas * price + value")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                transfer(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    safe="0xSafe",
+                    to="0xRecipient",
+                    amount=1000,
+                )
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_non_gas_error_propagates(self) -> None:
+        """Verify ValueError not related to gas propagates unchanged."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+        mock_ledger.api.to_checksum_address.return_value = "0xCryptoAddress"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("contract reverted")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(ValueError, match="contract reverted"):
+                transfer(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    safe="0xSafe",
+                    to="0xRecipient",
+                    amount=1000,
+                )
+
 
 class TestTransferErc20FromSafe:
     """Tests for transfer_erc20_from_safe."""
@@ -935,6 +1054,60 @@ class TestTransferErc20FromEoa:
         mock_instance.functions.transfer.assert_called_once_with("0x" + "c" * 40, 12)
         mock_update_gas_pricing.assert_called_once_with(built_tx, mock_ledger)
         mock_update_gas_estimate.assert_called_once_with(built_tx, mock_ledger)
+
+    def test_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("insufficient funds for gas * price + value")
+        )
+        mock_chain = MagicMock()
+        mock_chain.value = "gnosis"
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=mock_chain),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                transfer_erc20_from_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    token="0x" + "b" * 40,
+                    to="0x" + "c" * 40,
+                    amount=12,
+                )
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_non_gas_error_propagates(self) -> None:
+        """Verify ValueError not related to gas propagates unchanged."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("contract reverted")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(ValueError, match="contract reverted"):
+                transfer_erc20_from_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    token="0x" + "b" * 40,
+                    to="0x" + "c" * 40,
+                    amount=12,
+                )
 
 
 class TestEstimateTransferTxFee:
