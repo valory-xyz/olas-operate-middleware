@@ -119,12 +119,15 @@ class TestPyInstallerHostDeploymentRunnerLinux:
         """Force fork start method before delegating to parent setup."""
         runner = PyInstallerHostDeploymentRunnerLinux(tmp_path, is_aea=True)
 
-        with patch(
-            "operate.services.deployment_runner.multiprocessing.set_start_method"
-        ) as mock_set_start_method, patch.object(
-            PyInstallerHostDeploymentRunnerMac,
-            "_setup_agent",
-        ) as mock_parent_setup:
+        with (
+            patch(
+                "operate.services.deployment_runner.multiprocessing.set_start_method"
+            ) as mock_set_start_method,
+            patch.object(
+                PyInstallerHostDeploymentRunnerMac,
+                "_setup_agent",
+            ) as mock_parent_setup,
+        ):
             runner._setup_agent(password="pass")  # nosec B106
 
         mock_set_start_method.assert_called_once_with("fork", force=True)
@@ -136,16 +139,20 @@ class TestPyInstallerHostDeploymentRunnerLinux:
         """Log and continue when fork start method cannot be set."""
         runner = PyInstallerHostDeploymentRunnerLinux(tmp_path, is_aea=True)
 
-        with patch(
-            "operate.services.deployment_runner.multiprocessing.set_start_method",
-            side_effect=RuntimeError("already set"),
-        ), patch.object(
-            PyInstallerHostDeploymentRunnerMac,
-            "_setup_agent",
-        ) as mock_parent_setup, patch.object(
-            runner.logger,
-            "warning",
-        ) as mock_warning:
+        with (
+            patch(
+                "operate.services.deployment_runner.multiprocessing.set_start_method",
+                side_effect=RuntimeError("already set"),
+            ),
+            patch.object(
+                PyInstallerHostDeploymentRunnerMac,
+                "_setup_agent",
+            ) as mock_parent_setup,
+            patch.object(
+                runner.logger,
+                "warning",
+            ) as mock_warning,
+        ):
             runner._setup_agent(password="pass")  # nosec B106
 
         mock_warning.assert_called_once()
@@ -177,33 +184,41 @@ class TestDeploymentManagerGetHostClass:
 
     def test_returns_mac_runner_for_darwin_when_frozen(self) -> None:
         """Test that PyInstallerHostDeploymentRunnerMac is returned on macOS+frozen."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="Darwin"):
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="Darwin"),
+        ):
             cls = DeploymentManager._get_host_deployment_runner_class()
         assert cls is PyInstallerHostDeploymentRunnerMac
 
     def test_returns_windows_runner_for_windows_when_frozen(self) -> None:
         """Test that PyInstallerHostDeploymentRunnerWindows is returned on Windows+frozen."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="Windows"):
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="Windows"),
+        ):
             cls = DeploymentManager._get_host_deployment_runner_class()
         assert cls is PyInstallerHostDeploymentRunnerWindows
 
     def test_returns_linux_runner_for_linux_when_frozen(self) -> None:
         """Test that PyInstallerHostDeploymentRunnerLinux is returned on Linux+frozen."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="Linux"):
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="Linux"),
+        ):
             cls = DeploymentManager._get_host_deployment_runner_class()
         assert cls is PyInstallerHostDeploymentRunnerLinux
 
     def test_raises_for_unknown_platform_when_frozen(self) -> None:
         """Test that ValueError is raised for an unknown platform when frozen."""
-        with patch("sys.frozen", True, create=True), patch(
-            "sys._MEIPASS", "/path", create=True
-        ), patch("platform.system", return_value="FreeBSD"):
+        with (
+            patch("sys.frozen", True, create=True),
+            patch("sys._MEIPASS", "/path", create=True),
+            patch("platform.system", return_value="FreeBSD"),
+        ):
             with pytest.raises(ValueError, match="Platform is not supported"):
                 DeploymentManager._get_host_deployment_runner_class()
 
@@ -248,10 +263,13 @@ class TestDeploymentManagerCheckIpfsConnection:
     def test_retries_on_generic_exception_then_raises(self) -> None:
         """Test that non-OSError exceptions trigger retries, then raise RuntimeError."""
         manager = _make_manager()
-        with patch(
-            "operate.services.deployment_runner.requests.get",
-            side_effect=Exception("connection failed"),
-        ), patch("operate.services.deployment_runner.time.sleep"):
+        with (
+            patch(
+                "operate.services.deployment_runner.requests.get",
+                side_effect=Exception("connection failed"),
+            ),
+            patch("operate.services.deployment_runner.time.sleep"),
+        ):
             with pytest.raises(RuntimeError, match="Failed to perform test connection"):
                 manager.check_ipfs_connection_works()
 
@@ -294,9 +312,10 @@ class TestDeploymentManagerRunDeployment:
         """Test that a successful run sets state to STARTED."""
         manager = _make_manager()
         mock_runner = MagicMock()
-        with patch.object(
-            manager, "_get_deployment_runner", return_value=mock_runner
-        ), patch.object(manager, "check_ipfs_connection_works"):
+        with (
+            patch.object(manager, "_get_deployment_runner", return_value=mock_runner),
+            patch.object(manager, "check_ipfs_connection_works"),
+        ):
             manager.run_deployment(build_dir=tmp_path, password="pass")  # nosec B106
 
         assert manager._states[tmp_path] == States.STARTED
@@ -307,11 +326,11 @@ class TestDeploymentManagerRunDeployment:
         manager = _make_manager()
         mock_runner = MagicMock()
         mock_runner.start.side_effect = RuntimeError("start failed")
-        with patch.object(
-            manager, "_get_deployment_runner", return_value=mock_runner
-        ), patch.object(manager, "check_ipfs_connection_works"), patch.object(
-            manager, "stop_deployment"
-        ) as mock_stop:
+        with (
+            patch.object(manager, "_get_deployment_runner", return_value=mock_runner),
+            patch.object(manager, "check_ipfs_connection_works"),
+            patch.object(manager, "stop_deployment") as mock_stop,
+        ):
             manager.run_deployment(build_dir=tmp_path, password="pass")  # nosec B106
 
         assert manager._states[tmp_path] == States.ERROR
@@ -326,11 +345,11 @@ class TestDeploymentManagerRunDeployment:
             manager._is_stopping = True
 
         mock_runner.start.side_effect = set_stopping
-        with patch.object(
-            manager, "_get_deployment_runner", return_value=mock_runner
-        ), patch.object(manager, "check_ipfs_connection_works"), patch.object(
-            manager, "stop_deployment"
-        ) as mock_stop:
+        with (
+            patch.object(manager, "_get_deployment_runner", return_value=mock_runner),
+            patch.object(manager, "check_ipfs_connection_works"),
+            patch.object(manager, "stop_deployment") as mock_stop,
+        ):
             manager.run_deployment(build_dir=tmp_path, password="pass")  # nosec B106
 
         mock_stop.assert_called_with(build_dir=tmp_path, force=True)

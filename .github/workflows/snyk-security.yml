@@ -60,8 +60,25 @@ jobs:
         continue-on-error: true
 
         # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
+        # Fails for two compounding reasons:
+        # 1. `--all-projects` exits with "Could not detect supported
+        #    target files" — Snyk's Python plugin doesn't parse uv.lock,
+        #    and removing poetry.lock left no manifest it recognises.
+        # 2. Working around (1) by exporting requirements.txt and
+        #    invoking `snyk monitor --file=requirements.txt
+        #    --package-manager=pip --command=python3` then hits a 403
+        #    on snyk's monitor API (verified via `snyk monitor ... -d`:
+        #    analytics payload contains
+        #    `errors:[{"code":"403","id":"SNYK-CLI-0000"}]`, rendered
+        #    by the CLI as the misleading "Missing required packages").
+        # The 403 is an auth / org-entitlement issue on the Snyk side,
+        # unrelated to uv. Allow the step to fail until either (a) snyk
+        # ships native uv.lock support or (b) the team rotates the token
+        # / enables monitor for this project. Dependabot covers Python
+        # SCA against uv.lock natively in the meantime.
       - name: Snyk Open Source monitor
         run: snyk monitor --all-projects
+        continue-on-error: true
 
       # Disabled because this repo does not use IaC or Docker yet
 

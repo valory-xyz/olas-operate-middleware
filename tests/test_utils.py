@@ -425,10 +425,10 @@ class TestSecureCopyPrivateKey:
         dst = tmp_path / "key_copy.json"
 
         # Use shutil.copyfile (content only, no chmod) to avoid os.chmod in copy2
-        with patch(
-            "operate.utils.shutil.copy2", side_effect=shutil.copyfile
-        ), patch.object(Path, "chmod", side_effect=PermissionError("no perms")), patch(
-            "operate.utils.os.chmod", side_effect=OSError("os failed")
+        with (
+            patch("operate.utils.shutil.copy2", side_effect=shutil.copyfile),
+            patch.object(Path, "chmod", side_effect=PermissionError("no perms")),
+            patch("operate.utils.os.chmod", side_effect=OSError("os failed")),
         ):
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")

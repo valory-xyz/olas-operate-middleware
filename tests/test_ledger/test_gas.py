@@ -64,17 +64,20 @@ class TestGas(OnTestnet):
         # (to avoid hitting the Tenderly fork's eth_feeHistory which may
         # return -32001 on early blocks with no history).
         _priority_fee = to_wei(2, GWEI)
-        with patch(
-            "web3.eth.Eth.get_block",
-            return_value={"baseFeePerGas": base_fee_per_gas, "number": 1},
-        ), patch(
-            "web3.eth.Eth.fee_history",
-            return_value={
-                "baseFeePerGas": [base_fee_per_gas] * 6,
-                "gasUsedRatio": [0.5] * 5,
-                "reward": [[_priority_fee]] * 5,
-                "oldestBlock": 1,
-            },
+        with (
+            patch(
+                "web3.eth.Eth.get_block",
+                return_value={"baseFeePerGas": base_fee_per_gas, "number": 1},
+            ),
+            patch(
+                "web3.eth.Eth.fee_history",
+                return_value={
+                    "baseFeePerGas": [base_fee_per_gas] * 6,
+                    "gasUsedRatio": [0.5] * 5,
+                    "reward": [[_priority_fee]] * 5,
+                    "oldestBlock": 1,
+                },
+            ),
         ):
             tx_hash = wallet.transfer(
                 to=wallet.address,  # transfer to self

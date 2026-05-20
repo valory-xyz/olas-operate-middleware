@@ -314,10 +314,14 @@ class TestGetOnChainManagerAndBuilder:
         mock_wallet = MagicMock()
         manager.wallet_manager.load.return_value = mock_wallet  # type: ignore
 
-        with patch("operate.services.manage.OnChainManager") as mock_ocm_cls, patch(
-            "operate.services.manage.CONTRACTS",
-            {Chain.GNOSIS: {"service_manager": "0xabc"}},
-        ), patch("operate.services.manage.ChainType") as mock_chain_type:
+        with (
+            patch("operate.services.manage.OnChainManager") as mock_ocm_cls,
+            patch(
+                "operate.services.manage.CONTRACTS",
+                {Chain.GNOSIS: {"service_manager": "0xabc"}},
+            ),
+            patch("operate.services.manage.ChainType") as mock_chain_type,
+        ):
             mock_chain_type.return_value = MagicMock()
             result = manager.get_on_chain_manager(ledger_config)
 
@@ -331,10 +335,14 @@ class TestGetOnChainManagerAndBuilder:
         mock_wallet = MagicMock()
         manager.wallet_manager.load.return_value = mock_wallet  # type: ignore
 
-        with patch("operate.services.manage.EthSafeTxBuilder") as mock_sftxb_cls, patch(
-            "operate.services.manage.CONTRACTS",
-            {Chain.GNOSIS: {"service_manager": "0xabc"}},
-        ), patch("operate.services.manage.ChainType") as mock_chain_type:
+        with (
+            patch("operate.services.manage.EthSafeTxBuilder") as mock_sftxb_cls,
+            patch(
+                "operate.services.manage.CONTRACTS",
+                {Chain.GNOSIS: {"service_manager": "0xabc"}},
+            ),
+            patch("operate.services.manage.ChainType") as mock_chain_type,
+        ):
             mock_chain_type.return_value = MagicMock()
             result = manager.get_eth_safe_tx_builder(ledger_config)
 
@@ -503,9 +511,10 @@ class TestGetOnChainMetadata:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"name": "my service"}
 
-        with patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch("operate.services.manage.requests.get", return_value=mock_resp):
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch("operate.services.manage.requests.get", return_value=mock_resp),
+        ):
             result = manager._get_on_chain_metadata(chain_config=mock_chain_config)
 
         assert result == {"name": "my service"}
@@ -523,9 +532,10 @@ class TestGetOnChainMetadata:
         mock_resp = MagicMock()
         mock_resp.status_code = 404
 
-        with patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch("operate.services.manage.requests.get", return_value=mock_resp):
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch("operate.services.manage.requests.get", return_value=mock_resp),
+        ):
             with pytest.raises(ValueError, match="on-chain metadata"):
                 manager._get_on_chain_metadata(chain_config=mock_chain_config)
 
@@ -547,9 +557,10 @@ class TestGetMechConfigs:
 
         mock_sftxb = MagicMock()
 
-        with patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch("operate.services.manage.get_staking_contract", return_value=None):
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch("operate.services.manage.get_staking_contract", return_value=None),
+        ):
             result = manager.get_mech_configs(
                 chain=_CHAIN,
                 ledger_api=self._make_ledger_api(),
@@ -582,14 +593,16 @@ class TestGetMechConfigs:
         mock_mech_contract = MagicMock()
         mock_mech_contract.get_instance.return_value = mock_mech_instance
 
-        with patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch(
-            "operate.services.manage.get_staking_contract",
-            return_value="0xStakingContract",
-        ), patch(
-            "operate.services.manage.MechActivityContract.from_dir",
-            return_value=mock_mech_contract,
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+            patch(
+                "operate.services.manage.MechActivityContract.from_dir",
+                return_value=mock_mech_contract,
+            ),
         ):
             result = manager.get_mech_configs(
                 chain=_CHAIN,
@@ -624,20 +637,24 @@ class TestGetMechConfigs:
         priority_mech = "0xPriorityMech"
         priority_service_id = 123
 
-        with patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch(
-            "operate.services.manage.get_staking_contract",
-            return_value="0xStakingContract",
-        ), patch(
-            "operate.services.manage.MechActivityContract.from_dir",
-            side_effect=Exception("mech contract failed"),
-        ), patch(
-            "operate.services.manage.RequesterActivityCheckerContract.from_dir",
-            return_value=mock_requester_contract,
-        ), patch(
-            "operate.services.manage.DEFAULT_PRIORITY_MECH",
-            {mech_marketplace_addr: (priority_mech, priority_service_id)},
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+            patch(
+                "operate.services.manage.MechActivityContract.from_dir",
+                side_effect=Exception("mech contract failed"),
+            ),
+            patch(
+                "operate.services.manage.RequesterActivityCheckerContract.from_dir",
+                return_value=mock_requester_contract,
+            ),
+            patch(
+                "operate.services.manage.DEFAULT_PRIORITY_MECH",
+                {mech_marketplace_addr: (priority_mech, priority_service_id)},
+            ),
         ):
             result = manager.get_mech_configs(
                 chain=_CHAIN,
@@ -662,17 +679,20 @@ class TestGetMechConfigs:
             "activity_checker": "0xActivityChecker"
         }
 
-        with patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch(
-            "operate.services.manage.get_staking_contract",
-            return_value="0xStakingContract",
-        ), patch(
-            "operate.services.manage.MechActivityContract.from_dir",
-            side_effect=Exception("mech failed"),
-        ), patch(
-            "operate.services.manage.RequesterActivityCheckerContract.from_dir",
-            side_effect=Exception("requester failed"),
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+            patch(
+                "operate.services.manage.MechActivityContract.from_dir",
+                side_effect=Exception("mech failed"),
+            ),
+            patch(
+                "operate.services.manage.RequesterActivityCheckerContract.from_dir",
+                side_effect=Exception("requester failed"),
+            ),
         ):
             result = manager.get_mech_configs(
                 chain=_CHAIN,
@@ -770,9 +790,12 @@ class TestClaimAllOnChainFromSafe:
         svc2.service_config_id = "sc-2"
         svc2.home_chain = "base"
 
-        with patch.object(
-            manager, "get_all_services", return_value=([svc1, svc2], True)
-        ), patch.object(manager, "claim_on_chain_from_safe") as mock_claim:
+        with (
+            patch.object(
+                manager, "get_all_services", return_value=([svc1, svc2], True)
+            ),
+            patch.object(manager, "claim_on_chain_from_safe") as mock_claim,
+        ):
             manager.claim_all_on_chain_from_safe()
 
         assert mock_claim.call_count == 2
@@ -783,9 +806,10 @@ class TestClaimAllOnChainFromSafe:
         """No services means no claims."""
         manager = _make_manager(tmp_path)
 
-        with patch.object(
-            manager, "get_all_services", return_value=([], True)
-        ), patch.object(manager, "claim_on_chain_from_safe") as mock_claim:
+        with (
+            patch.object(manager, "get_all_services", return_value=([], True)),
+            patch.object(manager, "claim_on_chain_from_safe") as mock_claim,
+        ):
             manager.claim_all_on_chain_from_safe()
 
         mock_claim.assert_not_called()
@@ -1011,9 +1035,11 @@ class TestComputeProtocolAssetRequirements:
         mock_service = MagicMock()
         mock_service.chain_configs = {_CHAIN: mock_chain_config}
 
-        with patch.object(manager, "load", return_value=mock_service), patch.object(
-            manager, "get_eth_safe_tx_builder"
-        ), patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}):
+        with (
+            patch.object(manager, "load", return_value=mock_service),
+            patch.object(manager, "get_eth_safe_tx_builder"),
+            patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}),
+        ):
             result = manager._compute_protocol_asset_requirements("sc-1", _CHAIN)
 
         expected = {ZERO_ADDRESS: 10 * NUM_LOCAL_AGENT_INSTANCES + 10}
@@ -1044,13 +1070,14 @@ class TestComputeProtocolAssetRequirements:
         }
         mock_sftxb.get_staking_params.return_value = staking_params
 
-        with patch.object(manager, "load", return_value=mock_service), patch.object(
-            manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch(
-            "operate.services.manage.get_staking_contract",
-            return_value="0xStaking",
-        ), patch.dict(
-            os.environ, {"CUSTOM_CHAIN_RPC": _RPC}
+        with (
+            patch.object(manager, "load", return_value=mock_service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStaking",
+            ),
+            patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}),
         ):
             result = manager._compute_protocol_asset_requirements("sc-1", _CHAIN)
 
@@ -1076,9 +1103,11 @@ class TestComputeProtocolAssetRequirements:
         mock_service = MagicMock()
         mock_service.chain_configs = {_CHAIN: mock_chain_config}
 
-        with patch.object(manager, "load", return_value=mock_service), patch.object(
-            manager, "get_eth_safe_tx_builder"
-        ), patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}):
+        with (
+            patch.object(manager, "load", return_value=mock_service),
+            patch.object(manager, "get_eth_safe_tx_builder"),
+            patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}),
+        ):
             result = manager._compute_protocol_asset_requirements("sc-1", _CHAIN)
 
         assert result == {ZERO_ADDRESS: 5 * NUM_LOCAL_AGENT_INSTANCES + 5}

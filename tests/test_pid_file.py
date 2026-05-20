@@ -350,9 +350,10 @@ class TestLockingPlatformBranches:
         mock_msvcrt.locking.side_effect = OSError("Windows: file locked")
         mock_msvcrt.LK_NBLCK = 1
 
-        with patch(
-            "operate.utils.pid_file.platform.system", return_value="Windows"
-        ), patch.dict(sys.modules, {"msvcrt": mock_msvcrt}):
+        with (
+            patch("operate.utils.pid_file.platform.system", return_value="Windows"),
+            patch.dict(sys.modules, {"msvcrt": mock_msvcrt}),
+        ):
             with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
                 with pytest.raises(PIDFileLocked, match="locked"):
                     _acquire_lock(f.fileno())
@@ -363,9 +364,10 @@ class TestLockingPlatformBranches:
         mock_msvcrt.locking.side_effect = OSError("Windows: unlock failed")
         mock_msvcrt.LK_UNLCK = 2
 
-        with patch(
-            "operate.utils.pid_file.platform.system", return_value="Windows"
-        ), patch.dict(sys.modules, {"msvcrt": mock_msvcrt}):
+        with (
+            patch("operate.utils.pid_file.platform.system", return_value="Windows"),
+            patch.dict(sys.modules, {"msvcrt": mock_msvcrt}),
+        ):
             with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
                 # Should not raise
                 _release_lock(f.fileno())
@@ -377,9 +379,10 @@ class TestLockingPlatformBranches:
         self, tmp_path: Path
     ) -> None:
         """Test that Unix flock OSError is wrapped as PIDFileLocked."""
-        with patch(
-            "operate.utils.pid_file.platform.system", return_value="Linux"
-        ), patch("fcntl.flock", side_effect=OSError("flock failed")):
+        with (
+            patch("operate.utils.pid_file.platform.system", return_value="Linux"),
+            patch("fcntl.flock", side_effect=OSError("flock failed")),
+        ):
             with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
                 with pytest.raises(PIDFileLocked, match="locked"):
                     _acquire_lock(f.fileno())
@@ -391,9 +394,10 @@ class TestLockingPlatformBranches:
         self, tmp_path: Path
     ) -> None:
         """Test that Unix fcntl unlock OSError is silently ignored."""
-        with patch(
-            "operate.utils.pid_file.platform.system", return_value="Linux"
-        ), patch("fcntl.flock", side_effect=OSError("flock failed")):
+        with (
+            patch("operate.utils.pid_file.platform.system", return_value="Linux"),
+            patch("fcntl.flock", side_effect=OSError("flock failed")),
+        ):
             with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
                 # Should not raise
                 _release_lock(f.fileno())
@@ -470,10 +474,10 @@ class TestReadPIDFileEdgeCases:
         pid_file = tmp_path / "test.pid"
         pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
-        with patch(
-            "operate.utils.pid_file.platform.system", return_value="Linux"
-        ), patch("fcntl.flock", side_effect=PIDFileLocked("always locked")), patch(
-            "operate.utils.pid_file.time.sleep"
+        with (
+            patch("operate.utils.pid_file.platform.system", return_value="Linux"),
+            patch("fcntl.flock", side_effect=PIDFileLocked("always locked")),
+            patch("operate.utils.pid_file.time.sleep"),
         ):
             with pytest.raises(PIDFileLocked, match="Could not acquire lock"):
                 read_pid_file(pid_file, timeout=0.05)
@@ -488,9 +492,10 @@ class TestReadPIDFileEdgeCases:
         pid_file = tmp_path / "test.pid"
         pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
-        with patch(
-            "operate.utils.pid_file.platform.system", return_value="Linux"
-        ), patch("fcntl.flock", side_effect=OSError("disk error")):
+        with (
+            patch("operate.utils.pid_file.platform.system", return_value="Linux"),
+            patch("fcntl.flock", side_effect=OSError("disk error")),
+        ):
             with pytest.raises(PIDFileError, match="Failed to read PID file"):
                 read_pid_file(pid_file)
 
@@ -509,8 +514,9 @@ class TestReadPIDFileEdgeCases:
                 raise OSError("permission denied")
             original_unlink(self, missing_ok)
 
-        with patch("operate.utils.pid_file.logger") as mock_logger, patch.object(
-            Path, "unlink", mock_unlink
+        with (
+            patch("operate.utils.pid_file.logger") as mock_logger,
+            patch.object(Path, "unlink", mock_unlink),
         ):
             with pytest.raises(StalePIDFile):
                 read_pid_file(pid_file, remove_stale=True)
@@ -535,8 +541,9 @@ class TestRemovePIDFileEdgeCases:
                 raise OSError("permission denied")
             original_unlink(self, missing_ok)
 
-        with patch("operate.utils.pid_file.logger") as mock_logger, patch.object(
-            Path, "unlink", mock_unlink
+        with (
+            patch("operate.utils.pid_file.logger") as mock_logger,
+            patch.object(Path, "unlink", mock_unlink),
         ):
             remove_pid_file(pid_file, force=True)
 
