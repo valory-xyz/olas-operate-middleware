@@ -296,11 +296,14 @@ class TestProviderBase:
         provider = _ConcreteProvider(txs_to_return=[("transfer", tx)])
         req = _make_request(from_token=from_token)
 
-        with patch(
-            "operate.bridge.providers.provider.update_tx_with_gas_pricing"
-        ) as mock_gas, patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.update_tx_with_gas_pricing"
+            ) as mock_gas,
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
 
@@ -331,11 +334,14 @@ class TestProviderBase:
         provider = _ConcreteProvider(txs_to_return=[("transfer", tx)])
         req = _make_request(from_token=from_token)
 
-        with patch(
-            "operate.bridge.providers.provider.update_tx_with_gas_pricing"
-        ) as mock_gas, patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.update_tx_with_gas_pricing"
+            ) as mock_gas,
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
 
@@ -385,11 +391,14 @@ class TestProviderBase:
         mock_settler.settle.return_value = mock_settler
         mock_settler.tx_hash = "0x" + "e" * 64
 
-        with patch(
-            "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -416,11 +425,14 @@ class TestProviderBase:
         mock_settler.settle.side_effect = TimeExhausted("timed out")
         mock_settler.tx_hash = "0x" + "f" * 64
 
-        with patch(
-            "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -444,12 +456,15 @@ class TestProviderBase:
         req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
         req.quote_data = _make_quote_data()
 
-        with patch(
-            "operate.bridge.providers.provider.TxSettler",
-            side_effect=RuntimeError("boom"),
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
             provider.execute(req)
@@ -474,12 +489,15 @@ class TestProviderBase:
             "insufficient funds for gas * price + value"
         )
 
-        with patch(
-            "operate.bridge.providers.provider.TxSettler",
-            return_value=mock_settler,
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler",
+                return_value=mock_settler,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -504,12 +522,15 @@ class TestProviderBase:
         mock_settler = MagicMock()
         mock_settler.transact.side_effect = ValueError("contract reverted")
 
-        with patch(
-            "operate.bridge.providers.provider.TxSettler",
-            return_value=mock_settler,
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler",
+                return_value=mock_settler,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -726,15 +747,16 @@ class TestLiFiProviderUnit:
             "data": "0x095ea7b3...",
         }
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.registry_contracts"
+            ) as mock_contracts,
+            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"),
+            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
             mock_contracts.erc20.get_approve_tx.return_value = mock_approve_tx
@@ -773,13 +795,13 @@ class TestLiFiProviderUnit:
         }
         req.quote_data = _make_quote_data(provider_data={"response": quote_response})
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"),
+            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -823,15 +845,16 @@ class TestLiFiProviderUnit:
             "value": 0,
         }
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.registry_contracts"
+            ) as mock_contracts,
+            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"),
+            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -899,15 +922,19 @@ class TestLiFiProviderUnit:
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            return_value=mock_resp,
-        ), patch(
-            "operate.bridge.providers.provider.Provider._tx_timestamp",
-            return_value=100,
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "operate.bridge.providers.provider.Provider._tx_timestamp",
+                return_value=100,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_api.return_value = MagicMock()
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -1026,13 +1053,16 @@ class TestLiFiProviderUnit:
         req.execution_data = _make_execution_data(from_tx_hash="0x" + "dd" * 32)
         req.quote_data = _make_quote_data(eta=60)
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            side_effect=ConnectionError("network error"),
-        ), patch.object(
-            provider,
-            "_bridge_tx_likely_failed",
-            return_value=True,
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.requests.get",
+                side_effect=ConnectionError("network error"),
+            ),
+            patch.object(
+                provider,
+                "_bridge_tx_likely_failed",
+                return_value=True,
+            ),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -1770,11 +1800,14 @@ class TestProviderBaseAdditional:
         provider = _ConcreteProvider(txs_to_return=[("approve_tx", tx)])
         req = _make_request(from_token=from_token)
 
-        with patch(
-            "operate.bridge.providers.provider.update_tx_with_gas_pricing"
-        ) as mock_gas, patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.provider.update_tx_with_gas_pricing"
+            ) as mock_gas,
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
 
@@ -1953,10 +1986,13 @@ class TestLiFiQuotePaths:
             amount=1000,
         )
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            side_effect=req_lib.Timeout("timed out"),
-        ), patch("operate.bridge.providers.lifi_provider.time.sleep"):
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.requests.get",
+                side_effect=req_lib.Timeout("timed out"),
+            ),
+            patch("operate.bridge.providers.lifi_provider.time.sleep"),
+        ):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -1980,10 +2016,13 @@ class TestLiFiQuotePaths:
         mock_resp.json.return_value = {"message": "API error"}
         mock_resp.status_code = 400
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            return_value=mock_resp,
-        ), patch("operate.bridge.providers.lifi_provider.time.sleep"):
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.requests.get",
+                return_value=mock_resp,
+            ),
+            patch("operate.bridge.providers.lifi_provider.time.sleep"),
+        ):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -1997,10 +2036,13 @@ class TestLiFiQuotePaths:
             amount=1000,
         )
 
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            side_effect=ValueError("generic error"),
-        ), patch("operate.bridge.providers.lifi_provider.time.sleep"):
+        with (
+            patch(
+                "operate.bridge.providers.lifi_provider.requests.get",
+                side_effect=ValueError("generic error"),
+            ),
+            patch("operate.bridge.providers.lifi_provider.time.sleep"),
+        ):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -2209,10 +2251,13 @@ class TestRelayQuotePaths:
             amount=1000,
         )
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.post",
-            side_effect=req_lib.Timeout("timed out"),
-        ), patch("operate.bridge.providers.relay_provider.time.sleep"):
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.post",
+                side_effect=req_lib.Timeout("timed out"),
+            ),
+            patch("operate.bridge.providers.relay_provider.time.sleep"),
+        ):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -2258,12 +2303,14 @@ class TestRelayQuotePaths:
         }
         req.quote_data = _make_quote_data(provider_data={"response": response_json})
 
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api, patch(
-            "operate.bridge.providers.relay_provider.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.bridge.providers.relay_provider.update_tx_with_gas_estimate"
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+            patch("operate.bridge.providers.relay_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.relay_provider.update_tx_with_gas_estimate"
+            ),
         ):
             mock_ledger = MagicMock()
             mock_ledger.api.to_checksum_address.side_effect = lambda x: x
@@ -2425,12 +2472,15 @@ class TestRelayQuoteAdditionalPaths:
         mock_placeholder = MagicMock()
         mock_placeholder.json.return_value = placeholder_response_json
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.post",
-            side_effect=[mock_first, mock_placeholder],
-        ), patch(
-            "operate.bridge.providers.relay_provider.RELAY_DEFAULT_GAS",
-            {"gnosis": {"approve": 100000}},
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.post",
+                side_effect=[mock_first, mock_placeholder],
+            ),
+            patch(
+                "operate.bridge.providers.relay_provider.RELAY_DEFAULT_GAS",
+                {"gnosis": {"approve": 100000}},
+            ),
         ):
             provider.quote(req)
 
@@ -2453,10 +2503,13 @@ class TestRelayQuoteAdditionalPaths:
         mock_resp.raise_for_status.side_effect = req_lib.RequestException("bad request")
         mock_resp.status_code = 400
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.post",
-            return_value=mock_resp,
-        ), patch("operate.bridge.providers.relay_provider.time.sleep"):
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.post",
+                return_value=mock_resp,
+            ),
+            patch("operate.bridge.providers.relay_provider.time.sleep"),
+        ):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -2499,12 +2552,15 @@ class TestRelayUpdateExecutionStatusAdditional:
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.get",
-            return_value=mock_resp,
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_w3 = MagicMock()
             mock_w3.eth.get_transaction_receipt.return_value = None
             mock_api.return_value = MagicMock(api=mock_w3)
@@ -2543,12 +2599,15 @@ class TestRelayUpdateExecutionStatusAdditional:
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.get",
-            return_value=mock_resp,
-        ), patch(
-            "operate.bridge.providers.provider.Provider._tx_timestamp",
-            return_value=1000,
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "operate.bridge.providers.provider.Provider._tx_timestamp",
+                return_value=1000,
+            ),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -2566,12 +2625,15 @@ class TestRelayUpdateExecutionStatusAdditional:
         req.execution_data = _make_execution_data(timestamp=int(time.time()) - 1500)
         req.quote_data = _make_quote_data(eta=30)
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.get",
-            side_effect=RuntimeError("rpc down"),
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.get",
+                side_effect=RuntimeError("rpc down"),
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_w3 = MagicMock()
             mock_w3.eth.get_transaction_receipt.return_value = None
             mock_api.return_value = MagicMock(api=mock_w3)
@@ -2783,15 +2845,20 @@ class TestNativeBridgeProviderApproveAndBridgeTx:
         req.quote_data = _make_quote_data()
         mock_approve_tx: t.Dict = {"gas": 200_000, "value": 0, "to": ERC20_ADDR}
 
-        with patch(
-            "operate.bridge.providers.native_bridge_provider.registry_contracts"
-        ) as mock_contracts, patch(
-            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch(
+                "operate.bridge.providers.native_bridge_provider.registry_contracts"
+            ) as mock_contracts,
+            patch(
+                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
+            ),
+            patch(
+                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_api.return_value = MagicMock()
             mock_contracts.erc20.get_approve_tx.return_value = mock_approve_tx
             result = provider._get_approve_tx(req)  # pylint: disable=protected-access
@@ -2821,17 +2888,22 @@ class TestNativeBridgeProviderApproveAndBridgeTx:
         req.quote_data = _make_quote_data()
         expected_tx: t.Dict = {"to": "0x" + "a" * 40, "value": 1000, "gas": 200_000}
 
-        with patch.object(
-            provider.bridge_contract_adaptor,
-            "build_bridge_tx",
-            return_value=expected_tx,
-        ) as mock_build, patch(
-            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
-        ), patch(
-            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
-        ), patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
+        with (
+            patch.object(
+                provider.bridge_contract_adaptor,
+                "build_bridge_tx",
+                return_value=expected_tx,
+            ) as mock_build,
+            patch(
+                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
+            ),
+            patch(
+                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
             mock_api.return_value = MagicMock()
             result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
             mock_build.assert_called_once()
@@ -2970,9 +3042,10 @@ class TestNativeBridgeProviderGetTxs:
         approve_tx: t.Dict = {"gas": 200_000, "value": 0, "to": ERC20_ADDR}
         bridge_tx: t.Dict = {"gas": 100_000, "value": 1000, "to": "0x" + "e" * 40}
 
-        with patch.object(
-            provider, "_get_approve_tx", return_value=approve_tx
-        ), patch.object(provider, "_get_bridge_tx", return_value=bridge_tx):
+        with (
+            patch.object(provider, "_get_approve_tx", return_value=approve_tx),
+            patch.object(provider, "_get_bridge_tx", return_value=bridge_tx),
+        ):
             txs = provider._get_txs(req)  # pylint: disable=protected-access
 
         assert len(txs) == 2
@@ -2991,8 +3064,9 @@ class TestNativeBridgeProviderGetTxs:
 
         bridge_tx: t.Dict = {"gas": 100_000, "value": 1000, "to": "0x" + "e" * 40}
 
-        with patch.object(provider, "_get_approve_tx", return_value=None), patch.object(
-            provider, "_get_bridge_tx", return_value=bridge_tx
+        with (
+            patch.object(provider, "_get_approve_tx", return_value=None),
+            patch.object(provider, "_get_bridge_tx", return_value=bridge_tx),
         ):
             txs = provider._get_txs(req)  # pylint: disable=protected-access
 
@@ -3120,12 +3194,15 @@ class TestRelaySuccessSameChain:
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
 
-        with patch(
-            "operate.bridge.providers.relay_provider.requests.get",
-            return_value=mock_resp,
-        ), patch(
-            "operate.bridge.providers.provider.Provider._tx_timestamp",
-            return_value=1000,
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "operate.bridge.providers.provider.Provider._tx_timestamp",
+                return_value=1000,
+            ),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -3190,11 +3267,14 @@ class TestOptimismContractAdaptorCoverage:
             "from": {"chain": "ethereum", "token": from_addr},
             "to": {"chain": "base", "token": to_addr},
         }
-        with patch.object(
-            BridgeContractAdaptor, "can_handle_request", return_value=True
-        ), patch(
-            "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
-            return_value=MagicMock(),
+        with (
+            patch.object(
+                BridgeContractAdaptor, "can_handle_request", return_value=True
+            ),
+            patch(
+                "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
+                return_value=MagicMock(),
+            ),
         ):
             result = adaptor.can_handle_request(params)
         assert result is True
@@ -3212,11 +3292,14 @@ class TestOptimismContractAdaptorCoverage:
             "from": {"chain": "ethereum", "token": from_addr},
             "to": {"chain": "base", "token": to_addr},
         }
-        with patch.object(
-            BridgeContractAdaptor, "can_handle_request", return_value=True
-        ), patch(
-            "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
-            return_value=MagicMock(),
+        with (
+            patch.object(
+                BridgeContractAdaptor, "can_handle_request", return_value=True
+            ),
+            patch(
+                "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
+                return_value=MagicMock(),
+            ),
         ):
             result = adaptor.can_handle_request(params)
         assert result is False
@@ -3234,11 +3317,14 @@ class TestOptimismContractAdaptorCoverage:
             "from": {"chain": "ethereum", "token": from_addr},
             "to": {"chain": "base", "token": to_addr},
         }
-        with patch.object(
-            BridgeContractAdaptor, "can_handle_request", return_value=True
-        ), patch(
-            "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
-            return_value=MagicMock(),
+        with (
+            patch.object(
+                BridgeContractAdaptor, "can_handle_request", return_value=True
+            ),
+            patch(
+                "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
+                return_value=MagicMock(),
+            ),
         ):
             result = adaptor.can_handle_request(params)
         assert result is False
@@ -3564,21 +3650,26 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 return MagicMock(api=mock_from_w3)
             return MagicMock(api=mock_to_w3)
 
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api",
-            side_effect=_pick_ledger,
-        ), patch.object(
-            NativeBridgeProvider,
-            "_find_block_before_timestamp",
-            return_value=100,
-        ), patch.object(
-            provider.bridge_contract_adaptor,
-            "find_bridge_finalized_tx",
-            return_value=to_tx_hash,
-        ), patch.object(
-            Provider,
-            "_tx_timestamp",
-            return_value=1_000_000,
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                side_effect=_pick_ledger,
+            ),
+            patch.object(
+                NativeBridgeProvider,
+                "_find_block_before_timestamp",
+                return_value=100,
+            ),
+            patch.object(
+                provider.bridge_contract_adaptor,
+                "find_bridge_finalized_tx",
+                return_value=to_tx_hash,
+            ),
+            patch.object(
+                Provider,
+                "_tx_timestamp",
+                return_value=1_000_000,
+            ),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -3625,17 +3716,21 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 return MagicMock(api=mock_from_w3)
             return MagicMock(api=mock_to_w3)
 
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api",
-            side_effect=_pick_ledger,
-        ), patch.object(
-            NativeBridgeProvider,
-            "_find_block_before_timestamp",
-            return_value=100,
-        ), patch.object(
-            provider.bridge_contract_adaptor,
-            "find_bridge_finalized_tx",
-            return_value=None,
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                side_effect=_pick_ledger,
+            ),
+            patch.object(
+                NativeBridgeProvider,
+                "_find_block_before_timestamp",
+                return_value=100,
+            ),
+            patch.object(
+                provider.bridge_contract_adaptor,
+                "find_bridge_finalized_tx",
+                return_value=None,
+            ),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -3665,13 +3760,16 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 return MagicMock(api=mock_from_w3)
             return MagicMock(api=MagicMock())
 
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api",
-            side_effect=_pick_ledger,
-        ), patch.object(
-            NativeBridgeProvider,
-            "_find_block_before_timestamp",
-            side_effect=RuntimeError("network error"),
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                side_effect=_pick_ledger,
+            ),
+            patch.object(
+                NativeBridgeProvider,
+                "_find_block_before_timestamp",
+                side_effect=RuntimeError("network error"),
+            ),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
