@@ -1991,6 +1991,33 @@ class TestWithdrawAndTerminateRoutes:
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
 
+    def test_withdraw_onchain_insufficient_funds(self) -> None:
+        """_withdraw_onchain returns structured 400 on InsufficientFundsException."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc.home_chain = "gnosis"
+        m.service_manager.return_value.load.return_value = svc
+        m.service_manager.return_value.terminate_service_on_chain_from_safe.side_effect = InsufficientFundsException(
+            "no gas for gnosis", chain="gnosis"
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post(
+                    "/api/v2/service/svc1/onchain/withdraw",
+                    json={"withdrawal_address": "0xrecipient"},
+                )
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+            assert body["chain"] == "gnosis"
+            assert body["prefill_amount_wei"] == str(
+                DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+            )
+
     def test_terminate_and_withdraw_not_logged_in(self) -> None:
         """Cover line 1421."""
         m = _make_mock_operate()
