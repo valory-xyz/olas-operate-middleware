@@ -46,10 +46,10 @@ from operate.ledger import (
     is_gas_spike_error,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
-    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.operate_types import Chain
 from operate.serialization import BigInt
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 
 logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1

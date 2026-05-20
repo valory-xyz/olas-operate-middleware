@@ -43,11 +43,11 @@ from operate.constants import (
 from operate.ledger import (
     get_default_ledger_api,
     update_tx_with_gas_pricing,
-    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.serialization import BigInt
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_QUOTE_RETRIES = 3

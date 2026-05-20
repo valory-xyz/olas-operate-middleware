@@ -21,14 +21,12 @@
 
 import os
 import typing as t
-from contextlib import contextmanager
 from copy import deepcopy
 from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
-from autonomy.chain.exceptions import ChainInteractionError
 
 from operate.operate_types import Chain
 
@@ -176,23 +174,6 @@ def is_gas_spike_error(err: str) -> bool:
         or "insufficient funds for gas" in lower
         or "max fee per gas less than block base fee" in lower
     )
-
-
-@contextmanager
-def wrap_gas_spike_as_insufficient_funds(chain: str, action: str) -> t.Iterator[None]:
-    """Translate TxSettler gas-spike failures into InsufficientFundsException."""
-    from operate.exceptions import (  # isort: skip  # pylint: disable=import-outside-toplevel
-        InsufficientFundsException,
-    )
-
-    try:
-        yield
-    except (ValueError, ChainInteractionError) as exc:
-        if is_gas_spike_error(str(exc)):
-            raise InsufficientFundsException(
-                f"Insufficient gas to {action}: {exc}", chain=chain
-            ) from exc
-        raise
 
 
 # TODO backport to open aea/autonomy

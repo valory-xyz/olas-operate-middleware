@@ -48,7 +48,6 @@ from operate.ledger import (
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
-    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.ledger.profiles import (
     DUST,
@@ -59,6 +58,7 @@ from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.utils import create_backup
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     add_owner,
 )

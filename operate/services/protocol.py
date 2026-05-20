@@ -76,13 +76,13 @@ from operate.ledger import (
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
-    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.services.service import NON_EXISTENT_TOKEN
 from operate.utils import concurrent_execute
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
