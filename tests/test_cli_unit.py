@@ -1864,6 +1864,21 @@ class TestServiceRoutes:
             assert body["chain"] == "gnosis"
             assert "prefill_amount_wei" in body
 
+    def test_deploy_service_generic_exception(self) -> None:
+        """Cover lines 1623-1625: deploy returns 500 on generic Exception."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            RuntimeError("unexpected failure")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+            body = resp.json()
+            assert body["error"] == "Failed to deploy service. Please check the logs."
+
     def test_update_service_not_logged_in(self) -> None:
         """Cover line 1291."""
         m = _make_mock_operate()
