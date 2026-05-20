@@ -349,12 +349,26 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         """Updates current password using the mnemonic.
 
         The seed-phrase flow is for users who no longer have the password
-        agent EOA keys were encrypted with. Agent keys are marked
-        discarded (renamed ``.lost``) so the caller can re-establish agent
-        authority via the safe recovery module; the original files remain
-        on disk for audit. Discard runs last so a failure in the wallet
-        rewrite or the ``user.json`` update doesn't leave the directory in
-        a half-renamed state.
+        agent EOA keys were encrypted with. The old agent EOA key files
+        are unreadable, so we:
+
+        1. Rewrite the master keystore + ``user.json`` with the new password.
+        2. Mark every old agent EOA key file ``.lost`` for audit.
+        3. Mint a replacement EOA per slot in each service's
+           ``agent_addresses`` and rewrite the service config in place.
+
+        Step 3 matches the contract that
+        :class:`~operate.wallet.wallet_recovery_manager.WalletRecoveryManager`
+        already enforces on the full-recovery path. Without it, a service
+        whose ``agent_addresses`` still references a now-``.lost``
+        address fails to start with ``FileNotFoundError`` inside
+        ``_build_host``.
+
+        Retry semantics: this flow is retryable but not orphan-free. A
+        crash between step 2 and the end of step 3 leaves freshly minted
+        keys on disk that the next retry will re-``.lost`` and then
+        replace. Services still converge to a valid state; the cost is
+        ``.lost`` clutter in the keys directory.
         """
 
         if not new_password:
@@ -368,15 +382,39 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self.user_account.force_update(new_password)
         failed = self._keys_manager.discard_all()
         if failed:
-            # Wallet + user.json are already on new_password by this point;
-            # only the discard step partially failed. Re-running the
-            # seed-phrase flow is safe: wallet/user updates are idempotent
-            # and discard_all skips files already marked .lost.
+            # Wallet + user.json are already on new_password by this point,
+            # but the rotation loop hasn't run, so no agent keys were
+            # minted. Re-running the seed-phrase flow is safe in this
+            # narrow case: wallet/user updates are idempotent and
+            # discard_all skips files already marked .lost.
             raise ValueError(
                 "Could not mark the following agent keys as discarded; "
                 "retry the seed-phrase recovery flow to finish the "
                 f"discard step: {', '.join(failed)}"
             )
+
+        # Replacement EOAs must be encrypted under new_password so the
+        # service can decrypt them on start. Pin keys_manager explicitly
+        # rather than relying on the login state at the caller.
+        self._keys_manager.password = new_password
+        all_services, all_loaded = self.service_manager().get_all_services()
+        if not all_loaded:
+            # ServiceManager already logged the per-service load failure;
+            # surface it here too so the operator knows some services were
+            # NOT rotated and will still hit FileNotFoundError on start.
+            logger.warning(
+                "Some service configs failed to load during agent EOA "
+                "rotation; their agent_addresses still point at .lost "
+                "key files and will fail to start. Fix the service "
+                "configs and re-run the seed-phrase recovery flow."
+            )
+        for service in all_services:
+            if not service.agent_addresses:
+                continue
+            service.agent_addresses = [
+                self._keys_manager.create() for _ in service.agent_addresses
+            ]
+            service.store()
 
     def service_manager(
         self, skip_dependency_check: t.Optional[bool] = False
