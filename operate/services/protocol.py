@@ -45,7 +45,6 @@ from autonomy.chain.constants import (
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
-from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
@@ -72,13 +71,12 @@ from operate.constants import (
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     get_default_ledger_api,
-    is_gas_spike_error,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
+    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
@@ -215,7 +213,9 @@ class GnosisSafeTransaction:
 
     def settle(self) -> TxReceipt:
         """Settle the transaction."""
-        try:
+        with wrap_gas_spike_as_insufficient_funds(
+            self.chain_type.value, "settle Safe transaction"
+        ):
             return (
                 TxSettler(
                     ledger_api=self.ledger_api,
@@ -230,13 +230,6 @@ class GnosisSafeTransaction:
                 .settle()
                 .tx_receipt
             )
-        except (ValueError, ChainInteractionError) as exc:
-            if is_gas_spike_error(str(exc)):
-                raise InsufficientFundsException(
-                    f"Insufficient gas to settle Safe transaction on {self.chain_type.value}: {exc}",
-                    chain=self.chain_type.value,
-                ) from exc
-            raise
 
 
 class StakingManager:

@@ -48,6 +48,7 @@ from operate.ledger import (
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
+    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.ledger.profiles import (
     DUST,
@@ -462,7 +463,9 @@ class EthereumMasterWallet(
                 raise_on_try=True,
             )
 
-        try:
+        with wrap_gas_spike_as_insufficient_funds(
+            chain.value, f"transfer from EOA on {chain.name}"
+        ):
             return (
                 TxSettler(
                     ledger_api=ledger_api,
@@ -477,13 +480,6 @@ class EthereumMasterWallet(
                 .settle()
                 .tx_hash
             )
-        except (ValueError, ChainInteractionError) as exc:
-            if is_gas_spike_error(str(exc)):
-                raise InsufficientFundsException(
-                    f"Insufficient gas to transfer from EOA on {chain.name}: {exc}",
-                    chain=chain.value,
-                ) from exc
-            raise
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
@@ -558,7 +554,9 @@ class EthereumMasterWallet(
             update_tx_with_gas_estimate(tx, ledger_api)
             return tx
 
-        try:
+        with wrap_gas_spike_as_insufficient_funds(
+            chain.value, f"transfer ERC20 from EOA on {chain.name}"
+        ):
             return (
                 TxSettler(
                     ledger_api=ledger_api,
@@ -573,13 +571,6 @@ class EthereumMasterWallet(
                 .settle()
                 .tx_hash
             )
-        except (ValueError, ChainInteractionError) as exc:
-            if is_gas_spike_error(str(exc)):
-                raise InsufficientFundsException(
-                    f"Insufficient gas to transfer ERC20 from EOA on {chain.name}: {exc}",
-                    chain=chain.value,
-                ) from exc
-            raise
 
     def transfer(  # pylint: disable=too-many-arguments
         self,

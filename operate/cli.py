@@ -1620,6 +1620,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={"error": "Failed to deploy service. Please check the logs."},
+            )
 
         schedule_healthcheck_job(service_config_id=service_config_id)
 

@@ -29,7 +29,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from aea.crypto.base import LedgerApi
-from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
 from web3.exceptions import TimeExhausted, TransactionNotFound
@@ -41,11 +40,10 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     get_default_ledger_api,
-    is_gas_spike_error,
     update_tx_with_gas_pricing,
+    wrap_gas_spike_as_insufficient_funds,
 )
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
@@ -401,11 +399,13 @@ class Provider(ABC):
 
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
-                try:
+                with wrap_gas_spike_as_insufficient_funds(
+                    chain.value, f"bridge transaction {tx_label}"
+                ):
                     tx_settler = TxSettler(
                         ledger_api=from_ledger_api,
                         crypto=wallet.crypto,
-                        chain_type=Chain(provider_request.params["from"]["chain"]),
+                        chain_type=chain,
                         timeout=ON_CHAIN_INTERACT_TIMEOUT,
                         retries=ON_CHAIN_INTERACT_RETRIES,
                         sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -417,21 +417,14 @@ class Provider(ABC):
                         },
                         gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
                     ).transact()
-                except (ValueError, ChainInteractionError) as exc:
-                    if is_gas_spike_error(str(exc)):
-                        raise InsufficientFundsException(
-                            f"Insufficient gas for bridge transaction {tx_label}: {exc}",
-                            chain=Chain(provider_request.params["from"]["chain"]).value,
-                        ) from exc
-                    raise
 
-                try:
-                    tx_settler.settle()
-                    self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
-                except TimeExhausted as e:
-                    self.logger.warning(
-                        f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
-                    )
+                    try:
+                        tx_settler.settle()
+                        self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
+                    except TimeExhausted as e:
+                        self.logger.warning(
+                            f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
+                        )
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,

@@ -25,6 +25,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from autonomy.chain.exceptions import ChainInteractionError
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
@@ -1089,7 +1090,7 @@ class TestTransferFromEoa:
                 )
 
     def test_gas_spike_raises_insufficient_funds(self, tmp_path: Path) -> None:
-        """Test that _transfer_from_eoa re-raises gas spike errors as InsufficientFundsException (lines 480-486)."""
+        """Test that _transfer_from_eoa re-raises gas spike ValueError as InsufficientFundsException."""
         wallet = _make_wallet(tmp_path)
         crypto_mock = MagicMock()
         crypto_mock.address = EOA_ADDR
@@ -1103,6 +1104,39 @@ class TestTransferFromEoa:
         mock_settler_inst.transact.return_value = mock_settler_inst
         mock_settler_inst.settle.side_effect = ValueError(
             "insufficient funds for gas * price + value"
+        )
+
+        with (
+            patch.object(wallet, "get_balance", return_value=1000),
+            patch("operate.wallet.master.estimate_transfer_tx_fee", return_value=100),
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.TxSettler", return_value=mock_settler_inst),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                    SAFE_ADDR, 500, Chain.GNOSIS
+                )
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_chain_interaction_error_gas_spike_raises_insufficient_funds(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that _transfer_from_eoa re-raises gas spike ChainInteractionError as InsufficientFundsException."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+        mock_api.get_transfer_transaction.return_value = {"tx": "data"}
+        mock_api.update_with_gas_estimate.return_value = {"tx": "updated"}
+
+        mock_settler_inst = MagicMock()
+        mock_settler_inst.transact.return_value = mock_settler_inst
+        mock_settler_inst.settle.side_effect = ChainInteractionError(
+            "max fee per gas less than block base fee"
         )
 
         with (
@@ -1193,7 +1227,7 @@ class TestTransferErc20FromEoa:
         assert result == "0xerc20hash"
 
     def test_gas_spike_raises_insufficient_funds(self, tmp_path: Path) -> None:
-        """Test that _transfer_erc20_from_eoa re-raises gas spike errors as InsufficientFundsException (lines 576-582)."""
+        """Test that _transfer_erc20_from_eoa re-raises gas spike ValueError as InsufficientFundsException."""
         wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
 
@@ -1223,8 +1257,41 @@ class TestTransferErc20FromEoa:
 
         assert exc_info.value.chain == "gnosis"
 
+    def test_chain_interaction_error_gas_spike_raises_insufficient_funds(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that _transfer_erc20_from_eoa re-raises gas spike ChainInteractionError as InsufficientFundsException."""
+        wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
+        wallet._crypto = MagicMock()  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+
+        mock_settler_inst = MagicMock()
+        mock_settler_inst.transact.return_value = mock_settler_inst
+        mock_settler_inst.settle.side_effect = ChainInteractionError(
+            "max fee per gas less than block base fee"
+        )
+
+        with (
+            patch.object(wallet, "_pre_transfer_checks", return_value=SAFE_ADDR),
+            patch.object(wallet, "ledger_api", return_value=mock_api),
+            patch("operate.wallet.master.registry_contracts"),
+            patch("operate.wallet.master.update_tx_with_gas_pricing"),
+            patch("operate.wallet.master.update_tx_with_gas_estimate"),
+            patch(
+                "operate.wallet.master.TxSettler",
+                return_value=mock_settler_inst,
+            ),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                wallet._transfer_erc20_from_eoa(  # pylint: disable=protected-access
+                    TOKEN_ADDR, SAFE_ADDR, 100, Chain.GNOSIS
+                )
+
+        assert exc_info.value.chain == "gnosis"
+
     def test_non_gas_error_propagates(self, tmp_path: Path) -> None:
-        """Test that _transfer_erc20_from_eoa lets non-gas errors propagate unchanged (lines 576, 582)."""
+        """Test that _transfer_erc20_from_eoa lets non-gas errors propagate unchanged."""
         wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
         wallet._crypto = MagicMock()  # pylint: disable=protected-access
 

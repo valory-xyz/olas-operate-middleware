@@ -472,7 +472,7 @@ class TestProviderBase:
         assert req.execution_data is not None
 
     def test_execute_gas_spike_sets_execution_failed(self) -> None:
-        """execute() converts gas spike ValueError to InsufficientFundsException, caught by outer handler (lines 421-425)."""
+        """execute() converts gas spike ValueError to InsufficientFundsException, caught by outer broad except handler."""
         tx: t.Dict[str, t.Any] = {
             "to": "0x" + "a" * 40,
             "gas": 21_000,
