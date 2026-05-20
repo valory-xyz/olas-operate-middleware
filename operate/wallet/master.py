@@ -462,20 +462,28 @@ class EthereumMasterWallet(
                 raise_on_try=True,
             )
 
-        return (
-            TxSettler(
-                ledger_api=ledger_api,
-                crypto=self.crypto,
-                chain_type=chain,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-                tx_builder=_build_tx,
+        try:
+            return (
+                TxSettler(
+                    ledger_api=ledger_api,
+                    crypto=self.crypto,
+                    chain_type=chain,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=_build_tx,
+                )
+                .transact()
+                .settle()
+                .tx_hash
             )
-            .transact()
-            .settle()
-            .tx_hash
-        )
+        except (ValueError, ChainInteractionError) as exc:
+            if is_gas_spike_error(str(exc)):
+                raise InsufficientFundsException(
+                    f"Insufficient gas to transfer from EOA on {chain.name}: {exc}",
+                    chain=chain.value,
+                ) from exc
+            raise
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
@@ -550,20 +558,28 @@ class EthereumMasterWallet(
             update_tx_with_gas_estimate(tx, ledger_api)
             return tx
 
-        return (
-            TxSettler(
-                ledger_api=ledger_api,
-                crypto=self.crypto,
-                chain_type=chain,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-                tx_builder=_build_transfer_tx,
+        try:
+            return (
+                TxSettler(
+                    ledger_api=ledger_api,
+                    crypto=self.crypto,
+                    chain_type=chain,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=_build_transfer_tx,
+                )
+                .transact()
+                .settle()
+                .tx_hash
             )
-            .transact()
-            .settle()
-            .tx_hash
-        )
+        except (ValueError, ChainInteractionError) as exc:
+            if is_gas_spike_error(str(exc)):
+                raise InsufficientFundsException(
+                    f"Insufficient gas to transfer ERC20 from EOA on {chain.name}: {exc}",
+                    chain=chain.value,
+                ) from exc
+            raise
 
     def transfer(  # pylint: disable=too-many-arguments
         self,

@@ -187,22 +187,30 @@ def create_safe(
         return tx
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
-    tx_settler = (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=chain,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            gas_price_multiplier=(
-                1.125 if chain == Chain.POLYGON else 1.0
-            ),  # TODO: remove after safe creation failure is recoverable
-            tx_builder=_build,
+    try:
+        tx_settler = (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                gas_price_multiplier=(
+                    1.125 if chain == Chain.POLYGON else 1.0
+                ),  # TODO: remove after safe creation failure is recoverable
+                tx_builder=_build,
+            )
+            .transact()
+            .settle()
         )
-        .transact()
-        .settle()
-    )
+    except (ValueError, ChainInteractionError) as exc:
+        if is_gas_spike_error(str(exc)):
+            raise InsufficientFundsException(
+                f"Insufficient gas to create Safe: {exc}",
+                chain=chain.value,
+            ) from exc
+        raise
     (event,) = tx_settler.get_events(
         contract=registry_contracts.gnosis_safe_proxy_factory.get_instance(
             ledger_api=ledger_api,
@@ -445,22 +453,32 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    return (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
-            tx_builder=_build_tx,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
+    try:
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=Chain.from_id(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ),
+                tx_builder=_build_tx,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        .transact()
-        .settle()
-        .tx_hash
-    )
+    except (ValueError, ChainInteractionError) as exc:
+        if is_gas_spike_error(str(exc)):
+            raise InsufficientFundsException(
+                f"Insufficient gas to transfer from Safe: {exc}",
+                chain=Chain.from_id(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ).value,
+            ) from exc
+        raise
 
 
 def transfer_erc20_from_safe(
@@ -522,22 +540,32 @@ def transfer_erc20_from_eoa(
         update_tx_with_gas_estimate(tx, ledger_api)
         return tx
 
-    return (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=_build_transfer_tx,
+    try:
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=Chain.from_id(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ),
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_transfer_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        .transact()
-        .settle()
-        .tx_hash
-    )
+    except (ValueError, ChainInteractionError) as exc:
+        if is_gas_spike_error(str(exc)):
+            raise InsufficientFundsException(
+                f"Insufficient gas to transfer ERC20 from EOA: {exc}",
+                chain=Chain.from_id(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ).value,
+            ) from exc
+        raise
 
 
 def gas_fees_spent_in_tx(

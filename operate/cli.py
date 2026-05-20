@@ -1607,7 +1607,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_locally(service_config_id=service_config_id)
             logger.info("Deployed")
 
-        await run_in_executor(_fn)
+        try:
+            await run_in_executor(_fn)
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Deploy failed. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to deploy service due to insufficient funds.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
         schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(

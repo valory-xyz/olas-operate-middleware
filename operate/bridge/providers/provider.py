@@ -29,6 +29,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from aea.crypto.base import LedgerApi
+from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
 from web3.exceptions import TimeExhausted, TransactionNotFound
@@ -40,7 +41,12 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
+from operate.exceptions import InsufficientFundsException
+from operate.ledger import (
+    get_default_ledger_api,
+    is_gas_spike_error,
+    update_tx_with_gas_pricing,
+)
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.serialization import BigInt
@@ -395,21 +401,29 @@ class Provider(ABC):
 
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
-                tx_settler = TxSettler(
-                    ledger_api=from_ledger_api,
-                    crypto=wallet.crypto,
-                    chain_type=Chain(provider_request.params["from"]["chain"]),
-                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                    retries=ON_CHAIN_INTERACT_RETRIES,
-                    sleep=ON_CHAIN_INTERACT_SLEEP,
-                    tx_builder=lambda: {
-                        **tx,  # noqa: B023 # pylint: disable=cell-var-from-loop
-                        "nonce": from_ledger_api.api.eth.get_transaction_count(
-                            from_address
-                        ),
-                    },
-                    gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
-                ).transact()
+                try:
+                    tx_settler = TxSettler(
+                        ledger_api=from_ledger_api,
+                        crypto=wallet.crypto,
+                        chain_type=Chain(provider_request.params["from"]["chain"]),
+                        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                        retries=ON_CHAIN_INTERACT_RETRIES,
+                        sleep=ON_CHAIN_INTERACT_SLEEP,
+                        tx_builder=lambda: {
+                            **tx,  # noqa: B023 # pylint: disable=cell-var-from-loop
+                            "nonce": from_ledger_api.api.eth.get_transaction_count(
+                                from_address
+                            ),
+                        },
+                        gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
+                    ).transact()
+                except (ValueError, ChainInteractionError) as exc:
+                    if is_gas_spike_error(str(exc)):
+                        raise InsufficientFundsException(
+                            f"Insufficient gas for bridge transaction {tx_label}: {exc}",
+                            chain=Chain(provider_request.params["from"]["chain"]).value,
+                        ) from exc
+                    raise
 
                 try:
                     tx_settler.settle()
