@@ -67,7 +67,7 @@ jobs:
 
       - name: Bump version in pyproject.toml and uv.lock
         run: |
-          uv version --frozen "${{ steps.compute.outputs.next_version }}"
+          uv version "${{ steps.compute.outputs.next_version }}"
           uv lock
           git diff pyproject.toml uv.lock
 
