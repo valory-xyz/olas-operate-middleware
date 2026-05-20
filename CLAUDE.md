@@ -222,7 +222,7 @@ operate daemon
 
 **Bridge Management (`operate/bridge/`)**
 - `bridge_manager.py`: Orchestrates cross-chain token transfers
-- `providers/`: LiFi, Relay, and native bridge implementations
+- `providers/`: Relay and native bridge implementations
 
 **Ledger Integration (`operate/ledger/`)**
 - `profiles.py`: Chain configs, RPC endpoints, and token addresses

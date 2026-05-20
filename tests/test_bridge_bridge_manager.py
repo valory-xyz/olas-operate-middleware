@@ -28,7 +28,6 @@ import pytest
 import requests
 from deepdiff import DeepDiff
 
-from operate.bridge.providers.lifi_provider import LiFiProvider
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -609,13 +608,13 @@ class TestBridgeManager:
             expected_provider_cls = RelayProvider
             expected_contract_adaptor_cls = None
         elif to_chain_enum == Chain.BASE and token_dict == USDC:
-            expected_provider_cls = LiFiProvider
+            expected_provider_cls = RelayProvider
             expected_contract_adaptor_cls = None
         elif to_chain_enum == Chain.GNOSIS:
             expected_provider_cls = NativeBridgeProvider
             expected_contract_adaptor_cls = OmnibridgeContractAdaptor
         elif to_chain_enum == Chain.OPTIMISM and token_dict == USDC:
-            expected_provider_cls = LiFiProvider
+            expected_provider_cls = RelayProvider
             expected_contract_adaptor_cls = None
 
         self._main_test_correct_providers(

@@ -199,7 +199,7 @@ git commit -m "test: add VCR cassette for test_api_call"
 ```
 
 **When to use VCR:**
-- ✅ Testing external API integrations (Relay, LiFi, CoinGecko)
+- ✅ Testing external API integrations (Relay, CoinGecko)
 - ✅ Testing RPC calls to blockchain nodes
 - ✅ Tests that are slow due to network latency
 - ✅ Tests that fail intermittently due to network issues

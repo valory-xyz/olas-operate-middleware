@@ -27,7 +27,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from web3.exceptions import TimeExhausted, TransactionNotFound
 
-from operate.bridge.providers.lifi_provider import LiFiProvider, LiFiTransactionStatus
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -296,14 +295,11 @@ class TestProviderBase:
         provider = _ConcreteProvider(txs_to_return=[("transfer", tx)])
         req = _make_request(from_token=from_token)
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.update_tx_with_gas_pricing"
-            ) as mock_gas,
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.provider.update_tx_with_gas_pricing"
+        ) as mock_gas, patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
 
@@ -334,14 +330,11 @@ class TestProviderBase:
         provider = _ConcreteProvider(txs_to_return=[("transfer", tx)])
         req = _make_request(from_token=from_token)
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.update_tx_with_gas_pricing"
-            ) as mock_gas,
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.provider.update_tx_with_gas_pricing"
+        ) as mock_gas, patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
 
@@ -391,14 +384,11 @@ class TestProviderBase:
         mock_settler.settle.return_value = mock_settler
         mock_settler.tx_hash = "0x" + "e" * 64
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -425,14 +415,11 @@ class TestProviderBase:
         mock_settler.settle.side_effect = TimeExhausted("timed out")
         mock_settler.tx_hash = "0x" + "f" * 64
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
@@ -456,15 +443,12 @@ class TestProviderBase:
         req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
         req.quote_data = _make_quote_data()
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.TxSettler",
-                side_effect=RuntimeError("boom"),
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.provider.TxSettler",
+            side_effect=RuntimeError("boom"),
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
             provider.execute(req)
@@ -605,433 +589,6 @@ class TestProviderBase:
             )  # pylint: disable=protected-access
 
         assert result is True
-
-
-# ---------------------------------------------------------------------------
-# TestLiFiProviderUnit
-# ---------------------------------------------------------------------------
-
-
-def _make_lifi_provider() -> LiFiProvider:
-    """Construct a LiFiProvider with a mocked wallet manager."""
-    return LiFiProvider(
-        wallet_manager=MagicMock(),
-        provider_id="lifi-provider",
-        logger=MagicMock(),
-    )
-
-
-class TestLiFiProviderUnit:
-    """Unit tests for LiFiProvider (no network)."""
-
-    def test_description(self) -> None:
-        """description() returns the LI.FI string (line 68)."""
-        provider = _make_lifi_provider()
-        assert "LI.FI" in provider.description()
-
-    def test_quote_wrong_status_raises(self) -> None:
-        """quote() raises RuntimeError for wrong status (line 81)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        with pytest.raises(RuntimeError, match="Cannot quote"):
-            provider.quote(req)
-
-    def test_quote_execution_data_present_raises(self) -> None:
-        """quote() raises RuntimeError if execution_data already set (line 86)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.CREATED,
-        )
-        req.execution_data = _make_execution_data()
-        with pytest.raises(RuntimeError, match="execution already present"):
-            provider.quote(req)
-
-    def test_get_approve_tx_with_erc20_token(self) -> None:
-        """_get_approve_tx() builds approve tx for ERC20 token (lines 131-145)."""
-        provider = _make_lifi_provider()
-        erc20_addr = "0x" + "a" * 40
-        spender_addr = "0x" + "b" * 40
-        sender_addr = "0x" + "c" * 40
-
-        req = _make_request(
-            provider_id="lifi-provider",
-            from_token=erc20_addr,
-            amount=1000,
-        )
-        quote_response = {
-            "action": {
-                "fromToken": {"address": erc20_addr},
-                "fromAmount": "1000",
-            },
-            "transactionRequest": {
-                "to": spender_addr,
-                "from": sender_addr,
-            },
-        }
-        req.quote_data = _make_quote_data(provider_data={"response": quote_response})
-
-        mock_approve_tx: t.Dict[str, t.Any] = {
-            "gas": 200_000,
-            "value": 0,
-            "to": erc20_addr,
-            "data": "0x095ea7b3...",
-        }
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.registry_contracts"
-            ) as mock_contracts,
-            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"),
-            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
-            mock_ledger = MagicMock()
-            mock_api.return_value = mock_ledger
-            mock_contracts.erc20.get_approve_tx.return_value = mock_approve_tx
-
-            result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-
-        assert result is not None
-        mock_contracts.erc20.get_approve_tx.assert_called_once()
-
-    def test_get_bridge_tx_with_valid_transaction_request(self) -> None:
-        """_get_bridge_tx() builds bridge tx from transactionRequest (lines 147-150)."""
-        provider = _make_lifi_provider()
-        erc20_addr = "0x" + "a" * 40
-        spender_addr = "0x" + "b" * 40
-        sender_addr = "0x" + "c" * 40
-
-        req = _make_request(
-            provider_id="lifi-provider",
-            from_token=erc20_addr,
-            amount=1000,
-        )
-        quote_response = {
-            "action": {
-                "fromToken": {"address": erc20_addr},
-                "fromAmount": "1000",
-            },
-            "transactionRequest": {
-                "to": spender_addr,
-                "from": sender_addr,
-                "value": "0x0",
-                "data": "0xabcd",
-                "chainId": 100,
-                "gasPrice": "0x1",
-                "gasLimit": "0x5208",
-            },
-        }
-        req.quote_data = _make_quote_data(provider_data={"response": quote_response})
-
-        with (
-            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"),
-            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
-            mock_ledger = MagicMock()
-            mock_ledger.api.eth.get_transaction_count.return_value = 0
-            mock_api.return_value = mock_ledger
-
-            result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-
-        assert result is not None
-        assert result["to"] == spender_addr
-
-    def test_get_txs_erc20_returns_both_approve_and_bridge(self) -> None:
-        """_get_txs() returns approve and bridge tx for ERC20 (lines 179-183)."""
-        provider = _make_lifi_provider()
-        erc20_addr = "0x" + "a" * 40
-        spender_addr = "0x" + "b" * 40
-        sender_addr = "0x" + "c" * 40
-
-        req = _make_request(
-            provider_id="lifi-provider",
-            from_token=erc20_addr,
-            amount=1000,
-        )
-        quote_response = {
-            "action": {
-                "fromToken": {"address": erc20_addr},
-                "fromAmount": "1000",
-            },
-            "transactionRequest": {
-                "to": spender_addr,
-                "from": sender_addr,
-                "value": "0x0",
-                "data": "0xabcd",
-                "chainId": 100,
-                "gasPrice": "0x1",
-                "gasLimit": "0x5208",
-            },
-        }
-        req.quote_data = _make_quote_data(provider_data={"response": quote_response})
-
-        mock_approve_tx: t.Dict[str, t.Any] = {
-            "gas": 200_000,
-            "value": 0,
-        }
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.registry_contracts"
-            ) as mock_contracts,
-            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_pricing"),
-            patch("operate.bridge.providers.lifi_provider.update_tx_with_gas_estimate"),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
-            mock_ledger = MagicMock()
-            mock_ledger.api.eth.get_transaction_count.return_value = 0
-            mock_api.return_value = mock_ledger
-            mock_contracts.erc20.get_approve_tx.return_value = mock_approve_tx
-
-            txs = provider._get_txs(req)  # pylint: disable=protected-access
-
-        labels = [label for label, _ in txs]
-        assert "approve_tx" in labels
-        assert "bridge_tx" in labels
-
-    def test_update_execution_status_early_return_wrong_status(self) -> None:
-        """_update_execution_status() returns early when status not PENDING/UNKNOWN (line 217)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_DONE,
-        )
-        req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
-        # Should return without raising or making HTTP calls
-        provider._update_execution_status(req)  # pylint: disable=protected-access
-        assert req.status == ProviderRequestStatus.EXECUTION_DONE
-
-    def test_update_execution_status_no_execution_data_raises(self) -> None:
-        """_update_execution_status() raises RuntimeError when no execution_data (line 220)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        req.execution_data = None
-        with pytest.raises(RuntimeError, match="execution data not present"):
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-    def test_update_execution_status_no_from_tx_hash_early_return(self) -> None:
-        """_update_execution_status() returns early when no from_tx_hash (line 224)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        req.execution_data = _make_execution_data(from_tx_hash=None)
-        # Should return without making HTTP calls
-        provider._update_execution_status(req)  # pylint: disable=protected-access
-
-    def test_update_execution_status_done(self) -> None:
-        """_update_execution_status() handles DONE status (line 267)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        to_tx_hash = "0x" + "bb" * 32
-        from_tx_hash = "0x" + "dd" * 32
-        req.execution_data = _make_execution_data(from_tx_hash=from_tx_hash)
-        req.quote_data = _make_quote_data()
-
-        response_json = {
-            "status": LiFiTransactionStatus.DONE.value,
-            "receiving": {"txHash": to_tx_hash},
-            "substatusMessage": None,
-        }
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = response_json
-        mock_resp.raise_for_status.return_value = None
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.requests.get",
-                return_value=mock_resp,
-            ),
-            patch(
-                "operate.bridge.providers.provider.Provider._tx_timestamp",
-                return_value=100,
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
-            mock_api.return_value = MagicMock()
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-        assert req.status == ProviderRequestStatus.EXECUTION_DONE
-        assert req.execution_data.to_tx_hash == to_tx_hash
-
-    def test_update_execution_status_failed(self) -> None:
-        """_update_execution_status() handles FAILED status (line 270)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
-
-        response_json = {
-            "status": LiFiTransactionStatus.FAILED.value,
-            "substatusMessage": "bridge failed",
-        }
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = response_json
-        mock_resp.raise_for_status.return_value = None
-
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            return_value=mock_resp,
-        ):
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
-
-    def test_update_execution_status_pending(self) -> None:
-        """_update_execution_status() handles PENDING status (line 274)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
-
-        response_json = {
-            "status": LiFiTransactionStatus.PENDING.value,
-            "substatusMessage": None,
-        }
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = response_json
-        mock_resp.raise_for_status.return_value = None
-
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            return_value=mock_resp,
-        ):
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-        assert req.status == ProviderRequestStatus.EXECUTION_PENDING
-
-    def test_update_execution_status_unknown(self) -> None:
-        """_update_execution_status() handles unknown status (lines 279-301)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
-
-        response_json = {
-            "status": "SOME_UNKNOWN_STATUS",
-            "substatusMessage": None,
-        }
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = response_json
-        mock_resp.raise_for_status.return_value = None
-
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            return_value=mock_resp,
-        ):
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-        assert req.status == ProviderRequestStatus.EXECUTION_UNKNOWN
-
-    def test_update_execution_status_exception_sets_unknown(self) -> None:
-        """_update_execution_status() sets UNKNOWN on exception (lines 310, 313)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        # Make execution_data old enough to trigger bridge_tx_likely_failed checks
-        req.execution_data = _make_execution_data(
-            timestamp=int(time.time()) - 5  # fresh → likely_failed returns False
-        )
-        req.quote_data = _make_quote_data(eta=600)
-
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            side_effect=ConnectionError("network error"),
-        ):
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-        # Fresh tx → _bridge_tx_likely_failed returns False → stays EXECUTION_UNKNOWN
-        assert req.status == ProviderRequestStatus.EXECUTION_UNKNOWN
-
-    def test_update_execution_status_exception_bridge_likely_failed(self) -> None:
-        """_update_execution_status() → EXECUTION_FAILED when bridge_tx_likely_failed (line 313)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.EXECUTION_PENDING,
-        )
-        # from_tx_hash must be set so we get past the early return, then hit the exception path.
-        # _bridge_tx_likely_failed is patched to return True so status → EXECUTION_FAILED.
-        req.execution_data = _make_execution_data(from_tx_hash="0x" + "dd" * 32)
-        req.quote_data = _make_quote_data(eta=60)
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.requests.get",
-                side_effect=ConnectionError("network error"),
-            ),
-            patch.object(
-                provider,
-                "_bridge_tx_likely_failed",
-                return_value=True,
-            ),
-        ):
-            provider._update_execution_status(req)  # pylint: disable=protected-access
-
-        # _bridge_tx_likely_failed returns True → status set to EXECUTION_FAILED
-        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
-
-    def test_get_explorer_link_with_from_tx_hash(self) -> None:
-        """_get_explorer_link() returns URL when from_tx_hash is set (lines 366-371)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider")
-        tx_hash = "0x" + "aa" * 32
-        req.execution_data = _make_execution_data(from_tx_hash=tx_hash)
-
-        result = provider._get_explorer_link(req)  # pylint: disable=protected-access
-
-        assert result is not None
-        assert tx_hash in result
-
-    def test_get_explorer_link_no_execution_data(self) -> None:
-        """_get_explorer_link() returns None when no execution_data (line 378)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider")
-        req.execution_data = None
-
-        result = provider._get_explorer_link(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_explorer_link_no_tx_hash(self) -> None:
-        """_get_explorer_link() returns None when no from_tx_hash (line 384)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider")
-        req.execution_data = _make_execution_data(from_tx_hash=None)
-
-        result = provider._get_explorer_link(req)  # pylint: disable=protected-access
-        assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -1734,14 +1291,11 @@ class TestProviderBaseAdditional:
         provider = _ConcreteProvider(txs_to_return=[("approve_tx", tx)])
         req = _make_request(from_token=from_token)
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.update_tx_with_gas_pricing"
-            ) as mock_gas,
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.provider.update_tx_with_gas_pricing"
+        ) as mock_gas, patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_ledger = MagicMock()
             mock_api.return_value = mock_ledger
 
@@ -1855,272 +1409,6 @@ class TestProviderBaseAdditional:
 
 
 # ---------------------------------------------------------------------------
-# TestLiFiQuotePaths — missing lifi_provider.py coverage paths
-# ---------------------------------------------------------------------------
-
-
-class TestLiFiQuotePaths:
-    """Tests for LiFiProvider.quote() missing branches."""
-
-    def test_quote_zero_amount_sets_quote_done(self) -> None:
-        """quote() with to_amount=0 sets QUOTE_DONE with MESSAGE_QUOTE_ZERO (lines 98-109)."""
-        import requests as req_lib  # pylint: disable=import-outside-toplevel
-
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.CREATED,
-            amount=0,
-        )
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            side_effect=AssertionError("should not be called"),
-        ):
-            provider.quote(req)
-
-        assert req.status == ProviderRequestStatus.QUOTE_DONE
-        assert req.quote_data is not None
-        assert req.quote_data.eta == 0
-        assert req.quote_data.message is not None
-        # Suppress unused import warning
-        _ = req_lib
-
-    def test_quote_success_sets_quote_done(self) -> None:
-        """quote() with successful HTTP response sets QUOTE_DONE (lines 111-145)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.CREATED,
-            amount=1000,
-        )
-        response_json = {"transactionRequest": {"to": "0x" + "b" * 40}}
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = response_json
-        mock_resp.raise_for_status.return_value = None
-
-        with patch(
-            "operate.bridge.providers.lifi_provider.requests.get",
-            return_value=mock_resp,
-        ):
-            provider.quote(req)
-
-        assert req.status == ProviderRequestStatus.QUOTE_DONE
-        assert req.quote_data is not None
-        assert req.quote_data.provider_data is not None
-
-    def test_quote_timeout_on_all_attempts_sets_quote_failed(self) -> None:
-        """quote() sets QUOTE_FAILED after DEFAULT_MAX_QUOTE_RETRIES timeouts (lines 146-160, 194-202)."""
-        import requests as req_lib  # pylint: disable=import-outside-toplevel
-
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.CREATED,
-            amount=1000,
-        )
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.requests.get",
-                side_effect=req_lib.Timeout("timed out"),
-            ),
-            patch("operate.bridge.providers.lifi_provider.time.sleep"),
-        ):
-            provider.quote(req)
-
-        assert req.status == ProviderRequestStatus.QUOTE_FAILED
-        assert req.quote_data is not None
-        assert req.quote_data.eta is None
-
-    def test_quote_request_exception_sets_quote_failed(self) -> None:
-        """quote() sets QUOTE_FAILED after RequestException on raise_for_status (lines 161-178)."""
-        import requests as req_lib  # pylint: disable=import-outside-toplevel
-
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.CREATED,
-            amount=1000,
-        )
-        # Mock response: get() returns a mock, raise_for_status() raises RequestException,
-        # json() returns dict with "message" key (used after the exception).
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status.side_effect = req_lib.RequestException("API error")
-        mock_resp.json.return_value = {"message": "API error"}
-        mock_resp.status_code = 400
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.requests.get",
-                return_value=mock_resp,
-            ),
-            patch("operate.bridge.providers.lifi_provider.time.sleep"),
-        ):
-            provider.quote(req)
-
-        assert req.status == ProviderRequestStatus.QUOTE_FAILED
-
-    def test_quote_generic_exception_sets_quote_failed(self) -> None:
-        """quote() sets QUOTE_FAILED after generic Exception (lines 179-200)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider",
-            status=ProviderRequestStatus.CREATED,
-            amount=1000,
-        )
-
-        with (
-            patch(
-                "operate.bridge.providers.lifi_provider.requests.get",
-                side_effect=ValueError("generic error"),
-            ),
-            patch("operate.bridge.providers.lifi_provider.time.sleep"),
-        ):
-            provider.quote(req)
-
-        assert req.status == ProviderRequestStatus.QUOTE_FAILED
-
-
-# ---------------------------------------------------------------------------
-# TestLiFiApproveAndBridgeTxEarlyReturns
-# ---------------------------------------------------------------------------
-
-
-class TestLiFiApproveAndBridgeTxEarlyReturns:
-    """Tests for _get_approve_tx() and _get_bridge_tx() early-return paths."""
-
-    def test_get_approve_tx_zero_amount_returns_none(self) -> None:
-        """_get_approve_tx() returns None when to_amount==0 (line 213)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=0)
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_approve_tx_no_quote_data_returns_none(self) -> None:
-        """_get_approve_tx() returns None when quote_data is None (line 217)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = None
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_approve_tx_no_provider_data_returns_none(self) -> None:
-        """_get_approve_tx() returns None when provider_data is None (line 220)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = _make_quote_data(provider_data=None)
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_approve_tx_no_quote_response_returns_none(self) -> None:
-        """_get_approve_tx() returns None when response is None in provider_data (lines 223-224)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = _make_quote_data(provider_data={"response": None})
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_approve_tx_no_action_returns_none(self) -> None:
-        """_get_approve_tx() returns None when 'action' key missing from quote (lines 226-227)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = _make_quote_data(
-            provider_data={"response": {"no_action": True}}
-        )
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_approve_tx_zero_address_token_returns_none(self) -> None:
-        """_get_approve_tx() returns None when from_token is ZERO_ADDRESS (lines 230-231)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        quote_response = {
-            "action": {
-                "fromToken": {"address": ZERO_ADDRESS},
-                "fromAmount": "1000",
-            },
-            "transactionRequest": {"to": "0x" + "b" * 40, "from": FROM_ADDR},
-        }
-        req.quote_data = _make_quote_data(provider_data={"response": quote_response})
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_approve_tx_no_transaction_request_returns_none(self) -> None:
-        """_get_approve_tx() returns None when transactionRequest is missing (lines 234-235)."""
-        provider = _make_lifi_provider()
-        req = _make_request(
-            provider_id="lifi-provider", amount=1000, from_token=ERC20_ADDR
-        )
-        quote_response = {
-            "action": {
-                "fromToken": {"address": ERC20_ADDR},
-                "fromAmount": "1000",
-            },
-            # no transactionRequest key
-        }
-        req.quote_data = _make_quote_data(provider_data={"response": quote_response})
-        result = provider._get_approve_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_bridge_tx_zero_amount_returns_none(self) -> None:
-        """_get_bridge_tx() returns None when to_amount==0 (line 263)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=0)
-        result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_bridge_tx_no_quote_data_returns_none(self) -> None:
-        """_get_bridge_tx() returns None when quote_data is None (line 267)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = None
-        result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_bridge_tx_no_provider_data_returns_none(self) -> None:
-        """_get_bridge_tx() returns None when provider_data is None (line 270)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = _make_quote_data(provider_data=None)
-        result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_bridge_tx_no_quote_response_returns_none(self) -> None:
-        """_get_bridge_tx() returns None when response is None in provider_data (lines 273-274)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = _make_quote_data(provider_data={"response": None})
-        result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_bridge_tx_no_action_returns_none(self) -> None:
-        """_get_bridge_tx() returns None when 'action' key missing from quote (lines 276-277)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        req.quote_data = _make_quote_data(
-            provider_data={"response": {"no_action": True}}
-        )
-        result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-    def test_get_bridge_tx_no_transaction_request_returns_none(self) -> None:
-        """_get_bridge_tx() returns None when transactionRequest is missing (line 281)."""
-        provider = _make_lifi_provider()
-        req = _make_request(provider_id="lifi-provider", amount=1000)
-        quote_response = {
-            "action": {
-                "fromToken": {"address": ERC20_ADDR},
-                "fromAmount": "1000",
-            },
-            # no transactionRequest key
-        }
-        req.quote_data = _make_quote_data(provider_data={"response": quote_response})
-        result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
 # TestRelayQuotePaths — missing relay_provider.py coverage paths
 # ---------------------------------------------------------------------------
 
@@ -2185,13 +1473,10 @@ class TestRelayQuotePaths:
             amount=1000,
         )
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.post",
-                side_effect=req_lib.Timeout("timed out"),
-            ),
-            patch("operate.bridge.providers.relay_provider.time.sleep"),
-        ):
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.post",
+            side_effect=req_lib.Timeout("timed out"),
+        ), patch("operate.bridge.providers.relay_provider.time.sleep"):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -2237,14 +1522,12 @@ class TestRelayQuotePaths:
         }
         req.quote_data = _make_quote_data(provider_data={"response": response_json})
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-            patch("operate.bridge.providers.relay_provider.update_tx_with_gas_pricing"),
-            patch(
-                "operate.bridge.providers.relay_provider.update_tx_with_gas_estimate"
-            ),
+        with patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api, patch(
+            "operate.bridge.providers.relay_provider.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.bridge.providers.relay_provider.update_tx_with_gas_estimate"
         ):
             mock_ledger = MagicMock()
             mock_ledger.api.to_checksum_address.side_effect = lambda x: x
@@ -2406,15 +1689,12 @@ class TestRelayQuoteAdditionalPaths:
         mock_placeholder = MagicMock()
         mock_placeholder.json.return_value = placeholder_response_json
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.post",
-                side_effect=[mock_first, mock_placeholder],
-            ),
-            patch(
-                "operate.bridge.providers.relay_provider.RELAY_DEFAULT_GAS",
-                {"gnosis": {"approve": 100000}},
-            ),
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.post",
+            side_effect=[mock_first, mock_placeholder],
+        ), patch(
+            "operate.bridge.providers.relay_provider.RELAY_DEFAULT_GAS",
+            {"gnosis": {"approve": 100000}},
         ):
             provider.quote(req)
 
@@ -2437,13 +1717,10 @@ class TestRelayQuoteAdditionalPaths:
         mock_resp.raise_for_status.side_effect = req_lib.RequestException("bad request")
         mock_resp.status_code = 400
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.post",
-                return_value=mock_resp,
-            ),
-            patch("operate.bridge.providers.relay_provider.time.sleep"),
-        ):
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.post",
+            return_value=mock_resp,
+        ), patch("operate.bridge.providers.relay_provider.time.sleep"):
             provider.quote(req)
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
@@ -2486,15 +1763,12 @@ class TestRelayUpdateExecutionStatusAdditional:
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.get",
-                return_value=mock_resp,
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.get",
+            return_value=mock_resp,
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_w3 = MagicMock()
             mock_w3.eth.get_transaction_receipt.return_value = None
             mock_api.return_value = MagicMock(api=mock_w3)
@@ -2533,15 +1807,12 @@ class TestRelayUpdateExecutionStatusAdditional:
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.get",
-                return_value=mock_resp,
-            ),
-            patch(
-                "operate.bridge.providers.provider.Provider._tx_timestamp",
-                return_value=1000,
-            ),
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.get",
+            return_value=mock_resp,
+        ), patch(
+            "operate.bridge.providers.provider.Provider._tx_timestamp",
+            return_value=1000,
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -2559,15 +1830,12 @@ class TestRelayUpdateExecutionStatusAdditional:
         req.execution_data = _make_execution_data(timestamp=int(time.time()) - 1500)
         req.quote_data = _make_quote_data(eta=30)
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.get",
-                side_effect=RuntimeError("rpc down"),
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.get",
+            side_effect=RuntimeError("rpc down"),
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_w3 = MagicMock()
             mock_w3.eth.get_transaction_receipt.return_value = None
             mock_api.return_value = MagicMock(api=mock_w3)
@@ -2779,20 +2047,15 @@ class TestNativeBridgeProviderApproveAndBridgeTx:
         req.quote_data = _make_quote_data()
         mock_approve_tx: t.Dict = {"gas": 200_000, "value": 0, "to": ERC20_ADDR}
 
-        with (
-            patch(
-                "operate.bridge.providers.native_bridge_provider.registry_contracts"
-            ) as mock_contracts,
-            patch(
-                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
-            ),
-            patch(
-                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch(
+            "operate.bridge.providers.native_bridge_provider.registry_contracts"
+        ) as mock_contracts, patch(
+            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_api.return_value = MagicMock()
             mock_contracts.erc20.get_approve_tx.return_value = mock_approve_tx
             result = provider._get_approve_tx(req)  # pylint: disable=protected-access
@@ -2822,22 +2085,17 @@ class TestNativeBridgeProviderApproveAndBridgeTx:
         req.quote_data = _make_quote_data()
         expected_tx: t.Dict = {"to": "0x" + "a" * 40, "value": 1000, "gas": 200_000}
 
-        with (
-            patch.object(
-                provider.bridge_contract_adaptor,
-                "build_bridge_tx",
-                return_value=expected_tx,
-            ) as mock_build,
-            patch(
-                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
-            ),
-            patch(
-                "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
-            ),
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api"
-            ) as mock_api,
-        ):
+        with patch.object(
+            provider.bridge_contract_adaptor,
+            "build_bridge_tx",
+            return_value=expected_tx,
+        ) as mock_build, patch(
+            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.bridge.providers.native_bridge_provider.update_tx_with_gas_estimate"
+        ), patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
             mock_api.return_value = MagicMock()
             result = provider._get_bridge_tx(req)  # pylint: disable=protected-access
             mock_build.assert_called_once()
@@ -2976,10 +2234,9 @@ class TestNativeBridgeProviderGetTxs:
         approve_tx: t.Dict = {"gas": 200_000, "value": 0, "to": ERC20_ADDR}
         bridge_tx: t.Dict = {"gas": 100_000, "value": 1000, "to": "0x" + "e" * 40}
 
-        with (
-            patch.object(provider, "_get_approve_tx", return_value=approve_tx),
-            patch.object(provider, "_get_bridge_tx", return_value=bridge_tx),
-        ):
+        with patch.object(
+            provider, "_get_approve_tx", return_value=approve_tx
+        ), patch.object(provider, "_get_bridge_tx", return_value=bridge_tx):
             txs = provider._get_txs(req)  # pylint: disable=protected-access
 
         assert len(txs) == 2
@@ -2998,9 +2255,8 @@ class TestNativeBridgeProviderGetTxs:
 
         bridge_tx: t.Dict = {"gas": 100_000, "value": 1000, "to": "0x" + "e" * 40}
 
-        with (
-            patch.object(provider, "_get_approve_tx", return_value=None),
-            patch.object(provider, "_get_bridge_tx", return_value=bridge_tx),
+        with patch.object(provider, "_get_approve_tx", return_value=None), patch.object(
+            provider, "_get_bridge_tx", return_value=bridge_tx
         ):
             txs = provider._get_txs(req)  # pylint: disable=protected-access
 
@@ -3128,15 +2384,12 @@ class TestRelaySuccessSameChain:
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
 
-        with (
-            patch(
-                "operate.bridge.providers.relay_provider.requests.get",
-                return_value=mock_resp,
-            ),
-            patch(
-                "operate.bridge.providers.provider.Provider._tx_timestamp",
-                return_value=1000,
-            ),
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.get",
+            return_value=mock_resp,
+        ), patch(
+            "operate.bridge.providers.provider.Provider._tx_timestamp",
+            return_value=1000,
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -3201,14 +2454,11 @@ class TestOptimismContractAdaptorCoverage:
             "from": {"chain": "ethereum", "token": from_addr},
             "to": {"chain": "base", "token": to_addr},
         }
-        with (
-            patch.object(
-                BridgeContractAdaptor, "can_handle_request", return_value=True
-            ),
-            patch(
-                "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
-                return_value=MagicMock(),
-            ),
+        with patch.object(
+            BridgeContractAdaptor, "can_handle_request", return_value=True
+        ), patch(
+            "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
+            return_value=MagicMock(),
         ):
             result = adaptor.can_handle_request(params)
         assert result is True
@@ -3226,14 +2476,11 @@ class TestOptimismContractAdaptorCoverage:
             "from": {"chain": "ethereum", "token": from_addr},
             "to": {"chain": "base", "token": to_addr},
         }
-        with (
-            patch.object(
-                BridgeContractAdaptor, "can_handle_request", return_value=True
-            ),
-            patch(
-                "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
-                return_value=MagicMock(),
-            ),
+        with patch.object(
+            BridgeContractAdaptor, "can_handle_request", return_value=True
+        ), patch(
+            "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
+            return_value=MagicMock(),
         ):
             result = adaptor.can_handle_request(params)
         assert result is False
@@ -3251,14 +2498,11 @@ class TestOptimismContractAdaptorCoverage:
             "from": {"chain": "ethereum", "token": from_addr},
             "to": {"chain": "base", "token": to_addr},
         }
-        with (
-            patch.object(
-                BridgeContractAdaptor, "can_handle_request", return_value=True
-            ),
-            patch(
-                "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
-                return_value=MagicMock(),
-            ),
+        with patch.object(
+            BridgeContractAdaptor, "can_handle_request", return_value=True
+        ), patch(
+            "operate.bridge.providers.native_bridge_provider.get_default_ledger_api",
+            return_value=MagicMock(),
         ):
             result = adaptor.can_handle_request(params)
         assert result is False
@@ -3584,26 +2828,21 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 return MagicMock(api=mock_from_w3)
             return MagicMock(api=mock_to_w3)
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api",
-                side_effect=_pick_ledger,
-            ),
-            patch.object(
-                NativeBridgeProvider,
-                "_find_block_before_timestamp",
-                return_value=100,
-            ),
-            patch.object(
-                provider.bridge_contract_adaptor,
-                "find_bridge_finalized_tx",
-                return_value=to_tx_hash,
-            ),
-            patch.object(
-                Provider,
-                "_tx_timestamp",
-                return_value=1_000_000,
-            ),
+        with patch(
+            "operate.bridge.providers.provider.get_default_ledger_api",
+            side_effect=_pick_ledger,
+        ), patch.object(
+            NativeBridgeProvider,
+            "_find_block_before_timestamp",
+            return_value=100,
+        ), patch.object(
+            provider.bridge_contract_adaptor,
+            "find_bridge_finalized_tx",
+            return_value=to_tx_hash,
+        ), patch.object(
+            Provider,
+            "_tx_timestamp",
+            return_value=1_000_000,
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -3650,21 +2889,17 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 return MagicMock(api=mock_from_w3)
             return MagicMock(api=mock_to_w3)
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api",
-                side_effect=_pick_ledger,
-            ),
-            patch.object(
-                NativeBridgeProvider,
-                "_find_block_before_timestamp",
-                return_value=100,
-            ),
-            patch.object(
-                provider.bridge_contract_adaptor,
-                "find_bridge_finalized_tx",
-                return_value=None,
-            ),
+        with patch(
+            "operate.bridge.providers.provider.get_default_ledger_api",
+            side_effect=_pick_ledger,
+        ), patch.object(
+            NativeBridgeProvider,
+            "_find_block_before_timestamp",
+            return_value=100,
+        ), patch.object(
+            provider.bridge_contract_adaptor,
+            "find_bridge_finalized_tx",
+            return_value=None,
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
@@ -3694,16 +2929,13 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 return MagicMock(api=mock_from_w3)
             return MagicMock(api=MagicMock())
 
-        with (
-            patch(
-                "operate.bridge.providers.provider.get_default_ledger_api",
-                side_effect=_pick_ledger,
-            ),
-            patch.object(
-                NativeBridgeProvider,
-                "_find_block_before_timestamp",
-                side_effect=RuntimeError("network error"),
-            ),
+        with patch(
+            "operate.bridge.providers.provider.get_default_ledger_api",
+            side_effect=_pick_ledger,
+        ), patch.object(
+            NativeBridgeProvider,
+            "_find_block_before_timestamp",
+            side_effect=RuntimeError("network error"),
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
