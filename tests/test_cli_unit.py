@@ -1848,7 +1848,7 @@ class TestServiceRoutes:
             assert resp.status_code == HTTPStatus.OK
 
     def test_deploy_service_insufficient_funds(self) -> None:
-        """Cover lines 1612-1616: deploy returns 400 on InsufficientFundsException."""
+        """Deploy returns structured 400 with error_code and chain on InsufficientFundsException."""
         m = self._basic_with_password()
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
@@ -1865,7 +1865,7 @@ class TestServiceRoutes:
             assert "prefill_amount_wei" in body
 
     def test_deploy_service_generic_exception(self) -> None:
-        """Cover lines 1623-1625: deploy returns 500 on generic Exception."""
+        """Deploy returns 500 on generic Exception not caught by specific handlers."""
         m = self._basic_with_password()
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
@@ -2353,6 +2353,23 @@ class TestBridgeRoutes:
             with TestClient(app) as c:
                 resp = c.post("/api/bridge/execute", json={"id": "bad"})
             assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+    def test_bridge_execute_insufficient_funds(self) -> None:
+        """Bridge execute returns structured 400 on InsufficientFundsException."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        m.bridge_manager.execute_bundle.side_effect = InsufficientFundsException(
+            "Insufficient gas for bridge transaction", "gnosis"
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/bridge/execute", json={"id": "bundle1"})
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+            assert body["chain"] == "gnosis"
+            assert "prefill_amount_wei" in body
 
     def test_bridge_execute_generic_exception(self) -> None:
         """Bridge execute generic exception."""

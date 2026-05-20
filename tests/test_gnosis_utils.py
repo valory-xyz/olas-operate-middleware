@@ -423,7 +423,7 @@ class TestCreateSafe:
 
 
 class TestCreateSafeGasSpike:
-    """Tests for create_safe gas spike error handling (lines 207-213)."""
+    """Tests that create_safe translates gas-spike errors into InsufficientFundsException."""
 
     def test_gas_error_raises_insufficient_funds(self) -> None:
         """Verify ValueError with gas message is re-raised as InsufficientFundsException."""

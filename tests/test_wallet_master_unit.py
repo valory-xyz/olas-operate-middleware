@@ -1154,7 +1154,7 @@ class TestTransferFromEoa:
         assert exc_info.value.chain == "gnosis"
 
     def test_non_gas_error_propagates(self, tmp_path: Path) -> None:
-        """Test that _transfer_from_eoa lets non-gas errors propagate unchanged (lines 480, 486)."""
+        """Non-gas ValueError from _transfer_from_eoa propagates unchanged without being wrapped."""
         wallet = _make_wallet(tmp_path)
         crypto_mock = MagicMock()
         crypto_mock.address = EOA_ADDR

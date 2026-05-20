@@ -40,6 +40,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.exceptions import InsufficientFundsException
 from operate.ledger import (
     get_default_ledger_api,
     update_tx_with_gas_pricing,
@@ -440,6 +441,19 @@ class Provider(ABC):
                 f"[PROVIDER] Finished executing request {provider_request.id}."
             )
 
+        except InsufficientFundsException as e:
+            self.logger.error(f"[PROVIDER] Insufficient gas executing request: {e}")
+            provider_request.execution_data = ExecutionData(
+                elapsed_time=time.time() - timestamp,
+                message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",
+                timestamp=int(time.time()),
+                from_tx_hash=None,
+                to_tx_hash=None,
+                provider_data=e.to_error_fields(),
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            raise
+
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[PROVIDER] Error executing request: {e}")
             execution_data = ExecutionData(
@@ -473,13 +487,16 @@ class Provider(ABC):
             if provider_request.execution_data.from_tx_hash:
                 tx_hash = provider_request.execution_data.from_tx_hash
 
-            return {
+            result: t.Dict[str, t.Any] = {
                 "eta": provider_request.quote_data.eta,
                 "explorer_link": self._get_explorer_link(provider_request),
                 "message": provider_request.execution_data.message,
                 "status": provider_request.status.value,
                 "tx_hash": tx_hash,
             }
+            if provider_request.execution_data.provider_data:
+                result.update(provider_request.execution_data.provider_data)
+            return result
         if provider_request.quote_data:
             return {
                 "eta": provider_request.quote_data.eta,

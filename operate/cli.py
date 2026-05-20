@@ -1962,6 +1962,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content=output,
                 status_code=HTTPStatus.OK,
             )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Bridge execute failed. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to execute bridge transaction due to insufficient funds.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except ValueError as e:
             logger.error(f"Bridge execute error: {e}")
             return JSONResponse(
