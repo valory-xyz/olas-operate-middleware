@@ -1625,6 +1625,20 @@ class TestGnosisSafeTransactionSettle:
             safe=_SAFE_ADDRESS,
         )
 
+    def test_settle_returns_tx_receipt(self) -> None:
+        """Verify settle() returns the TxReceipt from TxSettler on success."""
+        gst = self._make_gst()
+        mock_txsettler_cls = MagicMock()
+        mock_receipt = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_receipt = (
+            mock_receipt
+        )
+
+        with patch("operate.services.protocol.TxSettler", mock_txsettler_cls):
+            result = gst.settle()
+
+        assert result is mock_receipt
+
     def test_settle_gas_error_raises_insufficient_funds(self) -> None:
         """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
         gst = self._make_gst()
