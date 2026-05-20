@@ -52,6 +52,7 @@ from operate.bridge.providers.provider import (
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, ChainAmounts, LedgerType
@@ -685,13 +686,17 @@ class TestNativeBridgeProvider(OnTestnet):
         expected_request.execution_data = expected_execution_data
         expected_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
-        provider.execute(provider_request=provider_request)
+        with pytest.raises(InsufficientFundsException):
+            provider.execute(provider_request=provider_request)
         assert provider_request.execution_data is not None, "Wrong request."
         expected_execution_data.message = provider_request.execution_data.message
         expected_execution_data.elapsed_time = (
             provider_request.execution_data.elapsed_time
         )
         expected_execution_data.timestamp = provider_request.execution_data.timestamp
+        expected_execution_data.provider_data = (
+            provider_request.execution_data.provider_data
+        )
 
         assert provider_request == expected_request, "Wrong request."
         sj = provider.status_json(provider_request)
@@ -703,6 +708,8 @@ class TestNativeBridgeProvider(OnTestnet):
             "message": sj["message"],
             "status": ProviderRequestStatus.EXECUTION_FAILED.value,
         }
+        if provider_request.execution_data.provider_data:
+            expected_sj.update(provider_request.execution_data.provider_data)
         diff = DeepDiff(sj, expected_sj)
         if diff:
             print(diff)
