@@ -268,22 +268,32 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    return (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
-            tx_builder=_build_tx,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
+    try:
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=Chain.from_id(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ),
+                tx_builder=_build_tx,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        .transact()
-        .settle()
-        .tx_hash
-    )
+    except (ValueError, ChainInteractionError) as exc:
+        if is_gas_spike_error(str(exc)):
+            raise InsufficientFundsException(
+                f"Insufficient gas to send Safe transaction: {exc}",
+                chain=Chain.from_id(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ).value,
+            ) from exc
+        raise
 
 
 def add_owner(
