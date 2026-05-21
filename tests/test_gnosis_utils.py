@@ -867,6 +867,34 @@ class TestTransfer:
 
         assert exc_info.value.chain == "gnosis"
 
+    def test_chain_interaction_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+        mock_ledger.api.to_checksum_address.return_value = "0xCryptoAddress"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ChainInteractionError("max fee per gas less than block base fee")
+        )
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                transfer(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    safe="0xSafe",
+                    to="0xRecipient",
+                    amount=1000,
+                )
+
+        assert exc_info.value.chain == "gnosis"
+
     def test_non_gas_error_propagates(self) -> None:
         """Verify ValueError not related to gas propagates unchanged."""
         mock_ledger = MagicMock()
@@ -1065,6 +1093,35 @@ class TestTransferErc20FromEoa:
         mock_txsettler_cls = MagicMock()
         mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
             ValueError("insufficient funds for gas * price + value")
+        )
+        mock_chain = MagicMock()
+        mock_chain.value = "gnosis"
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=mock_chain),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                transfer_erc20_from_eoa(
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                    token="0x" + "b" * 40,
+                    to="0x" + "c" * 40,
+                    amount=12,
+                )
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_chain_interaction_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ChainInteractionError("max fee per gas less than block base fee")
         )
         mock_chain = MagicMock()
         mock_chain.value = "gnosis"
