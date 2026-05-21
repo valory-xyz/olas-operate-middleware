@@ -38,6 +38,7 @@ from operate.bridge.providers.provider import (
     ProviderRequest,
     ProviderRequestStatus,
 )
+from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain
 
 # ---------------------------------------------------------------------------
@@ -998,6 +999,45 @@ class TestBridgeManagerExecuteBundleAdditional:
 
         assert result == expected_status
         manager.logger.warning.assert_called()  # type: ignore[attr-defined]
+
+    def test_execute_bundle_insufficient_funds_stores_and_reraises(
+        self, tmp_path: Path
+    ) -> None:
+        """execute_bundle() stores data and re-raises InsufficientFundsException (lines 410-413)."""
+        (tmp_path / EXECUTED_BUNDLES_PATH).mkdir(parents=True, exist_ok=True)
+        manager = _make_bridge_manager(tmp_path)
+
+        req = _make_provider_request_real(provider_id="relay-provider")
+        bundle = _make_real_bundle()
+        bundle.provider_requests = [req]
+        manager.data.last_requested_bundle = bundle
+        bundle_id = bundle.id
+
+        mock_provider = MagicMock()
+        mock_provider.execute.side_effect = InsufficientFundsException(
+            "not enough gas", chain="gnosis"
+        )
+        manager._providers["relay-provider"] = (
+            mock_provider  # pylint: disable=protected-access
+        )
+
+        mock_store_data = MagicMock()
+
+        with (
+            patch.object(
+                manager,
+                "bridge_refill_requirements",
+                return_value={"is_refill_required": False},
+            ),
+            patch.object(manager, "_store_data", mock_store_data),
+            patch.object(bundle, "store") as mock_bundle_store,
+            pytest.raises(InsufficientFundsException),
+        ):
+            manager.execute_bundle(bundle_id)
+
+        # Verify _store_data and bundle.store were called before re-raising
+        assert mock_store_data.call_count >= 2
+        assert mock_bundle_store.call_count >= 2
 
     def test_get_status_json_in_memory_bundle(self, tmp_path: Path) -> None:
         """get_status_json() takes the pass branch when bundle is in memory (line 427)."""
