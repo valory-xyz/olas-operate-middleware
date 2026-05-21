@@ -59,21 +59,17 @@ Confirmed by grepping `operate/` + `tests/`:
 |---|---|---|
 | `cytoolz` | 0 | drop |
 | `typing_extensions` | 2 (only `Annotated`, `TypedDict`) | both stdlib on Python ≥ 3.10; swap imports to `typing` and drop the dep |
-| `multiaddr` | 1 — only `operate/pearl.py:43-44` (PyInstaller bundling hint) | tied to pearl.py decision below |
+| `multiaddr` | 1 — only `operate/pearl.py:42-43` (PyInstaller bundling hint) | dropped with pearl.py (see below) |
 
-### Pearl.py — broken on main, separately
+### Pearl.py — dead in this repo
 
-`operate/pearl.py` imports `aea_ledger_ethereum_flashbots`, but that
-plugin was removed from `pyproject.toml` during the uv migration.
-The PyInstaller build is currently broken. Either:
+`operate/pearl.py` is the PyInstaller entry point. Confirmed by
+@OjusWiZard: the live Pearl entry point is in `olas-operate-app`
+(the Electron repo); the copy here is dead. Action:
 
-- pearl.py is dead → delete it, the `.coveragerc` exclusion entry,
-  and drop `pyinstaller` + `multiaddr`, OR
-- pearl.py is alive (used by the Pearl Electron app) → re-add
-  `open-aea-ledger-ethereum-flashbots` to dependencies.
-
-Either way, this is a real bug — flagging it so we don't ship the
-cleanup without resolving it.
+- delete `operate/pearl.py`
+- remove the `omit = operate/pearl.py` line from `.coveragerc`
+- drop `pyinstaller` and `multiaddr` from `pyproject.toml`
 
 ## Phase plan (all changes in this single PR after review)
 
@@ -84,8 +80,8 @@ cleanup without resolving it.
 | `tox.ini` | remove `[testenv:vulture]`, `[testenv:check-copyright]`, `[testenv:fix-copyright]`, `[testenv:darglint]`, `[testenv:liccheck]`, `[testenv:all-tests]`, the orphaned `[darglint]` block, the typo'd `[mypy-typing_extentions.*]` block; fix `envlist =` to something sane (empty or `unit-tests`) |
 | `.github/workflows/common_checks.yml` | drop the `markdown-spellcheck` `npm install` line |
 | `pyproject.toml` | drop `cytoolz` |
-| `operate/operate_types.py`, `operate/cli.py` | swap `from typing_extensions import Annotated/TypedDict` → `from typing import …`; drop `typing_extensions` from `pyproject.toml` |
-| `operate/pearl.py` + `.coveragerc` + `pyproject.toml` | resolve pearl.py per the "Pearl.py" section above |
+| `operate/operate_types.py`, `operate/cli.py` | swap `from typing_extensions import Annotated/TypedDict` → `from typing import …` (`operate_types.py` is imported by ~30 files but the change is the import line only, no API change); drop `typing_extensions` from `pyproject.toml` |
+| `operate/pearl.py` + `.coveragerc` + `pyproject.toml` | delete pearl.py, remove the `.coveragerc` omit entry, drop `pyinstaller` + `multiaddr` |
 
 **Expected delta:** `tox.ini` 315 → ~180 lines, `pyproject.toml`
 loses 1-3 deps.
@@ -126,38 +122,29 @@ lint output, don't trust a green tox env alone.
   Either keep with a date marker, or move to
   `docs/improvement-plan-2026-02.md`. Do not delete — it documents
   Phase 1+2 completion.
-- **`docs/test-suite-guide.md`** — appears in working trees but
-  isn't on `main`. Check provenance before this PR lands: merge into
-  `TESTING.md` or commit and cross-reference.
 
 **Expected delta:** `CONTRIBUTING.md` 345 → ~15, `TESTING.md` 427 → ~250.
 
-### Phase 4 — Gitleaks → canonical extend stub
+### Phase 4 — Gitleaks: delete the local ruleset
+
+Match trader's post-cleanup state (PR #925 deleted `.gitleaks.toml`
+entirely, leaving only `.gitleaksignore`). The 544-line file in this
+repo is the upstream default ruleset plus a handful of Valory-style
+allowlists; gitleaks falls back to its bundled default when the file
+is absent.
 
 1. **Baseline capture:**
    ```
    gitleaks detect --config=.gitleaks.toml \
      --report-format=json --report-path=/tmp/gl-before.json
    ```
-2. Replace `.gitleaks.toml` with:
-   ```toml
-   [extend]
-   path = "https://raw.githubusercontent.com/valory-xyz/open-autonomy/<SHA>/.gitleaks.toml"
+2. `rm .gitleaks.toml`. Move any genuinely-operate-middleware-specific
+   path allowlists into `.gitleaksignore` (which stays).
+3. Re-run gitleaks with no `--config`. Require the new findings
+   set ⊆ baseline (i.e. no *new* secrets surface). New
+   false-positives are allowlisted in `.gitleaksignore`.
 
-   [allowlist]
-   description = "operate-middleware-specific allowlist"
-   paths = [ ... ]   # whatever operate-middleware needs beyond canonical
-   ```
-3. Pin the SHA explicitly, not a branch — prevents surprise rule
-   churn breaking CI.
-4. **Verify the gitleaks action we use supports remote `[extend]
-   path = URL`.** Some versions only support local paths; if ours
-   doesn't, vendor the canonical instead of extending it.
-5. Re-run gitleaks. Require identical findings vs the baseline.
-6. `.gitleaksignore` stays — it's a per-repo path allowlist with
-   real entries.
-
-**Expected delta:** `.gitleaks.toml` 544 → ~15 lines.
+**Expected delta:** `.gitleaks.toml` 544 → 0 lines.
 
 ## Sequencing within the PR
 
@@ -166,10 +153,10 @@ diff stays reviewable:
 
 1. `chore: drop dead testenvs, dead CI step, broken script refs`
 2. `chore: prune dead deps; swap typing_extensions for stdlib`
-3. `chore: fix or remove pearl.py PyInstaller entry point`
+3. `chore: delete pearl.py (live entry point is in olas-operate-app)`
 4. `chore: fold pytest.ini / .pylintrc / tool config into pyproject.toml`
 5. `chore: stub CONTRIBUTING.md, trim TESTING.md`
-6. `chore: collapse .gitleaks.toml to extend the OA canonical`
+6. `chore: delete local .gitleaks.toml ruleset (match trader)`
 
 ## Net effect (estimate)
 
@@ -180,29 +167,24 @@ diff stays reviewable:
 | `pytest.ini` | 11 | 0 | -11 |
 | `.pylintrc` | 61 | 0 | -61 |
 | `CONTRIBUTING.md` | 345 | ~15 | -330 |
-| `.gitleaks.toml` | 544 | ~15 | -529 |
+| `.gitleaks.toml` | 544 | 0 | -544 |
 | `TESTING.md` | 427 | ~250 | -177 |
 | testenvs | 19 | 13 | -6 |
 | runtime deps | -2 to -4 | | |
 | **Net** | | | **~-1,230 lines** |
 
-## Things to confirm before implementing
+## Review feedback resolved (round 1, @OjusWiZard)
 
-These are blocking. Without answers, the PR can't move from
-plan-for-review to implementation.
-
-1. **`operate/pearl.py`** — still built downstream by the Pearl
-   Electron app, or dead? If alive, the missing
-   `open-aea-ledger-ethereum-flashbots` dep needs re-adding (separate
-   bug, surfaced by this audit). If dead, delete pearl.py and drop
-   `pyinstaller` + `multiaddr`.
-2. **`gitleaks-action` version compatibility** — does our pinned
-   action version support `[extend] path = <URL>`? If not, vendor the
-   canonical inside the repo or pin to a vendored copy under
-   `.github/` instead of extending remotely.
-3. **`docs/test-suite-guide.md`** — provenance + relationship to
-   `TESTING.md`. Was it added as a replacement or as a complementary
-   doc? Decides whether Phase 3 merges or cross-references.
+- `operate/pearl.py` is dead in this repo (live one is in
+  `olas-operate-app`). Phase 1 deletes it.
+- `operate/operate_types.py` is widely imported, so the
+  `typing_extensions` swap touches a central file — the change is
+  import-line only, no API change.
+- `docs/test-suite-guide.md` was local-context pollution from my
+  working tree, not on `main`. Removed from this plan.
+- Gitleaks: simplifying further — trader's actual end state is no
+  local `.gitleaks.toml` at all, so Phase 4 now matches that
+  instead of the extend-stub pattern.
 
 ## Verification gate before this PR moves out of draft
 
