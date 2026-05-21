@@ -77,7 +77,7 @@ Confirmed by grepping `operate/` + `tests/`:
 
 | File | Action |
 |---|---|
-| `tox.ini` | remove `[testenv:vulture]`, `[testenv:check-copyright]`, `[testenv:fix-copyright]`, `[testenv:darglint]`, `[testenv:liccheck]`, `[testenv:all-tests]`, the orphaned `[darglint]` block, the typo'd `[mypy-typing_extentions.*]` block; fix `envlist =` to something sane (empty or `unit-tests`) |
+| `tox.ini` | remove `[testenv:vulture]`, `[testenv:check-copyright]`, `[testenv:fix-copyright]`, `[testenv:darglint]`, `[testenv:liccheck]`, `[testenv:all-tests]`, the orphaned `[darglint]` block, the typo'd `[mypy-typing_extentions.*]` block; remove the `envlist = isort` line entirely so a bare `tox` is a no-op (setting `envlist = unit-tests` would auto-run the longest local job, which is the opposite of "sane") |
 | `.github/workflows/common_checks.yml` | drop the `markdown-spellcheck` `npm install` line |
 | `pyproject.toml` | drop `cytoolz` |
 | `operate/operate_types.py`, `operate/cli.py` | swap `from typing_extensions import Annotated/TypedDict` → `from typing import …` (`operate_types.py` is imported by ~30 files but the change is the import line only, no API change); drop `typing_extensions` from `pyproject.toml` |
@@ -93,11 +93,14 @@ loses 1-3 deps.
 | `pytest.ini` (11 lines) | `[tool.pytest.ini_options]` in `pyproject.toml`; `rm pytest.ini` |
 | `.pylintrc` (61 lines) | `[tool.pylint.master]`, `[tool.pylint."messages control"]`, `[tool.pylint.imports]`, `[tool.pylint.design]`, `[tool.pylint.spelling]`, `[tool.pylint.similarities]` in `pyproject.toml`; `rm .pylintrc`; drop `--rcfile=.pylintrc` from `[testenv:pylint]` |
 | `tox.ini [isort]` + `[flake8]` | `[tool.isort]`, `[tool.flake8]` in `pyproject.toml` (Flake8-pyproject ships with `tomte[flake8]==0.7.0`) |
-| `tox.ini [mypy]` (global flags) | `[tool.mypy]` in `pyproject.toml` |
-| `tox.ini [mypy-*]` per-module ignores | **stay in `tox.ini`** — mypy doesn't read these from `pyproject.toml` when invoked via the testenv's `--config-file tox.ini`. Audit the list and drop blocks for deps that are gone |
+| `tox.ini [mypy]` + `[mypy-*]` | **all stay in `tox.ini`.** `[testenv:mypy]` at `tox.ini:69` passes `--config-file tox.ini`. With `--config-file` set, mypy reads ONLY that file and silently ignores `[tool.mypy]` in `pyproject.toml` — splitting them would lose config without failing CI. Audit the list and drop blocks for deps that are gone, but don't move them |
 
-**Verification gate:** `tox -e pylint,flake8,isort-check,black-check,mypy`
-output must be byte-identical to pre-PR.
+**Verification gate:** for each of `tox -e pylint,flake8,isort-check,
+black-check,mypy`, the post-PR finding set must be a (non-strict)
+subset of the pre-PR finding set — i.e. no new findings introduced.
+Byte-identical output is too strict (these tools shift cosmetic
+output on file traversal order, rule-list summaries, timing lines).
+Compare normalised finding lists, not raw stdout.
 
 **Risks:** pylint's section names use the dotted-quote form
 (`[tool.pylint."messages control"]`) and are easy to mis-type as
@@ -188,8 +191,10 @@ diff stays reviewable:
 
 ## Verification gate before this PR moves out of draft
 
-Every check below must pass against `main` and against the cleanup
-branch with byte-identical (or strictly-fewer-warning) output:
+For each check below, the post-PR finding set must be a (non-strict)
+subset of the pre-PR finding set — no *new* findings, errors, or
+failures introduced. Compare normalised lint reports, not raw stdout
+(pylint/mypy/flake8 reorder cosmetic output on config changes).
 
 ```
 tox -e bandit
