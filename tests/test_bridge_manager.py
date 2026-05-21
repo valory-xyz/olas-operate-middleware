@@ -1003,7 +1003,7 @@ class TestBridgeManagerExecuteBundleAdditional:
     def test_execute_bundle_insufficient_funds_stores_and_reraises(
         self, tmp_path: Path
     ) -> None:
-        """execute_bundle() stores data and re-raises InsufficientFundsException (lines 410-413)."""
+        """execute_bundle() persists state and re-raises on InsufficientFundsException."""
         (tmp_path / EXECUTED_BUNDLES_PATH).mkdir(parents=True, exist_ok=True)
         manager = _make_bridge_manager(tmp_path)
 
