@@ -113,6 +113,7 @@ class ProviderRequest(LocalResource):
     status: ProviderRequestStatus
     quote_data: t.Optional[QuoteData]
     execution_data: t.Optional[ExecutionData]
+    fallback_provider_ids: t.Optional[t.List[str]] = None
 
 
 class Provider(ABC):
