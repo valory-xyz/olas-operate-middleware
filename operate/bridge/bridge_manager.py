@@ -499,6 +499,8 @@ class BridgeManager:
         """Sum bridge requirements."""
         requirements = []
         for provider_request in bundle.provider_requests:
+            if provider_request.status == ProviderRequestStatus.QUOTE_FAILED:
+                continue
             provider = self._providers[provider_request.provider_id]
             requirements.append(provider.requirements(provider_request))
 

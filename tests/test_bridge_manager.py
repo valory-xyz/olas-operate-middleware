@@ -935,6 +935,38 @@ class TestBridgeManagerBridgeTotalRequirements:
         mock_provider.requirements.assert_called_once_with(req)
         mock_add.assert_called_once_with(mock_reqs)
 
+    def test_skips_quote_failed_requests(self, tmp_path: Path) -> None:
+        """bridge_total_requirements() skips requests with QUOTE_FAILED status."""
+        from operate.operate_types import (
+            ChainAmounts,  # pylint: disable=import-outside-toplevel
+        )
+
+        manager = _make_bridge_manager(tmp_path)
+
+        mock_provider = MagicMock()
+        mock_reqs = MagicMock()
+        mock_provider.requirements.return_value = mock_reqs
+        manager._providers["relay-provider"] = (
+            mock_provider  # pylint: disable=protected-access
+        )
+
+        ok_req = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        failed_req = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_FAILED,
+        )
+        bundle = _make_real_bundle()
+        bundle.provider_requests = [failed_req, ok_req]
+
+        with patch.object(ChainAmounts, "add", return_value=MagicMock()) as mock_add:
+            manager.bridge_total_requirements(bundle)
+
+        mock_provider.requirements.assert_called_once_with(ok_req)
+        mock_add.assert_called_once_with(mock_reqs)
+
 
 # ---------------------------------------------------------------------------
 # TestBridgeManagerQuoteBundle

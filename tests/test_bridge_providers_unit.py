@@ -3299,6 +3299,47 @@ class TestMayanProviderGetTxs:
         assert label == "forwardEth"
         assert tx["value"] == 1020
 
+    def test_native_eth_missing_swift_input_contract_uses_wrapped_native(
+        self,
+    ) -> None:
+        """When swiftInputContract is absent, falls back to WRAPPED_NATIVE_ASSET."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_token=ZERO_ADDRESS,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        mock_response = _make_mayan_quote_response()
+        del mock_response["swiftInputContract"]
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 1
+        label, tx = txs[0]
+        assert label == "forwardEth"
+
     def test_erc20_path_returns_approve_and_forward(self) -> None:
         """ERC-20 path returns approve + forwardERC20."""
         provider = _make_mayan_provider()
