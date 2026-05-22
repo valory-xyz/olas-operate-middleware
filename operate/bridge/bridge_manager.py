@@ -31,12 +31,17 @@ from typing import cast
 from deepdiff import DeepDiff
 from web3 import Web3
 
+from operate.bridge.providers.mayan_provider import MayanProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
-from operate.bridge.providers.provider import Provider, ProviderRequest
+from operate.bridge.providers.provider import (
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
+)
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, ChainAmounts
@@ -49,6 +54,10 @@ EXECUTED_BUNDLES_PATH = "executed"
 BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
 RELAY_PROVIDER_ID = "relay-provider"
+MAYAN_PROVIDER_ID = "mayan-provider"
+
+# Chains where Mayan fallback is excluded (no reliable alternative exists)
+MAYAN_EXCLUDED_CHAINS: t.Set[str] = {Chain.GNOSIS.value}
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {
@@ -213,6 +222,11 @@ class BridgeManager:
             wallet_manager=wallet_manager,
             logger=logger,
         )
+        self._providers[MAYAN_PROVIDER_ID] = MayanProvider(
+            provider_id=MAYAN_PROVIDER_ID,
+            wallet_manager=wallet_manager,
+            logger=logger,
+        )
 
         # Clear any cached bundle that references a provider removed in a prior version
         # to prevent KeyError on execute_bundle after upgrade.
@@ -222,6 +236,14 @@ class BridgeManager:
                 for req in self.data.last_requested_bundle.provider_requests
                 if req.provider_id not in self._providers
             }
+            # Also check fallback_provider_ids for stale references
+            for req in self.data.last_requested_bundle.provider_requests:
+                if req.fallback_provider_ids:
+                    stale_providers |= {
+                        pid
+                        for pid in req.fallback_provider_ids
+                        if pid not in self._providers
+                    }
             if stale_providers:
                 self.logger.warning(
                     f"[BRIDGE MANAGER] Clearing cached bundle: unknown providers {stale_providers}."
@@ -232,6 +254,45 @@ class BridgeManager:
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
         self.data.store()
+
+    def _build_provider_chain(self, params: t.Dict) -> t.List[str]:
+        """Build an ordered list of provider IDs for a given route.
+
+        The first provider is the primary; remaining are fallbacks tried
+        in order if the primary fails at quote time.
+
+        Rules:
+        1. PREFERRED_ROUTES overrides — single provider, no auto-Mayan
+        2. Native bridge primary → [native_bridge, relay]
+        3. Default → [relay]
+        4. If relay is in the chain and destination is not in
+           MAYAN_EXCLUDED_CHAINS → append mayan as last resort
+        """
+        route = (
+            Chain(params["from"]["chain"]),
+            params["from"]["token"],
+            Chain(params["to"]["chain"]),
+            params["to"]["token"],
+        )
+        preferred = PREFERRED_ROUTES.get(route)
+        if preferred:
+            return [preferred]
+
+        chain: t.List[str] = []
+
+        for provider in self._native_bridge_providers.values():
+            if provider.can_handle_request(params):
+                chain.append(provider.provider_id)
+                break
+
+        if RELAY_PROVIDER_ID not in chain:
+            chain.append(RELAY_PROVIDER_ID)
+
+        to_chain = params["to"]["chain"]
+        if RELAY_PROVIDER_ID in chain and to_chain not in MAYAN_EXCLUDED_CHAINS:
+            chain.append(MAYAN_PROVIDER_ID)
+
+        return chain
 
     def _get_updated_bundle(
         self, requests_params: t.List[t.Dict], force_update: bool
@@ -262,26 +323,13 @@ class BridgeManager:
 
             provider_requests = []
             for params in requests_params:
-                route = (
-                    Chain(params["from"]["chain"]),
-                    params["from"]["token"],
-                    Chain(params["to"]["chain"]),
-                    params["to"]["token"],
-                )
-                provider_id = PREFERRED_ROUTES.get(route)
+                provider_chain = self._build_provider_chain(params)
+                primary_id = provider_chain[0]
+                fallback_ids = provider_chain[1:] if len(provider_chain) > 1 else None
 
-                if not provider_id:
-                    for provider in self._native_bridge_providers.values():
-                        if provider.can_handle_request(params):
-                            provider_id = provider.provider_id
-                            break
-
-                if not provider_id:
-                    provider_id = RELAY_PROVIDER_ID
-
-                provider_requests.append(
-                    self._providers[provider_id].create_request(params=params)
-                )
+                request = self._providers[primary_id].create_request(params=params)
+                request.fallback_provider_ids = fallback_ids
+                provider_requests.append(request)
 
             bundle = ProviderRequestBundle(
                 id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
@@ -455,10 +503,53 @@ class BridgeManager:
         return ChainAmounts.add(*requirements)
 
     def quote_bundle(self, bundle: ProviderRequestBundle) -> None:
-        """Update the bundle with the quotes."""
-        for provider_request in bundle.provider_requests:
+        """Update the bundle with the quotes.
+
+        If a provider fails at quote time (QUOTE_FAILED) and the request
+        has fallback_provider_ids, rotate to the next fallback provider.
+        The failed primary request is discarded — only the successful
+        fallback request is kept in the bundle.
+        """
+        for i, provider_request in enumerate(bundle.provider_requests):
             provider = self._providers[provider_request.provider_id]
             provider.quote(provider_request)
+
+            # Fallback rotation: if quote failed and fallbacks are available
+            if (
+                provider_request.status == ProviderRequestStatus.QUOTE_FAILED
+                and provider_request.fallback_provider_ids
+            ):
+                remaining_fallbacks = list(provider_request.fallback_provider_ids)
+                while (
+                    remaining_fallbacks
+                    and provider_request.status == ProviderRequestStatus.QUOTE_FAILED
+                ):
+                    next_provider_id = remaining_fallbacks.pop(0)
+                    self.logger.info(
+                        f"[BRIDGE MANAGER] Primary provider "
+                        f"{provider_request.provider_id} failed for request "
+                        f"{provider_request.id}. Trying fallback: "
+                        f"{next_provider_id}."
+                    )
+                    fallback_provider = self._providers[next_provider_id]
+                    fallback_request = fallback_provider.create_request(
+                        params=provider_request.params
+                    )
+                    fallback_request.fallback_provider_ids = (
+                        remaining_fallbacks if remaining_fallbacks else None
+                    )
+                    fallback_provider.quote(fallback_request)
+
+                    if fallback_request.status != ProviderRequestStatus.QUOTE_FAILED:
+                        # Fallback succeeded — replace the failed request
+                        bundle.provider_requests[i] = fallback_request
+                        provider_request = fallback_request
+                    else:
+                        # Fallback also failed — update provider_request to
+                        # reflect the latest failure and continue
+                        provider_request = fallback_request
+                        bundle.provider_requests[i] = fallback_request
+
         bundle.timestamp = int(time.time())
 
     def last_executed_bundle_id(self) -> t.Optional[str]:
