@@ -784,6 +784,49 @@ class TestBridgeManagerStaleCacheMigration:
 
         assert manager.data.last_requested_bundle is bundle
 
+    def test_stale_fallback_provider_clears_bundle(self, tmp_path: Path) -> None:
+        """__init__ clears bundle when fallback_provider_ids references an unknown provider."""
+        valid_request = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        valid_request.fallback_provider_ids = ["removed-fallback-provider"]
+        bundle = ProviderRequestBundle(
+            id="rb-stale-fallback-test",
+            requests_params=[valid_request.params],
+            provider_requests=[valid_request],
+            timestamp=int(time.time()),
+        )
+
+        mock_data = MagicMock(spec=BridgeManagerData)
+        mock_data.last_requested_bundle = bundle
+
+        with (
+            patch(
+                "operate.bridge.bridge_manager.BridgeManagerData.load",
+                return_value=mock_data,
+            ),
+            patch(
+                "operate.bridge.bridge_manager.RelayProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.NativeBridgeProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OptimismContractAdaptor",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+            ),
+        ):
+            manager = BridgeManager(
+                path=tmp_path,
+                wallet_manager=MagicMock(),
+                logger=MagicMock(),
+            )
+
+        assert manager.data.last_requested_bundle is None
+
 
 # ---------------------------------------------------------------------------
 # TestBridgeManagerSanitize
