@@ -24,18 +24,18 @@ import time
 import typing as t
 from pathlib import Path
 from platform import system
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import requests
 from deepdiff import DeepDiff
 
 from operate.bridge.bridge_manager import (
+    BridgeManager,
     MAYAN_EXCLUDED_CHAINS,
     MAYAN_PROVIDER_ID,
-    RELAY_PROVIDER_ID,
-    BridgeManager,
     ProviderRequestBundle,
+    RELAY_PROVIDER_ID,
 )
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
@@ -855,8 +855,8 @@ _ERC20 = "0x" + "c" * 40
 
 
 def _make_bare_manager(
-    native_providers: t.Optional[t.Dict[str, MagicMock]] = None,
-) -> BridgeManager:
+    native_providers: t.Optional[t.Dict[str, t.Any]] = None,
+) -> t.Any:
     """Return a BridgeManager with mocked internals (no filesystem / wallet)."""
     mgr = object.__new__(BridgeManager)
     mgr.logger = MagicMock()
@@ -1094,7 +1094,7 @@ class TestProviderRequestBackCompat:
     """Ensure old bundles without fallback_provider_ids deserialise safely."""
 
     def test_provider_request_without_fallback_field(self) -> None:
-        """ProviderRequest JSON lacking fallback_provider_ids loads correctly."""
+        """Old JSON without fallback_provider_ids deserialises correctly."""
         data = {
             "id": "r-old-1234",
             "params": _route_params(),

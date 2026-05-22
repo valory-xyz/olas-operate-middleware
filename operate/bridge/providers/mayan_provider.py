@@ -84,7 +84,7 @@ _ABI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "contracts"
 def _load_abi(contract_dir: str, contract_name: str) -> t.List[t.Dict]:
     """Load contract ABI from the data/contracts directory."""
     abi_path = _ABI_DIR / contract_dir / "build" / f"{contract_name}.json"
-    with open(abi_path, "r") as f:
+    with open(abi_path, "r", encoding="utf-8") as f:
         return json.load(f)["abi"]
 
 
@@ -324,7 +324,7 @@ class MayanProvider(Provider):
 
             time.sleep(2)
 
-    def _call_quote_api(
+    def _call_quote_api(  # pylint: disable=too-many-arguments
         self,
         from_chain: str,
         from_token: str,
@@ -373,7 +373,7 @@ class MayanProvider(Provider):
 
         return quotes[0]
 
-    def _get_txs(
+    def _get_txs(  # pylint: disable=too-many-locals
         self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Build transaction list from Mayan quote response.
@@ -425,7 +425,6 @@ class MayanProvider(Provider):
         # Build protocolData (ABI-encoded inner protocol call)
         protocol_data = self._build_protocol_data(
             response=response,
-            route_type=route_type,
             from_address=from_address,
             from_token=from_token,
             to_address=to_address,
@@ -539,10 +538,9 @@ class MayanProvider(Provider):
             return response.get("fastMctpMayanContract")
         return None
 
-    def _build_protocol_data(  # pylint: disable=too-many-locals
+    def _build_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments
         self,
         response: t.Dict,
-        route_type: str,
         from_address: str,
         from_token: str,
         to_address: str,
@@ -678,8 +676,8 @@ class MayanProvider(Provider):
                     execution_data.elapsed_time = Provider._tx_timestamp(
                         dest_tx, to_ledger_api
                     ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
-                except Exception:  # pylint: disable=broad-except
-                    pass
+                except Exception:  # pylint: disable=broad-except  # nosec B110
+                    pass  # Best-effort elapsed_time; non-critical if RPC fails
 
                 provider_request.status = ProviderRequestStatus.EXECUTION_DONE
 

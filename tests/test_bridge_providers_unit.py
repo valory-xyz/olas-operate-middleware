@@ -25,8 +25,13 @@ import typing as t
 from unittest.mock import MagicMock, patch
 
 import pytest
+from web3 import Web3
 from web3.exceptions import TimeExhausted, TransactionNotFound
 
+from operate.bridge.providers.mayan_provider import (
+    MAYAN_EXPLORER_URL,
+    MayanProvider,
+)
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -41,13 +46,6 @@ from operate.bridge.providers.provider import (
     ProviderRequest,
     ProviderRequestStatus,
     QuoteData,
-)
-from operate.bridge.providers.mayan_provider import (
-    MAYAN_CHAIN_NAMES,
-    MAYAN_EXPLORER_API_URL,
-    MAYAN_EXPLORER_URL,
-    MAYAN_QUOTE_API_URL,
-    MayanProvider,
 )
 from operate.bridge.providers.relay_provider import RelayExecutionStatus, RelayProvider
 from operate.constants import ZERO_ADDRESS
@@ -3070,7 +3068,7 @@ def _make_mayan_quote_response(
     min_amount_out_64: str = "1050",
     eta_seconds: int = 120,
     route_type: str = "SWIFT",
-    swift_mayan_contract: str = "0x" + "f" * 40,
+    swift_mayan_contract: str = "0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF",
 ) -> t.Dict:
     """Build a mock Mayan Quote API response."""
     return {
@@ -3089,7 +3087,7 @@ def _make_mayan_quote_response(
         "swiftAuctionMode": 1,
         "swiftMayanContract": swift_mayan_contract,
         "slippageBps": 300,
-        "toToken": {"contract": "0x" + "d" * 40},
+        "toToken": {"contract": "0xDDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd"},
         "fromToken": {"contract": ZERO_ADDRESS},
     }
 
@@ -3277,7 +3275,7 @@ class TestMayanProviderGetTxs:
         )
 
         mock_ledger_api = MagicMock()
-        mock_ledger_api.api.to_checksum_address = lambda addr: addr
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
         mock_ledger_api.api.eth.get_transaction_count.return_value = 0
 
         with (
@@ -3316,7 +3314,7 @@ class TestMayanProviderGetTxs:
         )
 
         mock_ledger_api = MagicMock()
-        mock_ledger_api.api.to_checksum_address = lambda addr: addr
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
         mock_ledger_api.api.eth.get_transaction_count.return_value = 0
 
         with (
