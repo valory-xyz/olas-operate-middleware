@@ -6,7 +6,7 @@ docs; this file documents only what's specific to operate-middleware.
 
 ## Test Organization
 
-### Unit Tests (~1,640 tests, ~2 minutes)
+### Unit Tests (1,956 tests, ~2 minutes)
 
 Fast tests with no external dependencies. Run with:
 
@@ -14,7 +14,7 @@ Fast tests with no external dependencies. Run with:
 uv run tox -e unit-tests
 ```
 
-### Integration Tests (~260 tests, slow)
+### Integration Tests (300 tests, slow)
 
 Tests requiring testnet RPC endpoints. **Run selectively** — full
 suite takes 7-10 minutes and burns Tenderly quota.
@@ -76,7 +76,7 @@ don't duplicate them here.
 ## Test Coverage
 
 **100% unit test coverage** is enforced across the `operate/`
-package (~7,580 statements). CI fails on any drop
+package (8,561 statements). CI fails on any drop
 (`--cov-fail-under=100`). The only file excluded from coverage is
 `operate/data/contracts/uniswap_v2_erc20/tests/test_contract.py`
 (see [`.coveragerc`](.coveragerc)).

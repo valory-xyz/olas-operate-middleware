@@ -11,7 +11,7 @@ test commands, coding style).
 - **Clone with git hooks:** `git clone -c core.hooksPath=.githooks git@github.com:valory-xyz/olas-operate-middleware.git`
 - **Install + sync deps:** `uv sync --all-groups --frozen`
 - **Run unit tests:** `uv run tox -e unit-tests`
-- **Run all linters:** `uv run tox -p -e flake8 -e pylint -e black-check -e isort-check -e bandit -e safety -e mypy`
+- **Run all linters:** `uv run tox -p -e flake8 -e pylint -e black-check -e isort-check -e bandit -e safety -e mypy`. Always invoke linters via `tox -e <name>`, not bare `flake8` / `pylint`. The `[tool.flake8]` config in `pyproject.toml` relies on `Flake8-pyproject`, which is installed only inside the flake8 tox env.
 - **Testing guide:** [TESTING.md](TESTING.md) covers test organisation,
   integration-test RPC setup, VCR cassettes, and coverage rules.
 - **In-flight work:** [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) tracks
