@@ -42,6 +42,13 @@ from operate.bridge.providers.provider import (
     ProviderRequestStatus,
     QuoteData,
 )
+from operate.bridge.providers.mayan_provider import (
+    MAYAN_CHAIN_NAMES,
+    MAYAN_EXPLORER_API_URL,
+    MAYAN_EXPLORER_URL,
+    MAYAN_QUOTE_API_URL,
+    MayanProvider,
+)
 from operate.bridge.providers.relay_provider import RelayExecutionStatus, RelayProvider
 from operate.constants import ZERO_ADDRESS
 
@@ -3039,3 +3046,478 @@ class TestOptimismContractAdaptorBaseReturnsFalse:
         # Then OptimismContractAdaptor.can_handle_request hits line 173 and returns False
         result = adaptor.can_handle_request(params)
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# MayanProvider unit tests
+# ---------------------------------------------------------------------------
+
+MAYAN_PROVIDER_ID = "mayan-provider"
+
+
+def _make_mayan_provider() -> MayanProvider:
+    """Build a MayanProvider for unit tests."""
+    return MayanProvider(
+        wallet_manager=MagicMock(),
+        provider_id=MAYAN_PROVIDER_ID,
+        logger=MagicMock(),
+    )
+
+
+def _make_mayan_quote_response(
+    expected_amount_out: float = 1100.0,
+    effective_amount_in: float = 1000.0,
+    min_amount_out_64: str = "1050",
+    eta_seconds: int = 120,
+    route_type: str = "SWIFT",
+    swift_mayan_contract: str = "0x" + "f" * 40,
+) -> t.Dict:
+    """Build a mock Mayan Quote API response."""
+    return {
+        "type": route_type,
+        "effectiveAmountIn": effective_amount_in,
+        "effectiveAmountIn64": str(int(effective_amount_in)),
+        "expectedAmountOut": expected_amount_out,
+        "minAmountOut64": min_amount_out_64,
+        "etaSeconds": eta_seconds,
+        "bridgeFee": 0,
+        "gasDrop64": "0",
+        "cancelRelayerFee64": "100",
+        "submitRelayerFee64": "50",
+        "deadline64": "9999999999",
+        "referrerBps": 0,
+        "swiftAuctionMode": 1,
+        "swiftMayanContract": swift_mayan_contract,
+        "slippageBps": 300,
+        "toToken": {"contract": "0x" + "d" * 40},
+        "fromToken": {"contract": ZERO_ADDRESS},
+    }
+
+
+class TestMayanProviderQuote:
+    """Unit tests for MayanProvider.quote()."""
+
+    def test_zero_amount_returns_quote_done(self) -> None:
+        """Zero-amount quote succeeds immediately."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=0,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        provider.quote(req)
+        assert req.status == ProviderRequestStatus.QUOTE_DONE
+        assert req.quote_data is not None
+        assert req.quote_data.eta == 0
+
+    def test_unsupported_chain_returns_quote_failed(self) -> None:
+        """Unsupported chain pair fails immediately."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="gnosis",
+            to_chain="base",
+        )
+        provider.quote(req)
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+
+    def test_successful_quote(self) -> None:
+        """Successful two-step quote sets QUOTE_DONE."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+
+        probe_resp = _make_mayan_quote_response(
+            effective_amount_in=1000.0,
+            expected_amount_out=950.0,
+        )
+        final_resp = _make_mayan_quote_response(
+            effective_amount_in=1074.0,
+            expected_amount_out=1020.0,
+            min_amount_out_64="1010",
+        )
+
+        with patch.object(
+            provider,
+            "_call_quote_api",
+            side_effect=[probe_resp, final_resp],
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_DONE
+        assert req.quote_data is not None
+        assert req.quote_data.provider_data is not None
+        assert req.quote_data.provider_data["amount_in_final"] > 1000
+
+    def test_under_delivery_returns_quote_failed(self) -> None:
+        """When minAmountOut64 < required amount, quote fails."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+
+        probe_resp = _make_mayan_quote_response(
+            effective_amount_in=1000.0,
+            expected_amount_out=950.0,
+        )
+        final_resp = _make_mayan_quote_response(
+            effective_amount_in=1074.0,
+            expected_amount_out=980.0,
+            min_amount_out_64="900",  # under-delivery
+        )
+
+        with patch.object(
+            provider,
+            "_call_quote_api",
+            side_effect=[probe_resp, final_resp],
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+
+    def test_timeout_retries_then_fails(self) -> None:
+        """Timeout on all attempts results in QUOTE_FAILED."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+
+        import requests as req_lib
+
+        with (
+            patch.object(
+                provider,
+                "_call_quote_api",
+                side_effect=req_lib.Timeout("timed out"),
+            ),
+            patch("operate.bridge.providers.mayan_provider.time.sleep"),
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+
+    def test_no_quotes_returns_quote_failed(self) -> None:
+        """Empty quotes list from API results in QUOTE_FAILED."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+
+        with (
+            patch.object(
+                provider,
+                "_call_quote_api",
+                return_value=None,
+            ),
+            patch("operate.bridge.providers.mayan_provider.time.sleep"),
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+
+
+class TestMayanProviderGetTxs:
+    """Unit tests for MayanProvider._get_txs()."""
+
+    def test_zero_amount_returns_empty(self) -> None:
+        """Zero amount returns empty tx list."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=0,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        txs = provider._get_txs(req)  # pylint: disable=protected-access
+        assert txs == []
+
+    def test_no_quote_data_raises(self) -> None:
+        """Missing quote_data raises RuntimeError."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        with pytest.raises(RuntimeError, match="quote data not present"):
+            provider._get_txs(req)  # pylint: disable=protected-access
+
+    def test_native_eth_path_returns_forward_eth(self) -> None:
+        """Native ETH path returns a single forwardEth transaction."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_token=ZERO_ADDRESS,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        mock_response = _make_mayan_quote_response()
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = lambda addr: addr
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 1
+        label, tx = txs[0]
+        assert label == "forwardEth"
+        assert tx["value"] == 1020
+
+    def test_erc20_path_returns_approve_and_forward(self) -> None:
+        """ERC-20 path returns approve + forwardERC20."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_token=ERC20_ADDR,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        mock_response = _make_mayan_quote_response()
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = lambda addr: addr
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 2
+        assert txs[0][0] == "approve"
+        assert txs[1][0] == "forwardERC20"
+
+
+class TestMayanProviderExecutionStatus:
+    """Unit tests for MayanProvider._update_execution_status()."""
+
+    def test_completed_sets_execution_done(self) -> None:
+        """COMPLETED status maps to EXECUTION_DONE."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "clientStatus": "COMPLETED",
+            "destTxHash": "0x" + "e" * 64,
+        }
+
+        with (
+            patch("requests.get", return_value=mock_response),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=MagicMock(),
+            ),
+            patch.object(Provider, "_tx_timestamp", return_value=100),
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_DONE
+
+    def test_refunded_sets_execution_failed(self) -> None:
+        """REFUNDED status maps to EXECUTION_FAILED."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "clientStatus": "REFUNDED",
+        }
+
+        with patch("requests.get", return_value=mock_response):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+    def test_failed_sets_execution_failed(self) -> None:
+        """FAILED status maps to EXECUTION_FAILED."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "clientStatus": "FAILED",
+        }
+
+        with patch("requests.get", return_value=mock_response):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+    def test_inprogress_sets_execution_pending(self) -> None:
+        """INPROGRESS status maps to EXECUTION_PENDING."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "clientStatus": "INPROGRESS",
+        }
+
+        with patch("requests.get", return_value=mock_response):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_PENDING
+
+    def test_404_calls_bridge_tx_likely_failed(self) -> None:
+        """404 not-found triggers _bridge_tx_likely_failed fallback."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+
+        with (
+            patch("requests.get", return_value=mock_response),
+            patch.object(provider, "_bridge_tx_likely_failed", return_value=True),
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+    def test_missing_tx_hash_sets_failed(self) -> None:
+        """Missing from_tx_hash immediately fails."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data(from_tx_hash=None)
+
+        provider._update_execution_status(req)  # pylint: disable=protected-access
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+    def test_unknown_status_sets_pending(self) -> None:
+        """Unknown clientStatus string maps to EXECUTION_PENDING."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "clientStatus": "SOME_UNKNOWN_STATUS",
+        }
+
+        with patch("requests.get", return_value=mock_response):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_PENDING
+
+
+class TestMayanProviderExplorerLink:
+    """Unit tests for MayanProvider._get_explorer_link()."""
+
+    def test_returns_mayan_explorer_url(self) -> None:
+        """Explorer link follows the SWIFT_V2 format."""
+        provider = _make_mayan_provider()
+        tx_hash = "0x" + "a" * 64
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data(from_tx_hash=tx_hash)
+
+        link = provider._get_explorer_link(req)  # pylint: disable=protected-access
+        assert link == f"{MAYAN_EXPLORER_URL}/SWIFT_V2_{tx_hash}"
+
+    def test_no_execution_data_returns_none(self) -> None:
+        """No execution data returns None."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        link = provider._get_explorer_link(req)  # pylint: disable=protected-access
+        assert link is None
