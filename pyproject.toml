@@ -73,6 +73,7 @@ profile = "black"
 order_by_type = false
 case_sensitive = true
 lines_after_imports = -1
+skip = ["operate/data"]
 known_first_party = ["operate"]
 known_local_folder = ["tests"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
