@@ -52,6 +52,9 @@ default-groups = "all"
 module-name = ["operate"]
 module-root = ""
 
+[tool.black]
+extend-exclude = "operate/data"
+
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "INFO"
@@ -67,8 +70,6 @@ markers = [
 
 [tool.isort]
 profile = "black"
-# multi_line_output, include_trailing_comma, force_grid_wrap, use_parentheses,
-# ensure_newline_before_comments, line_length all come from profile = "black".
 order_by_type = false
 case_sensitive = true
 lines_after_imports = -1
@@ -77,7 +78,6 @@ known_local_folder = ["tests"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
 [tool.flake8]
-paths = ["operate", "tests"]
 exclude = [
     "*_pb2.py",
     "*_pb2_grpc.py",
@@ -87,7 +87,6 @@ max-line-length = 88
 select = "B,C,D,E,F,I,W,PT"
 # I003 to avoid conflicts with isort
 ignore = "E203,E501,W503,D202,B014,D400,D401,DAR,B028,B017,I003"
-application-import-names = ["operate", "tests"]
 
 [tool.pylint.master]
 ignore-patterns = ["contract.py"]
