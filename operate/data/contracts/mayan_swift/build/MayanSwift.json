@@ -1,0 +1,38 @@
+{
+  "abi": [
+    {
+      "inputs": [
+        {"internalType": "address", "name": "tokenIn", "type": "address"},
+        {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+        {
+          "components": [
+            {"internalType": "uint8", "name": "payloadType", "type": "uint8"},
+            {"internalType": "bytes32", "name": "trader", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "destAddr", "type": "bytes32"},
+            {"internalType": "uint16", "name": "destChainId", "type": "uint16"},
+            {"internalType": "bytes32", "name": "referrerAddr", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "tokenOut", "type": "bytes32"},
+            {"internalType": "uint64", "name": "minAmountOut", "type": "uint64"},
+            {"internalType": "uint64", "name": "gasDrop", "type": "uint64"},
+            {"internalType": "uint64", "name": "cancelFee", "type": "uint64"},
+            {"internalType": "uint64", "name": "refundFee", "type": "uint64"},
+            {"internalType": "uint64", "name": "deadline", "type": "uint64"},
+            {"internalType": "uint8", "name": "referrerBps", "type": "uint8"},
+            {"internalType": "uint8", "name": "auctionMode", "type": "uint8"},
+            {"internalType": "bytes32", "name": "random", "type": "bytes32"}
+          ],
+          "internalType": "struct OrderParams",
+          "name": "params",
+          "type": "tuple"
+        },
+        {"internalType": "bytes", "name": "customPayload", "type": "bytes"}
+      ],
+      "name": "createOrderWithToken",
+      "outputs": [
+        {"internalType": "bytes32", "name": "orderHash", "type": "bytes32"}
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]
+}

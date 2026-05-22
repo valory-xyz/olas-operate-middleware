@@ -1,0 +1,38 @@
+{
+  "abi": [
+    {
+      "inputs": [
+        {"internalType": "address", "name": "mayanProtocol", "type": "address"},
+        {"internalType": "bytes", "name": "protocolData", "type": "bytes"}
+      ],
+      "name": "forwardEth",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {"internalType": "address", "name": "tokenIn", "type": "address"},
+        {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+        {
+          "components": [
+            {"internalType": "uint256", "name": "value", "type": "uint256"},
+            {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+            {"internalType": "uint8", "name": "v", "type": "uint8"},
+            {"internalType": "bytes32", "name": "r", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "s", "type": "bytes32"}
+          ],
+          "internalType": "struct MayanForwarder.PermitParams",
+          "name": "permitParams",
+          "type": "tuple"
+        },
+        {"internalType": "address", "name": "mayanProtocol", "type": "address"},
+        {"internalType": "bytes", "name": "protocolData", "type": "bytes"}
+      ],
+      "name": "forwardERC20",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    }
+  ]
+}
