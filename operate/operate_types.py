@@ -28,6 +28,7 @@ import threading
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated, TypedDict
 
 import argon2
 from aea_ledger_ethereum import cast
@@ -35,7 +36,6 @@ from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
 from pydantic import AfterValidator, BaseModel, ConfigDict, field_serializer
-from typing_extensions import Annotated, TypedDict
 from web3 import Web3
 
 from operate.constants import (

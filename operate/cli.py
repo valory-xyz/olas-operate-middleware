@@ -36,6 +36,7 @@ from http import HTTPStatus
 from pathlib import Path
 from time import time
 from types import FrameType
+from typing import Annotated
 
 import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
@@ -47,7 +48,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
-from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
 
