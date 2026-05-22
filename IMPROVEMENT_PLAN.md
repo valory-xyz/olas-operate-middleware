@@ -1,6 +1,6 @@
 # Improvement Plan
 
-**Last reviewed:** 2026-02-25
+**Last reviewed:** 2026-05-21
 **Replaces:** STABILITY_AND_QUALITY_IMPROVEMENT_PLAN.md, PHASE3_REFACTORING_PLAN.md, RESOURCE_LEAKS.md, VALIDATION_GAPS.md, IPFS_DOWNLOAD_ISSUES.md
 
 ---
@@ -15,8 +15,7 @@
 - **1.5 Input validation** — `Deployment.delete()` state guard, `fund_service()` address validation, non-positive amount warnings
 
 ### Phase 2: Testing (complete)
-- **1,647 unit tests**, 100% coverage (7,580 statements), CI-enforced via `--cov-fail-under=100`
-- `.coveragerc` excludes `operate/pearl.py` (PyInstaller-only)
+- **~1,640 unit tests**, 100% coverage (~7,580 statements), CI-enforced via `--cov-fail-under=100`
 - All 6 linters passing (isort, black, flake8, pylint 10.00/10, mypy, bandit)
 
 ---
