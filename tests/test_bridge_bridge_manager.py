@@ -19,15 +19,24 @@
 
 """Tests for bridge.bridge_manager module."""
 
+import json
 import time
 import typing as t
 from pathlib import Path
 from platform import system
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 from deepdiff import DeepDiff
 
+from operate.bridge.bridge_manager import (
+    MAYAN_EXCLUDED_CHAINS,
+    MAYAN_PROVIDER_ID,
+    RELAY_PROVIDER_ID,
+    BridgeManager,
+    ProviderRequestBundle,
+)
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -37,7 +46,9 @@ from operate.bridge.providers.native_bridge_provider import (
 from operate.bridge.providers.provider import (
     MESSAGE_QUOTE_ZERO,
     Provider,
+    ProviderRequest,
     ProviderRequestStatus,
+    QuoteData,
 )
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
@@ -833,3 +844,267 @@ class TestBridgeManager:
             assert quoted_from_cost_usd <= expected_to_cost_usd * (
                 1.0 + margin
             ), f"Quoted cost exceeds {margin * 100:.2f}% margin"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — no network, no RPC, no OperateApp
+# ---------------------------------------------------------------------------
+
+_ADDR = "0x" + "a" * 40
+_ERC20 = "0x" + "c" * 40
+
+
+def _make_bare_manager(
+    native_providers: t.Optional[t.Dict[str, MagicMock]] = None,
+) -> BridgeManager:
+    """Return a BridgeManager with mocked internals (no filesystem / wallet)."""
+    mgr = object.__new__(BridgeManager)
+    mgr.logger = MagicMock()
+    mgr._native_bridge_providers = native_providers or {}
+    mgr._providers = dict(mgr._native_bridge_providers)
+    mgr._providers[RELAY_PROVIDER_ID] = MagicMock(
+        provider_id=RELAY_PROVIDER_ID,
+        spec=RelayProvider,
+    )
+    mgr._providers[MAYAN_PROVIDER_ID] = MagicMock(
+        provider_id=MAYAN_PROVIDER_ID,
+    )
+    return mgr
+
+
+def _route_params(
+    from_chain: str = "ethereum",
+    to_chain: str = "base",
+    from_token: str = ZERO_ADDRESS,
+    to_token: str = ZERO_ADDRESS,
+    amount: int = 1_000_000,
+) -> t.Dict:
+    return {
+        "from": {"chain": from_chain, "address": _ADDR, "token": from_token},
+        "to": {
+            "chain": to_chain,
+            "address": _ADDR,
+            "token": to_token,
+            "amount": amount,
+        },
+    }
+
+
+def _make_provider_request(
+    provider_id: str = RELAY_PROVIDER_ID,
+    status: ProviderRequestStatus = ProviderRequestStatus.CREATED,
+    fallback_provider_ids: t.Optional[t.List[str]] = None,
+) -> ProviderRequest:
+    return ProviderRequest(
+        id="r-unit-test",
+        params=_route_params(),
+        provider_id=provider_id,
+        status=status,
+        quote_data=None,
+        execution_data=None,
+        fallback_provider_ids=fallback_provider_ids,
+    )
+
+
+class TestBuildProviderChain:
+    """Unit tests for BridgeManager._build_provider_chain()."""
+
+    def test_relay_primary_non_gnosis_appends_mayan(self) -> None:
+        """Non-Gnosis, no native bridge → [relay, mayan]."""
+        mgr = _make_bare_manager()
+        chain = mgr._build_provider_chain(_route_params(to_chain="base"))
+        assert chain == [RELAY_PROVIDER_ID, MAYAN_PROVIDER_ID]
+
+    def test_native_bridge_non_gnosis_appends_relay_and_mayan(self) -> None:
+        """Native bridge available, non-Gnosis → [native, relay, mayan]."""
+        native = MagicMock()
+        native.provider_id = "native-ethereum-to-base"
+        native.can_handle_request.return_value = True
+        mgr = _make_bare_manager({"native-ethereum-to-base": native})
+        chain = mgr._build_provider_chain(_route_params(to_chain="base"))
+        assert chain == [
+            "native-ethereum-to-base",
+            RELAY_PROVIDER_ID,
+            MAYAN_PROVIDER_ID,
+        ]
+
+    def test_gnosis_destination_excludes_mayan(self) -> None:
+        """To-Gnosis (token route, not in PREFERRED_ROUTES) → no Mayan."""
+        mgr = _make_bare_manager()
+        params = _route_params(to_chain="gnosis", from_token=_ERC20, to_token=_ERC20)
+        chain = mgr._build_provider_chain(params)
+        assert RELAY_PROVIDER_ID in chain
+        assert MAYAN_PROVIDER_ID not in chain
+
+    def test_preferred_route_returns_single_provider(self) -> None:
+        """PREFERRED_ROUTES match → single provider, no Mayan appended."""
+        mgr = _make_bare_manager()
+        # (Ethereum, ZERO, Gnosis, ZERO) is in PREFERRED_ROUTES
+        params = _route_params(to_chain="gnosis")
+        chain = mgr._build_provider_chain(params)
+        assert chain == [RELAY_PROVIDER_ID]
+
+    def test_mayan_excluded_chains_is_gnosis(self) -> None:
+        """Verify MAYAN_EXCLUDED_CHAINS contains exactly Gnosis."""
+        assert MAYAN_EXCLUDED_CHAINS == {Chain.GNOSIS.value}
+
+
+class TestQuoteBundleFallback:
+    """Unit tests for fallback rotation in BridgeManager.quote_bundle()."""
+
+    def test_primary_fails_fallback_succeeds(self) -> None:
+        """Primary QUOTE_FAILED → Mayan fallback succeeds, replaces request."""
+        mgr = _make_bare_manager()
+
+        # Primary relay provider fails
+        def relay_quote(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_FAILED
+
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+        relay_mock.quote.side_effect = relay_quote
+
+        # Mayan fallback succeeds
+        fallback_request = _make_provider_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.CREATED,
+        )
+
+        def mayan_quote(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_DONE
+            req.quote_data = QuoteData(
+                eta=60,
+                elapsed_time=0.1,
+                message=None,
+                timestamp=int(time.time()),
+                provider_data={},
+            )
+
+        mayan_mock = mgr._providers[MAYAN_PROVIDER_ID]
+        mayan_mock.create_request.return_value = fallback_request
+        mayan_mock.quote.side_effect = mayan_quote
+
+        primary = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            fallback_provider_ids=[MAYAN_PROVIDER_ID],
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-test",
+            requests_params=[_route_params()],
+            provider_requests=[primary],
+            timestamp=int(time.time()),
+        )
+
+        mgr.quote_bundle(bundle)
+
+        assert bundle.provider_requests[0].provider_id == MAYAN_PROVIDER_ID
+        assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_DONE
+
+    def test_all_fallbacks_fail(self) -> None:
+        """Primary and all fallbacks fail → final status is QUOTE_FAILED."""
+        mgr = _make_bare_manager()
+
+        def always_fail(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_FAILED
+
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+        relay_mock.quote.side_effect = always_fail
+
+        mayan_mock = mgr._providers[MAYAN_PROVIDER_ID]
+        mayan_mock.create_request.return_value = _make_provider_request(
+            provider_id=MAYAN_PROVIDER_ID,
+        )
+        mayan_mock.quote.side_effect = always_fail
+
+        primary = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            fallback_provider_ids=[MAYAN_PROVIDER_ID],
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-test",
+            requests_params=[_route_params()],
+            provider_requests=[primary],
+            timestamp=int(time.time()),
+        )
+
+        mgr.quote_bundle(bundle)
+
+        assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_FAILED
+
+    def test_no_fallbacks_primary_fails(self) -> None:
+        """Primary fails, no fallback_provider_ids → stays QUOTE_FAILED."""
+        mgr = _make_bare_manager()
+
+        def fail_quote(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_FAILED
+
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+        relay_mock.quote.side_effect = fail_quote
+
+        primary = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID, fallback_provider_ids=None
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-test",
+            requests_params=[_route_params()],
+            provider_requests=[primary],
+            timestamp=int(time.time()),
+        )
+
+        mgr.quote_bundle(bundle)
+
+        assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_FAILED
+        assert bundle.provider_requests[0].provider_id == RELAY_PROVIDER_ID
+
+    def test_primary_succeeds_no_fallback_tried(self) -> None:
+        """Primary succeeds → fallback providers never called."""
+        mgr = _make_bare_manager()
+
+        def succeed_quote(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_DONE
+            req.quote_data = QuoteData(
+                eta=60,
+                elapsed_time=0.1,
+                message=None,
+                timestamp=int(time.time()),
+                provider_data={},
+            )
+
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+        relay_mock.quote.side_effect = succeed_quote
+
+        primary = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            fallback_provider_ids=[MAYAN_PROVIDER_ID],
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-test",
+            requests_params=[_route_params()],
+            provider_requests=[primary],
+            timestamp=int(time.time()),
+        )
+
+        mgr.quote_bundle(bundle)
+
+        assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_DONE
+        assert bundle.provider_requests[0].provider_id == RELAY_PROVIDER_ID
+        mgr._providers[MAYAN_PROVIDER_ID].create_request.assert_not_called()
+
+
+class TestProviderRequestBackCompat:
+    """Ensure old bundles without fallback_provider_ids deserialise safely."""
+
+    def test_provider_request_without_fallback_field(self) -> None:
+        """ProviderRequest JSON lacking fallback_provider_ids loads correctly."""
+        data = {
+            "id": "r-old-1234",
+            "params": _route_params(),
+            "provider_id": RELAY_PROVIDER_ID,
+            "status": "CREATED",
+            "quote_data": None,
+            "execution_data": None,
+        }
+        raw = json.dumps(data)
+        loaded = json.loads(raw)
+        req = ProviderRequest(**loaded)
+        assert req.fallback_provider_ids is None
+        assert req.status == ProviderRequestStatus.CREATED
