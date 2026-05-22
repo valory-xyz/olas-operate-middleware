@@ -1,7 +1,7 @@
 # Cleanup plan — olas-operate-middleware
 
-**Status:** plan-for-review. No code changes yet. Once approved, the
-implementation lands in this same PR.
+**Status:** implemented in PR #447 (commits 366a1b42 and 884611f4).
+This doc remains as the design rationale behind those commits.
 
 Baseline: `main` at `e38113d6` (v0.15.23). The repo is already on
 tomte 0.7.0, uv_build, PEP 621, OA 0.21.21 — so it's structurally past

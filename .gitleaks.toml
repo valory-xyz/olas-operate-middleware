@@ -1,9 +1,9 @@
 title = "operate-middleware gitleaks config"
 
-# Use the bundled gitleaks default ruleset. The 540-line copy this file
-# replaced (deleted 2026-05) was an inlined copy of that default plus
-# the per-repo allowlist below. Keeping just the allowlist means rule
-# updates flow in from gitleaks itself instead of hand-vendored.
+# Use the bundled gitleaks default ruleset. The 544-line copy this file
+# replaced was an inlined copy of that default plus the per-repo
+# allowlist below. Keeping just the allowlist means rule updates flow
+# in from gitleaks itself instead of hand-vendored.
 [extend]
 useDefault = true
 
