@@ -195,7 +195,11 @@ class Provider(ABC):
 
         return True
 
-    def create_request(self, params: t.Dict) -> ProviderRequest:
+    def create_request(
+        self,
+        params: t.Dict,
+        fallback_provider_ids: t.Optional[t.List[str]] = None,
+    ) -> ProviderRequest:
         """Create a request."""
 
         if not self.can_handle_request(params):
@@ -216,6 +220,7 @@ class Provider(ABC):
             quote_data=None,
             execution_data=None,
             status=ProviderRequestStatus.CREATED,
+            fallback_provider_ids=fallback_provider_ids,
         )
 
     def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:

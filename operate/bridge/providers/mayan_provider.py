@@ -207,13 +207,15 @@ class MayanProvider(Provider):
                 if not probe_response:
                     raise ValueError("No quotes returned from Mayan API (probe)")
 
-                probe_amount_in = float(probe_response["effectiveAmountIn"])
-                probe_amount_out = float(probe_response["expectedAmountOut"])
+                # Use base-unit fields to avoid decimal mismatch across tokens
+                probe_amount_in = int(probe_response["effectiveAmountIn64"])
+                probe_amount_out = int(probe_response.get("minAmountOutBaseUnits", "0"))
 
                 if probe_amount_out <= 0:
                     raise ValueError(f"Invalid probe output: {probe_amount_out}")
 
                 # Step 2 — Scale up to guarantee over-delivery
+                # Both probe values are in base units, so the ratio is unit-safe
                 scale_factor = probe_amount_in / probe_amount_out
                 amount_in_final = math.ceil(
                     to_amount * scale_factor * (1 + MAYAN_SLIPPAGE_BUFFER)
@@ -232,18 +234,18 @@ class MayanProvider(Provider):
                     raise ValueError("No quotes returned from Mayan API (final)")
 
                 expected_out_raw = final_response.get("expectedAmountOut", 0)
-                min_amount_out_64 = int(final_response.get("minAmountOut64", "0"))
+                min_amount_out = int(final_response.get("minAmountOutBaseUnits", "0"))
 
                 # Verify over-delivery guarantee
-                # minAmountOut64 is in base units (same as to_amount)
-                if min_amount_out_64 < to_amount:
+                # minAmountOutBaseUnits is in base units (same as to_amount)
+                if min_amount_out < to_amount:
                     self.logger.warning(
                         f"[MAYAN PROVIDER] Under-delivery: "
-                        f"minAmountOut64={min_amount_out_64} < {to_amount}. "
+                        f"minAmountOutBaseUnits={min_amount_out} < {to_amount}. "
                         f"expectedAmountOut={expected_out_raw}."
                     )
                     raise ValueError(
-                        f"Under-delivery: minAmountOut64={min_amount_out_64} "
+                        f"Under-delivery: minAmountOutBaseUnits={min_amount_out} "
                         f"< required={to_amount}"
                     )
 
@@ -342,12 +344,13 @@ class MayanProvider(Provider):
             "toChain": to_chain,
             "slippageBps": 300,
             "swift": True,
-            "mctp": True,
-            "fastMctp": True,
+            "mctp": False,
+            "fastMctp": False,
             "wormhole": False,
             "gasless": False,
             "forwarderAddress": MAYAN_FORWARDER_ADDRESS,
             "destinationAddress": to_address,
+            "sdkVersion": "13_0_0",
         }
 
         api_key = os.environ.get("MAYAN_API_KEY")
@@ -366,14 +369,16 @@ class MayanProvider(Provider):
             timeout=30,
         )
         response.raise_for_status()
-        quotes = response.json()
+        payload = response.json()
 
-        if not quotes or not isinstance(quotes, list) or len(quotes) == 0:
+        # The API returns {"minimumSdkVersion": ..., "quotes": [...]}
+        quotes = payload.get("quotes", []) if isinstance(payload, dict) else []
+        if not quotes:
             return None
 
         return quotes[0]
 
-    def _get_txs(  # pylint: disable=too-many-locals
+    def _get_txs(  # pylint: disable=too-many-locals,too-many-statements
         self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Build transaction list from Mayan quote response.
@@ -393,15 +398,24 @@ class MayanProvider(Provider):
 
         provider_data = quote_data.provider_data
         if not provider_data:
-            return []
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "provider_data not present in quote_data."
+            )
 
         response = provider_data.get("response")
         if not response:
-            return []
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "response not present in provider_data."
+            )
 
         amount_in_final = provider_data.get("amount_in_final", 0)
         if not amount_in_final:
-            return []
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "amount_in_final is zero or missing."
+            )
 
         from_chain = provider_request.params["from"]["chain"]
         from_address = provider_request.params["from"]["address"]
@@ -417,8 +431,10 @@ class MayanProvider(Provider):
         # Determine the inner protocol contract address
         mayan_protocol = self._get_mayan_protocol_address(response, route_type)
         if not mayan_protocol:
-            self.logger.error(f"[MAYAN PROVIDER] Unknown route type: {route_type}")
-            return []
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                f"unknown route type '{route_type}'."
+            )
 
         mayan_protocol = w3.to_checksum_address(mayan_protocol)
 
@@ -564,10 +580,10 @@ class MayanProvider(Provider):
         to_token_contract = to_token_info.get("contract", ZERO_ADDRESS)
         token_out_bytes32 = self._address_to_bytes32(to_token_contract)
 
-        min_amount_out_64 = int(response.get("minAmountOut64", "0"))
-        gas_drop_64 = int(response.get("gasDrop64", "0"))
-        cancel_fee_64 = int(response.get("cancelRelayerFee64", "0"))
-        refund_fee_64 = int(response.get("submitRelayerFee64", "0"))
+        min_amount_out_64 = int(response.get("minAmountOutBaseUnits", "0"))
+        gas_drop_64 = int(response.get("gasDrop", 0) or 0)
+        cancel_fee_64 = int(response.get("cancelRelayerFee64", 0) or 0)
+        refund_fee_64 = int(response.get("submitRelayerFee64", 0) or 0)
         deadline_64 = int(response.get("deadline64", "0"))
         referrer_bps = int(response.get("referrerBps", 0))
         auction_mode = int(response.get("swiftAuctionMode", 1))
@@ -664,9 +680,9 @@ class MayanProvider(Provider):
 
             if client_status == "COMPLETED":
                 self.logger.info(
-                    f"[MAYAN PROVIDER] Execution done for " f"{provider_request.id}."
+                    f"[MAYAN PROVIDER] Execution done for {provider_request.id}."
                 )
-                dest_tx = response_json.get("destTxHash")
+                dest_tx = response_json.get("fulfillTxHash")
                 if dest_tx:
                     execution_data.to_tx_hash = dest_tx
 

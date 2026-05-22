@@ -3066,27 +3066,28 @@ def _make_mayan_provider() -> MayanProvider:
 def _make_mayan_quote_response(
     expected_amount_out: float = 1100.0,
     effective_amount_in: float = 1000.0,
-    min_amount_out_64: str = "1050",
+    min_amount_out_base_units: str = "1050",
     eta_seconds: int = 120,
     route_type: str = "SWIFT",
     swift_mayan_contract: str = "0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF",
 ) -> t.Dict:
-    """Build a mock Mayan Quote API response."""
+    """Build a mock Mayan Quote API response aligned with the live API schema."""
     return {
         "type": route_type,
         "effectiveAmountIn": effective_amount_in,
         "effectiveAmountIn64": str(int(effective_amount_in)),
         "expectedAmountOut": expected_amount_out,
-        "minAmountOut64": min_amount_out_64,
+        "minAmountOutBaseUnits": min_amount_out_base_units,
         "etaSeconds": eta_seconds,
         "bridgeFee": 0,
-        "gasDrop64": "0",
+        "gasDrop": 0,
         "cancelRelayerFee64": "100",
         "submitRelayerFee64": "50",
         "deadline64": "9999999999",
         "referrerBps": 0,
         "swiftAuctionMode": 1,
         "swiftMayanContract": swift_mayan_contract,
+        "swiftInputContract": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         "slippageBps": 300,
         "toToken": {"contract": "0xDDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd"},
         "fromToken": {"contract": ZERO_ADDRESS},
@@ -3135,11 +3136,12 @@ class TestMayanProviderQuote:
         probe_resp = _make_mayan_quote_response(
             effective_amount_in=1000.0,
             expected_amount_out=950.0,
+            min_amount_out_base_units="950",
         )
         final_resp = _make_mayan_quote_response(
             effective_amount_in=1074.0,
             expected_amount_out=1020.0,
-            min_amount_out_64="1010",
+            min_amount_out_base_units="1010",
         )
 
         with patch.object(
@@ -3155,7 +3157,7 @@ class TestMayanProviderQuote:
         assert req.quote_data.provider_data["amount_in_final"] > 1000
 
     def test_under_delivery_returns_quote_failed(self) -> None:
-        """When minAmountOut64 < required amount, quote fails."""
+        """When minAmountOutBaseUnits < required amount, quote fails."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3167,11 +3169,12 @@ class TestMayanProviderQuote:
         probe_resp = _make_mayan_quote_response(
             effective_amount_in=1000.0,
             expected_amount_out=950.0,
+            min_amount_out_base_units="950",
         )
         final_resp = _make_mayan_quote_response(
             effective_amount_in=1074.0,
             expected_amount_out=980.0,
-            min_amount_out_64="900",  # under-delivery
+            min_amount_out_base_units="900",  # under-delivery
         )
 
         with patch.object(
@@ -3353,7 +3356,7 @@ class TestMayanProviderExecutionStatus:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "clientStatus": "COMPLETED",
-            "destTxHash": "0x" + "e" * 64,
+            "fulfillTxHash": "0x" + "e" * 64,
         }
 
         with (
@@ -3583,7 +3586,7 @@ class TestMayanProviderQuoteEdgeCases:
             provider.quote(req)
 
     def test_invalid_probe_output_fails(self) -> None:
-        """Zero expectedAmountOut in probe results in QUOTE_FAILED."""
+        """Zero minAmountOutBaseUnits in probe results in QUOTE_FAILED."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3595,6 +3598,7 @@ class TestMayanProviderQuoteEdgeCases:
         probe_resp = _make_mayan_quote_response(
             effective_amount_in=1000.0,
             expected_amount_out=0.0,
+            min_amount_out_base_units="0",
         )
 
         with (
@@ -3622,6 +3626,7 @@ class TestMayanProviderQuoteEdgeCases:
         probe_resp = _make_mayan_quote_response(
             effective_amount_in=1000.0,
             expected_amount_out=950.0,
+            min_amount_out_base_units="950",
         )
 
         with (
@@ -3671,10 +3676,13 @@ class TestMayanProviderCallQuoteApi:
         """Successful API call returns the first quote from the list."""
         provider = _make_mayan_provider()
         mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {"type": "SWIFT", "effectiveAmountIn": 1000.0},
-            {"type": "MCTP", "effectiveAmountIn": 1050.0},
-        ]
+        mock_response.json.return_value = {
+            "minimumSdkVersion": "13_0_0",
+            "quotes": [
+                {"type": "SWIFT", "effectiveAmountIn": 1000.0},
+                {"type": "MCTP", "effectiveAmountIn": 1050.0},
+            ],
+        }
 
         with patch("requests.get", return_value=mock_response):
             result = provider._call_quote_api(  # pylint: disable=protected-access
@@ -3693,7 +3701,10 @@ class TestMayanProviderCallQuoteApi:
         """Empty quotes list from API returns None."""
         provider = _make_mayan_provider()
         mock_response = MagicMock()
-        mock_response.json.return_value = []
+        mock_response.json.return_value = {
+            "minimumSdkVersion": "13_0_0",
+            "quotes": [],
+        }
 
         with patch("requests.get", return_value=mock_response):
             result = provider._call_quote_api(  # pylint: disable=protected-access
@@ -3708,7 +3719,7 @@ class TestMayanProviderCallQuoteApi:
         assert result is None
 
     def test_none_response_returns_none(self) -> None:
-        """None response from API returns None."""
+        """None/non-dict response from API returns None."""
         provider = _make_mayan_provider()
         mock_response = MagicMock()
         mock_response.json.return_value = None
@@ -3729,7 +3740,10 @@ class TestMayanProviderCallQuoteApi:
         """API key from env is included in params."""
         provider = _make_mayan_provider()
         mock_response = MagicMock()
-        mock_response.json.return_value = [{"type": "SWIFT"}]
+        mock_response.json.return_value = {
+            "minimumSdkVersion": "13_0_0",
+            "quotes": [{"type": "SWIFT"}],
+        }
 
         with (
             patch.dict("os.environ", {"MAYAN_API_KEY": "test-key"}),
@@ -3756,8 +3770,8 @@ class TestMayanProviderCallQuoteApi:
 class TestMayanProviderGetTxsEdgeCases:
     """Additional edge-case tests for MayanProvider._get_txs()."""
 
-    def test_no_provider_data_returns_empty(self) -> None:
-        """Quote with no provider_data returns empty list."""
+    def test_no_provider_data_raises(self) -> None:
+        """Quote with no provider_data raises RuntimeError."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3766,11 +3780,11 @@ class TestMayanProviderGetTxsEdgeCases:
             to_chain="polygon",
         )
         req.quote_data = _make_quote_data(provider_data=None)
-        txs = provider._get_txs(req)  # pylint: disable=protected-access
-        assert txs == []
+        with pytest.raises(RuntimeError, match="provider_data not present"):
+            provider._get_txs(req)  # pylint: disable=protected-access
 
-    def test_no_response_in_provider_data_returns_empty(self) -> None:
-        """Quote with empty response in provider_data returns empty list."""
+    def test_no_response_in_provider_data_raises(self) -> None:
+        """Quote with empty response in provider_data raises RuntimeError."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3781,11 +3795,11 @@ class TestMayanProviderGetTxsEdgeCases:
         req.quote_data = _make_quote_data(
             provider_data={"response": None, "amount_in_final": 1020}
         )
-        txs = provider._get_txs(req)  # pylint: disable=protected-access
-        assert txs == []
+        with pytest.raises(RuntimeError, match="response not present"):
+            provider._get_txs(req)  # pylint: disable=protected-access
 
-    def test_zero_amount_in_final_returns_empty(self) -> None:
-        """Quote with zero amount_in_final returns empty list."""
+    def test_zero_amount_in_final_raises(self) -> None:
+        """Quote with zero amount_in_final raises RuntimeError."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3799,11 +3813,11 @@ class TestMayanProviderGetTxsEdgeCases:
                 "amount_in_final": 0,
             }
         )
-        txs = provider._get_txs(req)  # pylint: disable=protected-access
-        assert txs == []
+        with pytest.raises(RuntimeError, match="amount_in_final is zero"):
+            provider._get_txs(req)  # pylint: disable=protected-access
 
-    def test_unknown_route_type_returns_empty(self) -> None:
-        """Unknown route type returns empty tx list."""
+    def test_unknown_route_type_raises(self) -> None:
+        """Unknown route type raises RuntimeError."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3824,13 +3838,14 @@ class TestMayanProviderGetTxsEdgeCases:
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
 
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api",
-            return_value=mock_ledger_api,
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            pytest.raises(RuntimeError, match="unknown route type"),
         ):
-            txs = provider._get_txs(req)  # pylint: disable=protected-access
-
-        assert txs == []
+            provider._get_txs(req)  # pylint: disable=protected-access
 
 
 # ---------------------------------------------------------------------------
@@ -3914,7 +3929,7 @@ class TestMayanProviderExecutionStatusEdgeCases:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "clientStatus": "COMPLETED",
-            "destTxHash": "0x" + "e" * 64,
+            "fulfillTxHash": "0x" + "e" * 64,
         }
 
         with (

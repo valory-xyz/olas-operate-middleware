@@ -56,7 +56,7 @@ BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 RELAY_PROVIDER_ID = "relay-provider"
 MAYAN_PROVIDER_ID = "mayan-provider"
 
-# Chains where Mayan fallback is excluded (no reliable alternative exists)
+# Chains excluded from Mayan fallback (Mayan does not support these destinations)
 MAYAN_EXCLUDED_CHAINS: t.Set[str] = {Chain.GNOSIS.value}
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
@@ -327,8 +327,10 @@ class BridgeManager:
                 primary_id = provider_chain[0]
                 fallback_ids = provider_chain[1:] if len(provider_chain) > 1 else None
 
-                request = self._providers[primary_id].create_request(params=params)
-                request.fallback_provider_ids = fallback_ids
+                request = self._providers[primary_id].create_request(
+                    params=params,
+                    fallback_provider_ids=fallback_ids,
+                )
                 provider_requests.append(request)
 
             bundle = ProviderRequestBundle(
@@ -533,24 +535,22 @@ class BridgeManager:
                     )
                     fallback_provider = self._providers[next_provider_id]
                     fallback_request = fallback_provider.create_request(
-                        params=provider_request.params
-                    )
-                    fallback_request.fallback_provider_ids = (
-                        remaining_fallbacks if remaining_fallbacks else None
+                        params=provider_request.params,
+                        fallback_provider_ids=(
+                            remaining_fallbacks if remaining_fallbacks else None
+                        ),
                     )
                     fallback_provider.quote(fallback_request)
 
-                    if fallback_request.status != ProviderRequestStatus.QUOTE_FAILED:
-                        # Fallback succeeded — replace the failed request
-                        bundle.provider_requests[i] = fallback_request
-                        provider_request = fallback_request
-                    else:
-                        # Fallback also failed — update provider_request to
-                        # reflect the latest failure and continue
-                        provider_request = fallback_request
-                        bundle.provider_requests[i] = fallback_request
+                    bundle.provider_requests[i] = fallback_request
+                    provider_request = fallback_request
 
-        bundle.timestamp = int(time.time())
+        # Only refresh timestamp if at least one request quoted successfully
+        if any(
+            pr.status != ProviderRequestStatus.QUOTE_FAILED
+            for pr in bundle.provider_requests
+        ):
+            bundle.timestamp = int(time.time())
 
     def last_executed_bundle_id(self) -> t.Optional[str]:
         """Get the last executed bundle id."""
