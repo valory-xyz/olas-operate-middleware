@@ -489,6 +489,7 @@ class MayanProvider(Provider):
                 from_address=from_address,
                 from_chain=from_chain,
                 amount_in_final=amount_in_final,
+                bridge_fee=bridge_fee,
                 mayan_protocol=mayan_protocol,
                 protocol_data=protocol_data,
                 forwarder_address=forwarder_address,
@@ -590,6 +591,7 @@ class MayanProvider(Provider):
         from_address: str,
         from_chain: str,
         amount_in_final: int,
+        bridge_fee: int,
         mayan_protocol: str,
         protocol_data: bytes,
         forwarder_address: str,
@@ -612,6 +614,11 @@ class MayanProvider(Provider):
             raise RuntimeError(
                 f"MONO_CHAIN quote missing swap router fields: "
                 f"address={router_raw!r}, calldata={calldata_raw!r}"
+            )
+        if not calldata_raw.startswith("0x"):
+            raise RuntimeError(
+                f"MONO_CHAIN evmSwapRouterCalldata missing '0x' prefix: "
+                f"{calldata_raw!r}"
             )
         swap_router = w3.to_checksum_address(router_raw)
         swap_data = bytes.fromhex(calldata_raw[2:])
@@ -700,7 +707,7 @@ class MayanProvider(Provider):
                 "to": forwarder_address,
                 "from": from_address,
                 "data": forward_data,
-                "value": 0,
+                "value": bridge_fee,
                 "gas": MAYAN_DEFAULT_GAS.get(
                     Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
                 )["mono_chain_forwarder"],
@@ -966,7 +973,8 @@ class MayanProvider(Provider):
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(
                 f"[MAYAN PROVIDER] Failed to update status for "
-                f"request {provider_request.id}: {e}"
+                f"request {provider_request.id}: {e}",
+                exc_info=True,
             )
             provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
             if self._bridge_tx_likely_failed(provider_request):

@@ -3341,7 +3341,7 @@ class TestMayanProviderGetTxs:
         assert label == "forwardEth"
 
     def test_erc20_path_returns_approve_and_forward(self) -> None:
-        """ERC-20 path returns approve + forwardERC20."""
+        """ERC-20 path returns approve + forwardERC20, and requirements() includes the approve amount."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3358,25 +3358,51 @@ class TestMayanProviderGetTxs:
             }
         )
 
+        # Use a real Web3 for eth.contract / to_checksum_address so the
+        # approve calldata in the resulting tx dict is a real hex string
+        # (otherwise requirements()'s ERC-20 calldata parsing sees a MagicMock).
+        real_w3 = Web3()
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.contract = real_w3.eth.contract
         mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        # Set a known gas price so requirements() computes deterministic fees.
+        def _set_gas_price(tx: t.Dict, _ledger_api: t.Any) -> None:
+            tx["gasPrice"] = 1
 
         with (
             patch(
                 "operate.bridge.providers.provider.get_default_ledger_api",
                 return_value=mock_ledger_api,
             ),
-            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing",
+                side_effect=_set_gas_price,
+            ),
             patch(
                 "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+            patch(
+                "operate.bridge.providers.provider.update_tx_with_gas_pricing",
+                side_effect=_set_gas_price,
             ),
         ):
             txs = provider._get_txs(req)  # pylint: disable=protected-access
 
-        assert len(txs) == 2
-        assert txs[0][0] == "approve"
-        assert txs[1][0] == "forwardERC20"
+            assert len(txs) == 2
+            assert txs[0][0] == "approve"
+            assert txs[1][0] == "forwardERC20"
+
+            # Exercise the full SWIFT requirements() pipeline (regression pin).
+            # Native fees = (approve_gas 50k + forwarder_gas 350k) * gas_price 1 = 400_000.
+            # forwardERC20 has value = bridge_fee = 0 in the fixture, so no extra native.
+            # ERC-20 from_token total = approve amount = amount_in_final = 1020.
+            requirements = provider.requirements(req)
+
+        eth_amounts = requirements["ethereum"][FROM_ADDR]
+        assert eth_amounts[ZERO_ADDRESS] == 400_000
+        assert eth_amounts[ERC20_ADDR] == 1020
 
 
 class TestMayanProviderExecutionStatus:
@@ -4382,7 +4408,7 @@ class TestMayanProviderGetTxsMonoChain:
         assert tx["value"] == 1020000
 
     def test_mono_chain_erc20_input_returns_approve_and_swap_forward(self) -> None:
-        """MONO_CHAIN with ERC-20 input returns approve + swapAndForwardERC20."""
+        """MONO_CHAIN ERC-20 input: approve + swapAndForwardERC20, plus full requirements() pipeline."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -4400,25 +4426,51 @@ class TestMayanProviderGetTxsMonoChain:
             }
         )
 
+        # Use a real Web3 for eth.contract / to_checksum_address so the
+        # approve calldata in the resulting tx dict is a real hex string
+        # (otherwise requirements()'s ERC-20 calldata parsing sees a MagicMock).
+        real_w3 = Web3()
         mock_ledger_api = MagicMock()
         mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.contract = real_w3.eth.contract
         mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        # Set a known gas price so requirements() computes deterministic fees.
+        def _set_gas_price(tx: t.Dict, _ledger_api: t.Any) -> None:
+            tx["gasPrice"] = 1
 
         with (
             patch(
                 "operate.bridge.providers.provider.get_default_ledger_api",
                 return_value=mock_ledger_api,
             ),
-            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing",
+                side_effect=_set_gas_price,
+            ),
             patch(
                 "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+            patch(
+                "operate.bridge.providers.provider.update_tx_with_gas_pricing",
+                side_effect=_set_gas_price,
             ),
         ):
             txs = provider._get_txs(req)  # pylint: disable=protected-access
 
-        assert len(txs) == 2
-        assert txs[0][0] == "approve"
-        assert txs[1][0] == "swapAndForwardERC20"
+            assert len(txs) == 2
+            assert txs[0][0] == "approve"
+            assert txs[1][0] == "swapAndForwardERC20"
+
+            # Exercise the full MONO_CHAIN requirements() pipeline (regression pin).
+            # Native fees = (approve_gas 50k + mono_chain_forwarder_gas 1M) * gas_price 1
+            # swapAndForwardERC20 has value = bridge_fee = 0 in the fixture, so no extra native.
+            # ERC-20 from_token total = approve amount = amount_in_final = 1_020_000.
+            requirements = provider.requirements(req)
+
+        polygon_amounts = requirements["polygon"][FROM_ADDR]
+        assert polygon_amounts[ZERO_ADDRESS] == 1_050_000
+        assert polygon_amounts[ERC20_ADDR] == 1_020_000
 
     def test_mono_chain_uses_higher_gas_default(self) -> None:
         """MONO_CHAIN txs use mono_chain_forwarder gas default (1M), not the SWIFT default (350k)."""

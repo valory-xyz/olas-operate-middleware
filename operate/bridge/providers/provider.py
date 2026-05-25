@@ -258,7 +258,34 @@ class Provider(ABC):
         from_token = provider_request.params["from"]["token"]
         from_ledger_api = self._from_ledger_api(provider_request)
 
-        txs = self._get_txs(provider_request)
+        try:
+            txs = self._get_txs(provider_request)
+        except RuntimeError as e:
+            # A stored quote can become un-buildable between quote() and
+            # requirements() — e.g., persisted provider_data missing fields,
+            # an API contract change, or an SDK version skew. Surface this
+            # as a per-request quote failure rather than crashing the whole
+            # bridge_refill_requirements call.
+            self.logger.error(
+                f"[PROVIDER] Failed to build txs for request "
+                f"{provider_request.id}: {e}",
+                exc_info=True,
+            )
+            provider_request.status = ProviderRequestStatus.QUOTE_FAILED
+            if provider_request.quote_data is not None:
+                provider_request.quote_data.message = (
+                    f"{MESSAGE_REQUIREMENTS_QUOTE_FAILED} {e}"
+                )
+            return ChainAmounts(
+                {
+                    from_chain: {
+                        from_address: {
+                            ZERO_ADDRESS: BigInt(0),
+                            from_token: BigInt(0),
+                        }
+                    }
+                }
+            )
 
         if not txs:
             return ChainAmounts(
