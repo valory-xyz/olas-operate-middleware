@@ -49,6 +49,25 @@ SAFE_ID_PATTERN: str = r"^[A-Za-z0-9_-]{1,128}$"
 SAFE_ID_RE: re.Pattern[str] = re.compile(SAFE_ID_PATTERN)
 
 
+class UnsafeIdError(ValueError):
+    """Raised when an identifier fails ``SAFE_ID_RE`` validation."""
+
+
+def validate_safe_id(value: str) -> str:
+    """Validate a service/achievement identifier and return the sanitised value.
+
+    Raises :class:`UnsafeIdError` if *value* does not match :data:`SAFE_ID_RE`.
+    The return value is ``match.group(0)`` so downstream code operates on a
+    string that static-analysis tools (SnykCode, CodeQL) can trace back to a
+    regex sanitisation boundary — breaking the taint chain from the original
+    HTTP parameter.
+    """
+    match = SAFE_ID_RE.fullmatch(value)
+    if match is None:
+        raise UnsafeIdError(f"Invalid identifier: {value!r}")
+    return match.group(0)
+
+
 class UnsafePathError(ValueError):
     """Raised when a path candidate fails ``SAFE_FS_PATH_RE`` validation."""
 

@@ -110,7 +110,12 @@ from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import gas_fees_spent_in_tx, get_assets_balances
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
-from operate.validators import SAFE_ID_PATTERN, SAFE_ID_RE
+from operate.validators import (
+    SAFE_ID_PATTERN,
+    SAFE_ID_RE,
+    UnsafeIdError,
+    validate_safe_id,
+)
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
@@ -1820,9 +1825,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        # Explicit taint barrier for static-analysis tools (SnykCode, CodeQL)
-        # that cannot trace the FastApiPath / ValidatedServiceRoute validation.
-        if not SAFE_ID_RE.fullmatch(service_config_id):
+        # Taint barrier: validate_safe_id returns a new str via
+        # re.Match.group(0), breaking the taint chain from the HTTP param.
+        try:
+            service_config_id = validate_safe_id(service_config_id)
+        except UnsafeIdError:
             return JSONResponse(
                 content={"error": "Invalid service_config_id."},
                 status_code=HTTPStatus.BAD_REQUEST,
@@ -1867,9 +1874,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        # Explicit taint barrier for static-analysis tools (SnykCode, CodeQL)
-        # that cannot trace the FastApiPath / ValidatedServiceRoute validation.
-        if not SAFE_ID_RE.fullmatch(service_config_id):
+        # Taint barrier: validate_safe_id returns a new str via
+        # re.Match.group(0), breaking the taint chain from the HTTP param.
+        try:
+            service_config_id = validate_safe_id(service_config_id)
+        except UnsafeIdError:
             return JSONResponse(
                 content={"error": "Invalid service_config_id."},
                 status_code=HTTPStatus.BAD_REQUEST,
