@@ -1811,6 +1811,102 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             }
         )
 
+    @service_router.get("/api/v2/service/{service_config_id}/safe_withdrawable_balance")
+    async def _safe_withdrawable_balance(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
+        """Return per-chain, per-token withdrawable balances for the Agent Safe."""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            service = service_manager.load(service_config_id=service_config_id)
+            result: t.Dict[str, t.Any] = {}
+            for chain_str in service.chain_configs:
+                chain = Chain(chain_str)
+                result[chain_str] = (
+                    operate.funding_manager.get_safe_withdrawable_balance(
+                        service=service,
+                        chain=chain,
+                    )
+                )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to get withdrawable balance: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to get withdrawable balance. Please check the logs."
+                },
+            )
+
+        return JSONResponse(content=result)
+
+    @service_router.post("/api/v2/service/{service_config_id}/withdraw_safe")
+    async def _withdraw_safe(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        request: Request,
+    ) -> JSONResponse:
+        """Withdraw user-specified amounts from Agent Safe to Master Safe."""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            data = await request.json()
+            amounts_by_chain = data.get("amounts", {})
+            service = service_manager.load(service_config_id=service_config_id)
+
+            for chain_str, token_amounts in amounts_by_chain.items():
+                chain = Chain(chain_str)
+                operate.funding_manager.partial_withdraw_service_safe(
+                    service=service,
+                    amounts=token_amounts,
+                    chain=chain,
+                )
+
+        except ValueError as e:
+            logger.error(
+                f"Partial withdrawal failed (validation): {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Partial withdrawal failed (insufficient gas): {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Partial withdrawal failed due to insufficient signer gas.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Partial withdrawal failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={"error": "Failed to withdraw funds. Please check the logs."},
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Funds withdrawn successfully."}
+        )
+
     @service_router.post("/api/v2/service/{service_config_id}/fund")
     async def fund_service(  # pylint: disable=too-many-return-statements
         service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
