@@ -4420,6 +4420,119 @@ class TestMayanProviderGetTxsMonoChain:
         assert txs[0][0] == "approve"
         assert txs[1][0] == "swapAndForwardERC20"
 
+    def test_mono_chain_uses_higher_gas_default(self) -> None:
+        """MONO_CHAIN txs use mono_chain_forwarder gas default (1M), not the SWIFT default (350k)."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000000,
+            from_token=ZERO_ADDRESS,
+            to_token=ERC20_ADDR,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        mock_response = _make_mono_chain_quote_response()
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020000,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 1
+        _, tx = txs[0]
+        assert tx["gas"] == 1_000_000
+
+    def test_mono_chain_null_swap_router_address_raises(self) -> None:
+        """MONO_CHAIN raises RuntimeError when evmSwapRouterAddress is null."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000000,
+            from_token=ZERO_ADDRESS,
+            to_token=ERC20_ADDR,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        mock_response = _make_mono_chain_quote_response()
+        mock_response["evmSwapRouterAddress"] = None
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020000,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+            pytest.raises(RuntimeError, match="MONO_CHAIN quote missing swap router"),
+        ):
+            provider._get_txs(req)  # pylint: disable=protected-access
+
+    def test_mono_chain_null_swap_router_calldata_raises(self) -> None:
+        """MONO_CHAIN raises RuntimeError when evmSwapRouterCalldata is null."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000000,
+            from_token=ERC20_ADDR,
+            to_token="0x" + "d" * 40,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        mock_response = _make_mono_chain_quote_response()
+        mock_response["evmSwapRouterCalldata"] = None
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020000,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+            pytest.raises(RuntimeError, match="MONO_CHAIN quote missing swap router"),
+        ):
+            provider._get_txs(req)  # pylint: disable=protected-access
+
 
 class TestMayanProviderExplorerLinkMonoChain:
     """Unit tests for MONO_CHAIN in _get_explorer_link."""

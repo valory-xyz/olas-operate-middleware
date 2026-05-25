@@ -69,13 +69,37 @@ MAYAN_CHAIN_NAMES: t.Dict[str, str] = {
     Chain.ARBITRUM_ONE.value: "arbitrum",
 }
 
-# Default gas estimates per chain when the API/estimation fails
+# Default gas estimates per chain when the API/estimation fails.
+# "forwarder" covers SWIFT forwardEth/forwardERC20 (~150k–200k observed).
+# "mono_chain_forwarder" covers MONO_CHAIN swapAndForwardEth/swapAndForwardERC20
+# which includes an on-chain swap and can use significantly more gas (~270k–475k
+# observed, with outliers above 900k on some L2s).
 MAYAN_DEFAULT_GAS: t.Dict[Chain, t.Dict[str, int]] = {
-    Chain.ETHEREUM: {"approve": 50_000, "forwarder": 350_000},
-    Chain.BASE: {"approve": 50_000, "forwarder": 350_000},
-    Chain.OPTIMISM: {"approve": 50_000, "forwarder": 350_000},
-    Chain.POLYGON: {"approve": 50_000, "forwarder": 350_000},
-    Chain.ARBITRUM_ONE: {"approve": 50_000, "forwarder": 350_000},
+    Chain.ETHEREUM: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.BASE: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.OPTIMISM: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.POLYGON: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.ARBITRUM_ONE: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
 }
 
 _ABI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "contracts"
@@ -581,10 +605,16 @@ class MayanProvider(Provider):
             to_token_info.get("contract", ZERO_ADDRESS)
         )
         min_middle_amount = int(response.get("minAmountOutBaseUnits") or 0)
-        swap_router = w3.to_checksum_address(
-            response.get("evmSwapRouterAddress", ZERO_ADDRESS)
-        )
-        swap_data = bytes.fromhex(response.get("evmSwapRouterCalldata", "0x")[2:])
+
+        router_raw = response.get("evmSwapRouterAddress")
+        calldata_raw = response.get("evmSwapRouterCalldata")
+        if not router_raw or not calldata_raw:
+            raise RuntimeError(
+                f"MONO_CHAIN quote missing swap router fields: "
+                f"address={router_raw!r}, calldata={calldata_raw!r}"
+            )
+        swap_router = w3.to_checksum_address(router_raw)
+        swap_data = bytes.fromhex(calldata_raw[2:])
 
         if is_native:
             tx_data = self._forwarder_contract.encode_abi(
@@ -604,9 +634,9 @@ class MayanProvider(Provider):
                 "from": from_address,
                 "data": tx_data,
                 "value": amount_in_final,
-                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
-                    "forwarder"
-                ],
+                "gas": MAYAN_DEFAULT_GAS.get(
+                    Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
+                )["mono_chain_forwarder"],
             }
             update_tx_with_gas_pricing(tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -671,9 +701,9 @@ class MayanProvider(Provider):
                 "from": from_address,
                 "data": forward_data,
                 "value": 0,
-                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
-                    "forwarder"
-                ],
+                "gas": MAYAN_DEFAULT_GAS.get(
+                    Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
+                )["mono_chain_forwarder"],
             }
             update_tx_with_gas_pricing(forward_tx, from_ledger_api)
             update_tx_with_gas_estimate(
