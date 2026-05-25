@@ -50,6 +50,7 @@ from operate.bridge.providers.provider import (
 )
 from operate.bridge.providers.relay_provider import RelayExecutionStatus, RelayProvider
 from operate.constants import ZERO_ADDRESS
+from operate.operate_types import Chain
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -3094,8 +3095,206 @@ def _make_mayan_quote_response(
     }
 
 
+class TestMayanProviderHelpers:
+    """Unit tests for MayanProvider pure helpers."""
+
+    @pytest.mark.parametrize(
+        ("to_amount", "from_dec", "to_dec", "expected"),
+        [
+            # Decimal-expanding: source has more decimals than dest
+            # (e.g. POL/18 → pUSD/6, ETH/18 → USDC/6).
+            (1_000_000, 18, 6, 1_000_000 * 10**12),
+            # Decimal-shrinking: source has fewer decimals than dest
+            # (e.g. USDC/6 → OLAS/18).
+            (10**18, 6, 18, 10**6),
+            # Same decimals: identity (e.g. OLAS/18 → OLAS/18).
+            (5_000, 18, 18, 5_000),
+            # Floor-clamp: tiny to_amount with huge shrink stays at 1
+            # rather than 0 so Mayan still sees a non-zero probe.
+            (1, 6, 18, 1),
+        ],
+        ids=[
+            "expand-18to6",
+            "shrink-6to18",
+            "same-decimals",
+            "floor-clamp",
+        ],
+    )
+    def test_dest_to_source_atomic(
+        self, to_amount: int, from_dec: int, to_dec: int, expected: int
+    ) -> None:
+        """1:1 cross-decimal conversion preserves nominal value across pairs."""
+        assert (
+            MayanProvider._dest_to_source_atomic(  # pylint: disable=protected-access
+                to_amount, from_dec, to_dec
+            )
+            == expected
+        )
+
+    @pytest.mark.parametrize(
+        ("amount", "decimals", "expected"),
+        [
+            # Mirrors SDK getAmountOfFractionalAmount(amount, min(decimals, 8))
+            # then parseUnits. For 6-dec tokens, cutFactor = 6 → no truncation.
+            ("9.876543", 6, 9876543),
+            # For 18-dec tokens (ETH/OLAS), cutFactor = 8 → truncates beyond 8 places.
+            ("0.123456789012345678", 18, 12345678),
+            # Truncation, not rounding (matches SDK's regex-based cut).
+            ("0.999999999999", 18, 99999999),
+            # Integer-valued amount works the same.
+            (5, 18, 5 * 10**8),
+            # Zero in, zero out.
+            (0, 18, 0),
+        ],
+        ids=[
+            "6-dec-no-truncation",
+            "18-dec-truncate-at-8",
+            "truncates-not-rounds",
+            "integer-input",
+            "zero",
+        ],
+    )
+    def test_to_canonical_uint64(
+        self, amount: t.Union[int, str], decimals: int, expected: int
+    ) -> None:
+        """SDK-compatible truncate-then-scale-by-cutFactor encoding."""
+        assert (
+            MayanProvider._to_canonical_uint64(  # pylint: disable=protected-access
+                amount, decimals
+            )
+            == expected
+        )
+
+
+class TestMayanProviderQuoteCrossDecimal:
+    """Unit tests for cross-decimal probe seeding in MayanProvider.quote()."""
+
+    def test_probe_seed_uses_decimals_aware_translation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Probe amountIn64 reflects to_amount translated into source atomic.
+
+        For an 18-dec source and 6-dec destination, asking for 1 pUSD
+        (to_amount = 10**6) should probe Mayan with 10**18 source atomic
+        (1 unit at a 1:1 exchange-rate assumption), not 10**6.
+        """
+        decimals_by_chain = {"polygon": (18, 6)}
+
+        def fake_decimals(chain: Chain, _token: str) -> int:
+            from_dec, to_dec = decimals_by_chain[chain.value]
+            return from_dec if _token == ZERO_ADDRESS else to_dec
+
+        monkeypatch.setattr(
+            "operate.bridge.providers.mayan_provider.get_asset_decimals",
+            fake_decimals,
+        )
+
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=10**6,  # 1 unit of a 6-dec dest token
+            from_chain="polygon",
+            to_chain="polygon",
+            from_token=ZERO_ADDRESS,
+            to_token=ERC20_ADDR,
+        )
+        probe_resp = _make_mayan_quote_response(
+            effective_amount_in=10**18,
+            expected_amount_out=0.45,
+            min_amount_out_base_units="450000",
+            route_type="MONO_CHAIN",
+        )
+        final_resp = _make_mayan_quote_response(
+            effective_amount_in=2.5 * 10**18,
+            expected_amount_out=1.05,
+            min_amount_out_base_units="1050000",
+            route_type="MONO_CHAIN",
+        )
+
+        captured_amount_ins: t.List[str] = []
+
+        def fake_call_quote_api(**kwargs: t.Any) -> t.Dict:
+            captured_amount_ins.append(kwargs["amount_in64"])
+            return probe_resp if len(captured_amount_ins) == 1 else final_resp
+
+        with patch.object(provider, "_call_quote_api", side_effect=fake_call_quote_api):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_DONE
+        # Probe must have been seeded with to_amount scaled into source atomic
+        # (1:1 at 18-dec source vs 6-dec dest = 10**12 scale-up).
+        assert captured_amount_ins[0] == str(
+            10**18
+        ), f"Probe should use source-atomic seed 10**18, got {captured_amount_ins[0]}"
+
+    def test_probe_seed_handles_low_to_high_decimal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Reverse direction: 6-dec source → 18-dec dest shrinks the probe seed.
+
+        Asking for 1 OLAS (to_amount = 10**18) with a 6-dec source should
+        probe with 10**6 source atomic, not 10**18.
+        """
+
+        def fake_decimals(_chain: Chain, token: str) -> int:
+            # from_token is non-zero (6-dec ERC-20); to_token is ZERO (native 18-dec)
+            return 18 if token == ZERO_ADDRESS else 6
+
+        monkeypatch.setattr(
+            "operate.bridge.providers.mayan_provider.get_asset_decimals",
+            fake_decimals,
+        )
+
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=10**18,  # 1 unit of 18-dec dest
+            from_chain="ethereum",
+            to_chain="polygon",
+            from_token=ERC20_ADDR,  # 6-dec ERC-20 (per fake_decimals mapping)
+            to_token=ZERO_ADDRESS,
+        )
+        probe_resp = _make_mayan_quote_response(
+            effective_amount_in=10**6,
+            expected_amount_out=10**18,
+            min_amount_out_base_units=str(10**18),
+        )
+        final_resp = _make_mayan_quote_response(
+            effective_amount_in=int(1.05 * 10**6),
+            expected_amount_out=1.05 * 10**18,
+            min_amount_out_base_units=str(int(1.05 * 10**18)),
+        )
+
+        captured: t.List[str] = []
+
+        def fake_api(**kwargs: t.Any) -> t.Dict:
+            captured.append(kwargs["amount_in64"])
+            return probe_resp if len(captured) == 1 else final_resp
+
+        with patch.object(provider, "_call_quote_api", side_effect=fake_api):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_DONE
+        assert captured[0] == str(
+            10**6
+        ), f"Probe should shrink to 10**6 source atomic, got {captured[0]}"
+
+
 class TestMayanProviderQuote:
     """Unit tests for MayanProvider.quote()."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_get_asset_decimals(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub get_asset_decimals so quote() never hits a live RPC.
+
+        Default returns 18 (matches native ETH/POL/OLAS and the default
+        ZERO_ADDRESS fixture). Individual tests can monkeypatch a new
+        function via the same path if they need a specific decimals value.
+        """
+        monkeypatch.setattr(
+            "operate.bridge.providers.mayan_provider.get_asset_decimals",
+            lambda _chain, _token: 18,
+        )
 
     def test_zero_amount_returns_quote_done(self) -> None:
         """Zero-amount quote succeeds immediately."""
@@ -3631,6 +3830,14 @@ class TestMayanProviderDescription:
 
 class TestMayanProviderQuoteEdgeCases:
     """Additional edge-case tests for MayanProvider.quote()."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_get_asset_decimals(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub get_asset_decimals so quote() never hits a live RPC."""
+        monkeypatch.setattr(
+            "operate.bridge.providers.mayan_provider.get_asset_decimals",
+            lambda _chain, _token: 18,
+        )
 
     def test_quote_wrong_status_raises(self) -> None:
         """Quoting a request with EXECUTION_PENDING status raises RuntimeError."""

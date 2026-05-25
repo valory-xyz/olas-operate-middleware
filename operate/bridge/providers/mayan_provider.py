@@ -24,6 +24,7 @@ import math
 import secrets
 import time
 import typing as t
+from decimal import Decimal, ROUND_DOWN
 from http import HTTPStatus
 from pathlib import Path
 
@@ -41,7 +42,7 @@ from operate.bridge.providers.provider import (
 )
 from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER, ZERO_ADDRESS
 from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
-from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
+from operate.ledger.profiles import WRAPPED_NATIVE_ASSET, get_asset_decimals
 from operate.operate_types import Chain
 
 MAYAN_QUOTE_API_URL = "https://price-api.mayan.finance/v3/quote"
@@ -142,14 +143,48 @@ class MayanProvider(Provider):
         """Get a human-readable description of the provider."""
         return "Mayan Protocol https://mayan.finance/"
 
+    @staticmethod
+    def _to_canonical_uint64(amount: t.Union[str, int, float], decimals: int) -> int:
+        """Truncate *amount* at ``min(decimals, 8)`` places, then scale to int.
+
+        Mirrors Mayan SDK ``getAmountOfFractionalAmount`` (cutFactor =
+        ``min(decimals, 8)``, then ``parseUnits``). Using ``Decimal`` with
+        ``ROUND_DOWN`` avoids float-precision drift at the LSB for unusual
+        large gas-drop values and is the same truncate-then-parseUnits
+        semantics the SDK uses.
+        """
+        cut_factor = min(decimals, 8)
+        quantum = Decimal(1).scaleb(-cut_factor)  # 10**(-cut_factor)
+        truncated = Decimal(str(amount)).quantize(quantum, rounding=ROUND_DOWN)
+        return int(truncated.scaleb(cut_factor))
+
+    @staticmethod
+    def _dest_to_source_atomic(
+        to_amount: int, from_decimals: int, to_decimals: int
+    ) -> int:
+        """Convert *to_amount* (destination atomic) → source atomic at 1:1.
+
+        This is the seed used for the Mayan probe quote — close enough to
+        the eventual source amount that Mayan returns a sensible rate,
+        whatever the decimal mismatch between source and destination.
+        """
+        delta = from_decimals - to_decimals
+        if delta >= 0:
+            return to_amount * (10**delta)
+        return max(to_amount // (10 ** (-delta)), 1)
+
     def quote(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
         self, provider_request: ProviderRequest
     ) -> None:
         """Update the request with the quote from Mayan Quote API.
 
         Uses a two-step approach:
-        1. Probe: call Quote API with amountIn = to.amount to discover exchange rate
-        2. Scale: compute amountIn_final with slippage buffer, re-quote, verify over-delivery
+        1. Probe: call Quote API with amountIn = to_amount translated into
+           source atomic units at a 1:1 exchange-rate assumption, to discover
+           the actual rate. Source/destination decimals come from each token's
+           ``decimals()`` view via ``get_asset_decimals``.
+        2. Scale: compute amountIn_final with slippage buffer, re-quote, and
+           verify over-delivery against the requested to_amount.
         """
         self._validate(provider_request)
 
@@ -219,23 +254,41 @@ class MayanProvider(Provider):
             else to_token
         )
 
+        # Read source and destination decimals from the token contracts
+        # once, before the retry loop. We use these to translate the
+        # caller's to_amount (DESTINATION atomic units) into a SOURCE
+        # atomic seed for the Mayan probe. Without this translation,
+        # cross-decimal pairs (e.g. POL 18-dec → pUSD 6-dec) would feed
+        # Mayan dust source amounts and trigger 406 ROUTE_NOT_FOUND on
+        # every attempt.
+        from_decimals = get_asset_decimals(Chain(from_chain), from_token)
+        to_decimals = get_asset_decimals(Chain(to_chain), to_token)
+        seed_amount_in = self._dest_to_source_atomic(
+            to_amount, from_decimals, to_decimals
+        )
+
         for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
             start = time.time()
             try:
-                # Step 1 — Probe quote to discover exchange rate
+                # Step 1 — Probe with a SOURCE-atomic seed equal to the
+                # destination target under a 1:1 exchange-rate assumption.
+                # The probe response gives us the actual rate so we can
+                # refine in step 2. If Mayan 406s even with this seed,
+                # the requested to_amount is genuinely below the route
+                # minimum and we surface that as QUOTE_FAILED rather than
+                # silently bootstrapping to a different amount.
                 probe_response = self._call_quote_api(
                     from_chain=from_chain_name,
                     from_token=mayan_from_token,
                     to_chain=to_chain_name,
                     to_token=mayan_to_token,
-                    amount_in64=str(to_amount),
+                    amount_in64=str(seed_amount_in),
                     to_address=provider_request.params["to"]["address"],
                 )
 
                 if not probe_response:
                     raise ValueError("No quotes returned from Mayan API (probe)")
 
-                # Use base-unit fields to avoid decimal mismatch across tokens
                 probe_amount_in = int(probe_response["effectiveAmountIn64"])
                 probe_amount_out = int(probe_response.get("minAmountOutBaseUnits", "0"))
 
@@ -450,6 +503,10 @@ class MayanProvider(Provider):
         to_address = provider_request.params["to"]["address"]
         from_ledger_api = self._from_ledger_api(provider_request)
         w3 = from_ledger_api.api
+        # EIP-155 replay protection: these tx dicts are built manually rather
+        # than via web3.build_transaction (which would auto-inject chainId),
+        # so we must set it explicitly at each construction site.
+        chain_id = Chain(from_chain).id
 
         is_native = from_token == ZERO_ADDRESS
         route_type = response.get("type", "SWIFT")
@@ -510,6 +567,7 @@ class MayanProvider(Provider):
                 "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
                     "forwarder"
                 ],
+                "chainId": chain_id,
             }
             update_tx_with_gas_pricing(tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -548,6 +606,7 @@ class MayanProvider(Provider):
                 "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"approve": 50_000})[
                     "approve"
                 ],
+                "chainId": chain_id,
             }
             update_tx_with_gas_pricing(approve_tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -575,6 +634,7 @@ class MayanProvider(Provider):
                 "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
                     "forwarder"
                 ],
+                "chainId": chain_id,
             }
             update_tx_with_gas_pricing(forward_tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -601,6 +661,8 @@ class MayanProvider(Provider):
         """Build transaction list for MONO_CHAIN routes (same-chain swaps)."""
         txs: t.List[t.Tuple[str, t.Dict]] = []
         is_native = from_token == ZERO_ADDRESS
+        # EIP-155 replay protection — see note in _get_txs.
+        chain_id = Chain(from_chain).id
 
         to_token_info = response.get("toToken", {})
         middle_token = w3.to_checksum_address(
@@ -644,6 +706,7 @@ class MayanProvider(Provider):
                 "gas": MAYAN_DEFAULT_GAS.get(
                     Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
                 )["mono_chain_forwarder"],
+                "chainId": chain_id,
             }
             update_tx_with_gas_pricing(tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -681,6 +744,7 @@ class MayanProvider(Provider):
                 "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"approve": 50_000})[
                     "approve"
                 ],
+                "chainId": chain_id,
             }
             update_tx_with_gas_pricing(approve_tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -711,6 +775,7 @@ class MayanProvider(Provider):
                 "gas": MAYAN_DEFAULT_GAS.get(
                     Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
                 )["mono_chain_forwarder"],
+                "chainId": chain_id,
             }
             update_tx_with_gas_pricing(forward_tx, from_ledger_api)
             update_tx_with_gas_estimate(
@@ -795,8 +860,22 @@ class MayanProvider(Provider):
         to_token_contract = to_token_info.get("contract", ZERO_ADDRESS)
         token_out_bytes32 = self._address_to_bytes32(to_token_contract)
 
-        min_amount_out_64 = int(response.get("minAmountOutBaseUnits") or 0)
-        gas_drop_64 = int(response.get("gasDrop") or 0)
+        # SWIFT V2 encodes uint64 amounts in canonical min(decimals, 8) form
+        # (per Mayan SDK getNormalizeFactor=8 for EVM, getAmountOfFractionalAmount).
+        # Tokens with > 8 decimals (e.g. ETH/OLAS/POL = 18) overflow uint64 when
+        # passed in raw base units; tokens with <= 8 decimals (e.g. USDC = 6)
+        # produce identical canonical and base-unit values.
+        to_decimals = int(to_token_info.get("decimals", 18))
+        out_canonical_decimals = min(to_decimals, 8)
+        out_canonical_divisor = 10 ** (to_decimals - out_canonical_decimals)
+        min_amount_out_64 = (
+            int(response.get("minAmountOutBaseUnits") or 0) // out_canonical_divisor
+        )
+        # gasDrop is in display units of destination gas token (always 18-dec
+        # native on EVM). SDK uses min(getGasDecimal=18, 8) = 8 truncation.
+        gas_drop_64 = self._to_canonical_uint64(
+            response.get("gasDrop") or 0, decimals=18
+        )
         cancel_fee_64 = int(response.get("cancelRelayerFee64") or 0)
         refund_fee_64 = int(response.get("submitRelayerFee64") or 0)
         deadline_64 = int(response.get("deadline64") or 0)
