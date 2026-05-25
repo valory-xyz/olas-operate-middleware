@@ -1820,6 +1820,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
+        # Explicit taint barrier for static-analysis tools (SnykCode, CodeQL)
+        # that cannot trace the FastApiPath / ValidatedServiceRoute validation.
+        if not SAFE_ID_RE.fullmatch(service_config_id):
+            return JSONResponse(
+                content={"error": "Invalid service_config_id."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
         service_manager = operate.service_manager()
 
         if not service_manager.exists(service_config_id=service_config_id):
@@ -1850,7 +1858,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=result)
 
     @service_router.post("/api/v2/service/{service_config_id}/withdraw_safe")
-    async def _withdraw_safe(
+    async def _withdraw_safe(  # pylint: disable=too-many-return-statements
         service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
         request: Request,
     ) -> JSONResponse:
@@ -1858,6 +1866,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
+
+        # Explicit taint barrier for static-analysis tools (SnykCode, CodeQL)
+        # that cannot trace the FastApiPath / ValidatedServiceRoute validation.
+        if not SAFE_ID_RE.fullmatch(service_config_id):
+            return JSONResponse(
+                content={"error": "Invalid service_config_id."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
 
         service_manager = operate.service_manager()
 
