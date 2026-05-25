@@ -4030,6 +4030,78 @@ class TestMayanProviderExecutionStatusEdgeCases:
 
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
 
+    def test_unknown_status_with_likely_failed_sets_failed(self) -> None:
+        """Unknown clientStatus with _bridge_tx_likely_failed=True sets EXECUTION_FAILED."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "clientStatus": "SOME_UNKNOWN_STATUS",
+        }
+
+        with (
+            patch("requests.get", return_value=mock_response),
+            patch.object(provider, "_bridge_tx_likely_failed", return_value=True),
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+
+class TestMayanProviderAddressToBytes32:
+    """Unit tests for MayanProvider._address_to_bytes32()."""
+
+    def test_invalid_address_raises_value_error(self) -> None:
+        """Non-standard hex address raises ValueError."""
+        with pytest.raises(ValueError, match="Expected 20-byte hex address"):
+            MayanProvider._address_to_bytes32(
+                "not-an-address"
+            )  # pylint: disable=protected-access
+
+    def test_short_address_raises_value_error(self) -> None:
+        """Address shorter than 42 chars raises ValueError."""
+        with pytest.raises(ValueError, match="Expected 20-byte hex address"):
+            MayanProvider._address_to_bytes32(
+                "0x1234"
+            )  # pylint: disable=protected-access
+
+
+class TestMayanProviderBuildProtocolData:
+    """Unit tests for MayanProvider._build_protocol_data()."""
+
+    def test_unsupported_destination_chain_raises(self) -> None:
+        """Unsupported destination chain raises ValueError."""
+        provider = _make_mayan_provider()
+        response = {
+            "toToken": {"contract": ZERO_ADDRESS},
+            "minAmountOutBaseUnits": "0",
+            "gasDrop": "0",
+            "cancelRelayerFee64": "0",
+            "submitRelayerFee64": "0",
+            "deadline64": "0",
+            "referrerBps": "0",
+            "swiftAuctionMode": "1",
+            "swiftInputContract": "0x" + "f" * 40,
+        }
+        with pytest.raises(ValueError, match="Unsupported destination chain"):
+            provider._build_protocol_data(  # pylint: disable=protected-access
+                response=response,
+                from_address=FROM_ADDR,
+                from_token=ZERO_ADDRESS,
+                to_address=TO_ADDR,
+                to_chain="unsupported_chain",
+                amount_in_final=1000,
+                from_chain="ethereum",
+            )
+
 
 # ---------------------------------------------------------------------------
 # MayanProvider — integration tests (live API, guarded)
