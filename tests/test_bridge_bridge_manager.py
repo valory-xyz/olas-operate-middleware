@@ -1088,15 +1088,15 @@ class TestQuoteBundleFallback:
 
 
 class TestBuildProviderChainSameChain:
-    """Unit tests for same-chain exclusion in _build_provider_chain."""
+    """Unit tests for same-chain handling in _build_provider_chain."""
 
-    def test_same_chain_excludes_mayan(self) -> None:
-        """Same from_chain and to_chain → Mayan not appended."""
+    def test_same_chain_includes_mayan(self) -> None:
+        """Same from_chain and to_chain (non-Gnosis) → Mayan appended as fallback."""
         mgr = _make_bare_manager()
         params = _route_params(from_chain="polygon", to_chain="polygon")
         chain = mgr._build_provider_chain(params)
         assert RELAY_PROVIDER_ID in chain
-        assert MAYAN_PROVIDER_ID not in chain
+        assert MAYAN_PROVIDER_ID in chain
 
     def test_cross_chain_includes_mayan(self) -> None:
         """Different from_chain and to_chain (non-Gnosis) → Mayan appended."""
@@ -1104,6 +1104,18 @@ class TestBuildProviderChainSameChain:
         params = _route_params(from_chain="ethereum", to_chain="polygon")
         chain = mgr._build_provider_chain(params)
         assert MAYAN_PROVIDER_ID in chain
+
+    def test_same_chain_gnosis_excludes_mayan(self) -> None:
+        """Same-chain Gnosis → Mayan still excluded."""
+        mgr = _make_bare_manager()
+        params = _route_params(
+            from_chain="gnosis",
+            to_chain="gnosis",
+            from_token=_ERC20,
+            to_token=_ERC20,
+        )
+        chain = mgr._build_provider_chain(params)
+        assert MAYAN_PROVIDER_ID not in chain
 
 
 class TestQuoteBundleFallbackMultiRequest:

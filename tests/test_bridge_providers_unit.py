@@ -4184,3 +4184,346 @@ class TestMayanQuoteAPISchemaIntegration:
         fake_hash = "0x" + "0" * 64
         resp = requests.get(url=f"{MAYAN_EXPLORER_API_URL}/{fake_hash}", timeout=30)
         assert resp.status_code == 404
+
+    def test_mono_chain_quote_schema(self) -> None:
+        """Hit live Mayan Quote API for a MONO_CHAIN route and assert schema."""
+        import requests  # pylint: disable=import-outside-toplevel
+
+        from operate.bridge.providers.mayan_provider import (  # pylint: disable=import-outside-toplevel
+            MAYAN_FORWARDER_ADDRESS,
+            MAYAN_QUOTE_API_URL,
+        )
+
+        params = {
+            "amountIn64": "1000000",  # 1 USDC (6 decimals)
+            "fromToken": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+            "fromChain": "polygon",
+            "toToken": "0x0000000000000000000000000000000000001010",
+            "toChain": "polygon",
+            "slippageBps": 300,
+            "swift": "false",
+            "mctp": "false",
+            "fastMctp": "false",
+            "monoChain": "true",
+            "wormhole": "false",
+            "gasless": "false",
+            "forwarderAddress": MAYAN_FORWARDER_ADDRESS,
+            "destinationAddress": "0x" + "a" * 40,
+            "sdkVersion": "13_0_0",
+        }
+
+        resp = requests.get(url=MAYAN_QUOTE_API_URL, params=params, timeout=30)
+        if not resp.ok:
+            pytest.skip(
+                f"Mayan Quote API returned {resp.status_code} "
+                f"(transient or route unavailable)"
+            )
+        payload = resp.json()
+
+        assert isinstance(payload, dict), "Expected dict envelope"
+        assert "quotes" in payload, "Missing 'quotes' key in envelope"
+        quotes = payload["quotes"]
+        assert isinstance(quotes, list), "'quotes' should be a list"
+
+        if not quotes:
+            pytest.skip("No quotes returned (route may be temporarily unavailable)")
+
+        quote = quotes[0]
+
+        # Fields the provider code reads during quoting
+        assert "effectiveAmountIn64" in quote
+        assert "minAmountOutBaseUnits" in quote
+        assert "expectedAmountOut" in quote
+        assert "etaSeconds" in quote
+        assert quote["type"] == "MONO_CHAIN"
+
+        # MONO_CHAIN-specific fields read during _get_txs
+        assert "monoChainMayanContract" in quote
+        assert "evmSwapRouterAddress" in quote
+        assert "evmSwapRouterCalldata" in quote
+        assert "expectedAmountOutBaseUnits" in quote
+
+
+# ---------------------------------------------------------------------------
+# MayanProvider — MONO_CHAIN unit tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mono_chain_quote_response(
+    expected_amount_out: float = 10.0,
+    effective_amount_in: float = 1.0,
+    min_amount_out_base_units: str = "9500000000000000000",
+    expected_amount_out_base_units: str = "10000000000000000000",
+    eta_seconds: int = 0,
+    mono_chain_contract: str = "0x238856DE6d9d32EA3Dd4e9e7dbfe08b23cD5048c",
+    swap_router_address: str = "0x0000000000001fF3684f28c67538d4D072C22734",
+    swap_router_calldata: str = "0x2213bc0b",
+) -> t.Dict:
+    """Build a mock Mayan MONO_CHAIN Quote API response."""
+    return {
+        "type": "MONO_CHAIN",
+        "effectiveAmountIn": effective_amount_in,
+        "effectiveAmountIn64": str(int(effective_amount_in * 10**6)),
+        "expectedAmountOut": expected_amount_out,
+        "expectedAmountOutBaseUnits": expected_amount_out_base_units,
+        "minAmountOut": expected_amount_out * 0.97,
+        "minAmountOutBaseUnits": min_amount_out_base_units,
+        "minReceivedBaseUnits": min_amount_out_base_units,
+        "etaSeconds": eta_seconds,
+        "bridgeFee": 0,
+        "gasDrop": 0,
+        "cancelRelayerFee64": "0",
+        "submitRelayerFee64": "0",
+        "deadline64": "0",
+        "referrerBps": 0,
+        "monoChainMayanContract": mono_chain_contract,
+        "evmSwapRouterAddress": swap_router_address,
+        "evmSwapRouterCalldata": swap_router_calldata,
+        "slippageBps": 300,
+        "toToken": {"contract": "0x0000000000000000000000000000000000001010"},
+        "fromToken": {"contract": ZERO_ADDRESS},
+    }
+
+
+class TestMayanProviderGetMayanProtocolAddressMonoChain:
+    """Unit tests for MONO_CHAIN in _get_mayan_protocol_address."""
+
+    def test_mono_chain_returns_mono_chain_contract(self) -> None:
+        """MONO_CHAIN route type returns monoChainMayanContract."""
+        response = {"monoChainMayanContract": "0xABCD1234"}
+        result = MayanProvider._get_mayan_protocol_address(response, "MONO_CHAIN")
+        assert result == "0xABCD1234"
+
+
+class TestMayanProviderBuildProtocolDataMonoChain:
+    """Unit tests for MONO_CHAIN in _build_protocol_data."""
+
+    def test_mono_chain_erc20_output_builds_transfer_token(self) -> None:
+        """MONO_CHAIN with ERC-20 output builds transferToken protocolData."""
+        provider = _make_mayan_provider()
+        response = _make_mono_chain_quote_response()
+        # to_token is ERC-20 (non-zero address)
+        protocol_data = (
+            provider._build_protocol_data(  # pylint: disable=protected-access
+                response=response,
+                from_address=FROM_ADDR,
+                from_token=ZERO_ADDRESS,
+                to_address=TO_ADDR,
+                to_chain="polygon",
+                amount_in_final=1000000,
+                from_chain="polygon",
+                to_token=ERC20_ADDR,
+            )
+        )
+        assert isinstance(protocol_data, bytes)
+        assert len(protocol_data) > 0
+
+    def test_mono_chain_native_output_builds_transfer_eth(self) -> None:
+        """MONO_CHAIN with native output builds transferEth protocolData."""
+        provider = _make_mayan_provider()
+        response = _make_mono_chain_quote_response()
+        protocol_data = (
+            provider._build_protocol_data(  # pylint: disable=protected-access
+                response=response,
+                from_address=FROM_ADDR,
+                from_token=ERC20_ADDR,
+                to_address=TO_ADDR,
+                to_chain="polygon",
+                amount_in_final=1000000,
+                from_chain="polygon",
+                to_token=ZERO_ADDRESS,  # native output
+            )
+        )
+        assert isinstance(protocol_data, bytes)
+        assert len(protocol_data) > 0
+
+
+class TestMayanProviderGetTxsMonoChain:
+    """Unit tests for MONO_CHAIN in _get_txs."""
+
+    def test_mono_chain_native_input_returns_swap_and_forward_eth(self) -> None:
+        """MONO_CHAIN with native input returns swapAndForwardEth tx."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000000,
+            from_token=ZERO_ADDRESS,
+            to_token=ERC20_ADDR,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        mock_response = _make_mono_chain_quote_response()
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020000,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 1
+        label, tx = txs[0]
+        assert label == "swapAndForwardEth"
+        assert tx["value"] == 1020000
+
+    def test_mono_chain_erc20_input_returns_approve_and_swap_forward(self) -> None:
+        """MONO_CHAIN with ERC-20 input returns approve + swapAndForwardERC20."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000000,
+            from_token=ERC20_ADDR,
+            to_token="0x" + "d" * 40,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        mock_response = _make_mono_chain_quote_response()
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020000,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 2
+        assert txs[0][0] == "approve"
+        assert txs[1][0] == "swapAndForwardERC20"
+
+
+class TestMayanProviderExplorerLinkMonoChain:
+    """Unit tests for MONO_CHAIN in _get_explorer_link."""
+
+    def test_mono_chain_uses_plain_tx_hash(self) -> None:
+        """MONO_CHAIN route uses plain tx hash without prefix."""
+        provider = _make_mayan_provider()
+        tx_hash = "0x" + "a" * 64
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data(from_tx_hash=tx_hash)
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": {"type": "MONO_CHAIN"},
+                "amount_in_final": 1000,
+            }
+        )
+
+        link = provider._get_explorer_link(req)  # pylint: disable=protected-access
+        assert link == f"{MAYAN_EXPLORER_URL}/{tx_hash}"
+
+    def test_swift_still_uses_prefix(self) -> None:
+        """SWIFT route still uses SWIFT_V2_ prefix."""
+        provider = _make_mayan_provider()
+        tx_hash = "0x" + "a" * 64
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data(from_tx_hash=tx_hash)
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": {"type": "SWIFT"},
+                "amount_in_final": 1000,
+            }
+        )
+
+        link = provider._get_explorer_link(req)  # pylint: disable=protected-access
+        assert link == f"{MAYAN_EXPLORER_URL}/SWIFT_V2_{tx_hash}"
+
+    def test_no_quote_data_defaults_to_swift_prefix(self) -> None:
+        """No quote_data defaults to SWIFT_V2_ prefix for backward compatibility."""
+        provider = _make_mayan_provider()
+        tx_hash = "0x" + "a" * 64
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        req.execution_data = _make_execution_data(from_tx_hash=tx_hash)
+
+        link = provider._get_explorer_link(req)  # pylint: disable=protected-access
+        assert link == f"{MAYAN_EXPLORER_URL}/SWIFT_V2_{tx_hash}"
+
+
+class TestMayanProviderCallQuoteApiMonoChain:
+    """Unit tests for monoChain param in _call_quote_api."""
+
+    def test_same_chain_sends_mono_chain_true(self) -> None:
+        """Same from/to chain sends monoChain=true and swift=false."""
+        provider = _make_mayan_provider()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "minimumSdkVersion": "13_0_0",
+            "quotes": [{"type": "MONO_CHAIN"}],
+        }
+
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            provider._call_quote_api(  # pylint: disable=protected-access
+                from_chain="polygon",
+                from_token="0x" + "0" * 40,
+                to_chain="polygon",
+                to_token="0x" + "0" * 40,
+                amount_in64="1000",
+                to_address=TO_ADDR,
+            )
+
+        call_kwargs = mock_get.call_args
+        assert call_kwargs.kwargs["params"]["monoChain"] == "true"
+        assert call_kwargs.kwargs["params"]["swift"] == "false"
+
+    def test_cross_chain_sends_mono_chain_false(self) -> None:
+        """Different from/to chain sends monoChain=false and swift=true."""
+        provider = _make_mayan_provider()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "minimumSdkVersion": "13_0_0",
+            "quotes": [{"type": "SWIFT"}],
+        }
+
+        with patch("requests.get", return_value=mock_response) as mock_get:
+            provider._call_quote_api(  # pylint: disable=protected-access
+                from_chain="ethereum",
+                from_token="0x" + "0" * 40,
+                to_chain="polygon",
+                to_token="0x" + "0" * 40,
+                amount_in64="1000",
+                to_address=TO_ADDR,
+            )
+
+        call_kwargs = mock_get.call_args
+        assert call_kwargs.kwargs["params"]["monoChain"] == "false"
+        assert call_kwargs.kwargs["params"]["swift"] == "true"

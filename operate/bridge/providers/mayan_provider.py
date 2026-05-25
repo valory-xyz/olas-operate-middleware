@@ -102,12 +102,16 @@ class MayanProvider(Provider):
         self._w3 = Web3()
         self._forwarder_abi = _load_abi("mayan_forwarder", "MayanForwarder")
         self._swift_abi = _load_abi("mayan_swift", "MayanSwift")
+        self._mono_chain_abi = _load_abi("mayan_mono_chain", "MayanMonoChain")
         self._forwarder_contract = self._w3.eth.contract(
             address=self._w3.to_checksum_address(MAYAN_FORWARDER_ADDRESS),
             abi=self._forwarder_abi,
         )
         self._swift_contract = self._w3.eth.contract(
             abi=self._swift_abi,
+        )
+        self._mono_chain_contract = self._w3.eth.contract(
+            abi=self._mono_chain_abi,
         )
 
     def description(self) -> str:
@@ -336,6 +340,7 @@ class MayanProvider(Provider):
         to_address: str,
     ) -> t.Optional[t.Dict]:
         """Call the Mayan Quote API and return the best quote (first in list)."""
+        is_same_chain = from_chain == to_chain
         params: t.Dict[str, t.Any] = {
             "amountIn64": amount_in64,
             "fromToken": from_token,
@@ -343,9 +348,10 @@ class MayanProvider(Provider):
             "toToken": to_token,
             "toChain": to_chain,
             "slippageBps": 300,
-            "swift": "true",
+            "swift": "false" if is_same_chain else "true",
             "mctp": "false",
             "fastMctp": "false",
+            "monoChain": "true" if is_same_chain else "false",
             "wormhole": "false",
             "gasless": "false",
             "forwarderAddress": MAYAN_FORWARDER_ADDRESS,
@@ -434,6 +440,8 @@ class MayanProvider(Provider):
 
         mayan_protocol = w3.to_checksum_address(mayan_protocol)
 
+        to_token = provider_request.params["to"]["token"]
+
         # Build protocolData (ABI-encoded inner protocol call)
         protocol_data = self._build_protocol_data(
             response=response,
@@ -443,13 +451,27 @@ class MayanProvider(Provider):
             to_chain=to_chain,
             amount_in_final=amount_in_final,
             from_chain=from_chain,
+            to_token=to_token,
         )
 
         txs: t.List[t.Tuple[str, t.Dict]] = []
         forwarder_address = w3.to_checksum_address(MAYAN_FORWARDER_ADDRESS)
         bridge_fee = int(response.get("bridgeFee", 0))
 
-        if is_native:
+        if route_type == "MONO_CHAIN":
+            txs = self._build_mono_chain_txs(
+                response=response,
+                from_token=from_token,
+                from_address=from_address,
+                from_chain=from_chain,
+                amount_in_final=amount_in_final,
+                mayan_protocol=mayan_protocol,
+                protocol_data=protocol_data,
+                forwarder_address=forwarder_address,
+                from_ledger_api=from_ledger_api,
+                w3=w3,
+            )
+        elif is_native:
             # forwardEth: send native ETH as msg.value
             tx_data = self._forwarder_contract.encode_abi(
                 "forwardEth",
@@ -537,6 +559,130 @@ class MayanProvider(Provider):
 
         return txs
 
+    def _build_mono_chain_txs(  # pylint: disable=too-many-arguments,too-many-locals
+        self,
+        response: t.Dict,
+        from_token: str,
+        from_address: str,
+        from_chain: str,
+        amount_in_final: int,
+        mayan_protocol: str,
+        protocol_data: bytes,
+        forwarder_address: str,
+        from_ledger_api: t.Any,
+        w3: t.Any,
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Build transaction list for MONO_CHAIN routes (same-chain swaps)."""
+        txs: t.List[t.Tuple[str, t.Dict]] = []
+        is_native = from_token == ZERO_ADDRESS
+
+        to_token_info = response.get("toToken", {})
+        middle_token = w3.to_checksum_address(
+            to_token_info.get("contract", ZERO_ADDRESS)
+        )
+        min_middle_amount = int(response.get("minAmountOutBaseUnits") or 0)
+        swap_router = w3.to_checksum_address(
+            response.get("evmSwapRouterAddress", ZERO_ADDRESS)
+        )
+        swap_data = bytes.fromhex(response.get("evmSwapRouterCalldata", "0x")[2:])
+
+        if is_native:
+            tx_data = self._forwarder_contract.encode_abi(
+                "swapAndForwardEth",
+                args=[
+                    amount_in_final,
+                    swap_router,
+                    swap_data,
+                    middle_token,
+                    min_middle_amount,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            tx = {
+                "to": forwarder_address,
+                "from": from_address,
+                "data": tx_data,
+                "value": amount_in_final,
+                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
+                    "forwarder"
+                ],
+            }
+            update_tx_with_gas_pricing(tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append(("swapAndForwardEth", tx))
+        else:
+            from_token_checksum = w3.to_checksum_address(from_token)
+
+            # Build approve tx
+            erc20 = w3.eth.contract(
+                address=from_token_checksum,
+                abi=[
+                    {
+                        "inputs": [
+                            {"name": "spender", "type": "address"},
+                            {"name": "amount", "type": "uint256"},
+                        ],
+                        "name": "approve",
+                        "outputs": [{"name": "", "type": "bool"}],
+                        "stateMutability": "nonpayable",
+                        "type": "function",
+                    }
+                ],
+            )
+            approve_data = erc20.encode_abi(
+                "approve",
+                args=[forwarder_address, amount_in_final],
+            )
+            approve_tx = {
+                "to": from_token_checksum,
+                "from": from_address,
+                "data": approve_data,
+                "value": 0,
+                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"approve": 50_000})[
+                    "approve"
+                ],
+            }
+            update_tx_with_gas_pricing(approve_tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append(("approve", approve_tx))
+
+            zero_permit = (0, 0, 0, b"\x00" * 32, b"\x00" * 32)
+            forward_data = self._forwarder_contract.encode_abi(
+                "swapAndForwardERC20",
+                args=[
+                    from_token_checksum,
+                    amount_in_final,
+                    zero_permit,
+                    swap_router,
+                    swap_data,
+                    middle_token,
+                    min_middle_amount,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            forward_tx = {
+                "to": forwarder_address,
+                "from": from_address,
+                "data": forward_data,
+                "value": 0,
+                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
+                    "forwarder"
+                ],
+            }
+            update_tx_with_gas_pricing(forward_tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                forward_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append(("swapAndForwardERC20", forward_tx))
+
+        return txs
+
     @staticmethod
     def _get_mayan_protocol_address(
         response: t.Dict, route_type: str
@@ -548,9 +694,46 @@ class MayanProvider(Provider):
             return response.get("mctpMayanContract")
         if route_type == "FAST_MCTP":
             return response.get("fastMctpMayanContract")
+        if route_type == "MONO_CHAIN":
+            return response.get("monoChainMayanContract")
         return None
 
-    def _build_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments
+    def _build_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments  # nosec B107
+        self,
+        response: t.Dict,
+        from_address: str,
+        from_token: str,
+        to_address: str,
+        to_chain: str,
+        amount_in_final: int,
+        from_chain: str,
+        to_token: str = "",
+    ) -> bytes:
+        """Build the ABI-encoded protocolData for the inner Mayan protocol call.
+
+        Supports SWIFT V2 routes (createOrderWithToken) and MONO_CHAIN routes
+        (transferToken / transferEth on the MonoChain contract).
+        """
+        route_type = response.get("type", "SWIFT")
+
+        if route_type == "MONO_CHAIN":
+            return self._build_mono_chain_protocol_data(
+                response=response,
+                to_address=to_address,
+                to_token=to_token,
+            )
+
+        return self._build_swift_protocol_data(
+            response=response,
+            from_address=from_address,
+            from_token=from_token,
+            to_address=to_address,
+            to_chain=to_chain,
+            amount_in_final=amount_in_final,
+            from_chain=from_chain,
+        )
+
+    def _build_swift_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments
         self,
         response: t.Dict,
         from_address: str,
@@ -560,10 +743,7 @@ class MayanProvider(Provider):
         amount_in_final: int,
         from_chain: str,
     ) -> bytes:
-        """Build the ABI-encoded protocolData for the inner Mayan protocol call.
-
-        Currently supports SWIFT V2 routes via createOrderWithToken.
-        """
+        """Build SWIFT V2 protocolData via createOrderWithToken."""
         dest_chain_id = WORMHOLE_CHAIN_IDS.get(to_chain)
         if dest_chain_id is None:
             raise ValueError(f"Unsupported destination chain for Mayan: {to_chain}")
@@ -626,6 +806,43 @@ class MayanProvider(Provider):
                 b"",  # empty customPayload
             ],
         )
+
+        return bytes.fromhex(protocol_data[2:])  # strip 0x prefix
+
+    def _build_mono_chain_protocol_data(
+        self,
+        response: t.Dict,
+        to_address: str,
+        to_token: str,
+    ) -> bytes:
+        """Build MONO_CHAIN protocolData via transferToken or transferEth."""
+        to_token_info = response.get("toToken", {})
+        to_token_contract = to_token_info.get("contract", ZERO_ADDRESS)
+        expected_amount_out = int(response.get("expectedAmountOutBaseUnits") or 0)
+        zero_addr = self._w3.to_checksum_address(ZERO_ADDRESS)
+
+        # If output is native token, use transferEth; otherwise transferToken
+        is_native_output = to_token == ZERO_ADDRESS
+        if is_native_output:
+            protocol_data = self._mono_chain_contract.encode_abi(
+                "transferEth",
+                args=[
+                    self._w3.to_checksum_address(to_address),
+                    zero_addr,  # referrer
+                    0,  # referrerBps
+                ],
+            )
+        else:
+            protocol_data = self._mono_chain_contract.encode_abi(
+                "transferToken",
+                args=[
+                    self._w3.to_checksum_address(to_token_contract),
+                    expected_amount_out,
+                    self._w3.to_checksum_address(to_address),
+                    zero_addr,  # referrer
+                    0,  # referrerBps
+                ],
+            )
 
         return bytes.fromhex(protocol_data[2:])  # strip 0x prefix
 
@@ -733,5 +950,15 @@ class MayanProvider(Provider):
         from_tx_hash = provider_request.execution_data.from_tx_hash
         if not from_tx_hash:
             return None
+
+        # Determine the route type from the stored quote data
+        route_type = "SWIFT"
+        if provider_request.quote_data and provider_request.quote_data.provider_data:
+            response = provider_request.quote_data.provider_data.get("response", {})
+            route_type = response.get("type", "SWIFT") if response else "SWIFT"
+
+        # MONO_CHAIN uses plain tx hash; SWIFT uses SWIFT_V2_ prefix
+        if route_type == "MONO_CHAIN":
+            return f"{MAYAN_EXPLORER_URL}/{from_tx_hash}"
 
         return f"{MAYAN_EXPLORER_URL}/SWIFT_V2_{from_tx_hash}"
