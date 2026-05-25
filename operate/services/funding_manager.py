@@ -351,6 +351,199 @@ class FundingManager:
 
         self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
 
+    def get_safe_withdrawable_balance(
+        self, service: Service, chain: Chain
+    ) -> t.Dict[str, t.Any]:
+        """Return per-token withdrawable balances for the Agent Safe.
+
+        For native tokens, the withdrawable amount is the safe balance minus
+        the gas reserve (DEFAULT_EOA_TOPUPS), floored at zero.  For ERC20
+        tokens the full balance is withdrawable.
+
+        Returns a dict with ``withdrawable_amounts`` (token_address -> wei str)
+        and ``gas_reserve`` (wei str).
+        """
+        chain_config = service.chain_configs[chain.value]
+        chain_data = chain_config.chain_data
+        ledger_config = chain_config.ledger_config
+        ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
+        service_safe = chain_data.multisig
+
+        # Gas reserve for the native token on this chain
+        gas_reserve = DEFAULT_EOA_TOPUPS.get(chain, {}).get(ZERO_ADDRESS, BigInt(0))
+
+        # Collect all token addresses in scope
+        tokens = (
+            set(ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, []))
+            | service.chain_configs[
+                chain.value
+            ].chain_data.user_params.fund_requirements.keys()
+        )
+
+        withdrawable_amounts: t.Dict[str, str] = {}
+
+        # Native balance
+        native_balance = ledger_api.get_balance(service_safe)
+        withdrawable_native = max(0, native_balance - int(gas_reserve))
+        withdrawable_amounts[ZERO_ADDRESS] = str(withdrawable_native)
+
+        # ERC20 balances
+        for token_address in tokens:
+            if token_address == ZERO_ADDRESS:
+                continue
+            token_instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token_address,
+            )
+            balance = token_instance.functions.balanceOf(service_safe).call()
+            withdrawable_amounts[token_address] = str(balance)
+
+        return {
+            "withdrawable_amounts": withdrawable_amounts,
+            "gas_reserve": str(gas_reserve),
+        }
+
+    def partial_withdraw_service_safe(  # pylint: disable=too-many-locals
+        self,
+        service: Service,
+        amounts: t.Dict[str, str],
+        chain: Chain,
+    ) -> None:
+        """Withdraw user-specified amounts from Agent Safe to Master Safe.
+
+        ``amounts`` maps token addresses to wei-string amounts.  Zero or
+        absent entries are skipped (no-op).  ERC20 tokens are transferred
+        before native to avoid depleting gas before ERC20 transfers.
+        """
+        # Filter out zero / absent entries
+        effective = {addr: int(val) for addr, val in amounts.items() if int(val) > 0}
+        if not effective:
+            self.logger.info(
+                "partial_withdraw_service_safe: no non-zero amounts, no-op"
+            )
+            return
+
+        service_config_id = service.service_config_id
+        self.logger.info(
+            f"Partial withdrawal from service safe {service.name} "
+            f"({service_config_id=}): {effective}"
+        )
+        chain_config = service.chain_configs[chain.value]
+        chain_data = chain_config.chain_data
+        ledger_config = chain_config.ledger_config
+        ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
+        service_safe = chain_data.multisig
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        master_safe = wallet.safes[chain]
+        withdrawal_address = Web3.to_checksum_address(master_safe)
+
+        # Re-validate against live balances
+        gas_reserve = DEFAULT_EOA_TOPUPS.get(chain, {}).get(ZERO_ADDRESS, BigInt(0))
+        for token_address, requested in effective.items():
+            if token_address == ZERO_ADDRESS:
+                live_balance = ledger_api.get_balance(service_safe)
+                withdrawable = max(0, live_balance - int(gas_reserve))
+            else:
+                token_instance = registry_contracts.erc20.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=token_address,
+                )
+                withdrawable = token_instance.functions.balanceOf(service_safe).call()
+
+            if requested > withdrawable:
+                raise ValueError(
+                    f"Requested amount for {token_address} on {chain.name} "
+                    f"exceeds withdrawable balance."
+                )
+
+        sftxb = EthSafeTxBuilder(
+            rpc=ledger_config.rpc,
+            wallet=wallet,
+            contracts=CONTRACTS[ledger_config.chain],
+            chain_type=ChainType(ledger_config.chain.value),
+        )
+        owners = get_owners(ledger_api=ledger_api, safe=service_safe)
+
+        # ERC20 tokens first (avoids depleting native gas before ERC20 transfers)
+        erc20_entries = {
+            addr: amt for addr, amt in effective.items() if addr != ZERO_ADDRESS
+        }
+        native_amount = effective.get(ZERO_ADDRESS, 0)
+
+        for token_address, amount in erc20_entries.items():
+            token_name = get_asset_name(chain, token_address)
+            self.logger.info(
+                f"Partial withdraw {amount} {token_name} from "
+                f"{service_safe} to {withdrawal_address}"
+            )
+            if set(owners) == set(service.agent_addresses):
+                ethereum_crypto = self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                )
+                transfer_erc20_from_safe(
+                    ledger_api=ledger_api,
+                    crypto=ethereum_crypto,
+                    safe=chain_data.multisig,
+                    token=token_address,
+                    to=withdrawal_address,
+                    amount=amount,
+                )
+            elif set(owners) == {master_safe}:
+                messages = sftxb.get_safe_b_erc20_transfer_messages(
+                    safe_b_address=service_safe,
+                    token=token_address,
+                    to=withdrawal_address,
+                    amount=amount,
+                )
+                tx = sftxb.new_tx()
+                for message in messages:
+                    tx.add(message)
+                tx.settle()
+            else:
+                raise RuntimeError(
+                    f"Cannot withdraw from service safe: "
+                    f"unrecognized owner set {owners=}"
+                )
+
+        # Native transfer last
+        if native_amount > 0:
+            self.logger.info(
+                f"Partial withdraw {native_amount} "
+                f"{get_currency_denom(chain)} from "
+                f"{service_safe} to {withdrawal_address}"
+            )
+            if set(owners) == set(service.agent_addresses):
+                ethereum_crypto = self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                )
+                transfer_from_safe(
+                    ledger_api=ledger_api,
+                    crypto=ethereum_crypto,
+                    safe=chain_data.multisig,
+                    to=withdrawal_address,
+                    amount=native_amount,
+                )
+            elif set(owners) == {master_safe}:
+                messages = sftxb.get_safe_b_native_transfer_messages(
+                    safe_b_address=service_safe,
+                    to=withdrawal_address,
+                    amount=native_amount,
+                )
+                tx = sftxb.new_tx()
+                for message in messages:
+                    tx.add(message)
+                tx.settle()
+            else:
+                raise RuntimeError(
+                    f"Cannot withdraw from service safe: "
+                    f"unrecognized owner set {owners=}"
+                )
+
+        self.logger.info(
+            f"Partial withdrawal from service safe {service.name} "
+            f"complete ({service_config_id=})"
+        )
+
     # -------------------------------------------------------------------------------------
     # -------------------------------------------------------------------------------------
 
