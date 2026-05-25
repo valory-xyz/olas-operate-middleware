@@ -3945,6 +3945,23 @@ class TestSafeWithdrawableBalanceEndpoint:
         assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         assert "error" in resp.json()
 
+    async def test_invalid_id_taint_barrier_returns_400(self) -> None:
+        """Cover line 1826: handler-level taint barrier rejects invalid ID."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            # Find the endpoint function for safe_withdrawable_balance
+            handler = next(
+                r.endpoint
+                for r in app.routes
+                if getattr(r, "path", "").endswith("/safe_withdrawable_balance")
+            )
+            resp = await handler(service_config_id="bad.id")
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert json.loads(resp.body) == {"error": "Invalid service_config_id."}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # withdraw_safe endpoint
@@ -4090,3 +4107,21 @@ class TestWithdrawSafeEndpoint:
                 )
         assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         assert "error" in resp.json()
+
+    async def test_invalid_id_taint_barrier_returns_400(self) -> None:
+        """Cover line 1873: handler-level taint barrier rejects invalid ID."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            # Find the endpoint function for withdraw_safe
+            handler = next(
+                r.endpoint
+                for r in app.routes
+                if getattr(r, "path", "").endswith("/withdraw_safe")
+            )
+            mock_request = MagicMock()
+            resp = await handler(service_config_id="bad.id", request=mock_request)
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert json.loads(resp.body) == {"error": "Invalid service_config_id."}
