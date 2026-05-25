@@ -689,3 +689,543 @@ class TestDrainTokenSetIncludesPUSD:
             assert fake_address in token_set
         finally:
             del ERC20_TOKENS["_test_token_"]
+
+
+# ---------------------------------------------------------------------------
+# get_safe_withdrawable_balance
+# ---------------------------------------------------------------------------
+
+
+class TestGetSafeWithdrawableBalance:
+    """Tests for FundingManager.get_safe_withdrawable_balance."""
+
+    def test_returns_native_balance_minus_gas_reserve(self) -> None:
+        """Native withdrawable = balance - gas reserve, floored at zero."""
+        mgr = _make_manager()
+        service = MagicMock()
+        chain = Chain.GNOSIS
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.chain_data.user_params.fund_requirements.keys.return_value = set()
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        service.chain_configs = {chain.value: chain_config}
+
+        gas_reserve = int(DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS])
+        native_balance = gas_reserve + 5000
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: []},
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = native_balance
+
+            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
+
+        assert result["withdrawable_amounts"][ZERO_ADDRESS] == "5000"
+        assert result["gas_reserve"] == str(gas_reserve)
+
+    def test_native_balance_below_reserve_floors_at_zero(self) -> None:
+        """If native balance < gas reserve, withdrawable native is 0."""
+        mgr = _make_manager()
+        service = MagicMock()
+        chain = Chain.GNOSIS
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.chain_data.user_params.fund_requirements.keys.return_value = set()
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        service.chain_configs = {chain.value: chain_config}
+
+        gas_reserve = int(DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS])
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: []},
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = gas_reserve - 100
+
+            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
+
+        assert result["withdrawable_amounts"][ZERO_ADDRESS] == "0"
+
+    def test_includes_erc20_balances(self) -> None:
+        """ERC20 tokens return full balanceOf as withdrawable."""
+        mgr = _make_manager()
+        service = MagicMock()
+        chain = Chain.GNOSIS
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.chain_data.user_params.fund_requirements.keys.return_value = set()
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        service.chain_configs = {chain.value: chain_config}
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: [ERC20_TOKEN]},
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 0
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = (
+                99000
+            )
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+
+            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
+
+        assert result["withdrawable_amounts"][ERC20_TOKEN] == "99000"
+
+    def test_skips_zero_address_in_erc20_tokens_list(self) -> None:
+        """ZERO_ADDRESS in ERC20 list is skipped (handled as native)."""
+        mgr = _make_manager()
+        service = MagicMock()
+        chain = Chain.GNOSIS
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.chain_data.user_params.fund_requirements.keys.return_value = set()
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        service.chain_configs = {chain.value: chain_config}
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: [ZERO_ADDRESS, ERC20_TOKEN]},
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 0
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+
+            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
+
+        # Only one ERC20 call (ZERO_ADDRESS skipped)
+        mock_registry.erc20.get_instance.assert_called_once()
+        assert result["withdrawable_amounts"][ERC20_TOKEN] == "500"
+
+    def test_includes_fund_requirements_tokens(self) -> None:
+        """Tokens from fund_requirements are included in the withdrawal scope."""
+        mgr = _make_manager()
+        service = MagicMock()
+        chain = Chain.GNOSIS
+        extra_token = "0x" + "f" * 40
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.chain_data.user_params.fund_requirements.keys.return_value = {
+            extra_token
+        }
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        service.chain_configs = {chain.value: chain_config}
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: []},
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 0
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 777
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+
+            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
+
+        assert result["withdrawable_amounts"][extra_token] == "777"
+
+
+# ---------------------------------------------------------------------------
+# partial_withdraw_service_safe
+# ---------------------------------------------------------------------------
+
+
+class TestPartialWithdrawServiceSafe:
+    """Tests for FundingManager.partial_withdraw_service_safe."""
+
+    def _make_service(self, owners: list) -> MagicMock:
+        """Create a mock service with agent_addresses and chain_configs."""
+        service = MagicMock()
+        service.service_config_id = "svc_test"
+        service.name = "TestService"
+        service.agent_addresses = [EOA_ADDR]
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        chain_config.ledger_config.chain = Chain.GNOSIS
+        service.chain_configs = {Chain.GNOSIS.value: chain_config}
+        return service
+
+    def test_empty_amounts_is_noop(self) -> None:
+        """No-op when all amounts are zero or empty."""
+        mgr = _make_manager()
+        service = self._make_service(owners=[EOA_ADDR])
+
+        mgr.partial_withdraw_service_safe(
+            service=service, amounts={}, chain=Chain.GNOSIS
+        )
+        # No exception, no calls to external APIs
+
+    def test_zero_amounts_is_noop(self) -> None:
+        """No-op when all values are '0'."""
+        mgr = _make_manager()
+        service = self._make_service(owners=[EOA_ADDR])
+
+        mgr.partial_withdraw_service_safe(
+            service=service,
+            amounts={ZERO_ADDRESS: "0", ERC20_TOKEN: "0"},
+            chain=Chain.GNOSIS,
+        )
+
+    def test_raises_value_error_when_amount_exceeds_withdrawable(self) -> None:
+        """Raises ValueError if requested amount > live withdrawable balance."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[EOA_ADDR])
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+        ):
+            # Native balance is 1000, gas reserve ~x, so withdrawable is small
+            mock_ledger_api.return_value.get_balance.return_value = 100
+
+            with pytest.raises(ValueError, match="exceeds withdrawable"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ZERO_ADDRESS: "999999999"},
+                    chain=Chain.GNOSIS,
+                )
+
+    def test_erc20_exceeds_balance_raises_value_error(self) -> None:
+        """Raises ValueError if requested ERC20 amount > balance."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[EOA_ADDR])
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 0
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 50
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+
+            with pytest.raises(ValueError, match="exceeds withdrawable"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ERC20_TOKEN: "100"},
+                    chain=Chain.GNOSIS,
+                )
+
+    def test_agent_owner_path_transfers_erc20_and_native(self) -> None:
+        """When owners == agent_addresses, uses crypto-based transfer."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[EOA_ADDR])
+
+        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_safe"
+            ) as mock_erc20_transfer,
+            patch(
+                "operate.services.funding_manager.transfer_from_safe"
+            ) as mock_native_transfer,
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_asset_name", return_value="TOKEN"
+            ),
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            # ERC20 balance
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+            # Native balance (enough for withdrawal + gas reserve)
+            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 200
+
+            mgr.partial_withdraw_service_safe(
+                service=service,
+                amounts={ERC20_TOKEN: "100", ZERO_ADDRESS: "200"},
+                chain=Chain.GNOSIS,
+            )
+
+        mock_erc20_transfer.assert_called_once()
+        mock_native_transfer.assert_called_once()
+
+    def test_master_safe_owner_path_uses_sftxb(self) -> None:
+        """When owners == {master_safe}, uses EthSafeTxBuilder path."""
+        master_safe = "0x" + "b" * 40
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: master_safe}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[master_safe])
+
+        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[master_safe],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.EthSafeTxBuilder"
+            ) as mock_sftxb_cls,
+            patch(
+                "operate.services.funding_manager.get_asset_name", return_value="TOKEN"
+            ),
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            # ERC20 balance
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+            # Native balance
+            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 200
+
+            mock_sftxb = MagicMock()
+            mock_sftxb_cls.return_value = mock_sftxb
+            mock_tx = MagicMock()
+            mock_sftxb.new_tx.return_value = mock_tx
+            mock_sftxb.get_safe_b_erc20_transfer_messages.return_value = [MagicMock()]
+            mock_sftxb.get_safe_b_native_transfer_messages.return_value = [MagicMock()]
+
+            mgr.partial_withdraw_service_safe(
+                service=service,
+                amounts={ERC20_TOKEN: "100", ZERO_ADDRESS: "200"},
+                chain=Chain.GNOSIS,
+            )
+
+        mock_sftxb.get_safe_b_erc20_transfer_messages.assert_called_once()
+        mock_sftxb.get_safe_b_native_transfer_messages.assert_called_once()
+        assert mock_tx.settle.call_count == 2
+
+    def test_unrecognized_owner_raises_runtime_error_native(self) -> None:
+        """Raises RuntimeError in native path if owners don't match known patterns."""
+        unknown_owner = "0x" + "e" * 40
+        master_safe = "0x" + "b" * 40
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: master_safe}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[unknown_owner])
+
+        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[unknown_owner],
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 200
+
+            with pytest.raises(RuntimeError, match="unrecognized owner set"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ZERO_ADDRESS: "200"},
+                    chain=Chain.GNOSIS,
+                )
+
+    def test_unrecognized_owner_raises_runtime_error_erc20(self) -> None:
+        """Raises RuntimeError in ERC20 path if owners don't match known patterns."""
+        unknown_owner = "0x" + "e" * 40
+        master_safe = "0x" + "b" * 40
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: master_safe}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[unknown_owner])
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[unknown_owner],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_asset_name", return_value="TOKEN"
+            ),
+        ):
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+            mock_ledger_api.return_value.get_balance.return_value = 0
+
+            with pytest.raises(RuntimeError, match="unrecognized owner set"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ERC20_TOKEN: "100"},
+                    chain=Chain.GNOSIS,
+                )
+
+    def test_native_only_withdrawal_agent_owner(self) -> None:
+        """Native-only withdrawal through agent owner path."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[EOA_ADDR])
+
+        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_from_safe"
+            ) as mock_native_transfer,
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 500
+
+            mgr.partial_withdraw_service_safe(
+                service=service,
+                amounts={ZERO_ADDRESS: "500"},
+                chain=Chain.GNOSIS,
+            )
+
+        mock_native_transfer.assert_called_once()
+
+    def test_erc20_only_withdrawal_agent_owner(self) -> None:
+        """ERC20-only withdrawal (no native) through agent owner path."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service(owners=[EOA_ADDR])
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.transfer_erc20_from_safe"
+            ) as mock_erc20_transfer,
+            patch(
+                "operate.services.funding_manager.transfer_from_safe"
+            ) as mock_native_transfer,
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_asset_name", return_value="TOKEN"
+            ),
+        ):
+            mock_token_instance = MagicMock()
+            mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
+            mock_registry.erc20.get_instance.return_value = mock_token_instance
+            mock_ledger_api.return_value.get_balance.return_value = 0
+
+            mgr.partial_withdraw_service_safe(
+                service=service,
+                amounts={ERC20_TOKEN: "100"},
+                chain=Chain.GNOSIS,
+            )
+
+        mock_erc20_transfer.assert_called_once()
+        mock_native_transfer.assert_not_called()
