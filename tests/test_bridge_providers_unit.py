@@ -43,6 +43,7 @@ from operate.bridge.providers.provider import (
     ERC20_APPROVE_SELECTOR,
     ERC20_TRANSFER_SELECTOR,
     ExecutionData,
+    MESSAGE_REQUIREMENTS_QUOTE_FAILED,
     Provider,
     ProviderRequest,
     ProviderRequestStatus,
@@ -358,6 +359,38 @@ class TestProviderBase:
 
             with pytest.raises(RuntimeError, match="Malformed ERC20"):
                 provider.requirements(req)
+
+    def test_requirements_get_txs_runtime_error_sets_quote_failed(self) -> None:
+        """requirements() catches RuntimeError from _get_txs and sets QUOTE_FAILED (lines 263-279)."""
+
+        class _FailingProvider(_ConcreteProvider):
+            def _get_txs(  # type: ignore[override]
+                self,
+                provider_request: ProviderRequest,
+                *args: t.Any,
+                **kwargs: t.Any,
+            ) -> t.List[t.Tuple[str, t.Dict]]:
+                raise RuntimeError("stored quote is un-buildable")
+
+        provider = _FailingProvider()
+        req = _make_request(from_token=ERC20_ADDR)
+        req.quote_data = _make_quote_data()
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
+            mock_api.return_value = MagicMock()
+            result = provider.requirements(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+        assert req.quote_data is not None
+        assert MESSAGE_REQUIREMENTS_QUOTE_FAILED in str(req.quote_data.message)
+        from_chain = req.params["from"]["chain"]
+        from_addr = req.params["from"]["address"]
+        assert int(result[from_chain][from_addr][ZERO_ADDRESS]) == 0
+        assert int(result[from_chain][from_addr][ERC20_ADDR]) == 0
 
     # ------------------------------------------------------------------
     # execute() paths
@@ -4789,6 +4822,46 @@ class TestMayanProviderGetTxsMonoChain:
                 "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
             ),
             pytest.raises(RuntimeError, match="MONO_CHAIN quote missing swap router"),
+        ):
+            provider._get_txs(req)  # pylint: disable=protected-access
+
+    def test_mono_chain_calldata_missing_0x_prefix_raises(self) -> None:
+        """MONO_CHAIN raises RuntimeError when evmSwapRouterCalldata lacks '0x' prefix."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000000,
+            from_token=ERC20_ADDR,
+            to_token="0x" + "d" * 40,
+            from_chain="polygon",
+            to_chain="polygon",
+        )
+        mock_response = _make_mono_chain_quote_response()
+        mock_response["evmSwapRouterCalldata"] = "2213bc0b"
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": mock_response,
+                "amount_in_final": 1020000,
+            }
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+            pytest.raises(
+                RuntimeError,
+                match="MONO_CHAIN evmSwapRouterCalldata missing '0x' prefix",
+            ),
         ):
             provider._get_txs(req)  # pylint: disable=protected-access
 
