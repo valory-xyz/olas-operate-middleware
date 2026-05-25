@@ -3514,8 +3514,8 @@ class TestMayanProviderExecutionStatus:
         provider._update_execution_status(req)  # pylint: disable=protected-access
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
 
-    def test_unknown_status_sets_pending(self) -> None:
-        """Unknown clientStatus string maps to EXECUTION_PENDING."""
+    def test_unknown_status_sets_unknown_and_logs_warning(self) -> None:
+        """Unknown clientStatus string maps to EXECUTION_UNKNOWN and logs warning."""
         provider = _make_mayan_provider()
         req = _make_request(
             provider_id=MAYAN_PROVIDER_ID,
@@ -3531,10 +3531,16 @@ class TestMayanProviderExecutionStatus:
             "clientStatus": "SOME_UNKNOWN_STATUS",
         }
 
-        with patch("requests.get", return_value=mock_response):
+        with (
+            patch("requests.get", return_value=mock_response),
+            patch.object(provider, "_bridge_tx_likely_failed", return_value=False),
+        ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
-        assert req.status == ProviderRequestStatus.EXECUTION_PENDING
+        assert req.status == ProviderRequestStatus.EXECUTION_UNKNOWN
+        provider.logger.warning.assert_called()  # type: ignore[attr-defined]
+        warning_msg = provider.logger.warning.call_args[0][0]  # type: ignore[attr-defined]
+        assert "SOME_UNKNOWN_STATUS" in warning_msg
 
 
 class TestMayanProviderExplorerLink:
@@ -3777,8 +3783,8 @@ class TestMayanProviderCallQuoteApi:
 
         assert result is None
 
-    def test_includes_api_key_when_set(self) -> None:
-        """API key from env is included in params."""
+    def test_no_api_key_param_sent(self) -> None:
+        """Verify no apiKey param is sent (removed per review feedback)."""
         provider = _make_mayan_provider()
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -3786,10 +3792,7 @@ class TestMayanProviderCallQuoteApi:
             "quotes": [{"type": "SWIFT"}],
         }
 
-        with (
-            patch.dict("os.environ", {"MAYAN_API_KEY": "test-key"}),
-            patch("requests.get", return_value=mock_response) as mock_get,
-        ):
+        with patch("requests.get", return_value=mock_response) as mock_get:
             provider._call_quote_api(  # pylint: disable=protected-access
                 from_chain="ethereum",
                 from_token="0x" + "0" * 40,
@@ -3800,7 +3803,7 @@ class TestMayanProviderCallQuoteApi:
             )
 
         call_kwargs = mock_get.call_args
-        assert call_kwargs.kwargs["params"]["apiKey"] == "test-key"
+        assert "apiKey" not in call_kwargs.kwargs["params"]
 
 
 # ---------------------------------------------------------------------------
@@ -4026,3 +4029,82 @@ class TestMayanProviderExecutionStatusEdgeCases:
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+
+# ---------------------------------------------------------------------------
+# MayanProvider — integration tests (live API, guarded)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestMayanQuoteAPISchemaIntegration:
+    """Live-schema validation against the Mayan Quote API.
+
+    Verifies the response structure matches what the provider code expects.
+    Unauthenticated — Mayan allows public calls with per-IP rate limits.
+    """
+
+    def test_swift_quote_schema(self) -> None:
+        """Hit live Mayan Quote API for a SWIFT route and assert schema."""
+        import requests  # pylint: disable=import-outside-toplevel
+
+        from operate.bridge.providers.mayan_provider import (  # pylint: disable=import-outside-toplevel
+            MAYAN_FORWARDER_ADDRESS,
+            MAYAN_QUOTE_API_URL,
+        )
+
+        params = {
+            "amountIn64": "1000000000000000000",  # 1 ETH in wei
+            "fromToken": "0x0000000000000000000000000000000000000000",
+            "fromChain": "ethereum",
+            "toToken": "0x0000000000000000000000000000000000000000",
+            "toChain": "polygon",
+            "slippageBps": 300,
+            "swift": True,
+            "mctp": False,
+            "fastMctp": False,
+            "wormhole": False,
+            "gasless": False,
+            "forwarderAddress": MAYAN_FORWARDER_ADDRESS,
+            "destinationAddress": "0x" + "a" * 40,
+            "sdkVersion": "13_0_0",
+        }
+
+        resp = requests.get(url=MAYAN_QUOTE_API_URL, params=params, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+
+        # Envelope shape
+        assert isinstance(payload, dict), "Expected dict envelope"
+        assert "quotes" in payload, "Missing 'quotes' key in envelope"
+        quotes = payload["quotes"]
+        assert isinstance(quotes, list), "'quotes' should be a list"
+
+        if not quotes:
+            pytest.skip("No quotes returned (route may be temporarily unavailable)")
+
+        quote = quotes[0]
+
+        # Fields the provider code reads during quoting
+        assert "effectiveAmountIn64" in quote
+        assert "minAmountOutBaseUnits" in quote
+        assert "expectedAmountOut" in quote
+        assert "etaSeconds" in quote
+        assert "type" in quote
+
+        # Fields read during _build_protocol_data / _get_txs
+        if quote["type"] == "SWIFT":
+            assert "swiftMayanContract" in quote
+            assert "swiftInputContract" in quote
+
+    def test_explorer_api_404_on_fake_hash(self) -> None:
+        """Explorer API returns 404 for a non-existent transaction hash."""
+        import requests  # pylint: disable=import-outside-toplevel
+
+        from operate.bridge.providers.mayan_provider import (  # pylint: disable=import-outside-toplevel
+            MAYAN_EXPLORER_API_URL,
+        )
+
+        fake_hash = "0x" + "0" * 64
+        resp = requests.get(url=f"{MAYAN_EXPLORER_API_URL}/{fake_hash}", timeout=30)
+        assert resp.status_code == 404

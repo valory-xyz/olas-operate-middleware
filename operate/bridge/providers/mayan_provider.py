@@ -21,7 +21,6 @@
 
 import json
 import math
-import os
 import secrets
 import time
 import typing as t
@@ -76,6 +75,7 @@ MAYAN_DEFAULT_GAS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.BASE: {"approve": 50_000, "forwarder": 350_000},
     Chain.OPTIMISM: {"approve": 50_000, "forwarder": 350_000},
     Chain.POLYGON: {"approve": 50_000, "forwarder": 350_000},
+    Chain.ARBITRUM_ONE: {"approve": 50_000, "forwarder": 350_000},
 }
 
 _ABI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "contracts"
@@ -353,10 +353,6 @@ class MayanProvider(Provider):
             "sdkVersion": "13_0_0",
         }
 
-        api_key = os.environ.get("MAYAN_API_KEY")
-        if api_key:
-            params["apiKey"] = api_key
-
         self.logger.info(
             f"[MAYAN PROVIDER] GET {MAYAN_QUOTE_API_URL} "
             f"fromChain={from_chain} toChain={to_chain} "
@@ -568,7 +564,9 @@ class MayanProvider(Provider):
 
         Currently supports SWIFT V2 routes via createOrderWithToken.
         """
-        dest_chain_id = WORMHOLE_CHAIN_IDS.get(to_chain, 0)
+        dest_chain_id = WORMHOLE_CHAIN_IDS.get(to_chain)
+        if dest_chain_id is None:
+            raise ValueError(f"Unsupported destination chain for Mayan: {to_chain}")
 
         # Pad addresses to bytes32 (left-pad with zeros for EVM addresses)
         trader_bytes32 = self._address_to_bytes32(from_address)
@@ -580,13 +578,13 @@ class MayanProvider(Provider):
         to_token_contract = to_token_info.get("contract", ZERO_ADDRESS)
         token_out_bytes32 = self._address_to_bytes32(to_token_contract)
 
-        min_amount_out_64 = int(response.get("minAmountOutBaseUnits", "0"))
-        gas_drop_64 = int(response.get("gasDrop", 0) or 0)
-        cancel_fee_64 = int(response.get("cancelRelayerFee64", 0) or 0)
-        refund_fee_64 = int(response.get("submitRelayerFee64", 0) or 0)
-        deadline_64 = int(response.get("deadline64", "0"))
-        referrer_bps = int(response.get("referrerBps", 0))
-        auction_mode = int(response.get("swiftAuctionMode", 1))
+        min_amount_out_64 = int(response.get("minAmountOutBaseUnits") or 0)
+        gas_drop_64 = int(response.get("gasDrop") or 0)
+        cancel_fee_64 = int(response.get("cancelRelayerFee64") or 0)
+        refund_fee_64 = int(response.get("submitRelayerFee64") or 0)
+        deadline_64 = int(response.get("deadline64") or 0)
+        referrer_bps = int(response.get("referrerBps") or 0)
+        auction_mode = int(response.get("swiftAuctionMode") or 1)
         random_bytes32 = secrets.token_bytes(32)
 
         # Determine the input token for the SWIFT contract
@@ -634,8 +632,10 @@ class MayanProvider(Provider):
     @staticmethod
     def _address_to_bytes32(address: str) -> bytes:
         """Convert an EVM address to a left-padded bytes32."""
+        if not address.startswith("0x") or len(address) != 42:
+            raise ValueError(f"Expected 20-byte hex address, got {address!r}")
         addr_bytes = bytes.fromhex(address[2:])  # strip 0x, decode hex
-        return b"\x00" * (32 - len(addr_bytes)) + addr_bytes
+        return b"\x00" * 12 + addr_bytes
 
     def _update_execution_status(self, provider_request: ProviderRequest) -> None:
         """Poll the Mayan Explorer API for execution status."""
@@ -685,15 +685,14 @@ class MayanProvider(Provider):
                 dest_tx = response_json.get("fulfillTxHash")
                 if dest_tx:
                     execution_data.to_tx_hash = dest_tx
-
-                from_ledger_api = self._from_ledger_api(provider_request)
-                to_ledger_api = self._to_ledger_api(provider_request)
-                try:
-                    execution_data.elapsed_time = Provider._tx_timestamp(
-                        dest_tx, to_ledger_api
-                    ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
-                except Exception:  # pylint: disable=broad-except  # nosec B110
-                    pass  # Best-effort elapsed_time; non-critical if RPC fails
+                    from_ledger_api = self._from_ledger_api(provider_request)
+                    to_ledger_api = self._to_ledger_api(provider_request)
+                    try:
+                        execution_data.elapsed_time = Provider._tx_timestamp(
+                            dest_tx, to_ledger_api
+                        ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+                    except Exception:  # pylint: disable=broad-except  # nosec B110
+                        pass  # Best-effort elapsed_time; non-critical if RPC fails
 
                 provider_request.status = ProviderRequestStatus.EXECUTION_DONE
 
@@ -707,8 +706,15 @@ class MayanProvider(Provider):
                 provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
 
             else:
-                # Unknown status — treat as pending to fail safe
-                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
+                # Unknown status — log and treat as UNKNOWN so
+                # _bridge_tx_likely_failed engages sooner than HARD_TIMEOUT
+                self.logger.warning(
+                    f"[MAYAN PROVIDER] Unknown clientStatus '{client_status}' "
+                    f"for request {provider_request.id} — treating as UNKNOWN."
+                )
+                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                if self._bridge_tx_likely_failed(provider_request):
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(

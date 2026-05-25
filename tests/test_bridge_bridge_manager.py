@@ -54,7 +54,7 @@ from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain, ChainAmounts, LedgerType
 
 from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
@@ -1085,6 +1085,192 @@ class TestQuoteBundleFallback:
         assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_DONE
         assert bundle.provider_requests[0].provider_id == RELAY_PROVIDER_ID
         mgr._providers[MAYAN_PROVIDER_ID].create_request.assert_not_called()
+
+
+class TestBuildProviderChainSameChain:
+    """Unit tests for same-chain exclusion in _build_provider_chain."""
+
+    def test_same_chain_excludes_mayan(self) -> None:
+        """Same from_chain and to_chain → Mayan not appended."""
+        mgr = _make_bare_manager()
+        params = _route_params(from_chain="polygon", to_chain="polygon")
+        chain = mgr._build_provider_chain(params)
+        assert RELAY_PROVIDER_ID in chain
+        assert MAYAN_PROVIDER_ID not in chain
+
+    def test_cross_chain_includes_mayan(self) -> None:
+        """Different from_chain and to_chain (non-Gnosis) → Mayan appended."""
+        mgr = _make_bare_manager()
+        params = _route_params(from_chain="ethereum", to_chain="polygon")
+        chain = mgr._build_provider_chain(params)
+        assert MAYAN_PROVIDER_ID in chain
+
+
+class TestQuoteBundleFallbackMultiRequest:
+    """Tests for multi-request bundle with mixed fallback outcomes."""
+
+    def test_mixed_outcomes_multi_request_bundle(self) -> None:
+        """Bundle with req[0] primary-success and req[1] needing fallback."""
+        mgr = _make_bare_manager()
+
+        call_count = {"relay": 0}
+
+        def relay_quote_alternating(req: ProviderRequest) -> None:
+            call_count["relay"] += 1
+            if call_count["relay"] == 1:
+                # req[0] succeeds
+                req.status = ProviderRequestStatus.QUOTE_DONE
+                req.quote_data = QuoteData(
+                    eta=60,
+                    elapsed_time=0.1,
+                    message=None,
+                    timestamp=int(time.time()),
+                    provider_data={},
+                )
+            else:
+                # req[1] fails
+                req.status = ProviderRequestStatus.QUOTE_FAILED
+
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+        relay_mock.quote.side_effect = relay_quote_alternating
+
+        # Mayan fallback succeeds for req[1]
+        fallback_request = _make_provider_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            status=ProviderRequestStatus.CREATED,
+        )
+
+        def mayan_quote(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_DONE
+            req.quote_data = QuoteData(
+                eta=90,
+                elapsed_time=0.2,
+                message=None,
+                timestamp=int(time.time()),
+                provider_data={},
+            )
+
+        mayan_mock = mgr._providers[MAYAN_PROVIDER_ID]
+        mayan_mock.create_request.return_value = fallback_request
+        mayan_mock.quote.side_effect = mayan_quote
+
+        req0 = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            fallback_provider_ids=[MAYAN_PROVIDER_ID],
+        )
+        req1 = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            fallback_provider_ids=[MAYAN_PROVIDER_ID],
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-multi-test",
+            requests_params=[_route_params(), _route_params()],
+            provider_requests=[req0, req1],
+            timestamp=int(time.time()),
+        )
+
+        mgr.quote_bundle(bundle)
+
+        # req[0] should remain with primary provider (relay succeeded)
+        assert bundle.provider_requests[0].provider_id == RELAY_PROVIDER_ID
+        assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_DONE
+        # req[1] should rotate to fallback (mayan)
+        assert bundle.provider_requests[1].provider_id == MAYAN_PROVIDER_ID
+        assert bundle.provider_requests[1].status == ProviderRequestStatus.QUOTE_DONE
+
+    def test_three_deep_fallback_chain(self) -> None:
+        """Primary fails, first fallback fails, second fallback succeeds."""
+        mgr = _make_bare_manager()
+
+        # Add a third mock provider for the 3-deep chain
+        native_mock = MagicMock()
+        native_mock.provider_id = "native-ethereum-to-base"
+        mgr._providers["native-ethereum-to-base"] = native_mock
+
+        def always_fail(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_FAILED
+
+        def mayan_succeed(req: ProviderRequest) -> None:
+            req.status = ProviderRequestStatus.QUOTE_DONE
+            req.quote_data = QuoteData(
+                eta=120,
+                elapsed_time=0.3,
+                message=None,
+                timestamp=int(time.time()),
+                provider_data={},
+            )
+
+        # Native fails
+        native_mock.quote.side_effect = always_fail
+        # Relay fails
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+        relay_mock.quote.side_effect = always_fail
+        relay_fail_req = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID, status=ProviderRequestStatus.CREATED
+        )
+        relay_mock.create_request.return_value = relay_fail_req
+        # Mayan succeeds
+        mayan_mock = mgr._providers[MAYAN_PROVIDER_ID]
+        mayan_succeed_req = _make_provider_request(
+            provider_id=MAYAN_PROVIDER_ID, status=ProviderRequestStatus.CREATED
+        )
+        mayan_mock.create_request.return_value = mayan_succeed_req
+        mayan_mock.quote.side_effect = mayan_succeed
+
+        primary = _make_provider_request(
+            provider_id="native-ethereum-to-base",
+            fallback_provider_ids=[RELAY_PROVIDER_ID, MAYAN_PROVIDER_ID],
+        )
+        bundle = ProviderRequestBundle(
+            id="rb-3deep-test",
+            requests_params=[_route_params()],
+            provider_requests=[primary],
+            timestamp=int(time.time()),
+        )
+
+        mgr.quote_bundle(bundle)
+
+        assert bundle.provider_requests[0].provider_id == MAYAN_PROVIDER_ID
+        assert bundle.provider_requests[0].status == ProviderRequestStatus.QUOTE_DONE
+
+
+class TestBridgeTotalRequirementsQuoteFailedSkip:
+    """Unit test for bridge_total_requirements skipping QUOTE_FAILED requests."""
+
+    def test_quote_failed_not_included_in_requirements(self) -> None:
+        """QUOTE_FAILED request's token does NOT appear in total requirements."""
+        mgr = _make_bare_manager()
+
+        # Mock requirements: relay provider returns some requirements
+        relay_mock = mgr._providers[RELAY_PROVIDER_ID]
+
+        relay_mock.requirements.return_value = ChainAmounts(
+            {"ethereum": {_ADDR: {ZERO_ADDRESS: 1000}}}
+        )
+
+        # One failed request, one successful request
+        failed_req = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            status=ProviderRequestStatus.QUOTE_FAILED,
+        )
+        success_req = _make_provider_request(
+            provider_id=RELAY_PROVIDER_ID,
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+
+        bundle = ProviderRequestBundle(
+            id="rb-totals-test",
+            requests_params=[_route_params(), _route_params()],
+            provider_requests=[failed_req, success_req],
+            timestamp=int(time.time()),
+        )
+
+        result = mgr.bridge_total_requirements(bundle)
+
+        # Only one call to requirements (the success_req) — failed is skipped
+        relay_mock.requirements.assert_called_once_with(success_req)
+        # The result should contain the successful request's amounts
+        assert result == {"ethereum": {_ADDR: {ZERO_ADDRESS: 1000}}}
 
 
 class TestProviderRequestBackCompat:

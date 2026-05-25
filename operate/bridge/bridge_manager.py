@@ -288,8 +288,13 @@ class BridgeManager:
         if RELAY_PROVIDER_ID not in chain:
             chain.append(RELAY_PROVIDER_ID)
 
+        from_chain = params["from"]["chain"]
         to_chain = params["to"]["chain"]
-        if RELAY_PROVIDER_ID in chain and to_chain not in MAYAN_EXCLUDED_CHAINS:
+        if (
+            RELAY_PROVIDER_ID in chain
+            and to_chain not in MAYAN_EXCLUDED_CHAINS
+            and from_chain != to_chain  # Mayan does not support same-chain via SWIFT
+        ):
             chain.append(MAYAN_PROVIDER_ID)
 
         return chain
