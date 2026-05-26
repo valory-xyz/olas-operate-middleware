@@ -3750,6 +3750,266 @@ class TestMayanProviderGetTxs:
         assert eth_amounts[ZERO_ADDRESS] == 400_000
         assert eth_amounts[ERC20_ADDR] == 1020
 
+    def test_native_swap_path_uses_swap_and_forward_eth(self) -> None:
+        """Native + swap quote routes through swapAndForwardEth.
+
+        When Mayan's SWIFT response includes evmSwapRouterAddress, the
+        native-source path must call swapAndForwardEth (not forwardEth) and
+        the inner protocolData must use the hub asset + post-swap amount.
+        """
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_token=ZERO_ADDRESS,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        hub_token = "0x" + "1" * 40  # synthetic hub asset
+        swap_router = "0x" + "2" * 40  # synthetic swap router
+        # Build response with swap fields present
+        response = _make_mayan_quote_response()
+        response["swiftInputContract"] = hub_token
+        response["swiftInputDecimals"] = 6
+        response["evmSwapRouterAddress"] = swap_router
+        response["evmSwapRouterCalldata"] = "0xdeadbeef"
+        response["minMiddleAmount"] = 3.04
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": response,
+                "amount_in_final": 2_341_615_790_517_934,
+            },
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 1
+        label, tx = txs[0]
+        assert label == "swapAndForwardEth"
+        # value is the source ETH that gets swapped to hub
+        assert tx["value"] == 2_341_615_790_517_934
+        # gas budget bumped to mono_chain_forwarder tier (1_000_000) since
+        # we're now doing swap + SWIFT in one outer tx.
+        assert tx["gas"] == 1_000_000
+        # Verify the outer selector by inspecting calldata prefix.
+        data_hex = tx["data"]
+        assert data_hex.startswith(
+            "0xfa74fd43"
+        ), f"expected swapAndForwardEth selector, got {data_hex[:10]}"
+        # The hub token address (USDC) should appear in the outer args as
+        # the middle token (32-byte-padded), e.g. somewhere after the swap
+        # router param.
+        assert hub_token[2:].lower() in data_hex.lower()
+
+    def test_erc20_swap_path_uses_swap_and_forward_erc20(self) -> None:
+        """ERC-20 source + swap route: approve + swapAndForwardERC20."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_token=ERC20_ADDR,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        hub_token = "0x" + "1" * 40  # synthetic hub asset
+        swap_router = "0x" + "2" * 40  # synthetic swap router
+        response = _make_mayan_quote_response()
+        response["swiftInputContract"] = hub_token
+        response["swiftInputDecimals"] = 6
+        response["evmSwapRouterAddress"] = swap_router
+        response["evmSwapRouterCalldata"] = "0xcafebabe"
+        response["minMiddleAmount"] = 3.04
+        req.quote_data = _make_quote_data(
+            provider_data={
+                "response": response,
+                "amount_in_final": 100_000_000_000_000_000_000,
+            },
+        )
+
+        real_w3 = Web3()
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.contract = real_w3.eth.contract
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            txs = provider._get_txs(req)  # pylint: disable=protected-access
+
+        assert len(txs) == 2
+        assert txs[0][0] == "approve"
+        forward_label, forward_tx = txs[1]
+        assert forward_label == "swapAndForwardERC20"
+        assert forward_tx["data"].startswith(
+            "0x30dedc57"
+        ), f"expected swapAndForwardERC20 selector, got {forward_tx['data'][:10]}"
+        assert forward_tx["gas"] == 1_000_000
+
+    def test_swap_path_missing_calldata_prefix_raises(self) -> None:
+        """Reject evmSwapRouterCalldata without the 0x prefix (defensive guard)."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_token=ZERO_ADDRESS,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+        response = _make_mayan_quote_response()
+        response["evmSwapRouterAddress"] = "0x0000000000001ff3684f28c67538d4d072c22734"
+        response["evmSwapRouterCalldata"] = "deadbeef"  # missing 0x prefix
+        response["minMiddleAmount"] = 3.04
+        response["swiftInputDecimals"] = 6
+        req.quote_data = _make_quote_data(
+            provider_data={"response": response, "amount_in_final": 1000},
+        )
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger_api,
+            ),
+            patch("operate.bridge.providers.mayan_provider.update_tx_with_gas_pricing"),
+            patch(
+                "operate.bridge.providers.mayan_provider.update_tx_with_gas_estimate"
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="missing '0x' prefix"):
+                provider._get_txs(req)  # pylint: disable=protected-access
+
+    def test_swap_path_missing_swift_input_contract_raises_in_txs(self) -> None:
+        """Defense-in-depth: _build_swift_txs also guards against missing hub.
+
+        _build_swift_protocol_data has the same guard, but the tx builder
+        cannot trust that — they're called independently from the public
+        _get_txs API surface. This calls the tx builder directly with a
+        valid protocol_data but a response missing swiftInputContract.
+        """
+        provider = _make_mayan_provider()
+        response = _make_mayan_quote_response()
+        response["evmSwapRouterAddress"] = "0x" + "2" * 40
+        response["evmSwapRouterCalldata"] = "0xdeadbeef"
+        response["minMiddleAmount"] = 3.04
+        response["swiftInputDecimals"] = 6
+        del response["swiftInputContract"]
+
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.to_checksum_address = Web3.to_checksum_address
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 0
+
+        with pytest.raises(RuntimeError, match="missing swiftInputContract"):
+            provider._build_swift_txs(  # pylint: disable=protected-access
+                response=response,
+                from_token=ZERO_ADDRESS,
+                from_address=FROM_ADDR,
+                from_chain="ethereum",
+                amount_in_final=1000,
+                bridge_fee=0,
+                mayan_protocol="0x" + "f" * 40,
+                protocol_data=b"\x00" * 32,
+                forwarder_address="0x" + "e" * 40,
+                from_ledger_api=mock_ledger_api,
+                w3=Web3(),
+            )
+
+    def test_swap_protocol_data_missing_hub_token_raises(self) -> None:
+        """_build_swift_protocol_data also guards against missing hub token."""
+        provider = _make_mayan_provider()
+        response = _make_mayan_quote_response()
+        response["evmSwapRouterAddress"] = "0x" + "2" * 40
+        response["evmSwapRouterCalldata"] = "0xdead"
+        response["minMiddleAmount"] = 3.04
+        response["swiftInputDecimals"] = 6
+        del response["swiftInputContract"]
+        with pytest.raises(RuntimeError, match="missing swiftInputContract"):
+            provider._build_swift_protocol_data(  # pylint: disable=protected-access
+                response=response,
+                from_address=FROM_ADDR,
+                from_token=ZERO_ADDRESS,
+                to_address=TO_ADDR,
+                to_chain="polygon",
+                amount_in_final=1000,
+                from_chain="ethereum",
+            )
+
+    def test_swap_path_missing_min_middle_amount_raises(self) -> None:
+        """Reject swap-quote response with no minMiddleAmount/swiftInputDecimals."""
+        provider = _make_mayan_provider()
+        response = _make_mayan_quote_response()
+        response["swiftInputContract"] = "0x" + "1" * 40
+        response["evmSwapRouterAddress"] = "0x" + "2" * 40
+        response["evmSwapRouterCalldata"] = "0xdead"
+        # minMiddleAmount + swiftInputDecimals deliberately absent
+        with pytest.raises(
+            RuntimeError, match="missing minMiddleAmount/swiftInputDecimals"
+        ):
+            provider._swift_middle_amount(response)  # pylint: disable=protected-access
+
+    def test_swift_protocol_data_swap_path_uses_hub_amount(self) -> None:
+        """Inner createOrderWithToken uses the hub asset + post-swap amount.
+
+        In swap mode, the inner SWIFT call must encode the hub asset and the
+        post-swap minMiddleAmount, not the source token / source amount.
+        """
+        provider = _make_mayan_provider()
+        hub_token = "0x" + "1" * 40  # synthetic hub asset
+        response = _make_mayan_quote_response()
+        response["swiftInputContract"] = hub_token
+        response["swiftInputDecimals"] = 6
+        response["evmSwapRouterAddress"] = "0x0000000000001ff3684f28c67538d4d072c22734"
+        response["evmSwapRouterCalldata"] = "0xdeadbeef"
+        response["minMiddleAmount"] = 3.04  # USDC display
+        # Source-token amount is irrelevant to the inner SWIFT call in swap mode
+        source_amount_in = 2_341_615_790_517_934  # 0.00234 ETH
+
+        protocol_data = (
+            provider._build_swift_protocol_data(  # pylint: disable=protected-access
+                response=response,
+                from_address=FROM_ADDR,
+                from_token=ZERO_ADDRESS,
+                to_address=TO_ADDR,
+                to_chain="polygon",
+                amount_in_final=source_amount_in,
+                from_chain="ethereum",
+            )
+        )
+        # createOrderWithToken selector
+        assert protocol_data[:4].hex() == "a3a30834"
+        # First arg = tokenAddress (32 bytes, address right-padded). USDC.
+        assert protocol_data[4:36].hex().endswith(hub_token[2:].lower())
+        # Second arg = amountIn (uint256). Must be minMiddleAmount in USDC
+        # atomic (= 3.04 * 10**6 truncated = 3_040_000), NOT the source ETH
+        # amount.
+        amount_in_decoded = int.from_bytes(protocol_data[36:68], "big")
+        assert amount_in_decoded == 3_040_000, amount_in_decoded
+        assert amount_in_decoded != source_amount_in
+
 
 class TestMayanProviderExecutionStatus:
     """Unit tests for MayanProvider._update_execution_status()."""

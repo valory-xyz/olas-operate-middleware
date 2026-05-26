@@ -543,12 +543,10 @@ class MayanProvider(Provider):
         to_address = provider_request.params["to"]["address"]
         from_ledger_api = self._from_ledger_api(provider_request)
         w3 = from_ledger_api.api
-        # EIP-155 replay protection: these tx dicts are built manually rather
-        # than via web3.build_transaction (which would auto-inject chainId),
-        # so we must set it explicitly at each construction site.
-        chain_id = Chain(from_chain).id
-
-        is_native = from_token == ZERO_ADDRESS
+        # EIP-155 replay protection: tx dicts are built manually rather than
+        # via web3.build_transaction (which would auto-inject chainId), so
+        # chainId is set explicitly inside _build_mono_chain_txs and
+        # _build_swift_txs at each construction site.
         route_type = response.get("type", "SWIFT")
 
         # Determine the inner protocol contract address
@@ -593,69 +591,172 @@ class MayanProvider(Provider):
                 from_ledger_api=from_ledger_api,
                 w3=w3,
             )
-        elif is_native:
-            # forwardEth: send native ETH as msg.value
-            tx_data = self._forwarder_contract.encode_abi(
-                "forwardEth",
-                args=[mayan_protocol, protocol_data],
+        else:
+            txs = self._build_swift_txs(
+                response=response,
+                from_token=from_token,
+                from_address=from_address,
+                from_chain=from_chain,
+                amount_in_final=amount_in_final,
+                bridge_fee=bridge_fee,
+                mayan_protocol=mayan_protocol,
+                protocol_data=protocol_data,
+                forwarder_address=forwarder_address,
+                from_ledger_api=from_ledger_api,
+                w3=w3,
             )
+
+        return txs
+
+    def _build_swift_txs(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
+        self,
+        response: t.Dict,
+        from_token: str,
+        from_address: str,
+        from_chain: str,
+        amount_in_final: int,
+        bridge_fee: int,
+        mayan_protocol: str,
+        protocol_data: bytes,
+        forwarder_address: str,
+        from_ledger_api: t.Any,
+        w3: t.Any,
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Build transactions for SWIFT V2 routes.
+
+        Branches on whether Mayan's response requires a source-token swap to
+        the hub asset before the SWIFT lock. With swap: use
+        ``swapAndForwardEth`` / ``swapAndForwardERC20`` so the Forwarder
+        performs the DEX swap before invoking SWIFT. Without swap (source
+        token already equals the hub asset, e.g. USDC -> USDC): use the
+        plain ``forwardEth`` / ``forwardERC20``.
+
+        Calling the plain forwarders when a swap is needed broadcasts
+        successfully but leaves the SWIFT order in a state the Mayan relayer
+        cannot fulfill (the on-chain call succeeds for ERC-20 sources but
+        the bridge stalls; for native sources the inner SWIFT call reverts
+        with ``mayan protocol call failed``).
+        """
+        txs: t.List[t.Tuple[str, t.Dict]] = []
+        is_native = from_token == ZERO_ADDRESS
+        chain_id = Chain(from_chain).id
+        needs_swap = self._swift_needs_swap(response)
+
+        swap_router = b""
+        swap_data = b""
+        middle_token = ZERO_ADDRESS
+        min_middle_amount = 0
+        if needs_swap:
+            calldata_raw = response["evmSwapRouterCalldata"]
+            if not calldata_raw.startswith("0x"):
+                raise RuntimeError(
+                    f"SWIFT evmSwapRouterCalldata missing '0x' prefix: "
+                    f"{calldata_raw!r}"
+                )
+            swap_router = w3.to_checksum_address(response["evmSwapRouterAddress"])
+            swap_data = bytes.fromhex(calldata_raw[2:])
+            middle_token_raw = response.get("swiftInputContract")
+            if not middle_token_raw:
+                raise RuntimeError("SWIFT swap quote missing swiftInputContract")
+            middle_token = w3.to_checksum_address(middle_token_raw)
+            min_middle_amount = self._swift_middle_amount(response)
+
+        gas_table = MAYAN_DEFAULT_GAS.get(Chain(from_chain), {})
+        # Swap adds a non-trivial extra step; reuse the higher
+        # mono-chain forwarder budget to avoid out-of-gas.
+        forwarder_gas = gas_table.get(
+            "mono_chain_forwarder" if needs_swap else "forwarder",
+            1_000_000 if needs_swap else 350_000,
+        )
+
+        if is_native:
+            if needs_swap:
+                tx_data = self._forwarder_contract.encode_abi(
+                    "swapAndForwardEth",
+                    args=[
+                        amount_in_final,
+                        swap_router,
+                        swap_data,
+                        middle_token,
+                        min_middle_amount,
+                        mayan_protocol,
+                        protocol_data,
+                    ],
+                )
+                tx_name = "swapAndForwardEth"
+            else:
+                tx_data = self._forwarder_contract.encode_abi(
+                    "forwardEth",
+                    args=[mayan_protocol, protocol_data],
+                )
+                tx_name = "forwardEth"
             tx = {
                 "to": forwarder_address,
                 "from": from_address,
                 "data": tx_data,
                 "value": amount_in_final,
-                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
-                    "forwarder"
-                ],
+                "gas": forwarder_gas,
                 "chainId": chain_id,
             }
             update_tx_with_gas_pricing(tx, from_ledger_api)
             update_tx_with_gas_estimate(
                 tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
             )
-            txs.append(("forwardEth", tx))
+            txs.append((tx_name, tx))
+            return txs
+
+        # ERC-20 source: approve + forward(/swapAndForward)ERC20.
+        from_token_checksum = w3.to_checksum_address(from_token)
+        erc20 = w3.eth.contract(
+            address=from_token_checksum,
+            abi=[
+                {
+                    "inputs": [
+                        {"name": "spender", "type": "address"},
+                        {"name": "amount", "type": "uint256"},
+                    ],
+                    "name": "approve",
+                    "outputs": [{"name": "", "type": "bool"}],
+                    "stateMutability": "nonpayable",
+                    "type": "function",
+                }
+            ],
+        )
+        approve_data = erc20.encode_abi(
+            "approve", args=[forwarder_address, amount_in_final]
+        )
+        approve_tx = {
+            "to": from_token_checksum,
+            "from": from_address,
+            "data": approve_data,
+            "value": 0,
+            "gas": gas_table.get("approve", 50_000),
+            "chainId": chain_id,
+        }
+        update_tx_with_gas_pricing(approve_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
+        txs.append(("approve", approve_tx))
+
+        zero_permit = (0, 0, 0, b"\x00" * 32, b"\x00" * 32)
+        if needs_swap:
+            forward_data = self._forwarder_contract.encode_abi(
+                "swapAndForwardERC20",
+                args=[
+                    from_token_checksum,
+                    amount_in_final,
+                    zero_permit,
+                    swap_router,
+                    swap_data,
+                    middle_token,
+                    min_middle_amount,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            tx_name = "swapAndForwardERC20"
         else:
-            # ERC-20 path: approve + forwardERC20
-            from_token_checksum = w3.to_checksum_address(from_token)
-
-            # Build approve tx
-            erc20 = w3.eth.contract(
-                address=from_token_checksum,
-                abi=[
-                    {
-                        "inputs": [
-                            {"name": "spender", "type": "address"},
-                            {"name": "amount", "type": "uint256"},
-                        ],
-                        "name": "approve",
-                        "outputs": [{"name": "", "type": "bool"}],
-                        "stateMutability": "nonpayable",
-                        "type": "function",
-                    }
-                ],
-            )
-            approve_data = erc20.encode_abi(
-                "approve",
-                args=[forwarder_address, amount_in_final],
-            )
-            approve_tx = {
-                "to": from_token_checksum,
-                "from": from_address,
-                "data": approve_data,
-                "value": 0,
-                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"approve": 50_000})[
-                    "approve"
-                ],
-                "chainId": chain_id,
-            }
-            update_tx_with_gas_pricing(approve_tx, from_ledger_api)
-            update_tx_with_gas_estimate(
-                approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
-            )
-            txs.append(("approve", approve_tx))
-
-            # Build forwardERC20 tx
-            zero_permit = (0, 0, 0, b"\x00" * 32, b"\x00" * 32)
             forward_data = self._forwarder_contract.encode_abi(
                 "forwardERC20",
                 args=[
@@ -666,22 +767,20 @@ class MayanProvider(Provider):
                     protocol_data,
                 ],
             )
-            forward_tx = {
-                "to": forwarder_address,
-                "from": from_address,
-                "data": forward_data,
-                "value": bridge_fee,
-                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"forwarder": 350_000})[
-                    "forwarder"
-                ],
-                "chainId": chain_id,
-            }
-            update_tx_with_gas_pricing(forward_tx, from_ledger_api)
-            update_tx_with_gas_estimate(
-                forward_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
-            )
-            txs.append(("forwardERC20", forward_tx))
-
+            tx_name = "forwardERC20"
+        forward_tx = {
+            "to": forwarder_address,
+            "from": from_address,
+            "data": forward_data,
+            "value": bridge_fee,
+            "gas": forwarder_gas,
+            "chainId": chain_id,
+        }
+        update_tx_with_gas_pricing(forward_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            forward_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
+        txs.append((tx_name, forward_tx))
         return txs
 
     def _build_mono_chain_txs(  # pylint: disable=too-many-arguments,too-many-locals
@@ -885,6 +984,39 @@ class MayanProvider(Provider):
             "add an explicit handler before enabling this route"
         )
 
+    @staticmethod
+    def _swift_needs_swap(response: t.Dict) -> bool:
+        """True iff Mayan's response says SWIFT requires a source-token swap.
+
+        Mayan's SWIFT V2 routes through a hub asset (e.g. USDC). When the
+        source token is not the hub asset, the response includes
+        ``evmSwapRouterAddress`` + ``evmSwapRouterCalldata`` describing the
+        DEX swap from source -> hub. In that case the on-chain tx must use
+        ``swapAndForwardEth`` / ``swapAndForwardERC20``, and the inner SWIFT
+        ``createOrderWithToken`` must reference the hub asset (not the
+        source token) with the post-swap amount.
+        """
+        return bool(response.get("evmSwapRouterAddress")) and bool(
+            response.get("evmSwapRouterCalldata")
+        )
+
+    @staticmethod
+    def _swift_middle_amount(response: t.Dict) -> int:
+        """Convert ``minMiddleAmount`` (float, hub-token display units) to atomic.
+
+        Used as the amount in the inner SWIFT call when a swap is needed.
+        """
+        raw = response.get("minMiddleAmount")
+        decimals = int(response.get("swiftInputDecimals") or 0)
+        if raw is None or decimals <= 0:
+            raise RuntimeError(
+                f"SWIFT swap quote missing minMiddleAmount/swiftInputDecimals: "
+                f"minMiddleAmount={raw!r}, swiftInputDecimals={decimals!r}"
+            )
+        return int(
+            Decimal(str(raw)).scaleb(decimals).quantize(Decimal(1), rounding=ROUND_DOWN)
+        )
+
     def _build_swift_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments
         self,
         response: t.Dict,
@@ -933,17 +1065,30 @@ class MayanProvider(Provider):
         auction_mode = int(response.get("swiftAuctionMode") or 1)
         random_bytes32 = secrets.token_bytes(32)
 
-        # Determine the input token for the SWIFT contract
+        # Determine the input token + amount for the inner SWIFT call.
+        # When Mayan's route needs a source-token swap (evmSwapRouterAddress
+        # is present), the Forwarder will swap source -> hub asset (USDC
+        # today) BEFORE invoking SWIFT, so SWIFT must see the hub asset as
+        # `tokenIn` and the post-swap atomic amount (minMiddleAmount). If
+        # the response also carries a direct `swiftInputContract` field for
+        # routes that don't need a swap (e.g. native ETH wrapped to WETH),
+        # respect that; otherwise fall back to the source token.
         is_native = from_token == ZERO_ADDRESS
-        if is_native:
-            # For native ETH, the Forwarder wraps to WETH; use wrapped native addr
+        if self._swift_needs_swap(response):
+            swift_input_contract = response.get("swiftInputContract")
+            if not swift_input_contract:
+                raise RuntimeError("SWIFT swap quote missing swiftInputContract")
+            swift_amount_in = self._swift_middle_amount(response)
+        elif is_native:
             swift_input_contract = response.get("swiftInputContract")
             if not swift_input_contract:
                 swift_input_contract = WRAPPED_NATIVE_ASSET.get(
                     Chain(from_chain), ZERO_ADDRESS
                 )
+            swift_amount_in = amount_in_final
         else:
             swift_input_contract = from_token
+            swift_amount_in = amount_in_final
 
         order_params = (
             1,  # payloadType (1 = standard)
@@ -967,7 +1112,7 @@ class MayanProvider(Provider):
             "createOrderWithToken",
             args=[
                 self._w3.to_checksum_address(swift_input_contract),
-                amount_in_final,
+                swift_amount_in,
                 order_params,
                 b"",  # empty customPayload
             ],
