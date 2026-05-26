@@ -3481,6 +3481,57 @@ class TestMayanProviderQuote:
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
 
+    def test_under_delivery_message_is_human_readable(self) -> None:
+        """Under-delivery message surfaces human units + suggested bump."""
+        provider = _make_mayan_provider()
+        # 15 POL requested (18 dec), Mayan would deliver 14.2 POL — mirrors
+        # the QA scenario the operator hit.
+        to_amount = 15 * 10**18
+        delivered = 14_203_688_419_597_200_000  # 14.203... POL
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=to_amount,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+
+        probe_resp = _make_mayan_quote_response(
+            effective_amount_in=1000.0,
+            expected_amount_out=950.0,
+            min_amount_out_base_units="950",
+        )
+        final_resp = _make_mayan_quote_response(
+            effective_amount_in=float(to_amount),
+            expected_amount_out=14.5,
+            min_amount_out_base_units=str(delivered),
+        )
+
+        # Need probe+final for every retry attempt so the final stored message
+        # is the under-delivery error (otherwise later attempts run out of
+        # mocked responses and the broad-except clobbers the message).
+        with (
+            patch.object(
+                provider,
+                "_call_quote_api",
+                side_effect=[probe_resp, final_resp] * 5,
+            ),
+            patch("operate.bridge.providers.mayan_provider.time.sleep"),
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+        assert req.quote_data is not None
+        msg = req.quote_data.message or ""
+        # Human-readable destination units, not raw atomic ints
+        assert "14.2" in msg, msg
+        assert "15" in msg, msg
+        # Shortfall percentage surfaced
+        assert "%" in msg, msg
+        # Suggested bump surfaced
+        assert "Try amount >=" in msg, msg
+        # Should NOT contain the old opaque format
+        assert "minAmountOutBaseUnits=" not in msg, msg
+
     def test_timeout_retries_then_fails(self) -> None:
         """Timeout on all attempts results in QUOTE_FAILED."""
         provider = _make_mayan_provider()
@@ -4174,6 +4225,88 @@ class TestMayanProviderCallQuoteApi:
 
         call_kwargs = mock_get.call_args
         assert "apiKey" not in call_kwargs.kwargs["params"]
+
+    def test_amount_too_small_surfaces_structured_message(self) -> None:
+        """406 AMOUNT_TOO_SMALL is reformatted as a readable ValueError."""
+        import requests as req_lib
+
+        provider = _make_mayan_provider()
+        mock_response = MagicMock()
+        mock_response.status_code = 406
+        mock_response.json.return_value = {
+            "code": "AMOUNT_TOO_SMALL",
+            "msg": "Amount too small (min ~0.0004795 ETH)",
+            "data": {"minAmountIn": 0.0004795},
+        }
+        mock_response.raise_for_status.side_effect = req_lib.HTTPError(
+            "406 Client Error: Not Acceptable"
+        )
+
+        with patch("requests.get", return_value=mock_response):
+            with pytest.raises(ValueError, match="amount too small") as exc_info:
+                provider._call_quote_api(  # pylint: disable=protected-access
+                    from_chain="ethereum",
+                    from_token="0x" + "0" * 40,
+                    to_chain="polygon",
+                    to_token="0x" + "0" * 40,
+                    amount_in64="1000",
+                    to_address=TO_ADDR,
+                )
+
+        msg = str(exc_info.value)
+        assert "0.0004795" in msg
+        # Should NOT contain the opaque HTTP error text
+        assert "Client Error" not in msg
+
+    def test_other_http_error_falls_back_to_raise(self) -> None:
+        """Non-AMOUNT_TOO_SMALL HTTPError re-raises so callers can handle it."""
+        import requests as req_lib
+
+        provider = _make_mayan_provider()
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.json.side_effect = ValueError("no json")
+        mock_response.raise_for_status.side_effect = req_lib.HTTPError(
+            "500 Server Error"
+        )
+
+        with patch("requests.get", return_value=mock_response):
+            with pytest.raises(req_lib.HTTPError):
+                provider._call_quote_api(  # pylint: disable=protected-access
+                    from_chain="ethereum",
+                    from_token="0x" + "0" * 40,
+                    to_chain="polygon",
+                    to_token="0x" + "0" * 40,
+                    amount_in64="1000",
+                    to_address=TO_ADDR,
+                )
+
+    def test_other_mayan_code_surfaces_msg(self) -> None:
+        """Mayan errors with a `code` other than AMOUNT_TOO_SMALL surface msg."""
+        import requests as req_lib
+
+        provider = _make_mayan_provider()
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            "code": "ROUTE_NOT_FOUND",
+            "msg": "No route available for this pair",
+        }
+        mock_response.raise_for_status.side_effect = req_lib.HTTPError(
+            "400 Client Error"
+        )
+
+        with patch("requests.get", return_value=mock_response):
+            with pytest.raises(ValueError, match="ROUTE_NOT_FOUND") as exc_info:
+                provider._call_quote_api(  # pylint: disable=protected-access
+                    from_chain="ethereum",
+                    from_token="0x" + "0" * 40,
+                    to_chain="polygon",
+                    to_token="0x" + "0" * 40,
+                    amount_in64="1000",
+                    to_address=TO_ADDR,
+                )
+        assert "No route available" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

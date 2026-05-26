@@ -331,9 +331,20 @@ class MayanProvider(Provider):
                         f"minAmountOutBaseUnits={min_amount_out} < {to_amount}. "
                         f"expectedAmountOut={expected_out_raw}."
                     )
+                    ratio = min_amount_out / to_amount
+                    shortfall_pct = (1 - ratio) * 100
+                    # Suggest the smallest amount that would clear with ~5%
+                    # headroom under the current observed ratio. The real
+                    # ratio improves at larger amounts (fixed Mayan fees
+                    # amortise), so this is a conservative suggestion.
+                    suggested = math.ceil(to_amount * 1.05 / ratio)
+                    scale = 10**to_decimals
                     raise ValueError(
-                        f"Under-delivery: minAmountOutBaseUnits={min_amount_out} "
-                        f"< required={to_amount}"
+                        f"Mayan would deliver only "
+                        f"{min_amount_out / scale:.6g} of "
+                        f"{to_amount / scale:.6g} requested "
+                        f"({shortfall_pct:.2f}% short). "
+                        f"Try amount >= {suggested / scale:.6g}."
                     )
 
                 eta_seconds = int(final_response.get("etaSeconds", 120))
@@ -453,15 +464,38 @@ class MayanProvider(Provider):
             params=params,
             timeout=30,
         )
-        response.raise_for_status()
-        payload = response.json()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            # Surface Mayan's structured error codes (e.g. AMOUNT_TOO_SMALL)
+            # as a readable message instead of an opaque "406 Client Error".
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+            if isinstance(body, dict) and body.get("code"):
+                self._raise_mayan_error(body)
+            raise
 
+        payload = response.json()
         # The API returns {"minimumSdkVersion": ..., "quotes": [...]}
         quotes = payload.get("quotes", []) if isinstance(payload, dict) else []
         if not quotes:
             return None
-
         return quotes[0]
+
+    @staticmethod
+    def _raise_mayan_error(body: t.Dict) -> t.NoReturn:
+        """Translate Mayan's structured error body into a readable ValueError."""
+        code = body["code"]
+        min_in = (body.get("data") or {}).get("minAmountIn")
+        if code == "AMOUNT_TOO_SMALL" and min_in is not None:
+            raise ValueError(
+                f"Mayan rejected route: amount too small " f"(minimum source ~{min_in})"
+            )
+        raise ValueError(
+            f"Mayan rejected route: {body.get('msg') or code} (code={code})"
+        )
 
     def _get_txs(  # pylint: disable=too-many-locals,too-many-statements
         self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
