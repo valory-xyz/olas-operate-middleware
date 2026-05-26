@@ -357,20 +357,15 @@ class FundingManager:
         """Return per-token withdrawable balances for the Agent Safe.
 
         For native tokens, the withdrawable amount is the safe balance minus
-        the gas reserve (DEFAULT_EOA_TOPUPS), floored at zero.  For ERC20
-        tokens the full balance is withdrawable.
+        the full balance (Safes do not pay their own gas — the signer EOA does).
 
-        Returns a dict with ``withdrawable_amounts`` (token_address -> wei str)
-        and ``gas_reserve`` (wei str).
+        Returns a dict with ``withdrawable_amounts`` (token_address -> wei str).
         """
         chain_config = service.chain_configs[chain.value]
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
         ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
         service_safe = chain_data.multisig
-
-        # Gas reserve for the native token on this chain
-        gas_reserve = DEFAULT_EOA_TOPUPS.get(chain, {}).get(ZERO_ADDRESS, BigInt(0))
 
         # Collect all token addresses in scope
         tokens = (
@@ -379,17 +374,20 @@ class FundingManager:
                 chain.value
             ].chain_data.user_params.fund_requirements.keys()
         )
+        tokens.discard(ZERO_ADDRESS)
 
         withdrawable_amounts: t.Dict[str, str] = {}
 
-        # Native balance
+        # Native balance — fully withdrawable (Safe gas is paid by signer EOA)
         native_balance = ledger_api.get_balance(service_safe)
-        withdrawable_native = max(0, native_balance - int(gas_reserve))
-        withdrawable_amounts[ZERO_ADDRESS] = str(withdrawable_native)
+        withdrawable_amounts[ZERO_ADDRESS] = str(native_balance)
 
         # ERC20 balances
         for token_address in tokens:
-            if token_address == ZERO_ADDRESS:
+            if not Web3.is_address(token_address):
+                self.logger.warning(
+                    f"Skipping invalid token address in config: {token_address!r}"
+                )
                 continue
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -400,7 +398,6 @@ class FundingManager:
 
         return {
             "withdrawable_amounts": withdrawable_amounts,
-            "gas_reserve": str(gas_reserve),
         }
 
     def partial_withdraw_service_safe(  # pylint: disable=too-many-locals
@@ -415,8 +412,14 @@ class FundingManager:
         absent entries are skipped (no-op).  ERC20 tokens are transferred
         before native to avoid depleting gas before ERC20 transfers.
         """
-        # Filter out zero / absent entries
-        effective = {addr: int(val) for addr, val in amounts.items() if int(val) > 0}
+        # Filter out zero / absent entries; reject negative amounts
+        effective: t.Dict[str, int] = {}
+        for addr, val in amounts.items():
+            parsed = int(val)
+            if parsed < 0:
+                raise ValueError(f"Negative amount for {addr}: {parsed}")
+            if parsed > 0:
+                effective[addr] = parsed
         if not effective:
             self.logger.info(
                 "partial_withdraw_service_safe: no non-zero amounts, no-op"
@@ -426,7 +429,7 @@ class FundingManager:
         service_config_id = service.service_config_id
         self.logger.info(
             f"Partial withdrawal from service safe {service.name} "
-            f"({service_config_id=}): {effective}"
+            f"({service_config_id=}): {len(effective)} token(s)"
         )
         chain_config = service.chain_configs[chain.value]
         chain_data = chain_config.chain_data
@@ -437,107 +440,114 @@ class FundingManager:
         master_safe = wallet.safes[chain]
         withdrawal_address = Web3.to_checksum_address(master_safe)
 
-        # Re-validate against live balances
-        gas_reserve = DEFAULT_EOA_TOPUPS.get(chain, {}).get(ZERO_ADDRESS, BigInt(0))
-        for token_address, requested in effective.items():
-            if token_address == ZERO_ADDRESS:
-                live_balance = ledger_api.get_balance(service_safe)
-                withdrawable = max(0, live_balance - int(gas_reserve))
-            else:
-                token_instance = registry_contracts.erc20.get_instance(
-                    ledger_api=ledger_api,
-                    contract_address=token_address,
-                )
-                withdrawable = token_instance.functions.balanceOf(service_safe).call()
+        # Hold the lock across balance check + transfer to prevent TOCTOU races
+        # from concurrent withdrawal requests on the same service safe.
+        with self._lock:
+            # Re-validate against live balances (Safe gas is paid by signer EOA)
+            for token_address, requested in effective.items():
+                if token_address == ZERO_ADDRESS:
+                    withdrawable = ledger_api.get_balance(service_safe)
+                else:
+                    if not Web3.is_address(token_address):
+                        raise ValueError(f"Invalid token address: {token_address!r}")
+                    token_instance = registry_contracts.erc20.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=token_address,
+                    )
+                    withdrawable = token_instance.functions.balanceOf(
+                        service_safe
+                    ).call()
 
-            if requested > withdrawable:
-                raise ValueError(
-                    f"Requested amount for {token_address} on {chain.name} "
-                    f"exceeds withdrawable balance."
-                )
+                if requested > withdrawable:
+                    raise ValueError(
+                        f"Requested amount for {token_address} on {chain.value} "
+                        f"exceeds withdrawable balance."
+                    )
 
-        sftxb = EthSafeTxBuilder(
-            rpc=ledger_config.rpc,
-            wallet=wallet,
-            contracts=CONTRACTS[ledger_config.chain],
-            chain_type=ChainType(ledger_config.chain.value),
-        )
-        owners = get_owners(ledger_api=ledger_api, safe=service_safe)
-
-        # ERC20 tokens first (avoids depleting native gas before ERC20 transfers)
-        erc20_entries = {
-            addr: amt for addr, amt in effective.items() if addr != ZERO_ADDRESS
-        }
-        native_amount = effective.get(ZERO_ADDRESS, 0)
-
-        for token_address, amount in erc20_entries.items():
-            token_name = get_asset_name(chain, token_address)
-            self.logger.info(
-                f"Partial withdraw {amount} {token_name} from "
-                f"{service_safe} to {withdrawal_address}"
+            sftxb = EthSafeTxBuilder(
+                rpc=ledger_config.rpc,
+                wallet=wallet,
+                contracts=CONTRACTS[ledger_config.chain],
+                chain_type=ChainType(ledger_config.chain.value),
             )
-            if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = self.keys_manager.get_crypto_instance(
-                    service.agent_addresses[0]
-                )
-                transfer_erc20_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=ethereum_crypto,
-                    safe=chain_data.multisig,
-                    token=token_address,
-                    to=withdrawal_address,
-                    amount=amount,
-                )
-            elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_erc20_transfer_messages(
-                    safe_b_address=service_safe,
-                    token=token_address,
-                    to=withdrawal_address,
-                    amount=amount,
-                )
-                tx = sftxb.new_tx()
-                for message in messages:
-                    tx.add(message)
-                tx.settle()
-            else:
-                raise RuntimeError(
-                    f"Cannot withdraw from service safe: "
-                    f"unrecognized owner set {owners=}"
-                )
+            owners = get_owners(ledger_api=ledger_api, safe=service_safe)
 
-        # Native transfer last
-        if native_amount > 0:
-            self.logger.info(
-                f"Partial withdraw {native_amount} "
-                f"{get_currency_denom(chain)} from "
-                f"{service_safe} to {withdrawal_address}"
-            )
-            if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = self.keys_manager.get_crypto_instance(
-                    service.agent_addresses[0]
+            # ERC20 tokens first (avoids depleting native gas before ERC20 transfers)
+            erc20_entries = {
+                addr: amt for addr, amt in effective.items() if addr != ZERO_ADDRESS
+            }
+            native_amount = effective.get(ZERO_ADDRESS, 0)
+
+            # NOTE: owner-branching logic below mirrors drain_service_safe (lines 285-350).
+            # Refactor into a shared helper when a third caller appears.
+            for token_address, amount in erc20_entries.items():
+                token_name = get_asset_name(chain, token_address)
+                self.logger.info(
+                    f"Partial withdraw {amount} {token_name} from "
+                    f"{service_safe} to {withdrawal_address}"
                 )
-                transfer_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=ethereum_crypto,
-                    safe=chain_data.multisig,
-                    to=withdrawal_address,
-                    amount=native_amount,
+                if set(owners) == set(service.agent_addresses):
+                    ethereum_crypto = self.keys_manager.get_crypto_instance(
+                        service.agent_addresses[0]
+                    )
+                    transfer_erc20_from_safe(
+                        ledger_api=ledger_api,
+                        crypto=ethereum_crypto,
+                        safe=chain_data.multisig,
+                        token=token_address,
+                        to=withdrawal_address,
+                        amount=amount,
+                    )
+                elif set(owners) == {master_safe}:
+                    messages = sftxb.get_safe_b_erc20_transfer_messages(
+                        safe_b_address=service_safe,
+                        token=token_address,
+                        to=withdrawal_address,
+                        amount=amount,
+                    )
+                    tx = sftxb.new_tx()
+                    for message in messages:
+                        tx.add(message)
+                    tx.settle()
+                else:
+                    raise RuntimeError(
+                        f"Cannot withdraw from service safe: "
+                        f"unrecognized owner set {owners=}"
+                    )
+
+            # Native transfer last
+            if native_amount > 0:
+                self.logger.info(
+                    f"Partial withdraw {native_amount} "
+                    f"{get_currency_denom(chain)} from "
+                    f"{service_safe} to {withdrawal_address}"
                 )
-            elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_native_transfer_messages(
-                    safe_b_address=service_safe,
-                    to=withdrawal_address,
-                    amount=native_amount,
-                )
-                tx = sftxb.new_tx()
-                for message in messages:
-                    tx.add(message)
-                tx.settle()
-            else:
-                raise RuntimeError(
-                    f"Cannot withdraw from service safe: "
-                    f"unrecognized owner set {owners=}"
-                )
+                if set(owners) == set(service.agent_addresses):
+                    ethereum_crypto = self.keys_manager.get_crypto_instance(
+                        service.agent_addresses[0]
+                    )
+                    transfer_from_safe(
+                        ledger_api=ledger_api,
+                        crypto=ethereum_crypto,
+                        safe=chain_data.multisig,
+                        to=withdrawal_address,
+                        amount=native_amount,
+                    )
+                elif set(owners) == {master_safe}:
+                    messages = sftxb.get_safe_b_native_transfer_messages(
+                        safe_b_address=service_safe,
+                        to=withdrawal_address,
+                        amount=native_amount,
+                    )
+                    tx = sftxb.new_tx()
+                    for message in messages:
+                        tx.add(message)
+                    tx.settle()
+                else:
+                    raise RuntimeError(
+                        f"Cannot withdraw from service safe: "
+                        f"unrecognized owner set {owners=}"
+                    )
 
         self.logger.info(
             f"Partial withdrawal from service safe {service.name} "

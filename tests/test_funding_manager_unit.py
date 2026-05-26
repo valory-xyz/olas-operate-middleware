@@ -699,8 +699,8 @@ class TestDrainTokenSetIncludesPUSD:
 class TestGetSafeWithdrawableBalance:
     """Tests for FundingManager.get_safe_withdrawable_balance."""
 
-    def test_returns_native_balance_minus_gas_reserve(self) -> None:
-        """Native withdrawable = balance - gas reserve, floored at zero."""
+    def test_returns_full_native_balance(self) -> None:
+        """Native withdrawable = full balance (Safe gas is paid by signer EOA)."""
         mgr = _make_manager()
         service = MagicMock()
         chain = Chain.GNOSIS
@@ -710,8 +710,7 @@ class TestGetSafeWithdrawableBalance:
         chain_config.ledger_config.rpc = "http://fake-rpc"
         service.chain_configs = {chain.value: chain_config}
 
-        gas_reserve = int(DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS])
-        native_balance = gas_reserve + 5000
+        native_balance = 50000
 
         with (
             patch(
@@ -726,36 +725,8 @@ class TestGetSafeWithdrawableBalance:
 
             result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
 
-        assert result["withdrawable_amounts"][ZERO_ADDRESS] == "5000"
-        assert result["gas_reserve"] == str(gas_reserve)
-
-    def test_native_balance_below_reserve_floors_at_zero(self) -> None:
-        """If native balance < gas reserve, withdrawable native is 0."""
-        mgr = _make_manager()
-        service = MagicMock()
-        chain = Chain.GNOSIS
-        chain_config = MagicMock()
-        chain_config.chain_data.multisig = SAFE_ADDR
-        chain_config.chain_data.user_params.fund_requirements.keys.return_value = set()
-        chain_config.ledger_config.rpc = "http://fake-rpc"
-        service.chain_configs = {chain.value: chain_config}
-
-        gas_reserve = int(DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS])
-
-        with (
-            patch(
-                "operate.services.funding_manager.make_chain_ledger_api"
-            ) as mock_ledger_api,
-            patch(
-                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
-                {chain.id: []},
-            ),
-        ):
-            mock_ledger_api.return_value.get_balance.return_value = gas_reserve - 100
-
-            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
-
-        assert result["withdrawable_amounts"][ZERO_ADDRESS] == "0"
+        assert result["withdrawable_amounts"][ZERO_ADDRESS] == str(native_balance)
+        assert "gas_reserve" not in result
 
     def test_includes_erc20_balances(self) -> None:
         """ERC20 tokens return full balanceOf as withdrawable."""
@@ -869,7 +840,7 @@ class TestGetSafeWithdrawableBalance:
 class TestPartialWithdrawServiceSafe:
     """Tests for FundingManager.partial_withdraw_service_safe."""
 
-    def _make_service(self, owners: list) -> MagicMock:
+    def _make_service(self) -> MagicMock:
         """Create a mock service with agent_addresses and chain_configs."""
         service = MagicMock()
         service.service_config_id = "svc_test"
@@ -885,7 +856,7 @@ class TestPartialWithdrawServiceSafe:
     def test_empty_amounts_is_noop(self) -> None:
         """No-op when all amounts are zero or empty."""
         mgr = _make_manager()
-        service = self._make_service(owners=[EOA_ADDR])
+        service = self._make_service()
 
         mgr.partial_withdraw_service_safe(
             service=service, amounts={}, chain=Chain.GNOSIS
@@ -895,7 +866,7 @@ class TestPartialWithdrawServiceSafe:
     def test_zero_amounts_is_noop(self) -> None:
         """No-op when all values are '0'."""
         mgr = _make_manager()
-        service = self._make_service(owners=[EOA_ADDR])
+        service = self._make_service()
 
         mgr.partial_withdraw_service_safe(
             service=service,
@@ -910,7 +881,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[EOA_ADDR])
+        service = self._make_service()
 
         with (
             patch(
@@ -938,7 +909,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[EOA_ADDR])
+        service = self._make_service()
 
         with (
             patch(
@@ -971,9 +942,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[EOA_ADDR])
-
-        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+        service = self._make_service()
 
         with (
             patch(
@@ -1004,8 +973,8 @@ class TestPartialWithdrawServiceSafe:
             mock_token_instance = MagicMock()
             mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
             mock_registry.erc20.get_instance.return_value = mock_token_instance
-            # Native balance (enough for withdrawal + gas reserve)
-            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 200
+            # Native balance (fully withdrawable — Safe gas is paid by signer EOA)
+            mock_ledger_api.return_value.get_balance.return_value = 200
 
             mgr.partial_withdraw_service_safe(
                 service=service,
@@ -1024,9 +993,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: master_safe}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[master_safe])
-
-        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+        service = self._make_service()
 
         with (
             patch(
@@ -1054,8 +1021,8 @@ class TestPartialWithdrawServiceSafe:
             mock_token_instance = MagicMock()
             mock_token_instance.functions.balanceOf.return_value.call.return_value = 500
             mock_registry.erc20.get_instance.return_value = mock_token_instance
-            # Native balance
-            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 200
+            # Native balance (fully withdrawable)
+            mock_ledger_api.return_value.get_balance.return_value = 200
 
             mock_sftxb = MagicMock()
             mock_sftxb_cls.return_value = mock_sftxb
@@ -1083,9 +1050,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: master_safe}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[unknown_owner])
-
-        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+        service = self._make_service()
 
         with (
             patch(
@@ -1101,7 +1066,7 @@ class TestPartialWithdrawServiceSafe:
                 return_value="xDAI",
             ),
         ):
-            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 200
+            mock_ledger_api.return_value.get_balance.return_value = 200
 
             with pytest.raises(RuntimeError, match="unrecognized owner set"):
                 mgr.partial_withdraw_service_safe(
@@ -1119,7 +1084,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: master_safe}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[unknown_owner])
+        service = self._make_service()
 
         with (
             patch(
@@ -1156,9 +1121,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[EOA_ADDR])
-
-        gas_reserve = int(DEFAULT_EOA_TOPUPS.get(Chain.GNOSIS, {}).get(ZERO_ADDRESS, 0))
+        service = self._make_service()
 
         with (
             patch(
@@ -1176,7 +1139,7 @@ class TestPartialWithdrawServiceSafe:
                 return_value="xDAI",
             ),
         ):
-            mock_ledger_api.return_value.get_balance.return_value = gas_reserve + 500
+            mock_ledger_api.return_value.get_balance.return_value = 500
 
             mgr.partial_withdraw_service_safe(
                 service=service,
@@ -1193,7 +1156,7 @@ class TestPartialWithdrawServiceSafe:
         wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
         wm.load.return_value = wallet
         mgr = _make_manager(wallet_manager=wm)
-        service = self._make_service(owners=[EOA_ADDR])
+        service = self._make_service()
 
         with (
             patch(

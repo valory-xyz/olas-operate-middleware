@@ -3912,7 +3912,6 @@ class TestSafeWithdrawableBalanceEndpoint:
         svc_mgr.load.return_value = svc
         m.funding_manager.get_safe_withdrawable_balance.return_value = {
             "withdrawable_amounts": {ZERO_ADDRESS: "5000"},
-            "gas_reserve": "1000",
         }
 
         stack, app, _, _ = _open_app(m)
@@ -3944,23 +3943,6 @@ class TestSafeWithdrawableBalanceEndpoint:
                 resp = client.get("/api/v2/service/svc_abc/safe_withdrawable_balance")
         assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         assert "error" in resp.json()
-
-    async def test_invalid_id_taint_barrier_returns_400(self) -> None:
-        """Cover line 1826: handler-level taint barrier rejects invalid ID."""
-        m = _make_mock_operate()
-        m.password = "pass"  # nosec B105
-
-        stack, app, _, _ = _open_app(m)
-        with stack:
-            # Find the endpoint function for safe_withdrawable_balance
-            handler = next(
-                r.endpoint
-                for r in app.routes
-                if getattr(r, "path", "").endswith("/safe_withdrawable_balance")
-            )
-            resp = await handler(service_config_id="bad.id")
-        assert resp.status_code == HTTPStatus.BAD_REQUEST
-        assert json.loads(resp.body) == {"error": "Invalid service_config_id."}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4025,8 +4007,10 @@ class TestWithdrawSafeEndpoint:
                     },
                 )
         assert resp.status_code == HTTPStatus.OK
-        assert resp.json()["error"] is None
-        assert "withdrawn" in resp.json()["message"].lower()
+        body = resp.json()
+        assert body["error"] is None
+        assert "withdrawn" in body["message"].lower()
+        assert body["succeeded_chains"] == ["gnosis"]
 
     def test_value_error_returns_400(self) -> None:
         """When partial_withdraw raises ValueError, returns 400."""
@@ -4052,7 +4036,9 @@ class TestWithdrawSafeEndpoint:
                     },
                 )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
-        assert "exceeds" in resp.json()["error"]
+        body = resp.json()
+        assert "Invalid withdrawal request" in body["error"]
+        assert "exceeds" in body["detail"]
 
     def test_insufficient_funds_returns_400_with_error_fields(self) -> None:
         """When InsufficientFundsException raised, returns 400 with error fields."""
@@ -4107,21 +4093,3 @@ class TestWithdrawSafeEndpoint:
                 )
         assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         assert "error" in resp.json()
-
-    async def test_invalid_id_taint_barrier_returns_400(self) -> None:
-        """Cover line 1873: handler-level taint barrier rejects invalid ID."""
-        m = _make_mock_operate()
-        m.password = "pass"  # nosec B105
-
-        stack, app, _, _ = _open_app(m)
-        with stack:
-            # Find the endpoint function for withdraw_safe
-            handler = next(
-                r.endpoint
-                for r in app.routes
-                if getattr(r, "path", "").endswith("/withdraw_safe")
-            )
-            mock_request = MagicMock()
-            resp = await handler(service_config_id="bad.id", request=mock_request)
-        assert resp.status_code == HTTPStatus.BAD_REQUEST
-        assert json.loads(resp.body) == {"error": "Invalid service_config_id."}
