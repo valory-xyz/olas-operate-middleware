@@ -113,6 +113,8 @@ from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
     SAFE_ID_RE,
+    UnsafeIdError,
+    validate_safe_id,
 )
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
@@ -1823,7 +1825,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        if not SAFE_ID_RE.fullmatch(service_config_id):
+        try:
+            safe_id = validate_safe_id(service_config_id)
+        except UnsafeIdError:
             return JSONResponse(
                 content={"error": "Invalid service_config_id."},
                 status_code=HTTPStatus.BAD_REQUEST,
@@ -1831,12 +1835,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         service_manager = operate.service_manager()
 
-        if not service_manager.exists(service_config_id=service_config_id):
-            return service_not_found_error(service_config_id=service_config_id)
+        if not service_manager.exists(service_config_id=safe_id):
+            return service_not_found_error(service_config_id=safe_id)
 
         try:
-            # deepcode ignore PT, CommandInjection: service_config_id is validated by SAFE_ID_RE.fullmatch, ValidatedServiceRoute and FastApiPath(pattern=SAFE_ID_PATTERN) before this handler runs
-            service = service_manager.load(service_config_id=service_config_id)
+            service = service_manager.load(service_config_id=safe_id)
             result: t.Dict[str, t.Any] = {}
             for chain_str in service.chain_configs:
                 chain = Chain(chain_str)
@@ -1869,7 +1872,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        if not SAFE_ID_RE.fullmatch(service_config_id):
+        try:
+            safe_id = validate_safe_id(service_config_id)
+        except UnsafeIdError:
             return JSONResponse(
                 content={"error": "Invalid service_config_id."},
                 status_code=HTTPStatus.BAD_REQUEST,
@@ -1877,14 +1882,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         service_manager = operate.service_manager()
 
-        if not service_manager.exists(service_config_id=service_config_id):
-            return service_not_found_error(service_config_id=service_config_id)
+        if not service_manager.exists(service_config_id=safe_id):
+            return service_not_found_error(service_config_id=safe_id)
 
         try:
             data = await request.json()
             amounts_by_chain = data.get("amounts", {})
-            # deepcode ignore PT, CommandInjection: service_config_id is validated by SAFE_ID_RE.fullmatch, ValidatedServiceRoute and FastApiPath(pattern=SAFE_ID_PATTERN) before this handler runs
-            service = service_manager.load(service_config_id=service_config_id)
+            service = service_manager.load(service_config_id=safe_id)
 
             for chain_str, token_amounts in amounts_by_chain.items():
                 chain = Chain(chain_str)
