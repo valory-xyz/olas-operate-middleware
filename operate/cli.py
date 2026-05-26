@@ -1926,7 +1926,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": error_msg,
-                    "detail": "One or more request fields are invalid.",
+                    "detail": str(e),
                     "succeeded_chains": succeeded_chains,
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
