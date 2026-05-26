@@ -1794,6 +1794,69 @@ class TestRelayQuoteAdditionalPaths:
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
 
+    def test_quote_http_error_uses_response_json_message(self) -> None:
+        """quote() handles HTTPError by parsing response.json() for an error message."""
+        import requests as req_lib
+
+        provider = _make_relay_provider()
+        req = _make_request(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.CREATED,
+            amount=1000,
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"message": "relay API error"}
+        mock_resp.raise_for_status.side_effect = req_lib.HTTPError("bad request")
+        mock_resp.status_code = 400
+
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.post",
+                return_value=mock_resp,
+            ),
+            patch("operate.bridge.providers.relay_provider.time.sleep"),
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+        assert req.quote_data is not None
+        assert req.quote_data.message == "relay API error"
+        assert req.quote_data.provider_data is not None
+        assert req.quote_data.provider_data["response_status"] == 400
+
+    def test_quote_connection_error_sets_quote_failed_without_response(self) -> None:
+        """quote() handles ConnectionError raised by requests.post itself (no response bound).
+
+        Regression for the QA failure where transient proxy disconnects raised
+        ConnectionError before `response` was assigned, leaking UnboundLocalError
+        from the quote() method instead of failing cleanly with QUOTE_FAILED so
+        the bundle could rotate to the Mayan fallback.
+        """
+        import requests as req_lib
+
+        provider = _make_relay_provider()
+        req = _make_request(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.CREATED,
+            amount=1000,
+        )
+
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.post",
+                side_effect=req_lib.ConnectionError(
+                    "Connection aborted: RemoteDisconnected"
+                ),
+            ),
+            patch("operate.bridge.providers.relay_provider.time.sleep"),
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+        assert req.quote_data is not None
+        assert "Connection aborted" in (req.quote_data.message or "")
+
 
 # ---------------------------------------------------------------------------
 # TestRelayUpdateExecutionStatusAdditional
