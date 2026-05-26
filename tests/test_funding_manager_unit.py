@@ -1242,7 +1242,7 @@ class TestGetSafeWithdrawableBalanceInvalidToken:
         mgr = _make_manager()
         service = MagicMock()
         chain = Chain.GNOSIS
-        invalid_token = "not-an-address"
+        invalid_token = "not-an-address"  # nosec B105
         chain_config = MagicMock()
         chain_config.chain_data.multisig = SAFE_ADDR
         chain_config.chain_data.user_params.fund_requirements.keys.return_value = {
