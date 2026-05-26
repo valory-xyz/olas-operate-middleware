@@ -105,6 +105,8 @@ class FundingManager:
         self.logger = logger
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
         self._lock = threading.Lock()
+        self._withdrawal_locks_mu = threading.Lock()
+        self._withdrawal_locks: t.Dict[t.Tuple[str, str], threading.Lock] = {}
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
         self.is_for_quickstart = False
@@ -415,7 +417,12 @@ class FundingManager:
         # Filter out zero / absent entries; reject negative amounts
         effective: t.Dict[str, int] = {}
         for addr, val in amounts.items():
-            parsed = int(val)
+            try:
+                parsed = int(val)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"Invalid amount for {addr}: expected integer or numeric string"
+                ) from exc
             if parsed < 0:
                 raise ValueError(f"Negative amount for {addr}: {parsed}")
             if parsed > 0:
@@ -440,9 +447,16 @@ class FundingManager:
         master_safe = wallet.safes[chain]
         withdrawal_address = Web3.to_checksum_address(master_safe)
 
-        # Hold the lock across balance check + transfer to prevent TOCTOU races
-        # from concurrent withdrawal requests on the same service safe.
-        with self._lock:
+        # Per-(service, chain) lock prevents TOCTOU races from concurrent
+        # withdrawal requests on the same service safe without blocking
+        # unrelated funding operations or withdrawals on other services/chains.
+        lock_key = (service_config_id, chain.value)
+        with self._withdrawal_locks_mu:
+            if lock_key not in self._withdrawal_locks:
+                self._withdrawal_locks[lock_key] = threading.Lock()
+            withdrawal_lock = self._withdrawal_locks[lock_key]
+
+        with withdrawal_lock:
             # Re-validate against live balances (Safe gas is paid by signer EOA)
             for token_address, requested in effective.items():
                 if token_address == ZERO_ADDRESS:

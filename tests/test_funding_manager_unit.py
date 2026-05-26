@@ -1205,6 +1205,18 @@ class TestPartialWithdrawServiceSafe:
                 chain=Chain.GNOSIS,
             )
 
+    def test_non_numeric_amount_raises_value_error(self) -> None:
+        """Raises ValueError when amount value is a non-numeric type (e.g. list)."""
+        mgr = _make_manager()
+        service = self._make_service()
+
+        with pytest.raises(ValueError, match="Invalid amount"):
+            mgr.partial_withdraw_service_safe(
+                service=service,
+                amounts={ZERO_ADDRESS: [1, 2, 3]},  # type: ignore[dict-item]
+                chain=Chain.GNOSIS,
+            )
+
     def test_invalid_token_address_raises_value_error(self) -> None:
         """Raises ValueError for invalid (non-address) token in effective amounts."""
         wm = MagicMock()
