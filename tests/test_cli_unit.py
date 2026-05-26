@@ -4093,3 +4093,80 @@ class TestWithdrawSafeEndpoint:
                 )
         assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         assert "error" in resp.json()
+
+    def test_invalid_json_body_returns_400(self) -> None:
+        """When the request body is not valid JSON, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    content=b"not valid json {{{",
+                    headers={"Content-Type": "application/json"},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "Invalid JSON body" in resp.json()["error"]
+
+    def test_non_dict_body_returns_400(self) -> None:
+        """When the request body is valid JSON but not a dict, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    content=b"[1, 2, 3]",
+                    headers={"Content-Type": "application/json"},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "must be a JSON object" in resp.json()["error"]
+
+    def test_amounts_not_dict_returns_400(self) -> None:
+        """When 'amounts' is not a dict, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={"amounts": [1, 2, 3]},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "'amounts' must be a JSON object" in resp.json()["error"]
+
+    def test_token_amounts_not_dict_returns_400(self) -> None:
+        """When token amounts for a chain is not a dict, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={"amounts": {"gnosis": "not_a_dict"}},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "must be a JSON object" in resp.json()["detail"]

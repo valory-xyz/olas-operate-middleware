@@ -1192,3 +1192,79 @@ class TestPartialWithdrawServiceSafe:
 
         mock_erc20_transfer.assert_called_once()
         mock_native_transfer.assert_not_called()
+
+    def test_negative_amount_raises_value_error(self) -> None:
+        """Raises ValueError when a negative amount string is provided."""
+        mgr = _make_manager()
+        service = self._make_service()
+
+        with pytest.raises(ValueError, match="Negative amount"):
+            mgr.partial_withdraw_service_safe(
+                service=service,
+                amounts={ZERO_ADDRESS: "-100"},
+                chain=Chain.GNOSIS,
+            )
+
+    def test_invalid_token_address_raises_value_error(self) -> None:
+        """Raises ValueError for invalid (non-address) token in effective amounts."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service()
+
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+        ):
+            with pytest.raises(ValueError, match="Invalid token address"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={"not-a-valid-address": "100"},
+                    chain=Chain.GNOSIS,
+                )
+
+
+# ---------------------------------------------------------------------------
+# get_safe_withdrawable_balance — invalid token address
+# ---------------------------------------------------------------------------
+
+
+class TestGetSafeWithdrawableBalanceInvalidToken:
+    """Tests for invalid token address handling in get_safe_withdrawable_balance."""
+
+    def test_skips_invalid_token_address_and_logs_warning(self) -> None:
+        """Invalid token address is skipped with a warning log."""
+        mgr = _make_manager()
+        service = MagicMock()
+        chain = Chain.GNOSIS
+        invalid_token = "not-an-address"
+        chain_config = MagicMock()
+        chain_config.chain_data.multisig = SAFE_ADDR
+        chain_config.chain_data.user_params.fund_requirements.keys.return_value = {
+            invalid_token
+        }
+        chain_config.ledger_config.rpc = "http://fake-rpc"
+        service.chain_configs = {chain.value: chain_config}
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
+                {chain.id: []},
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 1000
+
+            result = mgr.get_safe_withdrawable_balance(service=service, chain=chain)
+
+        # Invalid token is skipped — only native balance returned
+        assert invalid_token not in result["withdrawable_amounts"]
+        assert result["withdrawable_amounts"][ZERO_ADDRESS] == "1000"
+        mgr.logger.warning.assert_called_once()
