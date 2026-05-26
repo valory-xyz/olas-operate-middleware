@@ -89,7 +89,7 @@ class FundingInProgressError(RuntimeError):
     """Raised when an attempt is made to fund a service that is already being funded."""
 
 
-class FundingManager:
+class FundingManager:  # pylint: disable=too-many-instance-attributes
     """FundingManager"""
 
     def __init__(
