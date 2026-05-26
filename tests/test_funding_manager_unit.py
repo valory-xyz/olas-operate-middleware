@@ -1267,4 +1267,4 @@ class TestGetSafeWithdrawableBalanceInvalidToken:
         # Invalid token is skipped — only native balance returned
         assert invalid_token not in result["withdrawable_amounts"]
         assert result["withdrawable_amounts"][ZERO_ADDRESS] == "1000"
-        mgr.logger.warning.assert_called_once()
+        mgr.logger.warning.assert_called_once()  # type: ignore[attr-defined]
