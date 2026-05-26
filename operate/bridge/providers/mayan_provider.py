@@ -289,7 +289,13 @@ class MayanProvider(Provider):
                 if not probe_response:
                     raise ValueError("No quotes returned from Mayan API (probe)")
 
-                probe_amount_in = int(probe_response["effectiveAmountIn64"])
+                effective_in_str = probe_response.get("effectiveAmountIn64")
+                if effective_in_str is None:
+                    raise ValueError(
+                        "Mayan probe response missing 'effectiveAmountIn64'; "
+                        f"keys present: {list(probe_response)}"
+                    )
+                probe_amount_in = int(effective_in_str)
                 probe_amount_out = int(probe_response.get("minAmountOutBaseUnits", "0"))
 
                 if probe_amount_out <= 0:
@@ -825,14 +831,24 @@ class MayanProvider(Provider):
                 to_token=to_token,
             )
 
-        return self._build_swift_protocol_data(
-            response=response,
-            from_address=from_address,
-            from_token=from_token,
-            to_address=to_address,
-            to_chain=to_chain,
-            amount_in_final=amount_in_final,
-            from_chain=from_chain,
+        if route_type == "SWIFT":
+            return self._build_swift_protocol_data(
+                response=response,
+                from_address=from_address,
+                from_token=from_token,
+                to_address=to_address,
+                to_chain=to_chain,
+                amount_in_final=amount_in_final,
+                from_chain=from_chain,
+            )
+
+        # Defensive guard against future API additions. The API-level filter in
+        # _call_quote_api gates which route types the API is allowed to return,
+        # but these two checks live in different functions and can drift. Failing
+        # here loudly is better than silently encoding a route with the SWIFT ABI.
+        raise RuntimeError(
+            f"_build_protocol_data: unsupported route_type {route_type!r}; "
+            "add an explicit handler before enabling this route"
         )
 
     def _build_swift_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments

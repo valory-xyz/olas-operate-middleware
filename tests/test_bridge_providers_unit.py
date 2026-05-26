@@ -3989,6 +3989,47 @@ class TestMayanProviderQuoteEdgeCases:
 
         assert req.status == ProviderRequestStatus.QUOTE_FAILED
 
+    def test_probe_missing_effective_amount_in64_fails_with_field_list(
+        self,
+    ) -> None:
+        """Probe response missing 'effectiveAmountIn64' surfaces an actionable error.
+
+        Defends against opaque KeyError if the Mayan API ever drops or
+        renames the field — the operator should see the list of keys that
+        were present in the response, not a bare key name.
+        """
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id=MAYAN_PROVIDER_ID,
+            amount=1000,
+            from_chain="ethereum",
+            to_chain="polygon",
+        )
+
+        # Probe response with effectiveAmountIn64 explicitly removed.
+        probe_resp = _make_mayan_quote_response()
+        del probe_resp["effectiveAmountIn64"]
+        remaining_keys = list(probe_resp)
+
+        with (
+            patch.object(
+                provider,
+                "_call_quote_api",
+                return_value=probe_resp,
+            ),
+            patch("operate.bridge.providers.mayan_provider.time.sleep"),
+        ):
+            provider.quote(req)
+
+        assert req.status == ProviderRequestStatus.QUOTE_FAILED
+        assert req.quote_data is not None
+        message = req.quote_data.message or ""
+        assert "effectiveAmountIn64" in message
+        # The error must surface the keys actually present so an operator can
+        # diagnose a schema drift from the message alone.
+        for key in remaining_keys:
+            assert key in message, f"expected key {key!r} in error message"
+
     def test_no_final_quotes_fails(self) -> None:
         """Empty final quote (probe succeeds, final returns None) results in QUOTE_FAILED."""
         provider = _make_mayan_provider()
@@ -4427,6 +4468,28 @@ class TestMayanProviderBuildProtocolData:
                 from_token=ZERO_ADDRESS,
                 to_address=TO_ADDR,
                 to_chain="unsupported_chain",
+                amount_in_final=1000,
+                from_chain="ethereum",
+            )
+
+    @pytest.mark.parametrize("route_type", ["MCTP", "FAST_MCTP", "WORMHOLE"])
+    def test_unsupported_route_type_raises(self, route_type: str) -> None:
+        """Unknown route_type raises RuntimeError instead of silently SWIFT-encoding.
+
+        Defensive guard for the case where the upstream API filter
+        (_call_quote_api) and this encoder dispatch drift apart — a route the
+        API was not supposed to return must not be silently encoded with the
+        wrong ABI.
+        """
+        provider = _make_mayan_provider()
+        response = {"type": route_type, "toToken": {"contract": ZERO_ADDRESS}}
+        with pytest.raises(RuntimeError, match="unsupported route_type"):
+            provider._build_protocol_data(  # pylint: disable=protected-access
+                response=response,
+                from_address=FROM_ADDR,
+                from_token=ZERO_ADDRESS,
+                to_address=TO_ADDR,
+                to_chain="optimism",
                 amount_in_final=1000,
                 from_chain="ethereum",
             )
