@@ -3865,3 +3865,308 @@ class TestPearlStoreEndpoints:
                 )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
         assert "segments" in resp.json()["error"].lower()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# safe_withdrawable_balance endpoint
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSafeWithdrawableBalanceEndpoint:
+    """Tests for GET /api/v2/service/{id}/safe_withdrawable_balance."""
+
+    def test_not_logged_in_returns_unauthorized(self) -> None:
+        """When password is None, returns USER_NOT_LOGGED_IN_ERROR."""
+        m = _make_mock_operate()
+        m.password = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/v2/service/svc_abc/safe_withdrawable_balance")
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_service_not_found_returns_404(self) -> None:
+        """When service does not exist, returns 404."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = False
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/v2/service/svc_abc/safe_withdrawable_balance")
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_happy_path_returns_balances(self) -> None:
+        """Happy path: returns withdrawable balances per chain."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+        m.funding_manager.get_safe_withdrawable_balance.return_value = {
+            "withdrawable_amounts": {ZERO_ADDRESS: "5000"},
+        }
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/v2/service/svc_abc/safe_withdrawable_balance")
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["gnosis"]["withdrawable_amounts"][ZERO_ADDRESS] == "5000"
+
+    def test_exception_returns_500(self) -> None:
+        """When funding_manager raises, returns 500."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+        m.funding_manager.get_safe_withdrawable_balance.side_effect = RuntimeError(
+            "rpc fail"
+        )
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.get("/api/v2/service/svc_abc/safe_withdrawable_balance")
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert "error" in resp.json()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# withdraw_safe endpoint
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestWithdrawSafeEndpoint:
+    """Tests for POST /api/v2/service/{id}/withdraw_safe."""
+
+    def test_not_logged_in_returns_unauthorized(self) -> None:
+        """When password is None, returns USER_NOT_LOGGED_IN_ERROR."""
+        m = _make_mock_operate()
+        m.password = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={"amounts": {}},
+                )
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_service_not_found_returns_404(self) -> None:
+        """When service does not exist, returns 404."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = False
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={"amounts": {}},
+                )
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    def test_happy_path_returns_success(self) -> None:
+        """Happy path: partial withdrawal completes successfully."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+        m.funding_manager.partial_withdraw_service_safe.return_value = None
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={
+                        "amounts": {"gnosis": {ZERO_ADDRESS: "1000"}},
+                    },
+                )
+        assert resp.status_code == HTTPStatus.OK
+        body = resp.json()
+        assert body["error"] is None
+        assert "withdrawn" in body["message"].lower()
+        assert body["succeeded_chains"] == ["gnosis"]
+
+    def test_value_error_returns_400(self) -> None:
+        """When partial_withdraw raises ValueError, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+        m.funding_manager.partial_withdraw_service_safe.side_effect = ValueError(
+            "exceeds withdrawable balance"
+        )
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={
+                        "amounts": {"gnosis": {ZERO_ADDRESS: "999999999"}},
+                    },
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        body = resp.json()
+        assert "Invalid withdrawal request" in body["error"]
+        assert "exceeds" in body["detail"]
+
+    def test_insufficient_funds_returns_400_with_error_fields(self) -> None:
+        """When InsufficientFundsException raised, returns 400 with error fields."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+        exc = InsufficientFundsException("not enough gas", "gnosis")
+        m.funding_manager.partial_withdraw_service_safe.side_effect = exc
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={
+                        "amounts": {"gnosis": {ZERO_ADDRESS: "1000"}},
+                    },
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        body = resp.json()
+        assert "insufficient" in body["error"].lower()
+        assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        assert body["chain"] == "gnosis"
+
+    def test_generic_exception_returns_500(self) -> None:
+        """When an unexpected exception is raised, returns 500."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+        m.funding_manager.partial_withdraw_service_safe.side_effect = RuntimeError(
+            "unexpected"
+        )
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={
+                        "amounts": {"gnosis": {ZERO_ADDRESS: "1000"}},
+                    },
+                )
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert "error" in resp.json()
+
+    def test_invalid_json_body_returns_400(self) -> None:
+        """When the request body is not valid JSON, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    content=b"not valid json {{{",
+                    headers={"Content-Type": "application/json"},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "Invalid JSON body" in resp.json()["error"]
+
+    def test_non_dict_body_returns_400(self) -> None:
+        """When the request body is valid JSON but not a dict, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    content=b"[1, 2, 3]",
+                    headers={"Content-Type": "application/json"},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "must be a JSON object" in resp.json()["error"]
+
+    def test_amounts_not_dict_returns_400(self) -> None:
+        """When 'amounts' is not a dict, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={"amounts": [1, 2, 3]},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "'amounts' must be a JSON object" in resp.json()["error"]
+
+    def test_token_amounts_not_dict_returns_400(self) -> None:
+        """When token amounts for a chain is not a dict, returns 400."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        svc_mgr = m.service_manager.return_value
+        svc_mgr.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc_mgr.load.return_value = svc
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            app._server = MagicMock()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/v2/service/svc_abc/withdraw_safe",
+                    json={"amounts": {"gnosis": "not_a_dict"}},
+                )
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "must be a JSON object" in resp.json()["detail"]

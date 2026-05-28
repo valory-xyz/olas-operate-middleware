@@ -2022,7 +2022,7 @@ wheels = [
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.15.24"
+version = "0.15.25"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

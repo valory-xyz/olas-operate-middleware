@@ -2283,6 +2283,121 @@ Terminates and unbonds a service on-chain, and withdraws all the funds from the 
 }
 ```
 
+### `GET /api/v2/service/{service_config_id}/safe_withdrawable_balance`
+
+Get per-chain, per-token withdrawable balances for the Agent Safe. Native token balance is fully withdrawable (Safes do not pay their own gas — the signer EOA does). ERC20 balances are returned as-is.
+
+**Response (Success - 200):**
+
+```json
+{
+  "gnosis": {
+    "withdrawable_amounts": {
+      "0x0000000000000000000000000000000000000000": "1000000000000000000",
+      "0xTokenAddress": "500000000000000000"
+    }
+  }
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to get withdrawable balance. Please check the logs."
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/withdraw_safe`
+
+Withdraw user-specified amounts from the Agent Safe to the Master Safe without stopping the agent. ERC20 tokens are transferred before native to avoid depleting gas. Empty or zero-amount requests are treated as a no-op (200). The operation is non-atomic across chains — if a multi-chain withdrawal fails partway, `succeeded_chains` reflects which chains completed.
+
+**Request Body:**
+
+```json
+{
+  "amounts": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": "500000000000000000",
+      "0xTokenAddress": "250000000000000000"
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Funds withdrawn successfully.",
+  "succeeded_chains": ["gnosis"]
+}
+```
+
+**Response (Invalid request - 400):**
+
+```json
+{
+  "error": "Invalid withdrawal request.",
+  "detail": "Requested amount for 0x... on gnosis exceeds withdrawable balance.",
+  "succeeded_chains": []
+}
+```
+
+**Response (Insufficient signer gas - 400):**
+
+```json
+{
+  "error": "Partial withdrawal failed due to insufficient signer gas.",
+  "succeeded_chains": [],
+  "error_code": "INSUFFICIENT_SIGNER_GAS",
+  "chain": "gnosis",
+  "prefill_amount_wei": "750000000000000000"
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to withdraw funds. Please check the logs.",
+  "succeeded_chains": []
+}
+```
+
 ### `POST /api/v2/service/{service_config_id}/fund`
 
 Funds the agent or service Safe from Master Safe. Fails (409 - Request conflict) if a funding operation is already in progress.
