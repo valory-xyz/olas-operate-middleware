@@ -270,7 +270,7 @@ class RelayProvider(Provider):
                     },
                     timestamp=int(time.time()),
                 )
-            except requests.RequestException as e:
+            except requests.HTTPError as e:
                 response_json = response.json()
                 self.logger.warning(
                     f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {response_json}."

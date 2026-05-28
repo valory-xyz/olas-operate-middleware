@@ -784,6 +784,49 @@ class TestBridgeManagerStaleCacheMigration:
 
         assert manager.data.last_requested_bundle is bundle
 
+    def test_stale_fallback_provider_clears_bundle(self, tmp_path: Path) -> None:
+        """__init__ clears bundle when fallback_provider_ids references an unknown provider."""
+        valid_request = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        valid_request.fallback_provider_ids = ["removed-fallback-provider"]
+        bundle = ProviderRequestBundle(
+            id="rb-stale-fallback-test",
+            requests_params=[valid_request.params],
+            provider_requests=[valid_request],
+            timestamp=int(time.time()),
+        )
+
+        mock_data = MagicMock(spec=BridgeManagerData)
+        mock_data.last_requested_bundle = bundle
+
+        with (
+            patch(
+                "operate.bridge.bridge_manager.BridgeManagerData.load",
+                return_value=mock_data,
+            ),
+            patch(
+                "operate.bridge.bridge_manager.RelayProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.NativeBridgeProvider",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OptimismContractAdaptor",
+            ),
+            patch(
+                "operate.bridge.bridge_manager.OmnibridgeContractAdaptor",
+            ),
+        ):
+            manager = BridgeManager(
+                path=tmp_path,
+                wallet_manager=MagicMock(),
+                logger=MagicMock(),
+            )
+
+        assert manager.data.last_requested_bundle is None
+
 
 # ---------------------------------------------------------------------------
 # TestBridgeManagerSanitize
@@ -890,6 +933,38 @@ class TestBridgeManagerBridgeTotalRequirements:
             manager.bridge_total_requirements(bundle)
 
         mock_provider.requirements.assert_called_once_with(req)
+        mock_add.assert_called_once_with(mock_reqs)
+
+    def test_skips_quote_failed_requests(self, tmp_path: Path) -> None:
+        """bridge_total_requirements() skips requests with QUOTE_FAILED status."""
+        from operate.operate_types import (
+            ChainAmounts,  # pylint: disable=import-outside-toplevel
+        )
+
+        manager = _make_bridge_manager(tmp_path)
+
+        mock_provider = MagicMock()
+        mock_reqs = MagicMock()
+        mock_provider.requirements.return_value = mock_reqs
+        manager._providers["relay-provider"] = (
+            mock_provider  # pylint: disable=protected-access
+        )
+
+        ok_req = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_DONE,
+        )
+        failed_req = _make_provider_request_real(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.QUOTE_FAILED,
+        )
+        bundle = _make_real_bundle()
+        bundle.provider_requests = [failed_req, ok_req]
+
+        with patch.object(ChainAmounts, "add", return_value=MagicMock()) as mock_add:
+            manager.bridge_total_requirements(bundle)
+
+        mock_provider.requirements.assert_called_once_with(ok_req)
         mock_add.assert_called_once_with(mock_reqs)
 
 
