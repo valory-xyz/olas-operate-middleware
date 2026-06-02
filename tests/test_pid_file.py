@@ -21,6 +21,7 @@ from operate.utils.pid_file import (
     _acquire_lock,
     _release_lock,
     read_pid_file,
+    read_raw_pid,
     remove_pid_file,
     validate_pid,
     write_pid_file,
@@ -550,3 +551,23 @@ class TestRemovePIDFileEdgeCases:
         mock_logger.error.assert_called()
         error_msg = str(mock_logger.error.call_args)
         assert "Failed to remove PID file" in error_msg
+
+
+class TestReadRawPid:
+    """Tests for read_raw_pid."""
+
+    def test_returns_pid_for_valid_content(self, tmp_path: Path) -> None:
+        """Returns the integer PID when the file holds a valid integer."""
+        pid_file = tmp_path / "x.pid"
+        pid_file.write_text("4321", encoding="utf-8")
+        assert read_raw_pid(pid_file) == 4321
+
+    def test_returns_none_when_file_missing(self, tmp_path: Path) -> None:
+        """Returns None (not raises) when the file cannot be read."""
+        assert read_raw_pid(tmp_path / "missing.pid") is None
+
+    def test_returns_none_for_non_integer_content(self, tmp_path: Path) -> None:
+        """Returns None when the file content is not an integer."""
+        pid_file = tmp_path / "x.pid"
+        pid_file.write_text("not-a-pid", encoding="utf-8")
+        assert read_raw_pid(pid_file) is None

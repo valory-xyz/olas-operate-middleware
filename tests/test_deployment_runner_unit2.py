@@ -952,6 +952,30 @@ class TestStopAgent:
         runner.logger.error.assert_called()
         mock_remove.assert_called_once_with(pid_file, force=True)
 
+    def test_pid_file_error_with_live_process_is_killed(self, tmp_path: Path) -> None:
+        """_stop_agent kills the recorded PID on PIDFileError when it is alive."""
+        pid_file = tmp_path / "agent.pid"
+        pid_file.write_text("12345", encoding="utf-8")
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        runner.logger = MagicMock()
+
+        with (
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=PIDFileError("bad pid"),
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
+        ):
+            runner._stop_agent()
+
+        mock_kill.assert_called_once_with(12345)
+
 
 # ---------------------------------------------------------------------------
 # _get_tm_exit_url test
