@@ -442,10 +442,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _start(self, password: str) -> None:
         """Start the deployment."""
         self.logger.info("Starting the deployment")
-        self._setup_agent(password=password)
-        # A leftover process (prior run, or a failed earlier _start attempt) may
-        # still hold the fixed ports; binding would then fail with OSError 10048.
+        # Reap leftovers first (prior run, or a failed earlier _start attempt):
+        # a process still holding a fixed port would make binding fail with
+        # OSError 10048. Done before setup so nothing survives into the bind.
         self._free_deployment_ports()
+        self._setup_agent(password=password)
         if self._is_aea:
             self._start_tendermint()
 
@@ -473,6 +474,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             return
         # read_pid_file removes the file when stale, so capture the PID first.
         raw_pid = read_raw_pid(pid_file)
+        # TOCTOU: raw_pid could be recycled by the OS between this read and the
+        # kill below (both branches). The port-reap backstop in the caller covers
+        # the practical case where the original process already died.
         try:
             pid = read_pid_file(
                 pid_file,

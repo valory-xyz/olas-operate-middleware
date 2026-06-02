@@ -728,13 +728,14 @@ class TestKillProcessesOnPort:
             kill_processes_on_port(8716, logger=logger)
         mock_kill.assert_not_called()
 
-    def test_access_denied_is_handled_gracefully(self) -> None:
-        """An AccessDenied while enumerating connections is logged, not raised."""
+    @pytest.mark.parametrize("exc", [psutil.AccessDenied(), OSError("eperm")])
+    def test_enumeration_failure_is_handled_gracefully(self, exc: Exception) -> None:
+        """A connection-enumeration error is logged, not raised."""
         logger = MagicMock()
         with (
             patch(
                 "operate.services.deployment_runner.psutil.net_connections",
-                side_effect=psutil.AccessDenied(),
+                side_effect=exc,
             ),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
         ):
