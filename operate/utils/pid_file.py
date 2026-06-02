@@ -248,6 +248,26 @@ def read_pid_file(
     )
 
 
+def read_raw_pid(pid_file: Path) -> Optional[int]:
+    """Read the PID from a PID file without validation, locking, or removal.
+
+    Lets shutdown terminate a recorded process even when :func:`read_pid_file`
+    would classify it stale (and remove the file). Best-effort: a missing file
+    or torn read yields ``None`` rather than raising.
+
+    :param pid_file: Path to PID file
+    :return: PID if the file contains a valid integer, otherwise None
+    """
+    try:
+        content = pid_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    try:
+        return int(content)
+    except ValueError:
+        return None
+
+
 def remove_pid_file(pid_file: Path, force: bool = False) -> None:
     """Remove PID file.
 

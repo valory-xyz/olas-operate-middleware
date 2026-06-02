@@ -24,12 +24,14 @@ import os
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import psutil
 import pytest
 
+from operate import constants
 from operate.services.agent_assets import AgentAssetManager
 from operate.services.deployment_runner import (
     BaseDeploymentRunner,
@@ -39,6 +41,7 @@ from operate.services.deployment_runner import (
     PyInstallerHostDeploymentRunnerMac,
     _kill_process,
     kill_process,
+    kill_processes_on_port,
 )
 from operate.utils.pid_file import PIDFileError, StalePIDFile
 
@@ -620,11 +623,124 @@ class TestStart:
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
         with (
             patch.object(runner, "_setup_agent"),
+            patch.object(runner, "_free_deployment_ports"),
             patch.object(runner, "_start_tendermint") as mock_tm,
             patch.object(runner, "_start_agent"),
         ):
             runner._start(password="testpass")  # nosec B106
         mock_tm.assert_not_called()
+
+    def test_internal_start_frees_ports_before_launch(self, tmp_path: Path) -> None:
+        """_start reaps leftover port holders before starting tendermint/agent.
+
+        This is the pre-flight that breaks the agent-not-starting deadlock: a
+        leftover process holding the fixed port would otherwise make the new
+        agent fail to bind (OSError 10048).
+        """
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        with (
+            patch.object(runner, "_setup_agent"),
+            patch.object(runner, "_free_deployment_ports") as mock_free,
+            patch.object(runner, "_start_tendermint"),
+            patch.object(runner, "_start_agent"),
+        ):
+            runner._start(password="testpass")  # nosec B106
+        mock_free.assert_called_once()
+
+    def test_free_deployment_ports_reaps_both_ports_for_aea(
+        self, tmp_path: Path
+    ) -> None:
+        """_free_deployment_ports reaps the agent and tendermint ports for aea."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        with patch(
+            "operate.services.deployment_runner.kill_processes_on_port"
+        ) as mock_reap:
+            runner._free_deployment_ports()
+        reaped = {call.args[0] for call in mock_reap.call_args_list}
+        assert reaped == {constants.AGENT_HTTP_PORT, constants.TENDERMINT_COM_PORT}
+
+    def test_free_deployment_ports_skips_tendermint_when_not_aea(
+        self, tmp_path: Path
+    ) -> None:
+        """_free_deployment_ports only reaps the agent port when not aea."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        with patch(
+            "operate.services.deployment_runner.kill_processes_on_port"
+        ) as mock_reap:
+            runner._free_deployment_ports()
+        reaped = {call.args[0] for call in mock_reap.call_args_list}
+        assert reaped == {constants.AGENT_HTTP_PORT}
+
+
+class TestKillProcessesOnPort:
+    """Tests for kill_processes_on_port (port-reap backstop, fix #2)."""
+
+    @staticmethod
+    def _conn(port: int, pid: int, status: str = psutil.CONN_LISTEN) -> Any:
+        return SimpleNamespace(
+            laddr=SimpleNamespace(ip="127.0.0.1", port=port),
+            status=status,
+            pid=pid,
+        )
+
+    def test_kills_listener_on_matching_port(self) -> None:
+        """A process listening on the target port is killed."""
+        logger = MagicMock()
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.net_connections",
+                return_value=[self._conn(8716, 4321)],
+            ),
+            patch("operate.services.deployment_runner.os.getpid", return_value=999),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
+            kill_processes_on_port(8716, logger=logger)
+        mock_kill.assert_called_once_with(4321)
+
+    def test_ignores_other_ports_and_non_listening(self) -> None:
+        """Connections on other ports or not in LISTEN state are ignored."""
+        logger = MagicMock()
+        conns = [
+            self._conn(9999, 1),
+            self._conn(8716, 2, status=psutil.CONN_ESTABLISHED),
+        ]
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.net_connections",
+                return_value=conns,
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
+            kill_processes_on_port(8716, logger=logger)
+        mock_kill.assert_not_called()
+
+    def test_skips_own_pid(self) -> None:
+        """The middleware never kills itself even if it matched the port."""
+        logger = MagicMock()
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.net_connections",
+                return_value=[self._conn(8716, 777)],
+            ),
+            patch("operate.services.deployment_runner.os.getpid", return_value=777),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
+            kill_processes_on_port(8716, logger=logger)
+        mock_kill.assert_not_called()
+
+    def test_access_denied_is_handled_gracefully(self) -> None:
+        """An AccessDenied while enumerating connections is logged, not raised."""
+        logger = MagicMock()
+        with (
+            patch(
+                "operate.services.deployment_runner.psutil.net_connections",
+                side_effect=psutil.AccessDenied(),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
+            kill_processes_on_port(8716, logger=logger)
+        mock_kill.assert_not_called()
+        logger.warning.assert_called()
 
 
 # ---------------------------------------------------------------------------
@@ -729,27 +845,62 @@ class TestStopAgent:
 
         mock_kill.assert_called_once_with(12345)
 
-    def test_file_not_found_error_logged(self, tmp_path: Path) -> None:
-        """_stop_agent logs debug when FileNotFoundError raised."""
+    def test_file_not_found_with_dead_pid_skips_kill_and_cleans_up(
+        self, tmp_path: Path
+    ) -> None:
+        """_stop_agent skips the kill but removes the file when the PID is gone."""
         pid_file = tmp_path / "agent.pid"
         pid_file.write_text("12345", encoding="utf-8")
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        runner.logger = MagicMock()
 
         with (
             patch(
                 "operate.services.deployment_runner.read_pid_file",
                 side_effect=FileNotFoundError("not found"),
             ),
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=False,
+            ),
+            patch("operate.services.deployment_runner.kill_processes_on_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file") as mock_remove,
         ):
             runner._stop_agent()
 
         mock_kill.assert_not_called()
-        runner.logger.debug.assert_called()
+        mock_remove.assert_called_once_with(pid_file, force=True)
 
-    def test_stale_pid_file_logged(self, tmp_path: Path) -> None:
-        """_stop_agent logs debug when StalePIDFile raised."""
+    def test_stale_pid_with_dead_process_skips_kill(self, tmp_path: Path) -> None:
+        """_stop_agent does not kill when the stale PID's process is dead."""
+        pid_file = tmp_path / "agent.pid"
+        pid_file.write_text("12345", encoding="utf-8")
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+
+        with (
+            patch(
+                "operate.services.deployment_runner.read_pid_file",
+                side_effect=StalePIDFile("stale"),
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=False,
+            ),
+            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
+        ):
+            runner._stop_agent()
+
+        mock_kill.assert_not_called()
+
+    def test_stale_pid_with_live_process_is_killed(self, tmp_path: Path) -> None:
+        """_stop_agent still kills a live process flagged stale (e.g. name mismatch).
+
+        Regression for the agent-not-starting deadlock: a live agent whose
+        process name did not match the expected list was previously abandoned,
+        leaving it holding the fixed port and blocking the next start.
+        """
         pid_file = tmp_path / "agent.pid"
         pid_file.write_text("12345", encoding="utf-8")
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
@@ -758,14 +909,29 @@ class TestStopAgent:
         with (
             patch(
                 "operate.services.deployment_runner.read_pid_file",
-                side_effect=StalePIDFile("stale"),
+                side_effect=StalePIDFile("name mismatch"),
             ),
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch("operate.services.deployment_runner.kill_processes_on_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
         ):
             runner._stop_agent()
 
-        mock_kill.assert_not_called()
-        runner.logger.debug.assert_called()
+        mock_kill.assert_called_once_with(12345)
+        runner.logger.warning.assert_called()
+
+    def test_stop_agent_reaps_fixed_port(self, tmp_path: Path) -> None:
+        """_stop_agent reaps the fixed agent HTTP port as a backstop."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        with patch(
+            "operate.services.deployment_runner.kill_processes_on_port"
+        ) as mock_reap:
+            runner._stop_agent()
+        mock_reap.assert_any_call(constants.AGENT_HTTP_PORT, logger=runner.logger)
 
     def test_pid_file_error_logged_and_file_removed(self, tmp_path: Path) -> None:
         """_stop_agent logs error and calls remove_pid_file when PIDFileError raised."""
@@ -865,8 +1031,8 @@ class TestStopTendermint:
 
         mock_kill.assert_called_once_with(55555)
 
-    def test_stale_pid_file_logged(self, tmp_path: Path) -> None:
-        """_stop_tendermint logs debug on StalePIDFile."""
+    def test_stale_pid_with_live_process_is_killed(self, tmp_path: Path) -> None:
+        """_stop_tendermint still kills a live process flagged stale."""
         pid_file = tmp_path / "tendermint.pid"
         pid_file.write_text("55555", encoding="utf-8")
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
@@ -879,10 +1045,17 @@ class TestStopTendermint:
                 "operate.services.deployment_runner.read_pid_file",
                 side_effect=StalePIDFile("stale"),
             ),
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=True,
+            ),
+            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
         ):
             runner._stop_tendermint()
 
-        runner.logger.debug.assert_called()
+        mock_kill.assert_called_once_with(55555)
 
     def test_pid_file_error_logs_and_removes(self, tmp_path: Path) -> None:
         """_stop_tendermint logs error and removes file on PIDFileError."""
@@ -905,12 +1078,11 @@ class TestStopTendermint:
         runner.logger.error.assert_called()
         mock_remove.assert_called_once_with(pid_file, force=True)
 
-    def test_file_not_found_error_logged(self, tmp_path: Path) -> None:
-        """_stop_tendermint logs debug when FileNotFoundError raised."""
+    def test_file_not_found_with_dead_pid_skips_kill(self, tmp_path: Path) -> None:
+        """_stop_tendermint skips the kill when the file is gone and PID is dead."""
         pid_file = tmp_path / "tendermint.pid"
         pid_file.write_text("55555", encoding="utf-8")
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        runner.logger = MagicMock()
 
         with (
             patch("operate.services.deployment_runner.requests.get"),
@@ -919,10 +1091,30 @@ class TestStopTendermint:
                 "operate.services.deployment_runner.read_pid_file",
                 side_effect=FileNotFoundError("gone"),
             ),
+            patch(
+                "operate.services.deployment_runner.psutil.pid_exists",
+                return_value=False,
+            ),
+            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            patch("operate.services.deployment_runner.remove_pid_file"),
         ):
             runner._stop_tendermint()
 
-        runner.logger.debug.assert_called()
+        mock_kill.assert_not_called()
+
+    def test_stop_tendermint_reaps_fixed_port(self, tmp_path: Path) -> None:
+        """_stop_tendermint reaps the fixed tendermint control port as a backstop."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        with (
+            patch("operate.services.deployment_runner.requests.get"),
+            patch("operate.services.deployment_runner.time.sleep"),
+            patch(
+                "operate.services.deployment_runner.kill_processes_on_port"
+            ) as mock_reap,
+        ):
+            runner._stop_tendermint()
+        mock_reap.assert_any_call(constants.TENDERMINT_COM_PORT, logger=runner.logger)
 
 
 # ---------------------------------------------------------------------------
