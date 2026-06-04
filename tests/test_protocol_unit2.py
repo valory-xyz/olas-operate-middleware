@@ -23,7 +23,9 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from autonomy.chain.config import ChainType
+from autonomy.chain.exceptions import ChainInteractionError
 
+from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain as OperateChain
 from operate.services.protocol import (
     EthSafeTxBuilder,
@@ -1749,3 +1751,74 @@ class TestEthSafeTxBuilderStakingDataMethods:
             )
 
         assert result is False
+
+
+class TestGnosisSafeTransactionSettle:
+    """Tests for GnosisSafeTransaction.settle() gas-error wrapping."""
+
+    @staticmethod
+    def _make_gst() -> GnosisSafeTransaction:
+        """Create a GnosisSafeTransaction with mocked dependencies."""
+        return GnosisSafeTransaction(
+            ledger_api=MagicMock(),
+            crypto=MagicMock(),
+            chain_type=ChainType.GNOSIS,
+            safe=_SAFE_ADDRESS,
+        )
+
+    def test_settle_returns_tx_receipt(self) -> None:
+        """Verify settle() returns the TxReceipt from TxSettler on success."""
+        gst = self._make_gst()
+        mock_txsettler_cls = MagicMock()
+        mock_receipt = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_receipt = (
+            mock_receipt
+        )
+
+        with patch("operate.services.protocol.TxSettler", mock_txsettler_cls):
+            result = gst.settle()
+
+        assert result is mock_receipt
+
+    def test_settle_gas_error_raises_insufficient_funds(self) -> None:
+        """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
+        gst = self._make_gst()
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("insufficient funds for gas * price + value")
+        )
+
+        with patch("operate.services.protocol.TxSettler", mock_txsettler_cls):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                gst.settle()
+
+        assert exc_info.value.chain == "gnosis"
+        assert "insufficient funds for gas" in str(exc_info.value).lower()
+
+    def test_settle_chain_interaction_gas_error_raises_insufficient_funds(
+        self,
+    ) -> None:
+        """Verify ChainInteractionError with gas message is re-raised as InsufficientFundsException."""
+        gst = self._make_gst()
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ChainInteractionError("max fee per gas less than block base fee")
+        )
+
+        with patch("operate.services.protocol.TxSettler", mock_txsettler_cls):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                gst.settle()
+
+        assert exc_info.value.chain == "gnosis"
+
+    def test_settle_non_gas_error_propagates(self) -> None:
+        """Verify ValueError not related to gas propagates unchanged."""
+        gst = self._make_gst()
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.return_value.settle.side_effect = (
+            ValueError("contract reverted")
+        )
+
+        with patch("operate.services.protocol.TxSettler", mock_txsettler_cls):
+            with pytest.raises(ValueError, match="contract reverted"):
+                gst.settle()

@@ -58,6 +58,7 @@ from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.utils import create_backup
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     add_owner,
 )
@@ -462,20 +463,23 @@ class EthereumMasterWallet(
                 raise_on_try=True,
             )
 
-        return (
-            TxSettler(
-                ledger_api=ledger_api,
-                crypto=self.crypto,
-                chain_type=chain,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-                tx_builder=_build_tx,
+        with wrap_gas_spike_as_insufficient_funds(
+            chain.value, f"transfer from EOA on {chain.name}"
+        ):
+            return (
+                TxSettler(
+                    ledger_api=ledger_api,
+                    crypto=self.crypto,
+                    chain_type=chain,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=_build_tx,
+                )
+                .transact()
+                .settle()
+                .tx_hash
             )
-            .transact()
-            .settle()
-            .tx_hash
-        )
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
@@ -550,20 +554,23 @@ class EthereumMasterWallet(
             update_tx_with_gas_estimate(tx, ledger_api)
             return tx
 
-        return (
-            TxSettler(
-                ledger_api=ledger_api,
-                crypto=self.crypto,
-                chain_type=chain,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-                tx_builder=_build_transfer_tx,
+        with wrap_gas_spike_as_insufficient_funds(
+            chain.value, f"transfer ERC20 from EOA on {chain.name}"
+        ):
+            return (
+                TxSettler(
+                    ledger_api=ledger_api,
+                    crypto=self.crypto,
+                    chain_type=chain,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=_build_transfer_tx,
+                )
+                .transact()
+                .settle()
+                .tx_hash
             )
-            .transact()
-            .settle()
-            .tx_hash
-        )
 
     def transfer(  # pylint: disable=too-many-arguments
         self,

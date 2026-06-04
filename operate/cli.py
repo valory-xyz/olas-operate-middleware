@@ -1610,7 +1610,26 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_locally(service_config_id=service_config_id)
             logger.info("Deployed")
 
-        await run_in_executor(_fn)
+        try:
+            await run_in_executor(_fn)
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Deploy failed. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to deploy service due to insufficient funds.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={"error": "Failed to deploy service. Please check the logs."},
+            )
+
         schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(
@@ -1745,6 +1764,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     from_safe=False,
                     rpc=chain_config.ledger_config.rpc,
                 )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Withdrawal failed. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to withdraw funds due to insufficient funds.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Withdrawal failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
@@ -2079,6 +2109,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content=output,
                 status_code=HTTPStatus.OK,
+            )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Bridge execute failed. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to execute bridge transaction due to insufficient funds.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
             )
         except ValueError as e:
             logger.error(f"Bridge execute error: {e}")

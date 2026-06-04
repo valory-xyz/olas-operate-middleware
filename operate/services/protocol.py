@@ -82,6 +82,7 @@ from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.services.service import NON_EXISTENT_TOKEN
 from operate.utils import concurrent_execute
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
@@ -210,22 +211,25 @@ class GnosisSafeTransaction:
         update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
-    def settle(self) -> TxReceipt:  # pragma: no cover
+    def settle(self) -> TxReceipt:
         """Settle the transaction."""
-        return (
-            TxSettler(
-                ledger_api=self.ledger_api,
-                crypto=self.crypto,
-                chain_type=self.chain_type,
-                tx_builder=self.build,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
+        with wrap_gas_spike_as_insufficient_funds(
+            self.chain_type.value, "settle Safe transaction"
+        ):
+            return (
+                TxSettler(
+                    ledger_api=self.ledger_api,
+                    crypto=self.crypto,
+                    chain_type=self.chain_type,
+                    tx_builder=self.build,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                )
+                .transact()
+                .settle()
+                .tx_receipt
             )
-            .transact()
-            .settle()
-            .tx_receipt
-        )
 
 
 class StakingManager:

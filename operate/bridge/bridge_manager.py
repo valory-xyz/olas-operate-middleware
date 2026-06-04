@@ -44,6 +44,7 @@ from operate.bridge.providers.provider import (
 )
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.constants import ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
@@ -454,7 +455,12 @@ class BridgeManager:
 
         for request in bundle.provider_requests:
             provider = self._providers[request.provider_id]
-            provider.execute(request)
+            try:
+                provider.execute(request)
+            except InsufficientFundsException:
+                self._store_data()
+                bundle.store()
+                raise
             self._store_data()
 
         self._store_data()

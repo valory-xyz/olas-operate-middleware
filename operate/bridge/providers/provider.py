@@ -40,10 +40,15 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
+from operate.exceptions import InsufficientFundsException
+from operate.ledger import (
+    get_default_ledger_api,
+    update_tx_with_gas_pricing,
+)
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.serialization import BigInt
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
@@ -428,29 +433,32 @@ class Provider(ABC):
 
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
-                tx_settler = TxSettler(
-                    ledger_api=from_ledger_api,
-                    crypto=wallet.crypto,
-                    chain_type=Chain(provider_request.params["from"]["chain"]),
-                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                    retries=ON_CHAIN_INTERACT_RETRIES,
-                    sleep=ON_CHAIN_INTERACT_SLEEP,
-                    tx_builder=lambda: {
-                        **tx,  # noqa: B023 # pylint: disable=cell-var-from-loop
-                        "nonce": from_ledger_api.api.eth.get_transaction_count(
-                            from_address
-                        ),
-                    },
-                    gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
-                ).transact()
+                with wrap_gas_spike_as_insufficient_funds(
+                    chain.value, f"bridge transaction {tx_label}"
+                ):
+                    tx_settler = TxSettler(
+                        ledger_api=from_ledger_api,
+                        crypto=wallet.crypto,
+                        chain_type=chain,
+                        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                        retries=ON_CHAIN_INTERACT_RETRIES,
+                        sleep=ON_CHAIN_INTERACT_SLEEP,
+                        tx_builder=lambda: {
+                            **tx,  # noqa: B023 # pylint: disable=cell-var-from-loop
+                            "nonce": from_ledger_api.api.eth.get_transaction_count(
+                                from_address
+                            ),
+                        },
+                        gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
+                    ).transact()
 
-                try:
-                    tx_settler.settle()
-                    self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
-                except TimeExhausted as e:
-                    self.logger.warning(
-                        f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
-                    )
+                    try:
+                        tx_settler.settle()
+                        self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
+                    except TimeExhausted as e:
+                        self.logger.warning(
+                            f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
+                        )
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
@@ -465,6 +473,19 @@ class Provider(ABC):
             self.logger.info(
                 f"[PROVIDER] Finished executing request {provider_request.id}."
             )
+
+        except InsufficientFundsException as e:
+            self.logger.error(f"[PROVIDER] Insufficient gas executing request: {e}")
+            provider_request.execution_data = ExecutionData(
+                elapsed_time=time.time() - timestamp,
+                message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",
+                timestamp=int(time.time()),
+                from_tx_hash=None,
+                to_tx_hash=None,
+                provider_data=e.to_error_fields(),
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            raise
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[PROVIDER] Error executing request: {e}")
@@ -499,13 +520,16 @@ class Provider(ABC):
             if provider_request.execution_data.from_tx_hash:
                 tx_hash = provider_request.execution_data.from_tx_hash
 
-            return {
+            result: t.Dict[str, t.Any] = {
                 "eta": provider_request.quote_data.eta,
                 "explorer_link": self._get_explorer_link(provider_request),
                 "message": provider_request.execution_data.message,
                 "status": provider_request.status.value,
                 "tx_hash": tx_hash,
             }
+            if provider_request.execution_data.provider_data:
+                result.update(provider_request.execution_data.provider_data)
+            return result
         if provider_request.quote_data:
             return {
                 "eta": provider_request.quote_data.eta,

@@ -1,6 +1,6 @@
 [project]
 name = "olas-operate-middleware"
-version = "0.15.26"
+version = "0.15.27"
 description = ""
 license = "Apache-2.0"
 authors = [

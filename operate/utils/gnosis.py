@@ -49,6 +49,7 @@ from operate.ledger import (
 )
 from operate.operate_types import Chain
 from operate.serialization import BigInt
+from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 
 logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1
@@ -187,22 +188,23 @@ def create_safe(
         return tx
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
-    tx_settler = (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=chain,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            gas_price_multiplier=(
-                1.125 if chain == Chain.POLYGON else 1.0
-            ),  # TODO: remove after safe creation failure is recoverable
-            tx_builder=_build,
+    with wrap_gas_spike_as_insufficient_funds(chain.value, "create Safe"):
+        tx_settler = (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                gas_price_multiplier=(
+                    1.125 if chain == Chain.POLYGON else 1.0
+                ),  # TODO: remove after safe creation failure is recoverable
+                tx_builder=_build,
+            )
+            .transact()
+            .settle()
         )
-        .transact()
-        .settle()
-    )
     (event,) = tx_settler.get_events(
         contract=registry_contracts.gnosis_safe_proxy_factory.get_instance(
             ledger_api=ledger_api,
@@ -268,22 +270,22 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    return (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
-            tx_builder=_build_tx,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
+    with wrap_gas_spike_as_insufficient_funds(chain.value, "send Safe transaction"):
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=chain,
+                tx_builder=_build_tx,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        .transact()
-        .settle()
-        .tx_hash
-    )
 
 
 def add_owner(
@@ -435,22 +437,22 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    return (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
-            tx_builder=_build_tx,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
+    with wrap_gas_spike_as_insufficient_funds(chain.value, "transfer from Safe"):
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=chain,
+                tx_builder=_build_tx,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        .transact()
-        .settle()
-        .tx_hash
-    )
 
 
 def transfer_erc20_from_safe(
@@ -512,22 +514,22 @@ def transfer_erc20_from_eoa(
         update_tx_with_gas_estimate(tx, ledger_api)
         return tx
 
-    return (
-        TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=_build_transfer_tx,
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
+    with wrap_gas_spike_as_insufficient_funds(chain.value, "transfer ERC20 from EOA"):
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_transfer_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        .transact()
-        .settle()
-        .tx_hash
-    )
 
 
 def gas_fees_spent_in_tx(

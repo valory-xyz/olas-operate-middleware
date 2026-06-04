@@ -1847,6 +1847,38 @@ class TestServiceRoutes:
                 resp = c.post("/api/v2/service/svc1", json={})
             assert resp.status_code == HTTPStatus.OK
 
+    def test_deploy_service_insufficient_funds(self) -> None:
+        """Deploy returns structured 400 with error_code and chain on InsufficientFundsException."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            InsufficientFundsException("no gas for gnosis", chain="gnosis")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+            assert body["chain"] == "gnosis"
+            assert "prefill_amount_wei" in body
+
+    def test_deploy_service_generic_exception(self) -> None:
+        """Deploy returns 500 on generic Exception not caught by specific handlers."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            RuntimeError("unexpected failure")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+            body = resp.json()
+            assert body["error"] == "Failed to deploy service. Please check the logs."
+
     def test_update_service_not_logged_in(self) -> None:
         """Cover line 1291."""
         m = _make_mock_operate()
@@ -1990,6 +2022,33 @@ class TestWithdrawAndTerminateRoutes:
                     json={"withdrawal_address": "0xrecipient"},
                 )
             assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+
+    def test_withdraw_onchain_insufficient_funds(self) -> None:
+        """_withdraw_onchain returns structured 400 on InsufficientFundsException."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.chain_configs = {"gnosis": MagicMock()}
+        svc.home_chain = "gnosis"
+        m.service_manager.return_value.load.return_value = svc
+        m.service_manager.return_value.terminate_service_on_chain_from_safe.side_effect = InsufficientFundsException(
+            "no gas for gnosis", chain="gnosis"
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post(
+                    "/api/v2/service/svc1/onchain/withdraw",
+                    json={"withdrawal_address": "0xrecipient"},
+                )
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+            assert body["chain"] == "gnosis"
+            assert body["prefill_amount_wei"] == str(
+                DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+            )
 
     def test_terminate_and_withdraw_not_logged_in(self) -> None:
         """Cover line 1421."""
@@ -2294,6 +2353,23 @@ class TestBridgeRoutes:
             with TestClient(app) as c:
                 resp = c.post("/api/bridge/execute", json={"id": "bad"})
             assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+    def test_bridge_execute_insufficient_funds(self) -> None:
+        """Bridge execute returns structured 400 on InsufficientFundsException."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        m.bridge_manager.execute_bundle.side_effect = InsufficientFundsException(
+            "Insufficient gas for bridge transaction", "gnosis"
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/bridge/execute", json={"id": "bundle1"})
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+            assert body["chain"] == "gnosis"
+            assert "prefill_amount_wei" in body
 
     def test_bridge_execute_generic_exception(self) -> None:
         """Bridge execute generic exception."""

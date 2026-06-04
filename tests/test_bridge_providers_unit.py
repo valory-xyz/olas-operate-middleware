@@ -51,6 +51,7 @@ from operate.bridge.providers.provider import (
 )
 from operate.bridge.providers.relay_provider import RelayExecutionStatus, RelayProvider
 from operate.constants import ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain
 
 # ---------------------------------------------------------------------------
@@ -510,6 +511,79 @@ class TestProviderBase:
 
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
         assert req.execution_data is not None
+
+    def test_execute_gas_spike_raises_insufficient_funds(self) -> None:
+        """execute() converts gas spike ValueError to InsufficientFundsException, stores structured error fields in provider_data, and re-raises."""
+        tx: t.Dict[str, t.Any] = {
+            "to": "0x" + "a" * 40,
+            "gas": 21_000,
+            "value": 0,
+            "data": "0x",
+        }
+        provider = _ConcreteProvider(txs_to_return=[("bridge_tx", tx)])
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        mock_settler = MagicMock()
+        mock_settler.transact.side_effect = ValueError(
+            "insufficient funds for gas * price + value"
+        )
+
+        mock_ledger = MagicMock()
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler",
+                return_value=mock_settler,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                return_value=mock_ledger,
+            ),
+            pytest.raises(InsufficientFundsException),
+        ):
+            provider.execute(req)
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+        assert req.execution_data is not None
+        assert "Insufficient gas" in (req.execution_data.message or "")
+        assert req.execution_data.provider_data is not None
+        assert (
+            req.execution_data.provider_data["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        )
+        assert "chain" in req.execution_data.provider_data
+
+    def test_execute_non_gas_error_sets_execution_failed(self) -> None:
+        """Non-gas ValueError propagates to the generic except handler and is recorded as EXECUTION_FAILED."""
+        tx: t.Dict[str, t.Any] = {
+            "to": "0x" + "a" * 40,
+            "gas": 21_000,
+            "value": 0,
+            "data": "0x",
+        }
+        provider = _ConcreteProvider(txs_to_return=[("bridge_tx", tx)])
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        mock_settler = MagicMock()
+        mock_settler.transact.side_effect = ValueError("contract reverted")
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler",
+                return_value=mock_settler,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
+            mock_ledger = MagicMock()
+            mock_ledger.api.eth.get_transaction_count.return_value = 0
+            mock_api.return_value = mock_ledger
+            provider.execute(req)
+
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
 
     def test_status_json_no_quote_data(self) -> None:
         """status_json() returns message=None when no quote_data (line 485)."""
@@ -1410,8 +1484,35 @@ class TestProviderBaseAdditional:
         assert "tx_hash" in result
         assert result["eta"] == 300
 
+    def test_status_json_surfaces_insufficient_funds_fields(self) -> None:
+        """status_json() includes structured error fields from provider_data when execution failed due to insufficient gas."""
+        provider = _ConcreteProvider()
+        req = _make_request(status=ProviderRequestStatus.EXECUTION_FAILED)
+        req.quote_data = _make_quote_data(eta=300)
+        error_fields = {
+            "error_code": "INSUFFICIENT_SIGNER_GAS",
+            "chain": "gnosis",
+            "prefill_amount_wei": "500000000000000000",
+        }
+        req.execution_data = ExecutionData(
+            elapsed_time=0.0,
+            message="Execution failed: Insufficient gas",
+            timestamp=int(time.time()),
+            from_tx_hash=None,
+            to_tx_hash=None,
+            provider_data=error_fields,
+        )
+
+        with patch.object(provider, "_update_execution_status"):
+            result = provider.status_json(req)
+
+        assert result["status"] == ProviderRequestStatus.EXECUTION_FAILED.value
+        assert result["error_code"] == "INSUFFICIENT_SIGNER_GAS"
+        assert result["chain"] == "gnosis"
+        assert result["prefill_amount_wei"] == "500000000000000000"
+
     def test_status_json_with_quote_data_only(self) -> None:
-        """status_json() with only quote_data (no execution_data) returns eta+message+status (line 479)."""
+        """status_json() with only quote_data (no execution_data) returns eta+message+status."""
         provider = _ConcreteProvider()
         req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
         req.quote_data = _make_quote_data(eta=600)
