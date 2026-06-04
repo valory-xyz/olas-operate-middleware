@@ -21,6 +21,7 @@
 
 import ctypes
 import json
+import logging
 import multiprocessing
 import os
 import platform
@@ -49,6 +50,7 @@ from operate.utils.pid_file import (
     PIDFileError,
     StalePIDFile,
     read_pid_file,
+    read_raw_pid,
     remove_pid_file,
     write_pid_file,
 )
@@ -103,6 +105,39 @@ def kill_process(pid: int) -> None:
         _kill_process(child.pid)
     _kill_process(pid)
     _kill_process(pid)
+
+
+def kill_processes_on_port(port: int, logger: logging.Logger) -> None:
+    """Kill any local process listening on the given TCP port.
+
+    Backstop for PID-file tracking misses (PID reuse, unexpected process name,
+    orphaned child): only one agent owns the fixed ports at a time, so whatever
+    listens on one is the blocker preventing the next agent from binding.
+
+    ``net_connections`` needs root on macOS and raises ``AccessDenied`` for an
+    unprivileged process, so the reap is silently skipped there.
+    """
+    own_pid = os.getpid()
+    try:
+        connections = psutil.net_connections(kind="inet")
+    except (psutil.AccessDenied, OSError) as e:
+        logger.warning(f"Could not enumerate connections to free port {port}: {e}")
+        return
+
+    pids = {
+        conn.pid
+        for conn in connections
+        if conn.pid not in (None, own_pid)
+        and conn.status == psutil.CONN_LISTEN
+        and conn.laddr
+        and conn.laddr.port == port
+    }
+    for pid in pids:
+        logger.warning(
+            f"Port {port} is held by leftover process PID {pid}; "
+            f"killing it to free the port for the deployment"
+        )
+        kill_process(pid)
 
 
 class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
@@ -407,6 +442,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _start(self, password: str) -> None:
         """Start the deployment."""
         self.logger.info("Starting the deployment")
+        # Reap leftovers first (prior run, or a failed earlier _start attempt):
+        # a process still holding a fixed port would make binding fail with
+        # OSError 10048. Done before setup so nothing survives into the bind.
+        self._free_deployment_ports()
         self._setup_agent(password=password)
         if self._is_aea:
             self._start_tendermint()
@@ -420,28 +459,58 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         if self._is_aea:
             self._stop_tendermint()
 
+    def _terminate_recorded_process(
+        self,
+        pid_file: Path,
+        expected_process_names: List[str],
+        label: str,
+    ) -> None:
+        """Terminate the process recorded in a PID file and remove the file.
+
+        Validation can flag a live process as stale on a mere name mismatch;
+        We kill the recorded PID on the stale path when it is still alive.
+        """
+        if not pid_file.exists():
+            return
+        # read_pid_file removes the file when stale, so capture the PID first.
+        raw_pid = read_raw_pid(pid_file)
+        # TOCTOU: raw_pid could be recycled by the OS between this read and the
+        # kill below (both branches). The port-reap backstop in the caller covers
+        # the practical case where the original process already died.
+        try:
+            pid = read_pid_file(
+                pid_file,
+                expected_process_names=expected_process_names,
+                remove_stale=True,
+            )
+            kill_process(pid)
+        except (FileNotFoundError, StalePIDFile):
+            if raw_pid is not None and psutil.pid_exists(raw_pid):
+                self.logger.warning(
+                    f"{label} PID {raw_pid} flagged stale but alive; killing it"
+                )
+                kill_process(raw_pid)
+        except PIDFileError as e:
+            self.logger.error(f"Error reading {label} PID file {pid_file}: {e}")
+            if raw_pid is not None and psutil.pid_exists(raw_pid):
+                kill_process(raw_pid)
+        finally:
+            remove_pid_file(pid_file, force=True)
+
+    def _free_deployment_ports(self) -> None:
+        """Reap leftover processes holding this deployment's fixed local ports."""
+        kill_processes_on_port(constants.AGENT_HTTP_PORT, logger=self.logger)
+        if self._is_aea:
+            kill_processes_on_port(constants.TENDERMINT_COM_PORT, logger=self.logger)
+
     def _stop_agent(self) -> None:
         """Stop agent process using safe PID file operations."""
-        pid_file = self._work_directory / "agent.pid"
-        if pid_file.exists():
-            try:
-                # Read and validate PID (checks process exists, removes stale files)
-                # Expected process names: python, agent_runner, aea
-                pid = read_pid_file(
-                    pid_file,
-                    expected_process_names=["python", "agent", "aea"],
-                    remove_stale=True,
-                )
-                kill_process(pid)
-                # Clean up PID file after successful kill
-                remove_pid_file(pid_file, force=True)
-            except (FileNotFoundError, StalePIDFile):
-                # PID file doesn't exist or process already dead - OK
-                self.logger.debug(f"Agent PID file {pid_file} not found or stale")
-            except PIDFileError as e:
-                self.logger.error(f"Error reading agent PID file {pid_file}: {e}")
-                # Try to clean up invalid PID file
-                remove_pid_file(pid_file, force=True)
+        self._terminate_recorded_process(
+            self._work_directory / "agent.pid",
+            expected_process_names=["python", "agent", "aea"],
+            label="agent",
+        )
+        kill_processes_on_port(constants.AGENT_HTTP_PORT, logger=self.logger)
         self._close_agent_log_file()
 
     def _get_tm_exit_url(self) -> str:
@@ -459,26 +528,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         except Exception:  # pylint: disable=broad-except
             self.logger.exception("Exception on tendermint stop!")
 
-        pid_file = self._work_directory / "tendermint.pid"
-        if pid_file.exists():
-            try:
-                # Read and validate PID (checks process exists, removes stale files)
-                # Expected process names: tendermint, flask, python
-                pid = read_pid_file(
-                    pid_file,
-                    expected_process_names=["tendermint", "flask", "python"],
-                    remove_stale=True,
-                )
-                kill_process(pid)
-                # Clean up PID file after successful kill
-                remove_pid_file(pid_file, force=True)
-            except (FileNotFoundError, StalePIDFile):
-                # PID file doesn't exist or process already dead - OK
-                self.logger.debug(f"Tendermint PID file {pid_file} not found or stale")
-            except PIDFileError as e:
-                self.logger.error(f"Error reading tendermint PID file {pid_file}: {e}")
-                # Try to clean up invalid PID file
-                remove_pid_file(pid_file, force=True)
+        self._terminate_recorded_process(
+            self._work_directory / "tendermint.pid",
+            expected_process_names=["tendermint", "flask", "python"],
+            label="tendermint",
+        )
+        kill_processes_on_port(constants.TENDERMINT_COM_PORT, logger=self.logger)
         self._close_tm_log_file()
 
     @abstractmethod
@@ -860,7 +915,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 "--host",
                 "localhost",
                 "--port",
-                "8080",
+                str(constants.TENDERMINT_COM_PORT),
             ],
             cwd=working_dir,
             stdout=self._tm_log_file,

@@ -1,0 +1,1276 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2025 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+"""Mayan bridge provider."""
+
+import json
+import math
+import secrets
+import time
+import typing as t
+from decimal import Decimal, ROUND_DOWN
+from http import HTTPStatus
+from pathlib import Path
+
+import requests
+from web3 import Web3
+
+from operate.bridge.providers.provider import (
+    DEFAULT_MAX_QUOTE_RETRIES,
+    MESSAGE_EXECUTION_FAILED,
+    MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
+    QuoteData,
+)
+from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER, ZERO_ADDRESS
+from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
+from operate.ledger.profiles import WRAPPED_NATIVE_ASSET, get_asset_decimals
+from operate.operate_types import Chain
+
+MAYAN_QUOTE_API_URL = "https://price-api.mayan.finance/v3/quote"
+MAYAN_EXPLORER_API_URL = "https://explorer-api.mayan.finance/v3/swap/trx"
+MAYAN_EXPLORER_URL = "https://explorer.mayan.finance/tx"
+
+MAYAN_FORWARDER_ADDRESS = "0x337685fdaB40D39bd02028545a4FfA7D287cC3E2"
+MAYAN_SLIPPAGE_BUFFER = 0.02  # 200 bps over-delivery buffer
+
+# Wormhole chain IDs for EVM chains
+WORMHOLE_CHAIN_IDS: t.Dict[str, int] = {
+    Chain.ETHEREUM.value: 2,
+    Chain.POLYGON.value: 5,
+    Chain.ARBITRUM_ONE.value: 23,
+    Chain.OPTIMISM.value: 24,
+    Chain.BASE.value: 30,
+}
+
+# Mayan API chain names (lowercase strings matching their API)
+MAYAN_CHAIN_NAMES: t.Dict[str, str] = {
+    Chain.ETHEREUM.value: "ethereum",
+    Chain.POLYGON.value: "polygon",
+    Chain.OPTIMISM.value: "optimism",
+    Chain.BASE.value: "base",
+    Chain.ARBITRUM_ONE.value: "arbitrum",
+}
+
+# Default gas estimates per chain when the API/estimation fails.
+# "forwarder" covers SWIFT forwardEth/forwardERC20 (~150k–200k observed).
+# "mono_chain_forwarder" covers MONO_CHAIN swapAndForwardEth/swapAndForwardERC20
+# which includes an on-chain swap and can use significantly more gas (~270k–475k
+# observed, with outliers above 900k on some L2s).
+MAYAN_DEFAULT_GAS: t.Dict[Chain, t.Dict[str, int]] = {
+    Chain.ETHEREUM: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.BASE: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.OPTIMISM: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.POLYGON: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+    Chain.ARBITRUM_ONE: {
+        "approve": 50_000,
+        "forwarder": 350_000,
+        "mono_chain_forwarder": 1_000_000,
+    },
+}
+
+_ABI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "contracts"
+
+
+def _load_abi(contract_dir: str, contract_name: str) -> t.List[t.Dict]:
+    """Load contract ABI from the data/contracts directory."""
+    abi_path = _ABI_DIR / contract_dir / "build" / f"{contract_name}.json"
+    with open(abi_path, "r", encoding="utf-8") as f:
+        return json.load(f)["abi"]
+
+
+class MayanProvider(Provider):
+    """Mayan bridge provider.
+
+    Quotes via the Mayan REST Quote API, encodes EVM transactions via
+    Python web3.py ABI encoding of the Mayan Forwarder contract, and
+    polls the Mayan Explorer API for execution status.
+    """
+
+    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
+        """Initialize the Mayan provider."""
+        super().__init__(*args, **kwargs)
+        self._w3 = Web3()
+        self._forwarder_abi = _load_abi("mayan_forwarder", "MayanForwarder")
+        self._swift_abi = _load_abi("mayan_swift", "MayanSwift")
+        self._mono_chain_abi = _load_abi("mayan_mono_chain", "MayanMonoChain")
+        self._forwarder_contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(MAYAN_FORWARDER_ADDRESS),
+            abi=self._forwarder_abi,
+        )
+        self._swift_contract = self._w3.eth.contract(
+            abi=self._swift_abi,
+        )
+        self._mono_chain_contract = self._w3.eth.contract(
+            abi=self._mono_chain_abi,
+        )
+
+    def description(self) -> str:
+        """Get a human-readable description of the provider."""
+        return "Mayan Protocol https://mayan.finance/"
+
+    @staticmethod
+    def _to_canonical_uint64(amount: t.Union[str, int, float], decimals: int) -> int:
+        """Truncate *amount* at ``min(decimals, 8)`` places, then scale to int.
+
+        Mirrors Mayan SDK ``getAmountOfFractionalAmount`` (cutFactor =
+        ``min(decimals, 8)``, then ``parseUnits``). Using ``Decimal`` with
+        ``ROUND_DOWN`` avoids float-precision drift at the LSB for unusual
+        large gas-drop values and is the same truncate-then-parseUnits
+        semantics the SDK uses.
+        """
+        cut_factor = min(decimals, 8)
+        quantum = Decimal(1).scaleb(-cut_factor)  # 10**(-cut_factor)
+        truncated = Decimal(str(amount)).quantize(quantum, rounding=ROUND_DOWN)
+        return int(truncated.scaleb(cut_factor))
+
+    @staticmethod
+    def _dest_to_source_atomic(
+        to_amount: int, from_decimals: int, to_decimals: int
+    ) -> int:
+        """Convert *to_amount* (destination atomic) → source atomic at 1:1.
+
+        This is the seed used for the Mayan probe quote — close enough to
+        the eventual source amount that Mayan returns a sensible rate,
+        whatever the decimal mismatch between source and destination.
+        """
+        delta = from_decimals - to_decimals
+        if delta >= 0:
+            return to_amount * (10**delta)
+        return max(to_amount // (10 ** (-delta)), 1)
+
+    def quote(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
+        self, provider_request: ProviderRequest
+    ) -> None:
+        """Update the request with the quote from Mayan Quote API.
+
+        Uses a two-step approach:
+        1. Probe: call Quote API with amountIn = to_amount translated into
+           source atomic units at a 1:1 exchange-rate assumption, to discover
+           the actual rate. Source/destination decimals come from each token's
+           ``decimals()`` view via ``get_asset_decimals``.
+        2. Scale: compute amountIn_final with slippage buffer, re-quote, and
+           verify over-delivery against the requested to_amount.
+        """
+        self._validate(provider_request)
+
+        if provider_request.status not in (
+            ProviderRequestStatus.CREATED,
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
+        ):
+            raise RuntimeError(
+                f"Cannot quote request {provider_request.id} "
+                f"with status {provider_request.status}."
+            )
+
+        if provider_request.execution_data:
+            raise RuntimeError(
+                f"Cannot quote request {provider_request.id}: "
+                "execution already present."
+            )
+
+        from_chain = provider_request.params["from"]["chain"]
+        from_token = provider_request.params["from"]["token"]
+        to_chain = provider_request.params["to"]["chain"]
+        to_token = provider_request.params["to"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
+
+        if to_amount == 0:
+            self.logger.info(f"[MAYAN PROVIDER] {MESSAGE_QUOTE_ZERO}")
+            quote_data = QuoteData(
+                eta=0,
+                elapsed_time=0,
+                message=MESSAGE_QUOTE_ZERO,
+                provider_data=None,
+                timestamp=int(time.time()),
+            )
+            provider_request.quote_data = quote_data
+            provider_request.status = ProviderRequestStatus.QUOTE_DONE
+            return
+
+        from_chain_name = MAYAN_CHAIN_NAMES.get(from_chain)
+        to_chain_name = MAYAN_CHAIN_NAMES.get(to_chain)
+
+        if not from_chain_name or not to_chain_name:
+            self.logger.warning(
+                f"[MAYAN PROVIDER] Unsupported chain pair: "
+                f"{from_chain} -> {to_chain}."
+            )
+            quote_data = QuoteData(
+                eta=None,
+                elapsed_time=0,
+                message=f"Unsupported chain: {from_chain} or {to_chain}",
+                provider_data=None,
+                timestamp=int(time.time()),
+            )
+            provider_request.quote_data = quote_data
+            provider_request.status = ProviderRequestStatus.QUOTE_FAILED
+            return
+
+        # Use native null address for Mayan when from_token is ZERO_ADDRESS
+        mayan_from_token = (
+            "0x0000000000000000000000000000000000000000"
+            if from_token == ZERO_ADDRESS
+            else from_token
+        )
+        mayan_to_token = (
+            "0x0000000000000000000000000000000000000000"
+            if to_token == ZERO_ADDRESS
+            else to_token
+        )
+
+        # Read source and destination decimals from the token contracts
+        # once, before the retry loop. We use these to translate the
+        # caller's to_amount (DESTINATION atomic units) into a SOURCE
+        # atomic seed for the Mayan probe. Without this translation,
+        # cross-decimal pairs (e.g. POL 18-dec → pUSD 6-dec) would feed
+        # Mayan dust source amounts and trigger 406 ROUTE_NOT_FOUND on
+        # every attempt.
+        from_decimals = get_asset_decimals(Chain(from_chain), from_token)
+        to_decimals = get_asset_decimals(Chain(to_chain), to_token)
+        seed_amount_in = self._dest_to_source_atomic(
+            to_amount, from_decimals, to_decimals
+        )
+
+        for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
+            start = time.time()
+            try:
+                # Step 1 — Probe with a SOURCE-atomic seed equal to the
+                # destination target under a 1:1 exchange-rate assumption.
+                # The probe response gives us the actual rate so we can
+                # refine in step 2. If Mayan 406s even with this seed,
+                # the requested to_amount is genuinely below the route
+                # minimum and we surface that as QUOTE_FAILED rather than
+                # silently bootstrapping to a different amount.
+                probe_response = self._call_quote_api(
+                    from_chain=from_chain_name,
+                    from_token=mayan_from_token,
+                    to_chain=to_chain_name,
+                    to_token=mayan_to_token,
+                    amount_in64=str(seed_amount_in),
+                    to_address=provider_request.params["to"]["address"],
+                )
+
+                if not probe_response:
+                    raise ValueError("No quotes returned from Mayan API (probe)")
+
+                effective_in_str = probe_response.get("effectiveAmountIn64")
+                if effective_in_str is None:
+                    raise ValueError(
+                        "Mayan probe response missing 'effectiveAmountIn64'; "
+                        f"keys present: {list(probe_response)}"
+                    )
+                probe_amount_in = int(effective_in_str)
+                probe_amount_out = int(probe_response.get("minAmountOutBaseUnits", "0"))
+
+                if probe_amount_out <= 0:
+                    raise ValueError(f"Invalid probe output: {probe_amount_out}")
+
+                # Step 2 — Scale up to guarantee over-delivery
+                # Both probe values are in base units, so the ratio is unit-safe
+                scale_factor = probe_amount_in / probe_amount_out
+                amount_in_final = math.ceil(
+                    to_amount * scale_factor * (1 + MAYAN_SLIPPAGE_BUFFER)
+                )
+
+                final_response = self._call_quote_api(
+                    from_chain=from_chain_name,
+                    from_token=mayan_from_token,
+                    to_chain=to_chain_name,
+                    to_token=mayan_to_token,
+                    amount_in64=str(amount_in_final),
+                    to_address=provider_request.params["to"]["address"],
+                )
+
+                if not final_response:
+                    raise ValueError("No quotes returned from Mayan API (final)")
+
+                expected_out_raw = final_response.get("expectedAmountOut", 0)
+                min_amount_out = int(final_response.get("minAmountOutBaseUnits", "0"))
+
+                # Verify over-delivery guarantee
+                # minAmountOutBaseUnits is in base units (same as to_amount)
+                if min_amount_out < to_amount:
+                    self.logger.warning(
+                        f"[MAYAN PROVIDER] Under-delivery: "
+                        f"minAmountOutBaseUnits={min_amount_out} < {to_amount}. "
+                        f"expectedAmountOut={expected_out_raw}."
+                    )
+                    ratio = min_amount_out / to_amount
+                    shortfall_pct = (1 - ratio) * 100
+                    # Suggest the smallest amount that would clear with ~5%
+                    # headroom under the current observed ratio. The real
+                    # ratio improves at larger amounts (fixed Mayan fees
+                    # amortise), so this is a conservative suggestion.
+                    suggested = math.ceil(to_amount * 1.05 / ratio)
+                    scale = 10**to_decimals
+                    raise ValueError(
+                        f"Mayan would deliver only "
+                        f"{min_amount_out / scale:.6g} of "
+                        f"{to_amount / scale:.6g} requested "
+                        f"({shortfall_pct:.2f}% short). "
+                        f"Try amount >= {suggested / scale:.6g}."
+                    )
+
+                eta_seconds = int(final_response.get("etaSeconds", 120))
+
+                quote_data = QuoteData(
+                    eta=eta_seconds,
+                    elapsed_time=time.time() - start,
+                    message=None,
+                    provider_data={
+                        "attempts": attempt,
+                        "response": final_response,
+                        "amount_in_final": amount_in_final,
+                    },
+                    timestamp=int(time.time()),
+                )
+                provider_request.quote_data = quote_data
+                provider_request.status = ProviderRequestStatus.QUOTE_DONE
+                return
+
+            except requests.Timeout as e:
+                self.logger.warning(
+                    f"[MAYAN PROVIDER] Timeout on attempt "
+                    f"{attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                quote_data = QuoteData(
+                    eta=None,
+                    elapsed_time=time.time() - start,
+                    message=str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.GATEWAY_TIMEOUT,
+                    },
+                    timestamp=int(time.time()),
+                )
+            except requests.RequestException as e:
+                self.logger.warning(
+                    f"[MAYAN PROVIDER] Request failed on attempt "
+                    f"{attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                quote_data = QuoteData(
+                    eta=None,
+                    elapsed_time=time.time() - start,
+                    message=str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.BAD_GATEWAY,
+                    },
+                    timestamp=int(time.time()),
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.warning(
+                    f"[MAYAN PROVIDER] Request failed on attempt "
+                    f"{attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                quote_data = QuoteData(
+                    eta=None,
+                    elapsed_time=time.time() - start,
+                    message=str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.INTERNAL_SERVER_ERROR,
+                    },
+                    timestamp=int(time.time()),
+                )
+
+            if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
+                self.logger.error(
+                    f"[MAYAN PROVIDER] Request failed after "
+                    f"{DEFAULT_MAX_QUOTE_RETRIES} attempts."
+                )
+                provider_request.quote_data = quote_data
+                provider_request.status = ProviderRequestStatus.QUOTE_FAILED
+                return
+
+            time.sleep(2)
+
+    def _call_quote_api(  # pylint: disable=too-many-arguments
+        self,
+        from_chain: str,
+        from_token: str,
+        to_chain: str,
+        to_token: str,
+        amount_in64: str,
+        to_address: str,
+    ) -> t.Optional[t.Dict]:
+        """Call the Mayan Quote API and return the best quote (first in list)."""
+        is_same_chain = from_chain == to_chain
+        params: t.Dict[str, t.Any] = {
+            "amountIn64": amount_in64,
+            "fromToken": from_token,
+            "fromChain": from_chain,
+            "toToken": to_token,
+            "toChain": to_chain,
+            "slippageBps": 300,
+            "swift": "false" if is_same_chain else "true",
+            "mctp": "false",
+            "fastMctp": "false",
+            "monoChain": "true" if is_same_chain else "false",
+            "wormhole": "false",
+            "gasless": "false",
+            "forwarderAddress": MAYAN_FORWARDER_ADDRESS,
+            "destinationAddress": to_address,
+            "sdkVersion": "13_0_0",
+        }
+
+        self.logger.info(
+            f"[MAYAN PROVIDER] GET {MAYAN_QUOTE_API_URL} "
+            f"fromChain={from_chain} toChain={to_chain} "
+            f"amountIn64={amount_in64}"
+        )
+
+        response = requests.get(
+            url=MAYAN_QUOTE_API_URL,
+            params=params,
+            timeout=30,
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            # Surface Mayan's structured error codes (e.g. AMOUNT_TOO_SMALL)
+            # as a readable message instead of an opaque "406 Client Error".
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+            if isinstance(body, dict) and body.get("code"):
+                self._raise_mayan_error(body)
+            raise
+
+        payload = response.json()
+        # The API returns {"minimumSdkVersion": ..., "quotes": [...]}
+        quotes = payload.get("quotes", []) if isinstance(payload, dict) else []
+        if not quotes:
+            return None
+        return quotes[0]
+
+    @staticmethod
+    def _raise_mayan_error(body: t.Dict) -> t.NoReturn:
+        """Translate Mayan's structured error body into a readable ValueError."""
+        code = body["code"]
+        min_in = (body.get("data") or {}).get("minAmountIn")
+        if code == "AMOUNT_TOO_SMALL" and min_in is not None:
+            raise ValueError(
+                f"Mayan rejected route: amount too small " f"(minimum source ~{min_in})"
+            )
+        raise ValueError(
+            f"Mayan rejected route: {body.get('msg') or code} (code={code})"
+        )
+
+    def _get_txs(  # pylint: disable=too-many-locals,too-many-statements
+        self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Build transaction list from Mayan quote response.
+
+        Returns an ERC-20 approve tx (if needed) followed by the
+        Forwarder call (forwardEth or forwardERC20).
+        """
+        if provider_request.params["to"]["amount"] == 0:
+            return []
+
+        quote_data = provider_request.quote_data
+        if not quote_data:
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "quote data not present."
+            )
+
+        provider_data = quote_data.provider_data
+        if not provider_data:
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "provider_data not present in quote_data."
+            )
+
+        response = provider_data.get("response")
+        if not response:
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "response not present in provider_data."
+            )
+
+        amount_in_final = provider_data.get("amount_in_final", 0)
+        if not amount_in_final:
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                "amount_in_final is zero or missing."
+            )
+
+        from_chain = provider_request.params["from"]["chain"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_chain = provider_request.params["to"]["chain"]
+        to_address = provider_request.params["to"]["address"]
+        from_ledger_api = self._from_ledger_api(provider_request)
+        w3 = from_ledger_api.api
+        # EIP-155 replay protection: tx dicts are built manually rather than
+        # via web3.build_transaction (which would auto-inject chainId), so
+        # chainId is set explicitly inside _build_mono_chain_txs and
+        # _build_swift_txs at each construction site.
+        route_type = response.get("type", "SWIFT")
+
+        # Determine the inner protocol contract address
+        mayan_protocol = self._get_mayan_protocol_address(response, route_type)
+        if not mayan_protocol:
+            raise RuntimeError(
+                f"Cannot get transactions for {provider_request.id}: "
+                f"unknown route type '{route_type}'."
+            )
+
+        mayan_protocol = w3.to_checksum_address(mayan_protocol)
+
+        to_token = provider_request.params["to"]["token"]
+
+        # Build protocolData (ABI-encoded inner protocol call)
+        protocol_data = self._build_protocol_data(
+            response=response,
+            from_address=from_address,
+            from_token=from_token,
+            to_address=to_address,
+            to_chain=to_chain,
+            amount_in_final=amount_in_final,
+            from_chain=from_chain,
+            to_token=to_token,
+        )
+
+        txs: t.List[t.Tuple[str, t.Dict]] = []
+        forwarder_address = w3.to_checksum_address(MAYAN_FORWARDER_ADDRESS)
+        bridge_fee = int(response.get("bridgeFee", 0))
+
+        if route_type == "MONO_CHAIN":
+            txs = self._build_mono_chain_txs(
+                response=response,
+                from_token=from_token,
+                from_address=from_address,
+                from_chain=from_chain,
+                amount_in_final=amount_in_final,
+                bridge_fee=bridge_fee,
+                mayan_protocol=mayan_protocol,
+                protocol_data=protocol_data,
+                forwarder_address=forwarder_address,
+                from_ledger_api=from_ledger_api,
+                w3=w3,
+            )
+        else:
+            txs = self._build_swift_txs(
+                response=response,
+                from_token=from_token,
+                from_address=from_address,
+                from_chain=from_chain,
+                amount_in_final=amount_in_final,
+                bridge_fee=bridge_fee,
+                mayan_protocol=mayan_protocol,
+                protocol_data=protocol_data,
+                forwarder_address=forwarder_address,
+                from_ledger_api=from_ledger_api,
+                w3=w3,
+            )
+
+        return txs
+
+    def _build_swift_txs(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
+        self,
+        response: t.Dict,
+        from_token: str,
+        from_address: str,
+        from_chain: str,
+        amount_in_final: int,
+        bridge_fee: int,
+        mayan_protocol: str,
+        protocol_data: bytes,
+        forwarder_address: str,
+        from_ledger_api: t.Any,
+        w3: t.Any,
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Build transactions for SWIFT V2 routes.
+
+        Branches on whether Mayan's response requires a source-token swap to
+        the hub asset before the SWIFT lock. With swap: use
+        ``swapAndForwardEth`` / ``swapAndForwardERC20`` so the Forwarder
+        performs the DEX swap before invoking SWIFT. Without swap (source
+        token already equals the hub asset, e.g. USDC -> USDC): use the
+        plain ``forwardEth`` / ``forwardERC20``.
+
+        Calling the plain forwarders when a swap is needed broadcasts
+        successfully but leaves the SWIFT order in a state the Mayan relayer
+        cannot fulfill (the on-chain call succeeds for ERC-20 sources but
+        the bridge stalls; for native sources the inner SWIFT call reverts
+        with ``mayan protocol call failed``).
+        """
+        txs: t.List[t.Tuple[str, t.Dict]] = []
+        is_native = from_token == ZERO_ADDRESS
+        chain_id = Chain(from_chain).id
+        needs_swap = self._swift_needs_swap(response)
+
+        swap_router = b""
+        swap_data = b""
+        middle_token = ZERO_ADDRESS
+        min_middle_amount = 0
+        if needs_swap:
+            calldata_raw = response["evmSwapRouterCalldata"]
+            if not calldata_raw.startswith("0x"):
+                raise RuntimeError(
+                    f"SWIFT evmSwapRouterCalldata missing '0x' prefix: "
+                    f"{calldata_raw!r}"
+                )
+            swap_router = w3.to_checksum_address(response["evmSwapRouterAddress"])
+            swap_data = bytes.fromhex(calldata_raw[2:])
+            middle_token_raw = response.get("swiftInputContract")
+            if not middle_token_raw:
+                raise RuntimeError("SWIFT swap quote missing swiftInputContract")
+            middle_token = w3.to_checksum_address(middle_token_raw)
+            min_middle_amount = self._swift_middle_amount(response)
+
+        gas_table = MAYAN_DEFAULT_GAS.get(Chain(from_chain), {})
+        # Swap adds a non-trivial extra step; reuse the higher
+        # mono-chain forwarder budget to avoid out-of-gas.
+        forwarder_gas = gas_table.get(
+            "mono_chain_forwarder" if needs_swap else "forwarder",
+            1_000_000 if needs_swap else 350_000,
+        )
+
+        if is_native:
+            if needs_swap:
+                tx_data = self._forwarder_contract.encode_abi(
+                    "swapAndForwardEth",
+                    args=[
+                        amount_in_final,
+                        swap_router,
+                        swap_data,
+                        middle_token,
+                        min_middle_amount,
+                        mayan_protocol,
+                        protocol_data,
+                    ],
+                )
+                tx_name = "swapAndForwardEth"
+            else:
+                tx_data = self._forwarder_contract.encode_abi(
+                    "forwardEth",
+                    args=[mayan_protocol, protocol_data],
+                )
+                tx_name = "forwardEth"
+            tx = {
+                "to": forwarder_address,
+                "from": from_address,
+                "data": tx_data,
+                "value": amount_in_final,
+                "gas": forwarder_gas,
+                "chainId": chain_id,
+            }
+            update_tx_with_gas_pricing(tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append((tx_name, tx))
+            return txs
+
+        # ERC-20 source: approve + forward(/swapAndForward)ERC20.
+        from_token_checksum = w3.to_checksum_address(from_token)
+        erc20 = w3.eth.contract(
+            address=from_token_checksum,
+            abi=[
+                {
+                    "inputs": [
+                        {"name": "spender", "type": "address"},
+                        {"name": "amount", "type": "uint256"},
+                    ],
+                    "name": "approve",
+                    "outputs": [{"name": "", "type": "bool"}],
+                    "stateMutability": "nonpayable",
+                    "type": "function",
+                }
+            ],
+        )
+        approve_data = erc20.encode_abi(
+            "approve", args=[forwarder_address, amount_in_final]
+        )
+        approve_tx = {
+            "to": from_token_checksum,
+            "from": from_address,
+            "data": approve_data,
+            "value": 0,
+            "gas": gas_table.get("approve", 50_000),
+            "chainId": chain_id,
+        }
+        update_tx_with_gas_pricing(approve_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
+        txs.append(("approve", approve_tx))
+
+        zero_permit = (0, 0, 0, b"\x00" * 32, b"\x00" * 32)
+        if needs_swap:
+            forward_data = self._forwarder_contract.encode_abi(
+                "swapAndForwardERC20",
+                args=[
+                    from_token_checksum,
+                    amount_in_final,
+                    zero_permit,
+                    swap_router,
+                    swap_data,
+                    middle_token,
+                    min_middle_amount,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            tx_name = "swapAndForwardERC20"
+        else:
+            forward_data = self._forwarder_contract.encode_abi(
+                "forwardERC20",
+                args=[
+                    from_token_checksum,
+                    amount_in_final,
+                    zero_permit,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            tx_name = "forwardERC20"
+        forward_tx = {
+            "to": forwarder_address,
+            "from": from_address,
+            "data": forward_data,
+            "value": bridge_fee,
+            "gas": forwarder_gas,
+            "chainId": chain_id,
+        }
+        update_tx_with_gas_pricing(forward_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            forward_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
+        txs.append((tx_name, forward_tx))
+        return txs
+
+    def _build_mono_chain_txs(  # pylint: disable=too-many-arguments,too-many-locals
+        self,
+        response: t.Dict,
+        from_token: str,
+        from_address: str,
+        from_chain: str,
+        amount_in_final: int,
+        bridge_fee: int,
+        mayan_protocol: str,
+        protocol_data: bytes,
+        forwarder_address: str,
+        from_ledger_api: t.Any,
+        w3: t.Any,
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Build transaction list for MONO_CHAIN routes (same-chain swaps)."""
+        txs: t.List[t.Tuple[str, t.Dict]] = []
+        is_native = from_token == ZERO_ADDRESS
+        # EIP-155 replay protection — see note in _get_txs.
+        chain_id = Chain(from_chain).id
+
+        to_token_info = response.get("toToken", {})
+        middle_token = w3.to_checksum_address(
+            to_token_info.get("contract", ZERO_ADDRESS)
+        )
+        min_middle_amount = int(response.get("minAmountOutBaseUnits") or 0)
+
+        router_raw = response.get("evmSwapRouterAddress")
+        calldata_raw = response.get("evmSwapRouterCalldata")
+        if not router_raw or not calldata_raw:
+            raise RuntimeError(
+                f"MONO_CHAIN quote missing swap router fields: "
+                f"address={router_raw!r}, calldata={calldata_raw!r}"
+            )
+        if not calldata_raw.startswith("0x"):
+            raise RuntimeError(
+                f"MONO_CHAIN evmSwapRouterCalldata missing '0x' prefix: "
+                f"{calldata_raw!r}"
+            )
+        swap_router = w3.to_checksum_address(router_raw)
+        swap_data = bytes.fromhex(calldata_raw[2:])
+
+        if is_native:
+            tx_data = self._forwarder_contract.encode_abi(
+                "swapAndForwardEth",
+                args=[
+                    amount_in_final,
+                    swap_router,
+                    swap_data,
+                    middle_token,
+                    min_middle_amount,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            tx = {
+                "to": forwarder_address,
+                "from": from_address,
+                "data": tx_data,
+                "value": amount_in_final,
+                "gas": MAYAN_DEFAULT_GAS.get(
+                    Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
+                )["mono_chain_forwarder"],
+                "chainId": chain_id,
+            }
+            update_tx_with_gas_pricing(tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append(("swapAndForwardEth", tx))
+        else:
+            from_token_checksum = w3.to_checksum_address(from_token)
+
+            # Build approve tx
+            erc20 = w3.eth.contract(
+                address=from_token_checksum,
+                abi=[
+                    {
+                        "inputs": [
+                            {"name": "spender", "type": "address"},
+                            {"name": "amount", "type": "uint256"},
+                        ],
+                        "name": "approve",
+                        "outputs": [{"name": "", "type": "bool"}],
+                        "stateMutability": "nonpayable",
+                        "type": "function",
+                    }
+                ],
+            )
+            approve_data = erc20.encode_abi(
+                "approve",
+                args=[forwarder_address, amount_in_final],
+            )
+            approve_tx = {
+                "to": from_token_checksum,
+                "from": from_address,
+                "data": approve_data,
+                "value": 0,
+                "gas": MAYAN_DEFAULT_GAS.get(Chain(from_chain), {"approve": 50_000})[
+                    "approve"
+                ],
+                "chainId": chain_id,
+            }
+            update_tx_with_gas_pricing(approve_tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append(("approve", approve_tx))
+
+            zero_permit = (0, 0, 0, b"\x00" * 32, b"\x00" * 32)
+            forward_data = self._forwarder_contract.encode_abi(
+                "swapAndForwardERC20",
+                args=[
+                    from_token_checksum,
+                    amount_in_final,
+                    zero_permit,
+                    swap_router,
+                    swap_data,
+                    middle_token,
+                    min_middle_amount,
+                    mayan_protocol,
+                    protocol_data,
+                ],
+            )
+            forward_tx = {
+                "to": forwarder_address,
+                "from": from_address,
+                "data": forward_data,
+                "value": bridge_fee,
+                "gas": MAYAN_DEFAULT_GAS.get(
+                    Chain(from_chain), {"mono_chain_forwarder": 1_000_000}
+                )["mono_chain_forwarder"],
+                "chainId": chain_id,
+            }
+            update_tx_with_gas_pricing(forward_tx, from_ledger_api)
+            update_tx_with_gas_estimate(
+                forward_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+            )
+            txs.append(("swapAndForwardERC20", forward_tx))
+
+        return txs
+
+    @staticmethod
+    def _get_mayan_protocol_address(
+        response: t.Dict, route_type: str
+    ) -> t.Optional[str]:
+        """Get the inner Mayan protocol contract address from the quote response."""
+        if route_type == "SWIFT":
+            return response.get("swiftMayanContract")
+        if route_type == "MCTP":
+            return response.get("mctpMayanContract")
+        if route_type == "FAST_MCTP":
+            return response.get("fastMctpMayanContract")
+        if route_type == "MONO_CHAIN":
+            return response.get("monoChainMayanContract")
+        return None
+
+    def _build_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments  # nosec B107
+        self,
+        response: t.Dict,
+        from_address: str,
+        from_token: str,
+        to_address: str,
+        to_chain: str,
+        amount_in_final: int,
+        from_chain: str,
+        to_token: str = "",
+    ) -> bytes:
+        """Build the ABI-encoded protocolData for the inner Mayan protocol call.
+
+        Supports SWIFT V2 routes (createOrderWithToken) and MONO_CHAIN routes
+        (transferToken / transferEth on the MonoChain contract).
+        """
+        route_type = response.get("type", "SWIFT")
+
+        if route_type == "MONO_CHAIN":
+            return self._build_mono_chain_protocol_data(
+                response=response,
+                to_address=to_address,
+                to_token=to_token,
+            )
+
+        if route_type == "SWIFT":
+            return self._build_swift_protocol_data(
+                response=response,
+                from_address=from_address,
+                from_token=from_token,
+                to_address=to_address,
+                to_chain=to_chain,
+                amount_in_final=amount_in_final,
+                from_chain=from_chain,
+            )
+
+        # Defensive guard against future API additions. The API-level filter in
+        # _call_quote_api gates which route types the API is allowed to return,
+        # but these two checks live in different functions and can drift. Failing
+        # here loudly is better than silently encoding a route with the SWIFT ABI.
+        raise RuntimeError(
+            f"_build_protocol_data: unsupported route_type {route_type!r}; "
+            "add an explicit handler before enabling this route"
+        )
+
+    @staticmethod
+    def _swift_needs_swap(response: t.Dict) -> bool:
+        """True iff Mayan's response says SWIFT requires a source-token swap.
+
+        Mayan's SWIFT V2 routes through a hub asset (e.g. USDC). When the
+        source token is not the hub asset, the response includes
+        ``evmSwapRouterAddress`` + ``evmSwapRouterCalldata`` describing the
+        DEX swap from source -> hub. In that case the on-chain tx must use
+        ``swapAndForwardEth`` / ``swapAndForwardERC20``, and the inner SWIFT
+        ``createOrderWithToken`` must reference the hub asset (not the
+        source token) with the post-swap amount.
+        """
+        return bool(response.get("evmSwapRouterAddress")) and bool(
+            response.get("evmSwapRouterCalldata")
+        )
+
+    @staticmethod
+    def _swift_middle_amount(response: t.Dict) -> int:
+        """Convert ``minMiddleAmount`` (float, hub-token display units) to atomic.
+
+        Used as the amount in the inner SWIFT call when a swap is needed.
+        """
+        raw = response.get("minMiddleAmount")
+        decimals = int(response.get("swiftInputDecimals") or 0)
+        if raw is None or decimals <= 0:
+            raise RuntimeError(
+                f"SWIFT swap quote missing minMiddleAmount/swiftInputDecimals: "
+                f"minMiddleAmount={raw!r}, swiftInputDecimals={decimals!r}"
+            )
+        return int(
+            Decimal(str(raw)).scaleb(decimals).quantize(Decimal(1), rounding=ROUND_DOWN)
+        )
+
+    def _build_swift_protocol_data(  # pylint: disable=too-many-locals,too-many-arguments
+        self,
+        response: t.Dict,
+        from_address: str,
+        from_token: str,
+        to_address: str,
+        to_chain: str,
+        amount_in_final: int,
+        from_chain: str,
+    ) -> bytes:
+        """Build SWIFT V2 protocolData via createOrderWithToken."""
+        dest_chain_id = WORMHOLE_CHAIN_IDS.get(to_chain)
+        if dest_chain_id is None:
+            raise ValueError(f"Unsupported destination chain for Mayan: {to_chain}")
+
+        # Pad addresses to bytes32 (left-pad with zeros for EVM addresses)
+        trader_bytes32 = self._address_to_bytes32(from_address)
+        dest_addr_bytes32 = self._address_to_bytes32(to_address)
+        referrer_bytes32 = b"\x00" * 32
+
+        # Token out: use the output token identifier from the quote
+        to_token_info = response.get("toToken", {})
+        to_token_contract = to_token_info.get("contract", ZERO_ADDRESS)
+        token_out_bytes32 = self._address_to_bytes32(to_token_contract)
+
+        # SWIFT V2 encodes uint64 amounts in canonical min(decimals, 8) form
+        # (per Mayan SDK getNormalizeFactor=8 for EVM, getAmountOfFractionalAmount).
+        # Tokens with > 8 decimals (e.g. ETH/OLAS/POL = 18) overflow uint64 when
+        # passed in raw base units; tokens with <= 8 decimals (e.g. USDC = 6)
+        # produce identical canonical and base-unit values.
+        to_decimals = int(to_token_info.get("decimals", 18))
+        out_canonical_decimals = min(to_decimals, 8)
+        out_canonical_divisor = 10 ** (to_decimals - out_canonical_decimals)
+        min_amount_out_64 = (
+            int(response.get("minAmountOutBaseUnits") or 0) // out_canonical_divisor
+        )
+        # gasDrop is in display units of destination gas token (always 18-dec
+        # native on EVM). SDK uses min(getGasDecimal=18, 8) = 8 truncation.
+        gas_drop_64 = self._to_canonical_uint64(
+            response.get("gasDrop") or 0, decimals=18
+        )
+        cancel_fee_64 = int(response.get("cancelRelayerFee64") or 0)
+        refund_fee_64 = int(response.get("submitRelayerFee64") or 0)
+        deadline_64 = int(response.get("deadline64") or 0)
+        referrer_bps = int(response.get("referrerBps") or 0)
+        auction_mode = int(response.get("swiftAuctionMode") or 1)
+        random_bytes32 = secrets.token_bytes(32)
+
+        # Determine the input token + amount for the inner SWIFT call.
+        # When Mayan's route needs a source-token swap (evmSwapRouterAddress
+        # is present), the Forwarder will swap source -> hub asset (USDC
+        # today) BEFORE invoking SWIFT, so SWIFT must see the hub asset as
+        # `tokenIn` and the post-swap atomic amount (minMiddleAmount). If
+        # the response also carries a direct `swiftInputContract` field for
+        # routes that don't need a swap (e.g. native ETH wrapped to WETH),
+        # respect that; otherwise fall back to the source token.
+        is_native = from_token == ZERO_ADDRESS
+        if self._swift_needs_swap(response):
+            swift_input_contract = response.get("swiftInputContract")
+            if not swift_input_contract:
+                raise RuntimeError("SWIFT swap quote missing swiftInputContract")
+            swift_amount_in = self._swift_middle_amount(response)
+        elif is_native:
+            swift_input_contract = response.get("swiftInputContract")
+            if not swift_input_contract:
+                swift_input_contract = WRAPPED_NATIVE_ASSET.get(
+                    Chain(from_chain), ZERO_ADDRESS
+                )
+            swift_amount_in = amount_in_final
+        else:
+            swift_input_contract = from_token
+            swift_amount_in = amount_in_final
+
+        order_params = (
+            1,  # payloadType (1 = standard)
+            trader_bytes32,
+            dest_addr_bytes32,
+            dest_chain_id,
+            referrer_bytes32,
+            token_out_bytes32,
+            min_amount_out_64,
+            gas_drop_64,
+            cancel_fee_64,
+            refund_fee_64,
+            deadline_64,
+            referrer_bps,
+            auction_mode,
+            random_bytes32,
+        )
+
+        # Encode createOrderWithToken(tokenIn, amountIn, orderParams, customPayload)
+        protocol_data = self._swift_contract.encode_abi(
+            "createOrderWithToken",
+            args=[
+                self._w3.to_checksum_address(swift_input_contract),
+                swift_amount_in,
+                order_params,
+                b"",  # empty customPayload
+            ],
+        )
+
+        return bytes.fromhex(protocol_data[2:])  # strip 0x prefix
+
+    def _build_mono_chain_protocol_data(
+        self,
+        response: t.Dict,
+        to_address: str,
+        to_token: str,
+    ) -> bytes:
+        """Build MONO_CHAIN protocolData via transferToken or transferEth."""
+        to_token_info = response.get("toToken", {})
+        to_token_contract = to_token_info.get("contract", ZERO_ADDRESS)
+        expected_amount_out = int(response.get("expectedAmountOutBaseUnits") or 0)
+        zero_addr = self._w3.to_checksum_address(ZERO_ADDRESS)
+
+        # If output is native token, use transferEth; otherwise transferToken
+        is_native_output = to_token == ZERO_ADDRESS
+        if is_native_output:
+            protocol_data = self._mono_chain_contract.encode_abi(
+                "transferEth",
+                args=[
+                    self._w3.to_checksum_address(to_address),
+                    zero_addr,  # referrer
+                    0,  # referrerBps
+                ],
+            )
+        else:
+            protocol_data = self._mono_chain_contract.encode_abi(
+                "transferToken",
+                args=[
+                    self._w3.to_checksum_address(to_token_contract),
+                    expected_amount_out,
+                    self._w3.to_checksum_address(to_address),
+                    zero_addr,  # referrer
+                    0,  # referrerBps
+                ],
+            )
+
+        return bytes.fromhex(protocol_data[2:])  # strip 0x prefix
+
+    @staticmethod
+    def _address_to_bytes32(address: str) -> bytes:
+        """Convert an EVM address to a left-padded bytes32."""
+        if not address.startswith("0x") or len(address) != 42:
+            raise ValueError(f"Expected 20-byte hex address, got {address!r}")
+        addr_bytes = bytes.fromhex(address[2:])  # strip 0x, decode hex
+        return b"\x00" * 12 + addr_bytes
+
+    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
+        """Poll the Mayan Explorer API for execution status."""
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+        ):
+            return
+
+        execution_data = provider_request.execution_data
+        if not execution_data:
+            raise RuntimeError(
+                f"Cannot update request {provider_request.id}: "
+                "execution data not present."
+            )
+
+        from_tx_hash = execution_data.from_tx_hash
+        if not from_tx_hash:
+            execution_data.message = (
+                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return
+
+        try:
+            url = f"{MAYAN_EXPLORER_API_URL}/{from_tx_hash}"
+            self.logger.info(f"[MAYAN PROVIDER] GET {url}")
+            response = requests.get(url=url, timeout=30)
+
+            if response.status_code == 404:
+                # Transaction not yet indexed by Mayan Explorer
+                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                if self._bridge_tx_likely_failed(provider_request):
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+                return
+
+            response.raise_for_status()
+            response_json = response.json()
+
+            client_status = response_json.get("clientStatus", "").upper()
+            execution_data.message = client_status
+
+            if client_status == "COMPLETED":
+                self.logger.info(
+                    f"[MAYAN PROVIDER] Execution done for {provider_request.id}."
+                )
+                dest_tx = response_json.get("fulfillTxHash")
+                if dest_tx:
+                    execution_data.to_tx_hash = dest_tx
+                    from_ledger_api = self._from_ledger_api(provider_request)
+                    to_ledger_api = self._to_ledger_api(provider_request)
+                    try:
+                        execution_data.elapsed_time = Provider._tx_timestamp(
+                            dest_tx, to_ledger_api
+                        ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+                    except Exception:  # pylint: disable=broad-except  # nosec B110
+                        pass  # Best-effort elapsed_time; non-critical if RPC fails
+
+                provider_request.status = ProviderRequestStatus.EXECUTION_DONE
+
+            elif client_status in ("REFUNDED", "FAILED"):
+                execution_data.message = (
+                    f"{MESSAGE_EXECUTION_FAILED} Mayan status: {client_status}"
+                )
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+            elif client_status in ("INPROGRESS", "PENDING", ""):
+                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
+
+            else:
+                # Unknown status — log and treat as UNKNOWN so
+                # _bridge_tx_likely_failed engages sooner than HARD_TIMEOUT
+                self.logger.warning(
+                    f"[MAYAN PROVIDER] Unknown clientStatus '{client_status}' "
+                    f"for request {provider_request.id} — treating as UNKNOWN."
+                )
+                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                if self._bridge_tx_likely_failed(provider_request):
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"[MAYAN PROVIDER] Failed to update status for "
+                f"request {provider_request.id}: {e}",
+                exc_info=True,
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+    def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
+        """Get the Mayan Explorer link for a transaction."""
+        if not provider_request.execution_data:
+            return None
+
+        from_tx_hash = provider_request.execution_data.from_tx_hash
+        if not from_tx_hash:
+            return None
+
+        # Determine the route type from the stored quote data
+        route_type = "SWIFT"
+        if provider_request.quote_data and provider_request.quote_data.provider_data:
+            response = provider_request.quote_data.provider_data.get("response", {})
+            route_type = response.get("type", "SWIFT") if response else "SWIFT"
+
+        # MONO_CHAIN uses plain tx hash; SWIFT uses SWIFT_V2_ prefix
+        if route_type == "MONO_CHAIN":
+            return f"{MAYAN_EXPLORER_URL}/{from_tx_hash}"
+
+        return f"{MAYAN_EXPLORER_URL}/SWIFT_V2_{from_tx_hash}"

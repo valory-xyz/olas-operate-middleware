@@ -37,7 +37,6 @@ jobs:
         sudo apt-get autoclean
         uv pip install --system tomte[tox,cli]==0.7.0 tox-uv
         uv pip install --system --upgrade setuptools
-        sudo npm install -g markdown-spellcheck
     - name: All pre-test checks
       run: |
         tox -p -e flake8 -e pylint; tox -p -e black-check -e isort-check -e bandit -e safety -e mypy

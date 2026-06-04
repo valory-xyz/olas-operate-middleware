@@ -36,6 +36,7 @@ from http import HTTPStatus
 from pathlib import Path
 from time import time
 from types import FrameType
+from typing import Annotated
 
 import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
@@ -47,7 +48,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
-from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
 
@@ -110,7 +110,10 @@ from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import gas_fees_spent_in_tx, get_assets_balances
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
-from operate.validators import SAFE_ID_PATTERN, SAFE_ID_RE
+from operate.validators import (
+    SAFE_ID_PATTERN,
+    SAFE_ID_RE,
+)
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
@@ -1838,6 +1841,151 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             content={
                 "error": None,
                 "message": "Terminate service and withdraw funds successful",
+            }
+        )
+
+    @service_router.get("/api/v2/service/{service_config_id}/safe_withdrawable_balance")
+    async def _safe_withdrawable_balance(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
+        """Return per-chain, per-token withdrawable balances for the Agent Safe."""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            # deepcode ignore PT, CommandInjection: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
+            service = service_manager.load(service_config_id=service_config_id)
+
+            def _get_balances() -> t.Dict[str, t.Any]:
+                balances: t.Dict[str, t.Any] = {}
+                for chain_str in service.chain_configs:
+                    chain = Chain(chain_str)
+                    balances[chain_str] = (
+                        operate.funding_manager.get_safe_withdrawable_balance(
+                            service=service,
+                            chain=chain,
+                        )
+                    )
+                return balances
+
+            result = await run_in_executor(_get_balances)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to get withdrawable balance: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to get withdrawable balance. Please check the logs."
+                },
+            )
+
+        return JSONResponse(content=result)
+
+    @service_router.post("/api/v2/service/{service_config_id}/withdraw_safe")
+    async def _withdraw_safe(  # pylint: disable=too-many-return-statements
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        request: Request,
+    ) -> JSONResponse:
+        """Withdraw user-specified amounts from Agent Safe to Master Safe."""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            data = await request.json()
+        except Exception:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": "Invalid JSON body."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        if not isinstance(data, dict):
+            return JSONResponse(
+                content={"error": "Request body must be a JSON object."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        amounts_by_chain = data.get("amounts", {})
+        if not isinstance(amounts_by_chain, dict):
+            return JSONResponse(
+                content={"error": "'amounts' must be a JSON object."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            # deepcode ignore PT, CommandInjection: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
+            service = service_manager.load(service_config_id=service_config_id)
+
+            succeeded_chains: t.List[str] = []
+
+            for chain_str, token_amounts in amounts_by_chain.items():
+                if not isinstance(token_amounts, dict):
+                    raise ValueError(
+                        f"Token amounts for chain '{chain_str}' must be a JSON object."
+                    )
+                chain = Chain(chain_str)
+
+                await run_in_executor(
+                    lambda _svc=service, _amounts=token_amounts, _chain=chain: (
+                        operate.funding_manager.partial_withdraw_service_safe(
+                            service=_svc, amounts=_amounts, chain=_chain
+                        )
+                    )
+                )
+                succeeded_chains.append(chain_str)
+
+        except ValueError as e:
+            error_msg = "Invalid withdrawal request."
+            logger.error(
+                f"Partial withdrawal failed (validation): {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": error_msg,
+                    "detail": str(e),
+                    "succeeded_chains": succeeded_chains,
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Partial withdrawal failed (insufficient gas): {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Partial withdrawal failed due to insufficient signer gas.",
+                    "succeeded_chains": succeeded_chains,
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Partial withdrawal failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to withdraw funds. Please check the logs.",
+                    "succeeded_chains": succeeded_chains,
+                },
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": "Funds withdrawn successfully.",
+                "succeeded_chains": succeeded_chains,
             }
         )
 

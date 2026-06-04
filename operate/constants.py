@@ -67,10 +67,13 @@ BRIDGE_GAS_ESTIMATE_MULTIPLIER = 1.2
 MIN_PASSWORD_LENGTH = 8
 DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS = 300  # Seconds to wait after an agent has been funded during which it will not be asked for fund requirements again
 
-HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on windows so use IP address
-AGENT_FUNDS_STATUS_URL = "http://127.0.0.1:8716/funds-status"
+AGENT_HTTP_PORT = 8716  # agent HTTP server (healthcheck / funds-status)
+TENDERMINT_COM_PORT = 8080  # Tendermint manager (flask) control server
+
+HEALTH_CHECK_URL = f"http://127.0.0.1:{AGENT_HTTP_PORT}/healthcheck"  # possible DNS issues on windows so use IP address
+AGENT_FUNDS_STATUS_URL = f"http://127.0.0.1:{AGENT_HTTP_PORT}/funds-status"
 SAFE_WEBAPP_URL = "https://app.safe.global/home?safe=gno:"
-TM_CONTROL_URL = "http://localhost:8080"
+TM_CONTROL_URL = f"http://localhost:{TENDERMINT_COM_PORT}"
 IPFS_ADDRESS = "https://gateway.autonolas.tech/ipfs/f01701220{hash}"
 
 # TODO: These links may break in the future, use a more robust approach

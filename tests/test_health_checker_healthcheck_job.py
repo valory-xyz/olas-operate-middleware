@@ -78,18 +78,31 @@ class TestHealthcheckJobErrorHandling:
         mock_service.path = MagicMock()
         health_checker._service_manager.load.return_value = mock_service
 
-        # Create a task that we'll cancel
-        task = asyncio.create_task(health_checker.healthcheck_job(service_config_id))
+        # Mock check_service_health to avoid real aiohttp calls — an
+        # in-flight connection to localhost can block task cancellation on
+        # some Python versions (observed on 3.11), causing the test to hang.
+        async def mock_check(*args: object, **kwargs: object) -> bool:
+            await _REAL_SLEEP(0)  # yield to event loop
+            return True
 
-        # Give it a moment to start
-        await asyncio.sleep(0.1)
+        with (
+            patch.object(health_checker, "check_service_health", mock_check),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+        ):
+            # Create a task that we'll cancel
+            task = asyncio.create_task(
+                health_checker.healthcheck_job(service_config_id)
+            )
 
-        # Cancel the task
-        task.cancel()
+            # Give it a moment to start
+            await _REAL_SLEEP(0.1)
 
-        # Should raise CancelledError
-        with pytest.raises(asyncio.CancelledError):
-            await task
+            # Cancel the task
+            task.cancel()
+
+            # Should raise CancelledError
+            with pytest.raises(asyncio.CancelledError):
+                await task
 
     @pytest.mark.asyncio
     async def test_healthcheck_job_exception_handler_logs_and_reraises(
