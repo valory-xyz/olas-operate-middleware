@@ -126,6 +126,11 @@ class TestDetermineAgentId:
         """Test that service names containing 'modius' return modius agent ID."""
         assert Service.determine_agent_id("Modius Service") == AGENT_TYPE_IDS["modius"]
 
+    def test_basius_name_returns_basius_id(self) -> None:
+        """Test that service names containing 'basius' return basius agent ID."""
+        assert Service.determine_agent_id("Basius Agent") == AGENT_TYPE_IDS["basius"]
+        assert Service.determine_agent_id("BASIUS_SERVICE") == AGENT_TYPE_IDS["basius"]
+
     def test_unknown_name_falls_back_to_trader_id(self) -> None:
         """Test that unrecognised names return the trader agent ID."""
         assert Service.determine_agent_id("My Custom Agent") == AGENT_TYPE_IDS["trader"]
