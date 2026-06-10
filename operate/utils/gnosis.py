@@ -188,7 +188,9 @@ def create_safe(
         return tx
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
-    with wrap_gas_spike_as_insufficient_funds(chain.value, "create Safe"):
+    with wrap_gas_spike_as_insufficient_funds(
+        chain.value, "create Safe", ledger_api=ledger_api, signer_address=crypto.address
+    ):
         tx_settler = (
             TxSettler(
                 ledger_api=ledger_api,
@@ -271,7 +273,12 @@ def send_safe_txs(
         )
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
-    with wrap_gas_spike_as_insufficient_funds(chain.value, "send Safe transaction"):
+    with wrap_gas_spike_as_insufficient_funds(
+        chain.value,
+        "send Safe transaction",
+        ledger_api=ledger_api,
+        signer_address=crypto.address,
+    ):
         return (
             TxSettler(
                 ledger_api=ledger_api,
@@ -438,7 +445,12 @@ def transfer(
         )
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
-    with wrap_gas_spike_as_insufficient_funds(chain.value, "transfer from Safe"):
+    with wrap_gas_spike_as_insufficient_funds(
+        chain.value,
+        "transfer from Safe",
+        ledger_api=ledger_api,
+        signer_address=crypto.address,
+    ):
         return (
             TxSettler(
                 ledger_api=ledger_api,
@@ -515,7 +527,12 @@ def transfer_erc20_from_eoa(
         return tx
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
-    with wrap_gas_spike_as_insufficient_funds(chain.value, "transfer ERC20 from EOA"):
+    with wrap_gas_spike_as_insufficient_funds(
+        chain.value,
+        "transfer ERC20 from EOA",
+        ledger_api=ledger_api,
+        signer_address=crypto.address,
+    ):
         return (
             TxSettler(
                 ledger_api=ledger_api,
