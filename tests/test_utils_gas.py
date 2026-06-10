@@ -202,6 +202,16 @@ class TestPreflightSignerGas:
         with pytest.raises(InsufficientFundsException):
             _enter_preflight(ledger)
 
+    def test_zero_max_fee_is_not_misrouted_to_gas_price(self) -> None:
+        """A zero maxFeePerGas (zero-basefee chain) must yield a zero threshold, not gasPrice's."""
+        ledger = MagicMock()
+        ledger.get_balance.return_value = 0
+        ledger.try_get_gas_pricing.return_value = {
+            "maxFeePerGas": 0,
+            "gasPrice": GAS_PRICE,
+        }
+        _enter_preflight(ledger)  # must not raise
+
     def test_non_int_balance_skips_check(self) -> None:
         """Non-int get_balance return (e.g. MagicMock in tests) skips check safely."""
         ledger = MagicMock()

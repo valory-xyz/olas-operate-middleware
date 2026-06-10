@@ -64,7 +64,8 @@ def _preflight_signer_gas(ledger_api: LedgerApi, address: str, chain: str) -> No
         # so maxFeePerGas is the correct price to threshold on.
         gas_pricing = ledger_api.try_get_gas_pricing()
         if gas_pricing is not None:
-            gas_price = gas_pricing.get("maxFeePerGas") or gas_pricing.get("gasPrice")
+            max_fee = gas_pricing.get("maxFeePerGas")
+            gas_price = max_fee if max_fee is not None else gas_pricing.get("gasPrice")
         else:
             gas_price = None
         if gas_price is None:

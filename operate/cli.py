@@ -507,6 +507,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     operate = OperateApp(home=home)
 
     funding_job: t.Optional[asyncio.Task] = None
+    maintenance_task: t.Optional[asyncio.Task] = None
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails, logger=logger
     )
@@ -559,6 +560,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             funding_job = None  # pragma: no cover
         else:
             logger.info("Funding job cancellation failed")
+
+    def post_login_schedule() -> None:
+        """Schedule that runs right after login."""
+        # service_maintenance never raises; failures are logged inside.
+        # Keep a reference to the task: the event loop only holds weak
+        # references, so a fire-and-forget task may be garbage collected.
+        nonlocal maintenance_task
+        maintenance_task = asyncio.get_running_loop().create_task(
+            run_in_executor(operate.service_manager().service_maintenance)
+        )
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
@@ -838,6 +849,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         operate.password = data["password"]
         schedule_funding_job()
+        post_login_schedule()
         return JSONResponse(
             content={"message": "Login successful."},
             status_code=HTTPStatus.OK,

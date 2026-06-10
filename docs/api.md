@@ -210,6 +210,8 @@ Update account password.
 
 Validate user credentials and establish a session.
 
+A successful login also starts two background jobs: the recurring funding job, and a one-shot service maintenance task. Maintenance failures never affect the login response; they are logged and retried at the next login.
+
 **Request Body:**
 
 ```json
