@@ -464,7 +464,10 @@ class EthereumMasterWallet(
             )
 
         with wrap_gas_spike_as_insufficient_funds(
-            chain.value, f"transfer from EOA on {chain.name}"
+            chain.value,
+            f"transfer from EOA on {chain.name}",
+            ledger_api=ledger_api,
+            signer_address=self.crypto.address,
         ):
             return (
                 TxSettler(
@@ -555,7 +558,10 @@ class EthereumMasterWallet(
             return tx
 
         with wrap_gas_spike_as_insufficient_funds(
-            chain.value, f"transfer ERC20 from EOA on {chain.name}"
+            chain.value,
+            f"transfer ERC20 from EOA on {chain.name}",
+            ledger_api=ledger_api,
+            signer_address=self.crypto.address,
         ):
             return (
                 TxSettler(

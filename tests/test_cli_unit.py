@@ -25,6 +25,7 @@ import logging
 import multiprocessing
 import os
 import signal as signal_module
+import threading
 from contextlib import ExitStack
 from http import HTTPStatus
 from pathlib import Path
@@ -350,6 +351,29 @@ class TestCreateAppInfra:
                 )
             # schedule_funding_job is called on successful login
             assert resp.status_code in (HTTPStatus.OK, HTTPStatus.UNAUTHORIZED)
+
+    def test_login_schedules_service_maintenance(self) -> None:
+        """A successful login schedules the one-shot service maintenance task."""
+        m = _make_mock_operate()
+        ua = MagicMock()
+        ua.is_valid.return_value = True
+        m.user_account = ua
+        maintenance_called = threading.Event()
+        m.service_manager.return_value.service_maintenance.side_effect = (
+            lambda: maintenance_called.set()
+        )
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                m.password = None  # not logged in before login
+                resp = client.post(
+                    "/api/account/login",
+                    json={"password": _TEST_PW_TESTPASS123},
+                )
+                assert resp.status_code == HTTPStatus.OK
+                # The task runs in the app's event loop / executor; wait for it.
+                assert maintenance_called.wait(timeout=5)
 
     # ── cancel_funding_job ────────────────────────────────────────────────────
 

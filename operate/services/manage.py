@@ -22,6 +22,7 @@
 import json
 import logging
 import os
+import threading
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -68,6 +69,7 @@ from operate.ledger.profiles import (
 from operate.operate_types import (
     Chain,
     ChainAmounts,
+    DeploymentStatus,
     FundingValues,
     LedgerConfig,
     MechMarketplaceConfig,
@@ -134,6 +136,7 @@ class ServiceManager:
         self.funding_manager = funding_manager
         self.logger = logger
         self.skip_depencency_check = skip_dependency_check
+        self._maintenance_lock = threading.Lock()
 
     def setup(self) -> None:
         """Setup service manager."""
@@ -2285,6 +2288,90 @@ class ServiceManager:
             withdrawal_address=withdrawal_address,
             chain=chain,
         )
+
+    def service_maintenance(self) -> t.Dict[str, t.List[str]]:
+        """Maintenance of the service to sync it with on-chain data"""
+        result: t.Dict[str, t.List[str]] = {
+            "processed": [],
+            "skipped": [],
+            "failed": [],
+        }
+        if not self._maintenance_lock.acquire(  # pylint: disable=consider-using-with
+            blocking=False
+        ):
+            self.logger.info("[Maintenance] Maintenance already in progress; skipping.")
+            return result
+        try:  # pylint: disable=too-many-nested-blocks
+            services, _ = self.get_all_services()
+            for service in services:
+                if service.deployment.status in (
+                    DeploymentStatus.DEPLOYING,
+                    DeploymentStatus.DEPLOYED,
+                    DeploymentStatus.STOPPING,
+                ):
+                    # A locally running/transitioning deployment must not race
+                    # with maintenance transfers.
+                    continue
+                for chain_str, chain_config in service.chain_configs.items():
+                    tag = f"{service.service_config_id}:{chain_str}"
+                    try:
+                        chain_data = chain_config.chain_data
+                        if chain_data.token == NON_EXISTENT_TOKEN:
+                            continue
+                        multisig = chain_data.multisig
+                        if not multisig or multisig in (
+                            NON_EXISTENT_MULTISIG,
+                            ZERO_ADDRESS,
+                        ):
+                            continue
+                        chain = Chain(chain_str)
+                        wallet = self.wallet_manager.load(chain.ledger_type)
+                        if chain not in wallet.safes:
+                            result["skipped"].append(tag)
+                            continue
+                        master_safe = wallet.safes[chain]
+                        # Hold the same per-(service, chain) lock as user
+                        # withdrawals, and read the on-chain state under it,
+                        # right before transferring.
+                        withdrawal_lock = self.funding_manager.get_withdrawal_lock(
+                            service_config_id=service.service_config_id,
+                            chain=chain,
+                        )
+                        if not withdrawal_lock.acquire(blocking=False):
+                            result["skipped"].append(tag)
+                            continue
+                        try:
+                            state = self._get_on_chain_state(
+                                service=service, chain=chain_str
+                            )
+                            if state not in {
+                                OnChainState.PRE_REGISTRATION,
+                                OnChainState.ACTIVE_REGISTRATION,
+                            }:
+                                continue
+                            self.logger.info(
+                                f"[Maintenance] Maintaining service {multisig} -> "
+                                f"{master_safe} ({tag}, state={state.name})."
+                            )
+                            self.drain(
+                                service_config_id=service.service_config_id,
+                                chain_str=chain_str,
+                                withdrawal_address=master_safe,
+                            )
+                            result["processed"].append(tag)
+                        finally:
+                            withdrawal_lock.release()
+                    except Exception as e:  # pylint: disable=broad-except
+                        # Expected on transient conditions (RPC offline,
+                        # gas-poor signer); warn without a traceback to keep
+                        # login-time logs readable.
+                        self.logger.warning(f"[Maintenance] Failed for {tag}: {e}")
+                        result["failed"].append(tag)
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(f"[Maintenance] Aborted: {e}\n{traceback.format_exc()}")
+        finally:
+            self._maintenance_lock.release()
+        return result
 
     def deploy_service_locally(  # pylint: disable=too-many-arguments
         self,

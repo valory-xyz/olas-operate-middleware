@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/advise-code-review.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/advise-code-review.py\"",
             "timeout": 10,
             "statusMessage": "Reminding about pre-commit code review"
           }

@@ -434,7 +434,10 @@ class Provider(ABC):
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
                 with wrap_gas_spike_as_insufficient_funds(
-                    chain.value, f"bridge transaction {tx_label}"
+                    chain.value,
+                    f"bridge transaction {tx_label}",
+                    ledger_api=from_ledger_api,
+                    signer_address=wallet.crypto.address,
                 ):
                     tx_settler = TxSettler(
                         ledger_api=from_ledger_api,

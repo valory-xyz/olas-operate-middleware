@@ -111,6 +111,16 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
         self.is_for_quickstart = False
 
+    def get_withdrawal_lock(
+        self, service_config_id: str, chain: Chain
+    ) -> threading.Lock:
+        """Return the per-(service, chain) lock guarding service-safe withdrawals."""
+        lock_key = (service_config_id, chain.value)
+        with self._withdrawal_locks_mu:
+            if lock_key not in self._withdrawal_locks:
+                self._withdrawal_locks[lock_key] = threading.Lock()
+            return self._withdrawal_locks[lock_key]
+
     def drain_agents_eoas(
         self, service: Service, withdrawal_address: str, chain: Chain
     ) -> None:
@@ -450,11 +460,9 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         # Per-(service, chain) lock prevents TOCTOU races from concurrent
         # withdrawal requests on the same service safe without blocking
         # unrelated funding operations or withdrawals on other services/chains.
-        lock_key = (service_config_id, chain.value)
-        with self._withdrawal_locks_mu:
-            if lock_key not in self._withdrawal_locks:
-                self._withdrawal_locks[lock_key] = threading.Lock()
-            withdrawal_lock = self._withdrawal_locks[lock_key]
+        withdrawal_lock = self.get_withdrawal_lock(
+            service_config_id=service_config_id, chain=chain
+        )
 
         with withdrawal_lock:
             # Re-validate against live balances (Safe gas is paid by signer EOA)

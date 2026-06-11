@@ -214,7 +214,10 @@ class GnosisSafeTransaction:
     def settle(self) -> TxReceipt:
         """Settle the transaction."""
         with wrap_gas_spike_as_insufficient_funds(
-            self.chain_type.value, "settle Safe transaction"
+            self.chain_type.value,
+            "settle Safe transaction",
+            ledger_api=self.ledger_api,
+            signer_address=self.crypto.address,
         ):
             return (
                 TxSettler(

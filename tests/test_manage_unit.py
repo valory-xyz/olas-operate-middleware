@@ -26,10 +26,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from operate.constants import ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
-from operate.operate_types import Chain, LedgerConfig
+from operate.operate_types import (
+    Chain,
+    DeploymentStatus,
+    LedgerConfig,
+    OnChainState,
+)
 from operate.services.manage import NUM_LOCAL_AGENT_INSTANCES, ServiceManager
 from operate.services.service import (
+    NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
@@ -1252,3 +1259,289 @@ class TestGetMasterEoaNativeFundingValues:
         assert result["topup"] == topup
         assert result["threshold"] == topup
         assert result["balance"] == 0
+
+
+def _make_maintenance_service(
+    token: int = 1,
+    multisig: t.Optional[str] = "0xAgentSafe",
+    chains: t.Optional[t.List[str]] = None,
+    status: DeploymentStatus = DeploymentStatus.STOPPED,
+) -> MagicMock:
+    """Create a mock service suitable for service_maintenance tests."""
+    service = _make_mock_service()
+    service.deployment.status = status
+    service.chain_configs = {}
+    for chain_str in chains or [_CHAIN]:
+        chain_config = MagicMock()
+        chain_config.chain_data.token = token
+        chain_config.chain_data.multisig = multisig
+        chain_config.ledger_config.rpc = _RPC
+        service.chain_configs[chain_str] = chain_config
+    return service
+
+
+class TestServiceMaintenance:
+    """Tests for ServiceManager.service_maintenance()."""
+
+    def _run(
+        self,
+        tmp_path: Path,
+        services: t.List[MagicMock],
+        state: OnChainState = OnChainState.PRE_REGISTRATION,
+        master_safes: t.Optional[t.Dict[Chain, str]] = None,
+    ) -> t.Tuple[ServiceManager, t.Dict[str, t.List[str]], MagicMock]:
+        """Run service_maintenance with mocked collaborators; returns (manager, result, drain)."""
+        manager = _make_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.safes = (
+            master_safes if master_safes is not None else {Chain.GNOSIS: "0xMasterSafe"}
+        )
+        manager.wallet_manager.load.return_value = wallet
+        with (
+            patch.object(manager, "get_all_services", return_value=(services, True)),
+            patch.object(
+                manager, "_get_on_chain_state", return_value=state
+            ) as state_mock,
+            patch.object(manager, "drain") as drain_mock,
+        ):
+            result = manager.service_maintenance()
+        self._last_state_mock = state_mock
+        return manager, result, drain_mock
+
+    def test_processes_pre_registration_service(self, tmp_path: Path) -> None:
+        """A PreRegistration service is drained to the master safe."""
+        service = _make_maintenance_service()
+        _, result, drain = self._run(tmp_path, [service])
+        drain.assert_called_once_with(
+            service_config_id=service.service_config_id,
+            chain_str=_CHAIN,
+            withdrawal_address="0xMasterSafe",
+        )
+        assert result["processed"] == [f"{service.service_config_id}:{_CHAIN}"]
+        assert result["failed"] == []
+
+    def test_processes_active_registration_service(self, tmp_path: Path) -> None:
+        """An ActiveRegistration service is drained."""
+        service = _make_maintenance_service()
+        _, result, drain = self._run(
+            tmp_path, [service], state=OnChainState.ACTIVE_REGISTRATION
+        )
+        drain.assert_called_once()
+        assert result["processed"] == [f"{service.service_config_id}:{_CHAIN}"]
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            OnChainState.NON_EXISTENT,
+            OnChainState.FINISHED_REGISTRATION,
+            OnChainState.DEPLOYED,
+            OnChainState.TERMINATED_BONDED,
+            OnChainState.UNBONDED,
+        ],
+    )
+    def test_state_gate_blocks_other_states(
+        self, tmp_path: Path, state: OnChainState
+    ) -> None:
+        """Services in other on-chain states are not drained."""
+        _, result, drain = self._run(
+            tmp_path, [_make_maintenance_service()], state=state
+        )
+        drain.assert_not_called()
+        assert result == {"processed": [], "skipped": [], "failed": []}
+
+    @pytest.mark.parametrize("multisig", [NON_EXISTENT_MULTISIG, ZERO_ADDRESS, ""])
+    def test_multisig_gate(self, tmp_path: Path, multisig: t.Optional[str]) -> None:
+        """Services without an agent safe are skipped before any on-chain query."""
+        service = _make_maintenance_service(multisig=multisig)
+        _, result, drain = self._run(tmp_path, [service])
+        drain.assert_not_called()
+        self._last_state_mock.assert_not_called()
+        assert result == {"processed": [], "skipped": [], "failed": []}
+
+    def test_token_gate(self, tmp_path: Path) -> None:
+        """Services never minted on a chain are skipped without on-chain queries."""
+        service = _make_maintenance_service(token=NON_EXISTENT_TOKEN)
+        _, result, drain = self._run(tmp_path, [service])
+        drain.assert_not_called()
+        self._last_state_mock.assert_not_called()
+
+    def test_missing_master_safe_is_skipped(self, tmp_path: Path) -> None:
+        """Chains without a master safe are reported as skipped."""
+        service = _make_maintenance_service()
+        _, result, drain = self._run(tmp_path, [service], master_safes={})
+        drain.assert_not_called()
+        assert result["skipped"] == [f"{service.service_config_id}:{_CHAIN}"]
+
+    def test_per_chain_error_is_isolated(self, tmp_path: Path) -> None:
+        """A failure on one service does not prevent draining the next one."""
+        failing = _make_maintenance_service()
+        failing.service_config_id = "sc-failing"
+        healthy = _make_maintenance_service()
+        healthy.service_config_id = "sc-healthy"
+        manager = _make_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+        with (
+            patch.object(
+                manager, "get_all_services", return_value=([failing, healthy], True)
+            ),
+            patch.object(
+                manager,
+                "_get_on_chain_state",
+                side_effect=[RuntimeError("RPC down"), OnChainState.PRE_REGISTRATION],
+            ),
+            patch.object(manager, "drain") as drain_mock,
+        ):
+            result = manager.service_maintenance()
+        drain_mock.assert_called_once()
+        assert result["failed"] == [f"sc-failing:{_CHAIN}"]
+        assert result["processed"] == [f"sc-healthy:{_CHAIN}"]
+
+    def test_drain_insufficient_funds_is_isolated(self, tmp_path: Path) -> None:
+        """An InsufficientFundsException from drain is logged, not raised."""
+        service = _make_maintenance_service()
+        manager = _make_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+        with (
+            patch.object(manager, "get_all_services", return_value=([service], True)),
+            patch.object(
+                manager,
+                "_get_on_chain_state",
+                return_value=OnChainState.PRE_REGISTRATION,
+            ),
+            patch.object(
+                manager,
+                "drain",
+                side_effect=InsufficientFundsException("no gas", chain=_CHAIN),
+            ),
+        ):
+            result = manager.service_maintenance()
+        assert result["failed"] == [f"{service.service_config_id}:{_CHAIN}"]
+        assert result["processed"] == []
+
+    def test_lock_held_returns_immediately(self, tmp_path: Path) -> None:
+        """An in-progress maintenance run makes a concurrent call a no-op."""
+        manager = _make_manager(tmp_path)
+        with patch.object(manager, "get_all_services") as get_all_mock:
+            manager._maintenance_lock.acquire()  # pylint: disable=consider-using-with
+            try:
+                result = manager.service_maintenance()
+            finally:
+                manager._maintenance_lock.release()
+        get_all_mock.assert_not_called()
+        assert result == {"processed": [], "skipped": [], "failed": []}
+
+    def test_enumeration_error_is_swallowed(self, tmp_path: Path) -> None:
+        """An error while enumerating services aborts quietly without raising."""
+        manager = _make_manager(tmp_path)
+        with patch.object(
+            manager, "get_all_services", side_effect=RuntimeError("disk error")
+        ):
+            result = manager.service_maintenance()
+        assert result == {"processed": [], "skipped": [], "failed": []}
+        assert not manager._maintenance_lock.locked()
+
+    def test_multi_chain_only_passing_chain_drained(self, tmp_path: Path) -> None:
+        """Only the chain meeting all gates is drained on a multi-chain service."""
+        service = _make_maintenance_service(chains=["gnosis", "base"])
+        service.chain_configs["base"].chain_data.token = NON_EXISTENT_TOKEN
+        _, result, drain = self._run(tmp_path, [service])
+        drain.assert_called_once_with(
+            service_config_id=service.service_config_id,
+            chain_str="gnosis",
+            withdrawal_address="0xMasterSafe",
+        )
+        assert result["processed"] == [f"{service.service_config_id}:gnosis"]
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            DeploymentStatus.DEPLOYING,
+            DeploymentStatus.DEPLOYED,
+            DeploymentStatus.STOPPING,
+        ],
+    )
+    def test_locally_active_deployment_skipped(
+        self, tmp_path: Path, status: DeploymentStatus
+    ) -> None:
+        """Locally running/transitioning deployments are never drained."""
+        service = _make_maintenance_service(status=status)
+        _, result, drain = self._run(tmp_path, [service])
+        drain.assert_not_called()
+        self._last_state_mock.assert_not_called()
+        assert result == {"processed": [], "skipped": [], "failed": []}
+
+    def test_busy_withdrawal_lock_is_skipped(self, tmp_path: Path) -> None:
+        """A held per-(service, chain) withdrawal lock skips the service chain."""
+        service = _make_maintenance_service()
+        manager = _make_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+        busy_lock = MagicMock()
+        busy_lock.acquire.return_value = False
+        manager.funding_manager.get_withdrawal_lock.return_value = busy_lock
+        with (
+            patch.object(manager, "get_all_services", return_value=([service], True)),
+            patch.object(manager, "_get_on_chain_state") as state_mock,
+            patch.object(manager, "drain") as drain_mock,
+        ):
+            result = manager.service_maintenance()
+        drain_mock.assert_not_called()
+        state_mock.assert_not_called()
+        busy_lock.release.assert_not_called()
+        assert result["skipped"] == [f"{service.service_config_id}:{_CHAIN}"]
+
+    def test_withdrawal_lock_released_after_drain(self, tmp_path: Path) -> None:
+        """The withdrawal lock is acquired before the state check and released after."""
+        service = _make_maintenance_service()
+        manager = _make_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+        lock = MagicMock()
+        lock.acquire.return_value = True
+        manager.funding_manager.get_withdrawal_lock.return_value = lock
+        with (
+            patch.object(manager, "get_all_services", return_value=([service], True)),
+            patch.object(
+                manager,
+                "_get_on_chain_state",
+                return_value=OnChainState.PRE_REGISTRATION,
+            ),
+            patch.object(manager, "drain") as drain_mock,
+        ):
+            result = manager.service_maintenance()
+        drain_mock.assert_called_once()
+        manager.funding_manager.get_withdrawal_lock.assert_called_once_with(
+            service_config_id=service.service_config_id, chain=Chain.GNOSIS
+        )
+        lock.acquire.assert_called_once_with(blocking=False)
+        lock.release.assert_called_once_with()
+        assert result["processed"] == [f"{service.service_config_id}:{_CHAIN}"]
+
+    def test_withdrawal_lock_released_when_state_gate_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """The withdrawal lock is released even when the state gate skips."""
+        service = _make_maintenance_service()
+        manager = _make_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+        lock = MagicMock()
+        lock.acquire.return_value = True
+        manager.funding_manager.get_withdrawal_lock.return_value = lock
+        with (
+            patch.object(manager, "get_all_services", return_value=([service], True)),
+            patch.object(
+                manager, "_get_on_chain_state", return_value=OnChainState.DEPLOYED
+            ),
+            patch.object(manager, "drain") as drain_mock,
+        ):
+            manager.service_maintenance()
+        drain_mock.assert_not_called()
+        lock.release.assert_called_once_with()
