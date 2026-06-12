@@ -24,15 +24,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from autonomy.chain.exceptions import ChainInteractionError
+from web3.exceptions import ContractLogicError
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
+    BatchResult,
     MultiSendOperation,
+    MultiSendSubTx,
     SENTINEL_OWNERS,
     SafeOperation,
+    Transfer,
     _get_nonce,
     add_owner,
     create_safe,
@@ -1477,6 +1481,7 @@ class TestDrainEoa:
 def _calling_txsettler_cls(
     tx_hash: str = "0xhash",
     events: t.Optional[t.List] = None,
+    tx_receipt: t.Optional[t.Dict] = None,
 ) -> t.Type:
     """Return a fake TxSettler class that invokes tx_builder() inside transact().
 
@@ -1489,6 +1494,7 @@ def _calling_txsettler_cls(
         def __init__(self, *, tx_builder: t.Callable, **_kwargs: t.Any) -> None:
             self._tx_builder = tx_builder
             self.tx_hash = tx_hash
+            self.tx_receipt = tx_receipt if tx_receipt is not None else {"status": 1}
 
         def transact(self) -> "_Fake":
             self._tx_builder()
@@ -1753,11 +1759,11 @@ class TestSimulateSafeSubTx:
             {"from": "0xSafe", "to": "0xTo", "value": 1, "data": b""}
         )
 
-    def test_failure_returns_error_message(self) -> None:
-        """A reverting eth_call simulation returns the error message."""
+    def test_revert_returns_error_message(self) -> None:
+        """An EVM-level revert returns the revert reason."""
         mock_ledger = MagicMock()
         mock_ledger.api.to_checksum_address.side_effect = lambda a: a
-        mock_ledger.api.eth.call.side_effect = ValueError("execution reverted")
+        mock_ledger.api.eth.call.side_effect = ContractLogicError("execution reverted")
 
         result = simulate_safe_sub_tx(
             ledger_api=mock_ledger,
@@ -1767,6 +1773,19 @@ class TestSimulateSafeSubTx:
 
         assert result is not None
         assert "execution reverted" in result
+
+    def test_transport_error_propagates(self) -> None:
+        """Transport-level RPC failures are NOT classified as reverts."""
+        mock_ledger = MagicMock()
+        mock_ledger.api.to_checksum_address.side_effect = lambda a: a
+        mock_ledger.api.eth.call.side_effect = ConnectionError("RPC down")
+
+        with pytest.raises(ConnectionError, match="RPC down"):
+            simulate_safe_sub_tx(
+                ledger_api=mock_ledger,
+                safe="0xSafe",
+                tx={"to": "0xTo", "value": 1, "data": b""},
+            )
 
 
 class TestSendSafeMultisendTxs:
@@ -1783,7 +1802,7 @@ class TestSendSafeMultisendTxs:
 
         fake_settler_cls = _calling_txsettler_cls(tx_hash="0xbatchhash")
 
-        txs = [
+        txs: t.List[MultiSendSubTx] = [
             {"to": "0xA", "value": 1, "data": "0xdead"},  # hex-str data
             {"to": "0xB", "value": 0, "data": b"\xbe\xef"},  # bytes data
         ]
@@ -1865,6 +1884,40 @@ class TestSendSafeMultisendTxs:
                     crypto=mock_crypto,
                 )
 
+    def test_reverted_batch_raises(self) -> None:
+        """A mined-but-reverted batch tx (status 0) raises instead of returning."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xOwner"
+        mock_ledger.api.to_checksum_address.return_value = "0xOwner"
+        mock_crypto.sign_message.return_value = MagicMock()
+
+        fake_settler_cls = _calling_txsettler_cls(
+            tx_hash="0xreverted", tx_receipt={"status": 0}
+        )
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing"),
+            patch("operate.utils.gnosis.update_tx_with_gas_estimate"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
+            mock_contracts.multisend.get_tx_data.return_value = {"data": "0xcafe"}
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "ab" * 32
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "data": "0xbeef"
+            }
+            with pytest.raises(ChainInteractionError, match="reverted on-chain"):
+                send_safe_multisend_txs(
+                    txs=[{"to": "0xA", "value": 1, "data": b""}],
+                    safe="0xSafe",
+                    multisend_address=MULTISEND_ADDR,
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                )
+
 
 class TestTransferBatchFromSafe:
     """Tests for transfer_batch_from_safe."""
@@ -1902,12 +1955,12 @@ class TestTransferBatchFromSafe:
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
                 transfers=[
-                    ("0xAlice", ZERO_ADDRESS, 100),
-                    ("0xBob", "0xToken", 200),
+                    Transfer("0xAlice", ZERO_ADDRESS, 100),
+                    Transfer("0xBob", "0xToken", 200),
                 ],
             )
 
-        assert result == "0xbatched"
+        assert result.tx_hash == "0xbatched"
         mock_send.assert_called_once()
         sent_txs = mock_send.call_args.kwargs["txs"]
         assert len(sent_txs) == 2
@@ -1949,13 +2002,13 @@ class TestTransferBatchFromSafe:
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
                 transfers=[
-                    ("0xAlice", ZERO_ADDRESS, 100),
-                    ("0xBob", "0xBadToken", 200),
-                    ("0xCarol", ZERO_ADDRESS, 300),
+                    Transfer("0xAlice", ZERO_ADDRESS, 100),
+                    Transfer("0xBob", "0xBadToken", 200),
+                    Transfer("0xCarol", ZERO_ADDRESS, 300),
                 ],
             )
 
-        assert result == "0xbatched"
+        assert result.tx_hash == "0xbatched"
         sent_txs = mock_send.call_args.kwargs["txs"]
         assert [tx["to"] for tx in sent_txs] == ["0xAlice", "0xCarol"]
 
@@ -1980,10 +2033,10 @@ class TestTransferBatchFromSafe:
                 crypto=mock_crypto,
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
-                transfers=[("0xAlice", ZERO_ADDRESS, 100)],
+                transfers=[Transfer("0xAlice", ZERO_ADDRESS, 100)],
             )
 
-        assert result is None
+        assert result == BatchResult(tx_hash=None, sent=[])
         mock_send.assert_not_called()
         mock_transfer.assert_not_called()
 
@@ -2007,10 +2060,11 @@ class TestTransferBatchFromSafe:
                 crypto=mock_crypto,
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
-                transfers=[("0xAlice", ZERO_ADDRESS, 100)],
+                transfers=[Transfer("0xAlice", ZERO_ADDRESS, 100)],
             )
 
-        assert result == "0xsingle"
+        assert result.tx_hash == "0xsingle"
+        assert result.sent == [Transfer("0xAlice", ZERO_ADDRESS, 100)]
         mock_send.assert_not_called()
         mock_transfer.assert_called_once_with(
             ledger_api=mock_ledger,
@@ -2045,10 +2099,10 @@ class TestTransferBatchFromSafe:
                 crypto=mock_crypto,
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
-                transfers=[("0xBob", "0xToken", 200)],
+                transfers=[Transfer("0xBob", "0xToken", 200)],
             )
 
-        assert result == "0xsingleerc20"
+        assert result.tx_hash == "0xsingleerc20"
         mock_send.assert_not_called()
         mock_erc20.assert_called_once_with(  # nosec B106
             ledger_api=mock_ledger,
@@ -2082,13 +2136,13 @@ class TestTransferBatchFromSafe:
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
                 transfers=[
-                    ("0xAlice", ZERO_ADDRESS, 0),
-                    ("0xBob", ZERO_ADDRESS, -5),
-                    ("0xCarol", ZERO_ADDRESS, 100),
+                    Transfer("0xAlice", ZERO_ADDRESS, 0),
+                    Transfer("0xBob", ZERO_ADDRESS, -5),
+                    Transfer("0xCarol", ZERO_ADDRESS, 100),
                 ],
             )
 
-        assert result == "0xok"
+        assert result.tx_hash == "0xok"
         assert mock_sim.call_count == 1  # only the positive entry simulated
         mock_send.assert_not_called()
         mock_transfer.assert_called_once()
@@ -2112,13 +2166,13 @@ class TestTransferBatchFromSafe:
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
                 transfers=[
-                    ("0xAlice", ZERO_ADDRESS, 80),
-                    ("0xBob", ZERO_ADDRESS, 30),  # 80 + 30 > 100 — dropped
+                    Transfer("0xAlice", ZERO_ADDRESS, 80),
+                    Transfer("0xBob", ZERO_ADDRESS, 30),  # 80 + 30 > 100 — dropped
                 ],
             )
 
         # Only the first entry survives → single-tx path.
-        assert result == "0xfirstonly"
+        assert result.tx_hash == "0xfirstonly"
         mock_send.assert_not_called()
         mock_transfer.assert_called_once_with(
             ledger_api=mock_ledger,
@@ -2149,9 +2203,9 @@ class TestTransferBatchFromSafe:
                 safe="0xSafe",
                 multisend_address=MULTISEND_ADDR,
                 transfers=[
-                    ("0xAlice", ZERO_ADDRESS, 1),
-                    ("0xBob", ZERO_ADDRESS, 2),
-                    ("0xCarol", ZERO_ADDRESS, 3),
+                    Transfer("0xAlice", ZERO_ADDRESS, 1),
+                    Transfer("0xBob", ZERO_ADDRESS, 2),
+                    Transfer("0xCarol", ZERO_ADDRESS, 3),
                 ],
             )
 
