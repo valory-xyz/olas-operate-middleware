@@ -50,6 +50,7 @@ from operate.ledger import (
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import (
+    CONTRACTS,
     DUST,
     ERC20_TOKENS,
     format_asset_amount,
@@ -73,6 +74,7 @@ from operate.utils.gnosis import (
 )
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import (
+    transfer_batch_from_safe,
     transfer_erc20_from_safe,
 )
 
@@ -159,6 +161,24 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> t.List[str]:
         """Transfer assets to the given account using Safe balance first, and EOA balance for leftover."""
+        raise NotImplementedError()
+
+    def transfer_batch(
+        self,
+        chain: Chain,
+        transfers: t.List[t.Tuple[str, str, int]],
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
+        """Transfer multiple (to, asset, amount) entries from the Master Safe in one tx."""
+        raise NotImplementedError()
+
+    def transfer_batch_from_safe_then_eoa(
+        self,
+        chain: Chain,
+        transfers: t.List[t.Tuple[str, str, int]],
+        rpc: t.Optional[str] = None,
+    ) -> t.List[str]:
+        """Transfer assets using Safe balances first (one batched tx), and EOA balances for leftovers."""
         raise NotImplementedError()
 
     def drain(
@@ -687,6 +707,139 @@ class EthereumMasterWallet(
 
         return tx_hashes
 
+    def transfer_batch(
+        self,
+        chain: Chain,
+        transfers: t.List[t.Tuple[str, str, int]],
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
+        """Transfer multiple ``(to, asset, amount)`` entries from the Master Safe in one tx.
+
+        Safe-only by design: EOA transfers cannot join a MultiSend batch.
+        Entries are pre-filtered (non-positive amounts, per-asset over-balance,
+        failing simulation) instead of failing the whole batch; returns the tx
+        hash, or ``None`` when no entry survives the pre-filter.
+        """
+        if chain not in self.safes:
+            raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
+
+        if not transfers:
+            return None
+
+        normalized = [
+            (Web3.to_checksum_address(to), asset, int(amount))
+            for to, asset, amount in transfers
+        ]
+        return transfer_batch_from_safe(
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+            crypto=self.crypto,
+            safe=self.safes[chain],
+            multisend_address=CONTRACTS[chain]["multisend"],
+            transfers=normalized,
+        )
+
+    def transfer_batch_from_safe_then_eoa(  # pylint: disable=too-many-locals
+        self,
+        chain: Chain,
+        transfers: t.List[t.Tuple[str, str, int]],
+        rpc: t.Optional[str] = None,
+    ) -> t.List[str]:
+        """Transfer assets using Safe balances first, and EOA balances for leftovers.
+
+        Batch-aware sibling of ``transfer_from_safe_then_eoa``: all Safe
+        contributions are sent in a single MultiSend transaction; only the
+        per-asset EOA shortfalls settle as individual transactions (a
+        different signer cannot join the Safe batch).
+        """
+        transfers = [(to, asset, int(amount)) for to, asset, amount in transfers]
+
+        # Aggregate per-asset funds check (mirrors transfer_from_safe_then_eoa).
+        safe_balances: t.Dict[str, int] = {}
+        eoa_balances: t.Dict[str, int] = {}
+        required: t.Dict[str, int] = {}
+        for _, asset, amount in transfers:
+            if asset not in safe_balances:
+                safe_balances[asset] = int(
+                    self.get_balance(chain=chain, asset=asset, from_safe=True, rpc=rpc)
+                )
+                eoa_balances[asset] = int(
+                    self.get_balance(chain=chain, asset=asset, from_safe=False, rpc=rpc)
+                )
+            required[asset] = required.get(asset, 0) + amount
+
+        for asset, amount in required.items():
+            balance = safe_balances[asset] + eoa_balances[asset]
+            if asset == ZERO_ADDRESS:
+                # to account for gas fees burned in previous txs
+                balance += DUST[chain]
+            if balance < amount:
+                raise InsufficientFundsException(
+                    f"Cannot transfer {format_asset_amount(chain, asset, amount)} on chain {chain.name}. "
+                    f"Balance of Master Safe {self.safes[chain]}: {format_asset_amount(chain, asset, safe_balances[asset])}. "
+                    f"Balance of Master EOA {self.address}: {format_asset_amount(chain, asset, eoa_balances[asset])}. "
+                    f"Missing: {format_asset_amount(chain, asset, amount - balance)}.",
+                    chain=chain.value,
+                )
+
+        # Split each entry into its Safe contribution and EOA shortfall.
+        remaining_safe = dict(safe_balances)
+        safe_leg: t.List[t.Tuple[str, str, int]] = []
+        shortfalls: t.List[t.List] = []  # mutable for the gas deduction below
+        for to, asset, amount in transfers:
+            from_safe_amount = min(remaining_safe[asset], amount)
+            if from_safe_amount > 0:
+                safe_leg.append((to, asset, from_safe_amount))
+                remaining_safe[asset] -= from_safe_amount
+            if amount > from_safe_amount:
+                shortfalls.append([to, asset, amount - from_safe_amount])
+
+        tx_hashes: t.List[str] = []
+        if safe_leg:
+            batch_tx_hash = self.transfer_batch(
+                chain=chain, transfers=safe_leg, rpc=rpc
+            )
+            if batch_tx_hash:
+                tx_hashes.append(batch_tx_hash)
+                # The Master EOA paid the batch tx gas: deduct it once from the
+                # first native shortfall (mirrors transfer_from_safe_then_eoa).
+                gas_spent = gas_fees_spent_in_tx(
+                    ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+                    tx_hash=batch_tx_hash,
+                )
+                for shortfall in shortfalls:
+                    if shortfall[1] == ZERO_ADDRESS:
+                        shortfall[2] -= gas_spent
+                        break
+
+        # EOA legs: one tx per remaining shortfall (different signer).
+        for to, asset, amount in shortfalls:
+            if asset == ZERO_ADDRESS and amount > 0:
+                eoa_balance = int(
+                    self.get_balance(chain=chain, asset=asset, from_safe=False, rpc=rpc)
+                )
+                # capping at the EOA balance makes the internal function
+                # drain the EOA
+                amount = min(amount, eoa_balance)
+            if amount <= 0:
+                # consumed by the batch gas deduction, or the EOA is empty
+                # (e.g. drained by a previous leg)
+                logger.info(
+                    "Skipping EOA leg for asset %s to %s on chain %s: "
+                    "remaining amount %d is not positive.",
+                    asset,
+                    to,
+                    chain,
+                    amount,
+                )
+                continue
+            tx_hash = self.transfer(
+                to=to, amount=amount, chain=chain, asset=asset, from_safe=False, rpc=rpc
+            )
+            if tx_hash:
+                tx_hashes.append(tx_hash)
+
+        return tx_hashes
+
     def drain(
         self,
         withdrawal_address: str,
@@ -702,21 +855,57 @@ class EthereumMasterWallet(
             ZERO_ADDRESS
         ]
         moved: t.Dict[str, int] = {}
+        balances: t.Dict[str, int] = {}
         for asset in assets:
-            balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
-            if balance <= 0:
-                continue
+            balance = self.get_balance(
+                chain=chain, asset=asset, from_safe=from_safe, rpc=rpc
+            )
+            if balance > 0:
+                balances[asset] = int(balance)
 
+        if from_safe:
+            # One MultiSend Safe tx for all assets. The batch pre-filter may
+            # drop individual entries, so what actually moved is computed
+            # from the balance delta instead of assumed.
+            if not balances:
+                return moved
+            try:
+                tx_hash = self.transfer_batch(
+                    chain=chain,
+                    transfers=[
+                        (withdrawal_address, asset, balance)
+                        for asset, balance in balances.items()
+                    ],
+                    rpc=rpc,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to drain Master Safe on chain %s: %s",
+                    chain,
+                    str(exc),
+                )
+                return moved
+            if tx_hash is None:
+                return moved
+            for asset, balance_before in balances.items():
+                balance_after = int(
+                    self.get_balance(chain=chain, asset=asset, from_safe=True, rpc=rpc)
+                )
+                if balance_before > balance_after:
+                    moved[asset] = balance_before - balance_after
+            return moved
+
+        for asset, balance in balances.items():
             try:
                 self.transfer(
                     to=withdrawal_address,
                     amount=balance,
                     chain=chain,
                     asset=asset,
-                    from_safe=from_safe,
+                    from_safe=False,
                     rpc=rpc,
                 )
-                moved[asset] = int(balance)
+                moved[asset] = balance
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(
                     "Failed to transfer asset %s on chain %s: %s",
