@@ -21,6 +21,7 @@
 
 import json
 import typing as t
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -30,6 +31,7 @@ from autonomy.chain.exceptions import ChainInteractionError
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import CONTRACTS, DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
+from operate.utils.gnosis import BatchResult, Transfer
 from operate.wallet.master import (
     EthereumMasterWallet,
     InsufficientFundsException,
@@ -541,13 +543,16 @@ class TestEthereumDrain:
         wallet = _make_wallet(
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
-        # 100 for the first asset, 0 for the rest; the trailing zeros also
-        # serve the post-batch balance re-read (asset fully drained).
+        # 100 for the first asset, 0 for the rest.
         balance_side_effect = [100] + [0] * 20
         with (
             patch.object(wallet, "get_balance", side_effect=balance_side_effect),
             patch.object(
-                wallet, "transfer_batch", return_value="0xbatch"
+                wallet,
+                "transfer_batch",
+                side_effect=lambda chain, transfers, rpc=None: BatchResult(
+                    tx_hash="0xbatch", sent=list(transfers)
+                ),
             ) as mock_batch,
             patch.object(wallet, "transfer") as mock_transfer,
         ):
@@ -1497,6 +1502,26 @@ class TestEthereumDrainTransferException:
         # Nothing was moved because the batch raised
         assert not result
 
+    def test_drain_reraises_insufficient_funds(self, tmp_path: Path) -> None:
+        """The batch's InsufficientFundsException is NOT swallowed."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
+        )
+        balance_side_effect = [100] + [0] * 20
+        with (
+            patch.object(wallet, "get_balance", side_effect=balance_side_effect),
+            patch.object(
+                wallet,
+                "transfer_batch",
+                side_effect=InsufficientFundsException(
+                    "gas spike", chain=Chain.GNOSIS.value
+                ),
+            ),
+        ):
+            with pytest.raises(InsufficientFundsException) as exc_info:
+                wallet.drain("0xWithdrawal", Chain.GNOSIS)
+        assert exc_info.value.chain == Chain.GNOSIS.value
+
     def test_drain_eoa_transfer_exception_is_swallowed(self, tmp_path: Path) -> None:
         """When an EOA transfer raises, the asset is excluded from moved."""
         wallet = _make_wallet(
@@ -1520,7 +1545,11 @@ class TestEthereumDrainTransferException:
         balance_side_effect = [100] + [0] * 20
         with (
             patch.object(wallet, "get_balance", side_effect=balance_side_effect),
-            patch.object(wallet, "transfer_batch", return_value=None),
+            patch.object(
+                wallet,
+                "transfer_batch",
+                return_value=BatchResult(tx_hash=None, sent=[]),
+            ),
         ):
             result = wallet.drain("0xWithdrawal", Chain.GNOSIS)
         assert not result
@@ -1530,12 +1559,17 @@ class TestEthereumDrainTransferException:
         wallet = _make_wallet(
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
-        # First asset has 100, the rest 0; trailing zeros also serve the
-        # post-batch re-read (asset fully drained → moved = 100 - 0).
+        # First asset has 100, the rest 0.
         balance_side_effect = [100] + [0] * 20
         with (
             patch.object(wallet, "get_balance", side_effect=balance_side_effect),
-            patch.object(wallet, "transfer_batch", return_value="0xbatch"),
+            patch.object(
+                wallet,
+                "transfer_batch",
+                side_effect=lambda chain, transfers, rpc=None: BatchResult(
+                    tx_hash="0xbatch", sent=list(transfers)
+                ),
+            ),
         ):
             result = wallet.drain("0xWithdrawal", Chain.GNOSIS)
         # The first asset with balance 100 should be in the returned dict
@@ -1549,13 +1583,20 @@ class TestEthereumDrainTransferException:
         wallet = _make_wallet(
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
-        # Pin the asset list to [TOKEN_ADDR, ZERO_ADDRESS]. Initial reads:
-        # token=100, native=50. Post-batch re-reads: token=0 (drained),
-        # native=50 (unchanged — e.g. dropped by the batch pre-filter).
-        balance_side_effect = [100, 50, 0, 50]
+        # Pin the asset list to [TOKEN_ADDR, ZERO_ADDRESS]: token=100,
+        # native=50. The batch reports only the token transfer as executed
+        # (the native entry was dropped by the pre-filter).
+        balance_side_effect = [100, 50]
         with (
             patch.object(wallet, "get_balance", side_effect=balance_side_effect),
-            patch.object(wallet, "transfer_batch", return_value="0xbatch"),
+            patch.object(
+                wallet,
+                "transfer_batch",
+                return_value=BatchResult(
+                    tx_hash="0xbatch",
+                    sent=[Transfer("0xWithdrawal", TOKEN_ADDR, 100)],
+                ),
+            ),
             patch(
                 "operate.wallet.master.ERC20_TOKENS",
                 {"token": {Chain.GNOSIS: TOKEN_ADDR}},
@@ -2460,7 +2501,7 @@ class TestTransferBatch:
         )
         with patch("operate.wallet.master.transfer_batch_from_safe") as mock_batch:
             result = wallet.transfer_batch(Chain.GNOSIS, [])
-        assert result is None
+        assert result == BatchResult(tx_hash=None, sent=[])
         mock_batch.assert_not_called()
 
     def test_routes_to_gnosis_helper(self, tmp_path: Path) -> None:
@@ -2474,7 +2515,7 @@ class TestTransferBatch:
             patch.object(wallet, "ledger_api", return_value=mock_api),
             patch(
                 "operate.wallet.master.transfer_batch_from_safe",
-                return_value="0xbatch",
+                return_value=BatchResult(tx_hash="0xbatch", sent=[]),
             ) as mock_batch,
         ):
             result = wallet.transfer_batch(
@@ -2482,7 +2523,7 @@ class TestTransferBatch:
                 [(EOA_ADDR, ZERO_ADDRESS, 5), (BACKUP_ADDR, TOKEN_ADDR, "7")],
             )
 
-        assert result == "0xbatch"
+        assert result.tx_hash == "0xbatch"
         kwargs = mock_batch.call_args.kwargs
         assert kwargs["safe"] == SAFE_ADDR
         assert kwargs["ledger_api"] is mock_api
@@ -2492,13 +2533,51 @@ class TestTransferBatch:
 
         assert kwargs["transfers"] == [
             (_Web3.to_checksum_address(EOA_ADDR), ZERO_ADDRESS, 5),
-            (_Web3.to_checksum_address(BACKUP_ADDR), TOKEN_ADDR, 7),
+            (
+                _Web3.to_checksum_address(BACKUP_ADDR),
+                _Web3.to_checksum_address(TOKEN_ADDR),
+                7,
+            ),
         ]
 
 
 # ---------------------------------------------------------------------------
 # EthereumMasterWallet – transfer_batch_from_safe_then_eoa
 # ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _batch_ctx(
+    wallet: EthereumMasterWallet,
+    balances: t.List[int],
+    batch_hash: t.Optional[str] = "0xbatch",
+    transfer_rv: str = "0xtx_eoa",
+    gas: int = 5,
+) -> t.Iterator[t.Tuple[MagicMock, MagicMock]]:
+    """Patch the collaborators of transfer_batch_from_safe_then_eoa.
+
+    Yields the (transfer_batch, transfer) mocks; ``balances`` feeds
+    ``get_balance`` in call order. The transfer_batch fake mirrors a fully
+    executed batch (``sent`` = requested transfers) unless ``batch_hash``
+    is None, which mimics an all-pre-filtered batch.
+    """
+
+    def _fake_batch(
+        chain: Chain, transfers: t.List, rpc: t.Optional[str] = None
+    ) -> BatchResult:
+        del chain, rpc
+        if batch_hash is None:
+            return BatchResult(tx_hash=None, sent=[])
+        return BatchResult(tx_hash=batch_hash, sent=list(transfers))
+
+    with (
+        patch.object(wallet, "get_balance", side_effect=balances),
+        patch.object(wallet, "transfer_batch", side_effect=_fake_batch) as mock_batch,
+        patch.object(wallet, "transfer", return_value=transfer_rv) as mock_transfer,
+        patch.object(wallet, "ledger_api", return_value=MagicMock()),
+        patch("operate.wallet.master.gas_fees_spent_in_tx", return_value=gas),
+    ):
+        yield mock_batch, mock_transfer
 
 
 class TestTransferBatchFromSafeThenEoa:
@@ -2528,15 +2607,7 @@ class TestTransferBatchFromSafeThenEoa:
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
         # safe=200, eoa=50 for TOKEN_ADDR — covers 100 + 50 fully from Safe.
-        with (
-            patch.object(wallet, "get_balance", side_effect=[200, 50]),
-            patch.object(
-                wallet, "transfer_batch", return_value="0xbatch"
-            ) as mock_batch,
-            patch.object(wallet, "transfer") as mock_transfer,
-            patch.object(wallet, "ledger_api", return_value=MagicMock()),
-            patch("operate.wallet.master.gas_fees_spent_in_tx", return_value=5),
-        ):
+        with _batch_ctx(wallet, balances=[200, 50]) as (mock_batch, mock_transfer):
             result = wallet.transfer_batch_from_safe_then_eoa(
                 Chain.GNOSIS,
                 [(EOA_ADDR, TOKEN_ADDR, 100), (BACKUP_ADDR, TOKEN_ADDR, 50)],
@@ -2559,14 +2630,9 @@ class TestTransferBatchFromSafeThenEoa:
         # deducted from the first native shortfall (A): 5 - 5 = 0 → A's EOA
         # leg is skipped without a transfer. B: re-read eoa balance = 60
         # <= 120 → amount capped to 60 (EOA drain mode).
-        with (
-            patch.object(wallet, "get_balance", side_effect=[50, 100, 60]),
-            patch.object(
-                wallet, "transfer_batch", return_value="0xbatch"
-            ) as mock_batch,
-            patch.object(wallet, "transfer", return_value="0xtx_eoa") as mock_transfer,
-            patch.object(wallet, "ledger_api", return_value=MagicMock()),
-            patch("operate.wallet.master.gas_fees_spent_in_tx", return_value=5),
+        with _batch_ctx(wallet, balances=[50, 100, 60]) as (
+            mock_batch,
+            mock_transfer,
         ):
             result = wallet.transfer_batch_from_safe_then_eoa(
                 Chain.GNOSIS,
@@ -2594,15 +2660,7 @@ class TestTransferBatchFromSafeThenEoa:
         )
         # ERC20: safe=100, eoa=100; transfers 80 + 80. Safe leg: 80 to A,
         # 20 to B; EOA leg: 60 to B.
-        with (
-            patch.object(wallet, "get_balance", side_effect=[100, 100]),
-            patch.object(
-                wallet, "transfer_batch", return_value="0xbatch"
-            ) as mock_batch,
-            patch.object(wallet, "transfer", return_value="0xtx_eoa") as mock_transfer,
-            patch.object(wallet, "ledger_api", return_value=MagicMock()),
-            patch("operate.wallet.master.gas_fees_spent_in_tx", return_value=5),
-        ):
+        with _batch_ctx(wallet, balances=[100, 100]) as (mock_batch, mock_transfer):
             result = wallet.transfer_batch_from_safe_then_eoa(
                 Chain.GNOSIS,
                 [(EOA_ADDR, TOKEN_ADDR, 80), (BACKUP_ADDR, TOKEN_ADDR, 80)],
@@ -2618,23 +2676,20 @@ class TestTransferBatchFromSafeThenEoa:
         assert eoa_kwargs["amount"] == 60
         assert eoa_kwargs["from_safe"] is False
 
-    def test_all_filtered_batch_none_still_runs_eoa_leg(self, tmp_path: Path) -> None:
-        """A batch returning None (all pre-filtered) adds no hash; EOA legs still run."""
+    def test_batch_none_with_safe_leg_raises(self, tmp_path: Path) -> None:
+        """A None batch despite a due Safe leg aborts before the EOA legs."""
         wallet = _make_wallet(
             tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
         )
-        # ERC20: safe=50, eoa=100; amount 120 → safe leg 50 (returns None),
-        # shortfall 70 (no gas deduction since no batch hash).
-        with (
-            patch.object(wallet, "get_balance", side_effect=[50, 100]),
-            patch.object(wallet, "transfer_batch", return_value=None),
-            patch.object(wallet, "transfer", return_value="0xtx_eoa") as mock_transfer,
-            patch("operate.wallet.master.gas_fees_spent_in_tx") as mock_gas,
+        # ERC20: safe=50, eoa=100; amount 120 → safe leg 50 is due, but the
+        # batch sends nothing (fully pre-filtered) → infrastructure failure
+        # or balance race → fail loudly, EOA legs must not run.
+        with _batch_ctx(wallet, balances=[50, 100], batch_hash=None) as (
+            _mock_batch,
+            mock_transfer,
         ):
-            result = wallet.transfer_batch_from_safe_then_eoa(
-                Chain.GNOSIS, [(EOA_ADDR, TOKEN_ADDR, 120)]
-            )
-
-        assert result == ["0xtx_eoa"]
-        mock_gas.assert_not_called()
-        assert mock_transfer.call_args.kwargs["amount"] == 70
+            with pytest.raises(RuntimeError, match="executed 0 of 1"):
+                wallet.transfer_batch_from_safe_then_eoa(
+                    Chain.GNOSIS, [(EOA_ADDR, TOKEN_ADDR, 120)]
+                )
+        mock_transfer.assert_not_called()
