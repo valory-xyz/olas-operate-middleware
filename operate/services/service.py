@@ -120,7 +120,14 @@ SERVICE_CONFIG_PREFIX = "sc-"
 NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
-AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 80}
+AGENT_TYPE_IDS = {
+    "mech": 37,
+    "optimus": 40,
+    "modius": 40,
+    "trader": 25,
+    "pett_ai": 80,
+    "basius": 115,  # Olas Registry mint: https://marketplace.olas.network/ethereum/ai-agents/115
+}
 
 logger = setup_logger("operate.services.service")
 
@@ -835,6 +842,8 @@ class Service(LocalResource):
             return AGENT_TYPE_IDS["optimus"]
         if "modius" in service_name_lower:
             return AGENT_TYPE_IDS["modius"]
+        if "basius" in service_name_lower:
+            return AGENT_TYPE_IDS["basius"]
         return AGENT_TYPE_IDS["trader"]
 
     @classmethod
