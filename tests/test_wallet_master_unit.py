@@ -2653,6 +2653,30 @@ class TestTransferBatchFromSafeThenEoa:
         assert eoa_kwargs["from_safe"] is False
         assert eoa_kwargs["amount"] == 60
 
+    def test_native_entries_reordered_last(self, tmp_path: Path) -> None:
+        """Caller input order does not matter: native entries are moved last."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
+        )
+        # Native FIRST in the input; both entries fully Safe-covered.
+        # Balance reads follow the sorted order: TOKEN (safe, eoa), then
+        # native (safe, eoa).
+        with _batch_ctx(wallet, balances=[200, 50, 300, 50]) as (
+            mock_batch,
+            mock_transfer,
+        ):
+            result = wallet.transfer_batch_from_safe_then_eoa(
+                Chain.GNOSIS,
+                [(EOA_ADDR, ZERO_ADDRESS, 100), (BACKUP_ADDR, TOKEN_ADDR, 50)],
+            )
+
+        assert result == ["0xbatch"]
+        mock_transfer.assert_not_called()
+        assert mock_batch.call_args.kwargs["transfers"] == [
+            (BACKUP_ADDR, TOKEN_ADDR, 50),
+            (EOA_ADDR, ZERO_ADDRESS, 100),
+        ]
+
     def test_same_asset_split_across_recipients(self, tmp_path: Path) -> None:
         """Safe balance is allocated in order across same-asset entries."""
         wallet = _make_wallet(

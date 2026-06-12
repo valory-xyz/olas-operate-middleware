@@ -762,6 +762,12 @@ class EthereumMasterWallet(
             Transfer(to=to, asset=asset, amount=int(amount))
             for to, asset, amount in transfers
         ]
+        # EOA shortfall legs execute in list order and every EOA tx pays
+        # gas in native, so a native leg running first could drain the EOA
+        # and leave later ERC20 legs unable to pay for gas. The stable sort
+        # also makes the batch-gas deduction target (the first native
+        # shortfall) deterministic.
+        transfers.sort(key=lambda transfer: transfer.asset == ZERO_ADDRESS)
 
         # Aggregate per-asset funds check (mirrors transfer_from_safe_then_eoa).
         safe_balances: t.Dict[str, int] = {}
