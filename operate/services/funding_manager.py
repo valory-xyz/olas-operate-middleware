@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
 from time import time
 
+from aea.crypto.base import LedgerApi
 from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
@@ -65,15 +66,13 @@ from operate.services.protocol import EthSafeTxBuilder, StakingManager, StakingS
 from operate.services.service import NON_EXISTENT_TOKEN, Service
 from operate.utils import concurrent_execute
 from operate.utils.gnosis import (
+    Transfer,
     drain_eoa,
     estimate_transfer_tx_fee,
     get_asset_balance,
     get_owners,
-)
-from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import (
+    transfer_batch_from_safe,
     transfer_erc20_from_eoa,
-    transfer_erc20_from_safe,
 )
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
@@ -243,6 +242,90 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 # Log and continue rather than abort sibling drains.
                 self.logger.warning(f"Skipping drain of {agent_address}: {exc}")
 
+    def _execute_service_safe_transfers(  # pylint: disable=too-many-arguments
+        self,
+        ledger_api: LedgerApi,
+        sftxb: EthSafeTxBuilder,
+        service: Service,
+        chain: Chain,
+        service_safe: str,
+        transfers: t.List[Transfer],
+        require_all: bool = False,
+    ) -> None:
+        """Execute transfers out of the service Safe in one batched tx.
+
+        Agent-owned Safes batch all transfers in one MultiSend tx signed by
+        the agent key; master-owned Safes batch the approveHash +
+        execTransaction message pairs (with sequential Safe B nonces) into
+        one Master Safe tx. ``require_all`` raises when the agent-owned
+        batch pre-filter drops any of the requested transfers.
+        """
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        master_safe = wallet.safes[chain]
+        owners = get_owners(ledger_api=ledger_api, safe=service_safe)
+
+        if set(owners) == set(service.agent_addresses):
+            ethereum_crypto = self.keys_manager.get_crypto_instance(
+                service.agent_addresses[0]
+            )
+            result = transfer_batch_from_safe(
+                ledger_api=ledger_api,
+                crypto=ethereum_crypto,
+                safe=service_safe,
+                multisend_address=CONTRACTS[chain]["multisend"],
+                transfers=transfers,
+            )
+            if require_all and len(result.sent) != len(transfers):
+                raise RuntimeError(
+                    f"Service safe transfer executed {len(result.sent)} of "
+                    f"{len(transfers)} due transfer(s) on chain {chain.value}."
+                )
+        elif set(owners) == {master_safe}:
+            # Each Safe B execTransaction hash embeds a specific Safe B
+            # nonce: read it once and assign sequential nonces in batch
+            # order so all pairs are valid within one outer tx.
+            base_nonce = (
+                registry_contracts.gnosis_safe.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=service_safe,
+                )
+                .functions.nonce()
+                .call()
+            )
+            tx = sftxb.new_tx()
+            for i, (to, asset, amount) in enumerate(transfers):
+                if asset == ZERO_ADDRESS:
+                    messages = sftxb.get_safe_b_native_transfer_messages(
+                        safe_b_address=service_safe,
+                        to=to,
+                        amount=amount,
+                        nonce=base_nonce + i,
+                    )
+                else:
+                    messages = sftxb.get_safe_b_erc20_transfer_messages(
+                        safe_b_address=service_safe,
+                        token=asset,
+                        to=to,
+                        amount=amount,
+                        nonce=base_nonce + i,
+                    )
+                for message in messages:
+                    tx.add(message)
+            receipt = tx.settle()
+            # The outer Safe tx is mined with status 0 when any inner
+            # execTransaction fails, and TxSettler does not raise on a
+            # reverted receipt — check explicitly so a failed batch cannot
+            # report success.
+            if receipt is not None and receipt.get("status") == 0:
+                raise ChainInteractionError(
+                    "Batched service safe transfer reverted on-chain "
+                    f"({len(transfers)} transfer(s) on {chain.value})."
+                )
+        else:
+            raise RuntimeError(
+                f"Cannot transfer from service safe: unrecognized owner set {owners=}"
+            )
+
     def drain_service_safe(  # pylint: disable=too-many-locals
         self, service: Service, withdrawal_address: str, chain: Chain
     ) -> None:
@@ -257,7 +340,6 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         withdrawal_address = Web3.to_checksum_address(withdrawal_address)
         service_safe = chain_data.multisig
         wallet = self.wallet_manager.load(chain.ledger_type)
-        master_safe = wallet.safes[chain]
         sftxb = EthSafeTxBuilder(
             rpc=ledger_config.rpc,
             wallet=wallet,
@@ -265,9 +347,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             chain_type=ChainType(ledger_config.chain.value),
         )
 
-        owners = get_owners(ledger_api=ledger_api, safe=service_safe)
-
-        # Drain ERC20 tokens from service Safe
+        # Collect drainable amounts: ERC20 tokens first, native last.
         tokens = (
             set(ERC20_TOKENS_BY_CHAIN_ID.get(chain.id, []))
             | service.chain_configs[
@@ -276,6 +356,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         )
         tokens.discard(ZERO_ADDRESS)
 
+        to_drain: t.List[Transfer] = []
         for token_address in tokens:
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -292,38 +373,10 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             self.logger.info(
                 f"Draining {balance} {token_name} from {service_safe} (service safe) to {withdrawal_address}"
             )
+            to_drain.append(
+                Transfer(to=withdrawal_address, asset=token_address, amount=balance)
+            )
 
-            # Safe not swapped
-            if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = self.keys_manager.get_crypto_instance(
-                    service.agent_addresses[0]
-                )
-                transfer_erc20_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=ethereum_crypto,
-                    safe=chain_data.multisig,
-                    token=token_address,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-            elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_erc20_transfer_messages(
-                    safe_b_address=service_safe,
-                    token=token_address,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-                tx = sftxb.new_tx()
-                for message in messages:
-                    tx.add(message)
-                tx.settle()
-
-            else:
-                raise RuntimeError(
-                    f"Cannot drain service safe: unrecognized owner set {owners=}"
-                )
-
-        # Drain native asset from service Safe
         balance = ledger_api.get_balance(service_safe)
         if balance == 0:
             self.logger.info(
@@ -333,33 +386,19 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             self.logger.info(
                 f"Draining {balance} {get_currency_denom(chain)} from {service_safe} (service safe) to {withdrawal_address}"
             )
+            to_drain.append(
+                Transfer(to=withdrawal_address, asset=ZERO_ADDRESS, amount=balance)
+            )
 
-            if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = self.keys_manager.get_crypto_instance(
-                    service.agent_addresses[0]
-                )
-                transfer_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=ethereum_crypto,
-                    safe=chain_data.multisig,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-            elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_native_transfer_messages(
-                    safe_b_address=service_safe,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-                tx = sftxb.new_tx()
-                for message in messages:
-                    tx.add(message)
-                tx.settle()
-
-            else:
-                raise RuntimeError(
-                    f"Cannot drain service safe: unrecognized owner set {owners=}"
-                )
+        if to_drain:
+            self._execute_service_safe_transfers(
+                ledger_api=ledger_api,
+                sftxb=sftxb,
+                service=service,
+                chain=chain,
+                service_safe=service_safe,
+                transfers=to_drain,
+            )
 
         self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
 
@@ -492,84 +531,46 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 contracts=CONTRACTS[ledger_config.chain],
                 chain_type=ChainType(ledger_config.chain.value),
             )
-            owners = get_owners(ledger_api=ledger_api, safe=service_safe)
 
             # ERC20 tokens first (avoids depleting native gas before ERC20 transfers)
-            erc20_entries = {
-                addr: amt for addr, amt in effective.items() if addr != ZERO_ADDRESS
-            }
-            native_amount = effective.get(ZERO_ADDRESS, 0)
-
-            # NOTE: owner-branching logic below mirrors drain_service_safe (lines 285-350).
-            # Refactor into a shared helper when a third caller appears.
-            for token_address, amount in erc20_entries.items():
+            to_withdraw: t.List[Transfer] = []
+            for token_address, amount in effective.items():
+                if token_address == ZERO_ADDRESS:
+                    continue
                 token_name = get_asset_name(chain, token_address)
                 self.logger.info(
                     f"Partial withdraw {amount} {token_name} from "
                     f"{service_safe} to {withdrawal_address}"
                 )
-                if set(owners) == set(service.agent_addresses):
-                    ethereum_crypto = self.keys_manager.get_crypto_instance(
-                        service.agent_addresses[0]
-                    )
-                    transfer_erc20_from_safe(
-                        ledger_api=ledger_api,
-                        crypto=ethereum_crypto,
-                        safe=chain_data.multisig,
-                        token=token_address,
-                        to=withdrawal_address,
-                        amount=amount,
-                    )
-                elif set(owners) == {master_safe}:
-                    messages = sftxb.get_safe_b_erc20_transfer_messages(
-                        safe_b_address=service_safe,
-                        token=token_address,
-                        to=withdrawal_address,
-                        amount=amount,
-                    )
-                    tx = sftxb.new_tx()
-                    for message in messages:
-                        tx.add(message)
-                    tx.settle()
-                else:
-                    raise RuntimeError(
-                        f"Cannot withdraw from service safe: "
-                        f"unrecognized owner set {owners=}"
-                    )
+                to_withdraw.append(
+                    Transfer(to=withdrawal_address, asset=token_address, amount=amount)
+                )
 
             # Native transfer last
+            native_amount = effective.get(ZERO_ADDRESS, 0)
             if native_amount > 0:
                 self.logger.info(
                     f"Partial withdraw {native_amount} "
                     f"{get_currency_denom(chain)} from "
                     f"{service_safe} to {withdrawal_address}"
                 )
-                if set(owners) == set(service.agent_addresses):
-                    ethereum_crypto = self.keys_manager.get_crypto_instance(
-                        service.agent_addresses[0]
-                    )
-                    transfer_from_safe(
-                        ledger_api=ledger_api,
-                        crypto=ethereum_crypto,
-                        safe=chain_data.multisig,
+                to_withdraw.append(
+                    Transfer(
                         to=withdrawal_address,
+                        asset=ZERO_ADDRESS,
                         amount=native_amount,
                     )
-                elif set(owners) == {master_safe}:
-                    messages = sftxb.get_safe_b_native_transfer_messages(
-                        safe_b_address=service_safe,
-                        to=withdrawal_address,
-                        amount=native_amount,
-                    )
-                    tx = sftxb.new_tx()
-                    for message in messages:
-                        tx.add(message)
-                    tx.settle()
-                else:
-                    raise RuntimeError(
-                        f"Cannot withdraw from service safe: "
-                        f"unrecognized owner set {owners=}"
-                    )
+                )
+
+            self._execute_service_safe_transfers(
+                ledger_api=ledger_api,
+                sftxb=sftxb,
+                service=service,
+                chain=chain,
+                service_safe=service_safe,
+                transfers=to_withdraw,
+                require_all=True,
+            )
 
         self.logger.info(
             f"Partial withdrawal from service safe {service.name} "
@@ -1275,6 +1276,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         for chain_str, addresses in amounts.items():
             chain = Chain(chain_str)
             wallet = self.wallet_manager.load(chain.ledger_type)
+            transfers: t.List[Transfer] = []
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
                     if amount <= 0:
@@ -1287,13 +1289,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     self.logger.info(
                         f"[FUNDING MANAGER] Funding {amount} of {asset} to {address} on chain {chain.value} from Master Safe {wallet.safes.get(chain, 'N/A')}"
                     )
-                    wallet.transfer(
-                        chain=chain,
-                        to=address,
-                        asset=asset,
-                        amount=amount,
-                        from_safe=True,
-                    )
+                    transfers.append(Transfer(to=address, asset=asset, amount=amount))
+
+            if not transfers:
+                continue
+
+            # All transfers of a chain land in one MultiSend Safe tx.
+            wallet.transfer_batch(chain=chain, transfers=transfers)
 
     def fund_service(self, service: Service, amounts: ChainAmounts) -> None:
         """Fund service-related wallets."""

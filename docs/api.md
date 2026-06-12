@@ -325,7 +325,11 @@ Create a new wallet.
 ### `POST /api/wallet/withdraw`
 
 Withdraw funds to the target account, using Master Safe first and
-falling back to Master EOA if needed.
+falling back to Master EOA if needed. All Master Safe transfers of a
+chain are batched into a single MultiSend transaction; only the Master
+EOA legs (if any) settle as additional individual transactions. The
+per-asset `transfer_txs` lists are preserved for compatibility — assets
+withdrawn in the same batch share the same transaction hashes.
 
 **Request Body:**
 
@@ -349,7 +353,7 @@ falling back to Master EOA if needed.
   "message": "Funds withdrawn successfully.",
   "transfer_txs": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // Txs of the chain's batched withdrawal (shared across its assets): one batched Master Safe tx and/or Master EOA txs
       "0x...": ["0x...", "0x..."]
     }
   }
@@ -379,7 +383,7 @@ falling back to Master EOA if needed.
   "error": "Failed to withdraw funds. Insufficient funds: (...)",
   "transfer_txs": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // Txs of the chain's batched withdrawal (shared across its assets): one batched Master Safe tx and/or Master EOA txs
       "0x...": ["0x...", "0x..."]
     }
   }  
@@ -393,7 +397,7 @@ falling back to Master EOA if needed.
   "error": "Failed to withdraw funds. Please check the logs.",
   "transfer_txs": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // Txs of the chain's batched withdrawal (shared across its assets): one batched Master Safe tx and/or Master EOA txs
       "0x...": ["0x...", "0x..."]
     }
   }  
