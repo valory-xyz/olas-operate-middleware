@@ -87,37 +87,12 @@ from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
     hash_payload_to_hex,
+    normalize_tx_data_to_bytes,
     skill_input_hex_to_payload,
 )
 from operate.wallet.master import MasterWallet
 
 ETHEREUM_ERC20 = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
-
-
-def _normalize_tx_data_to_bytes(data: t.Union[str, bytes]) -> bytes:
-    """Coerce a multisend tx ``data`` field to ``bytes``.
-
-    ``Contract.encode_abi()`` returns ``HexStr`` (``str``) under web3 7.x /
-    open-aea 2.2.x, but the multisend contract's ``encode_data()`` requires
-    ``bytes`` for concatenation. This helper handles both ``"0x..."`` and
-    raw-hex inputs as well as already-``bytes`` values.
-
-    Two callsite layers exist for this normalization, covering different
-    paths to multisend:
-
-    - Boundary: :meth:`GnosisSafeTransaction.build` normalizes every tx added
-      via :meth:`GnosisSafeTransaction.add` before passing them to
-      ``multisend.get_tx_data``. This catches all ``gst.add(...).settle()``
-      flows (staking / unstaking / claiming / etc.).
-    - Per-callsite: helpers that bypass :meth:`build` and call
-      ``multisend.get_multisend_tx`` / ``get_tx_data`` directly (e.g.
-      :meth:`get_safe_b_erc20_transfer_messages`) must normalize their own
-      ``txs`` dicts before the multisend call.
-    """
-    if isinstance(data, bytes):
-        return data
-    hex_str = data[2:] if data.startswith("0x") else data
-    return bytes.fromhex(hex_str)
 
 
 class StakingState(Enum):
@@ -154,11 +129,11 @@ class GnosisSafeTransaction:
         """Build the transaction."""
         # Boundary normalization: every tx added via .add() is coerced to
         # bytes here before reaching multisend.get_tx_data(). See
-        # _normalize_tx_data_to_bytes for the architectural rationale.
+        # normalize_tx_data_to_bytes for the architectural rationale.
         normalized_txs = []
         for tx in self._txs:
             tx_copy = dict(tx)
-            tx_copy["data"] = _normalize_tx_data_to_bytes(tx_copy.get("data", b""))
+            tx_copy["data"] = normalize_tx_data_to_bytes(tx_copy.get("data", b""))
             normalized_txs.append(tx_copy)
 
         multisend_data = bytes.fromhex(
@@ -1010,7 +985,7 @@ class _ChainUtil:
                 "operation": MultiSendOperation.CALL,
                 "to": multisig,
                 "value": 0,
-                "data": _normalize_tx_data_to_bytes(txd),
+                "data": normalize_tx_data_to_bytes(txd),
             }
         )
         multisend_txd = registry_contracts.multisend.get_tx_data(  # type: ignore
@@ -1713,8 +1688,8 @@ class EthSafeTxBuilder(_ChainUtil):
 
         # Per-callsite normalization: this multisend call bypasses
         # GnosisSafeTransaction.build() (the boundary), so the tx dict
-        # must be coerced to bytes here. See _normalize_tx_data_to_bytes.
-        transfer_data = _normalize_tx_data_to_bytes(
+        # must be coerced to bytes here. See normalize_tx_data_to_bytes.
+        transfer_data = normalize_tx_data_to_bytes(
             erc20_instance.encode_abi(
                 abi_element_identifier="transfer",
                 args=[to, amount],
@@ -2092,7 +2067,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
         txs.append(
             {
                 "to": multisig_address,
-                "data": _normalize_tx_data_to_bytes(
+                "data": normalize_tx_data_to_bytes(
                     multisig_instance.encode_abi(
                         abi_element_identifier="addOwnerWithThreshold",
                         args=[_owner, 1],
@@ -2106,7 +2081,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     txs.append(
         {
             "to": multisig_address,
-            "data": _normalize_tx_data_to_bytes(
+            "data": normalize_tx_data_to_bytes(
                 multisig_instance.encode_abi(
                     abi_element_identifier="removeOwner",
                     args=[new_owners[0], master_safe, 1],
@@ -2120,7 +2095,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # 
     txs.append(
         {
             "to": multisig_address,
-            "data": _normalize_tx_data_to_bytes(
+            "data": normalize_tx_data_to_bytes(
                 multisig_instance.encode_abi(
                     abi_element_identifier="changeThreshold",
                     args=[threshold],
