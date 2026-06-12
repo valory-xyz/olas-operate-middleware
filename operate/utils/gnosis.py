@@ -497,6 +497,260 @@ def transfer_erc20_from_safe(
     )
 
 
+def simulate_safe_sub_tx(
+    ledger_api: LedgerApi,
+    safe: str,
+    tx: t.Dict,
+) -> t.Optional[str]:
+    """Simulate a MultiSend sub-transaction as the Safe via ``eth_call``.
+
+    Returns ``None`` when the call succeeds, otherwise the error message.
+    Used as the pre-filter before batching (drop failing entries instead of
+    letting one bad sub-tx revert the whole batch) and for attributing a
+    batch revert to the failing sub-transaction.
+    """
+    try:
+        ledger_api.api.eth.call(
+            {
+                "from": ledger_api.api.to_checksum_address(safe),
+                "to": ledger_api.api.to_checksum_address(tx["to"]),
+                "value": int(tx.get("value", 0)),
+                "data": tx.get("data", b""),
+            }
+        )
+        return None
+    except Exception as e:  # pylint: disable=broad-except
+        return str(e)
+
+
+def normalize_tx_data_to_bytes(data: t.Union[str, bytes]) -> bytes:
+    """Coerce a multisend tx ``data`` field to ``bytes``.
+
+    ``Contract.encode_abi()`` returns ``HexStr`` (``str``) under web3 7.x /
+    open-aea 2.2.x, but the multisend contract's ``encode_data()`` requires
+    ``bytes`` for concatenation. This helper handles both ``"0x..."`` and
+    raw-hex inputs as well as already-``bytes`` values.
+
+    Canonical helper for every multisend payload producer: used by
+    ``send_safe_multisend_txs`` here, and by ``operate.services.protocol``
+    (boundary normalization in ``GnosisSafeTransaction.build`` plus the
+    per-callsite normalizations in helpers that bypass it).
+    """
+    if isinstance(data, bytes):
+        return data
+    hex_str = data[2:] if data.startswith("0x") else data
+    return bytes.fromhex(hex_str)
+
+
+def send_safe_multisend_txs(
+    txs: t.List[t.Dict],
+    safe: str,
+    multisend_address: str,
+    ledger_api: LedgerApi,
+    crypto: Crypto,
+) -> str:
+    """Send multiple sub-transactions as one Safe MultiSend transaction.
+
+    Each entry in ``txs`` is a dict with keys ``to``, ``data`` (bytes or hex
+    string), ``value`` and optionally ``operation`` (defaults to
+    ``MultiSendOperation.CALL``). The batch executes as a single Safe
+    transaction that DELEGATE_CALLs into the MultiSend contract, so every
+    sub-transaction runs with the Safe as ``msg.sender`` and the batch
+    succeeds or reverts atomically.
+    """
+    owner = ledger_api.api.to_checksum_address(crypto.address)
+
+    normalized_txs = []
+    for tx in txs:
+        tx_copy = dict(tx)
+        tx_copy["data"] = normalize_tx_data_to_bytes(tx_copy.get("data", b""))
+        tx_copy.setdefault("operation", MultiSendOperation.CALL)
+        normalized_txs.append(tx_copy)
+
+    multisend_data = bytes.fromhex(
+        registry_contracts.multisend.get_tx_data(
+            ledger_api=ledger_api,
+            contract_address=multisend_address,
+            multi_send_txs=normalized_txs,
+        ).get("data")[2:]
+    )
+
+    def _build_tx() -> t.Optional[t.Dict]:
+        safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
+            ledger_api=ledger_api,
+            contract_address=safe,
+            value=0,
+            safe_tx_gas=0,
+            to_address=multisend_address,
+            data=multisend_data,
+            operation=SafeOperation.DELEGATE_CALL.value,
+        ).get("tx_hash")
+        safe_tx_bytes = binascii.unhexlify(safe_tx_hash[2:])
+        signatures = {
+            owner: crypto.sign_message(
+                message=safe_tx_bytes,
+                is_deprecated_mode=True,
+            )[2:]
+        }
+        tx = registry_contracts.gnosis_safe.get_raw_safe_transaction(
+            ledger_api=ledger_api,
+            contract_address=safe,
+            sender_address=owner,
+            owners=(owner,),  # type: ignore
+            to_address=multisend_address,
+            value=0,
+            data=multisend_data,
+            safe_tx_gas=0,
+            signatures_by_owner=signatures,
+            operation=SafeOperation.DELEGATE_CALL.value,
+            nonce=ledger_api.api.eth.get_transaction_count(owner),
+        )
+        update_tx_with_gas_pricing(tx, ledger_api)
+        update_tx_with_gas_estimate(tx, ledger_api)
+        return tx
+
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
+    with wrap_gas_spike_as_insufficient_funds(
+        chain.value,
+        "send Safe MultiSend transaction",
+        ledger_api=ledger_api,
+        signer_address=crypto.address,
+    ):
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=chain,
+                tx_builder=_build_tx,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+            )
+            .transact()
+            .settle()
+            .tx_hash
+        )
+
+
+def transfer_batch_from_safe(  # pylint: disable=too-many-locals
+    ledger_api: LedgerApi,
+    crypto: Crypto,
+    safe: str,
+    multisend_address: str,
+    transfers: t.List[t.Tuple[str, str, int]],
+) -> t.Optional[str]:
+    """Transfer multiple ``(to, asset, amount)`` entries from a Safe in one tx.
+
+    ``asset == ZERO_ADDRESS`` denotes the chain's native asset. Entries are
+    pre-filtered before batching: non-positive amounts, amounts exceeding the
+    Safe's remaining per-asset balance (cumulative across the batch), and
+    sub-txs whose ``eth_call`` simulation reverts are dropped and logged
+    instead of failing the whole batch. Returns the tx hash, or ``None``
+    when no transfer survives the pre-filter. A single surviving transfer
+    routes through the plain single-tx path (no DELEGATECALL).
+    """
+    sub_txs: t.List[t.Dict] = []
+    kept: t.List[t.Tuple[str, str, int]] = []
+    spent_per_asset: t.Dict[str, int] = {}
+    balance_per_asset: t.Dict[str, int] = {}
+
+    for to, asset, amount in transfers:
+        amount = int(amount)
+        if amount <= 0:
+            logger.warning(
+                f"[BATCH TRANSFER] Skipping non-positive amount {amount} "
+                f"of {asset} to {to} from {safe}"
+            )
+            continue
+
+        if asset not in balance_per_asset:
+            balance_per_asset[asset] = int(
+                get_asset_balance(
+                    ledger_api=ledger_api, asset_address=asset, address=safe
+                )
+            )
+        spent = spent_per_asset.get(asset, 0)
+        if spent + amount > balance_per_asset[asset]:
+            logger.warning(
+                f"[BATCH TRANSFER] Skipping transfer of {amount} of {asset} "
+                f"to {to}: exceeds remaining Safe balance "
+                f"({balance_per_asset[asset] - spent} of {balance_per_asset[asset]})"
+            )
+            continue
+
+        if asset == ZERO_ADDRESS:
+            sub_tx = {
+                "to": to,
+                "value": amount,
+                "data": b"",
+                "operation": MultiSendOperation.CALL,
+            }
+        else:
+            instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=asset,
+            )
+            txd = instance.encode_abi(
+                abi_element_identifier="transfer",
+                args=[to, amount],
+            )
+            sub_tx = {
+                "to": asset,
+                "value": 0,
+                "data": normalize_tx_data_to_bytes(txd),
+                "operation": MultiSendOperation.CALL,
+            }
+
+        error = simulate_safe_sub_tx(ledger_api=ledger_api, safe=safe, tx=sub_tx)
+        if error is not None:
+            logger.warning(
+                f"[BATCH TRANSFER] Skipping transfer of {amount} of {asset} "
+                f"to {to}: simulation failed: {error}"
+            )
+            continue
+
+        spent_per_asset[asset] = spent + amount
+        sub_txs.append(sub_tx)
+        kept.append((to, asset, amount))
+
+    if not sub_txs:
+        logger.warning(
+            f"[BATCH TRANSFER] No transfer survived the pre-filter for Safe {safe}."
+        )
+        return None
+
+    if len(sub_txs) == 1:
+        to, asset, amount = kept[0]
+        if asset == ZERO_ADDRESS:
+            return transfer(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                safe=safe,
+                to=to,
+                amount=amount,
+            )
+        return transfer_erc20_from_safe(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            safe=safe,
+            token=asset,
+            to=to,
+            amount=amount,
+        )
+
+    logger.info(
+        f"[BATCH TRANSFER] Sending {len(sub_txs)} transfers from {safe} "
+        f"in one MultiSend transaction."
+    )
+    return send_safe_multisend_txs(
+        txs=sub_txs,
+        safe=safe,
+        multisend_address=multisend_address,
+        ledger_api=ledger_api,
+        crypto=crypto,
+    )
+
+
 def transfer_erc20_from_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
