@@ -1584,6 +1584,7 @@ class EthSafeTxBuilder(_ChainUtil):
         safe_b_address: str,
         to: str,
         amount: int,
+        nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
         Build the two messages (Safe calls) to withdraw native ETH from Safe B via this Safe (owner of Safe B).
@@ -1591,6 +1592,9 @@ class EthSafeTxBuilder(_ChainUtil):
         Builds the messages to be settled by this Safe:
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ETH
+
+        ``nonce`` is the Safe B nonce the inner tx hash is computed with;
+        ``None`` reads the current nonce on-chain.
         """
         safe_b_instance = registry_contracts.gnosis_safe.get_instance(
             ledger_api=self.ledger_api,
@@ -1624,6 +1628,7 @@ class EthSafeTxBuilder(_ChainUtil):
             value=multisend_tx["value"],
             data=multisend_tx["data"],
             operation=SafeOperation.CALL.value,
+            safe_nonce=nonce,
         ).get("tx_hash")
 
         # Build approveHash message
@@ -1669,6 +1674,7 @@ class EthSafeTxBuilder(_ChainUtil):
         token: str,
         to: str,
         amount: int,
+        nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
         Build the two messages (Safe calls) to withdraw ERC20 from Safe B via this Safe (owner of Safe B).
@@ -1676,6 +1682,9 @@ class EthSafeTxBuilder(_ChainUtil):
         Builds the messages to be settled by this Safe:
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ERC20 tokens
+
+        ``nonce`` is the Safe B nonce the inner tx hash is computed with;
+        ``None`` reads the current nonce on-chain.
         """
         safe_b_instance = registry_contracts.gnosis_safe.get_instance(
             ledger_api=self.ledger_api,
@@ -1723,6 +1732,7 @@ class EthSafeTxBuilder(_ChainUtil):
             value=multisend_tx["value"],
             data=multisend_tx["data"],
             operation=SafeOperation.CALL.value,
+            safe_nonce=nonce,
         ).get("tx_hash")
 
         # Build approveHash message

@@ -22,6 +22,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from autonomy.chain.exceptions import ChainInteractionError
 
 from operate.constants import (
     MASTER_EOA_PLACEHOLDER,
@@ -32,6 +33,13 @@ from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, ChainAmounts
 from operate.serialization import BigInt
 from operate.services.funding_manager import FundingInProgressError, FundingManager
+from operate.utils.gnosis import BatchResult
+
+
+def _mirror_batch(**kwargs):  # type: ignore[no-untyped-def]
+    """transfer_batch_from_safe fake mirroring a fully executed batch."""
+    return BatchResult(tx_hash="0xbatch", sent=list(kwargs["transfers"]))
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -955,11 +963,9 @@ class TestPartialWithdrawServiceSafe:
                 "operate.services.funding_manager.registry_contracts"
             ) as mock_registry,
             patch(
-                "operate.services.funding_manager.transfer_erc20_from_safe"
-            ) as mock_erc20_transfer,
-            patch(
-                "operate.services.funding_manager.transfer_from_safe"
-            ) as mock_native_transfer,
+                "operate.services.funding_manager.transfer_batch_from_safe",
+                side_effect=_mirror_batch,
+            ) as mock_batch,
             patch("operate.services.funding_manager.EthSafeTxBuilder"),
             patch(
                 "operate.services.funding_manager.get_asset_name", return_value="TOKEN"
@@ -982,8 +988,13 @@ class TestPartialWithdrawServiceSafe:
                 chain=Chain.GNOSIS,
             )
 
-        mock_erc20_transfer.assert_called_once()
-        mock_native_transfer.assert_called_once()
+        mock_batch.assert_called_once()
+        sent = mock_batch.call_args.kwargs["transfers"]
+        # ERC20 first, native last — all in one batch
+        assert [(tr.asset, tr.amount) for tr in sent] == [
+            (ERC20_TOKEN, 100),
+            (ZERO_ADDRESS, 200),
+        ]
 
     def test_master_safe_owner_path_uses_sftxb(self) -> None:
         """When owners == {master_safe}, uses EthSafeTxBuilder path."""
@@ -1039,7 +1050,56 @@ class TestPartialWithdrawServiceSafe:
 
         mock_sftxb.get_safe_b_erc20_transfer_messages.assert_called_once()
         mock_sftxb.get_safe_b_native_transfer_messages.assert_called_once()
-        assert mock_tx.settle.call_count == 2
+        # Both message pairs settle in ONE outer Safe tx
+        assert mock_tx.settle.call_count == 1
+
+    def test_master_safe_owner_reverted_batch_raises(self) -> None:
+        """A mined-but-reverted batched outer tx (status 0) raises."""
+        master_safe = "0x" + "b" * 40
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: master_safe}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service()
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[master_safe],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.EthSafeTxBuilder"
+            ) as mock_sftxb_cls,
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            mock_registry.gnosis_safe.get_instance.return_value.functions.nonce.return_value.call.return_value = (
+                7
+            )
+            mock_ledger_api.return_value.get_balance.return_value = 200
+
+            mock_sftxb = MagicMock()
+            mock_sftxb_cls.return_value = mock_sftxb
+            mock_tx = MagicMock()
+            mock_sftxb.new_tx.return_value = mock_tx
+            mock_sftxb.get_safe_b_native_transfer_messages.return_value = [MagicMock()]
+            mock_tx.settle.return_value = {"status": 0}
+
+            with pytest.raises(ChainInteractionError, match="reverted on-chain"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ZERO_ADDRESS: "200"},
+                    chain=Chain.GNOSIS,
+                )
 
     def test_unrecognized_owner_raises_runtime_error_native(self) -> None:
         """Raises RuntimeError in native path if owners don't match known patterns."""
@@ -1131,7 +1191,8 @@ class TestPartialWithdrawServiceSafe:
                 "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
             ),
             patch(
-                "operate.services.funding_manager.transfer_from_safe"
+                "operate.services.funding_manager.transfer_batch_from_safe",
+                side_effect=_mirror_batch,
             ) as mock_native_transfer,
             patch("operate.services.funding_manager.EthSafeTxBuilder"),
             patch(
@@ -1148,6 +1209,41 @@ class TestPartialWithdrawServiceSafe:
             )
 
         mock_native_transfer.assert_called_once()
+
+    def test_agent_owner_dropped_transfer_raises(self) -> None:
+        """A pre-filtered (dropped) transfer fails the partial withdrawal loudly."""
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0x" + "b" * 40}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service()
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners", return_value=[EOA_ADDR]
+            ),
+            patch(
+                "operate.services.funding_manager.transfer_batch_from_safe",
+                return_value=BatchResult(tx_hash=None, sent=[]),
+            ),
+            patch("operate.services.funding_manager.EthSafeTxBuilder"),
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 500
+
+            with pytest.raises(RuntimeError, match="executed 0 of 1"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ZERO_ADDRESS: "500"},
+                    chain=Chain.GNOSIS,
+                )
 
     def test_erc20_only_withdrawal_agent_owner(self) -> None:
         """ERC20-only withdrawal (no native) through agent owner path."""
@@ -1169,11 +1265,9 @@ class TestPartialWithdrawServiceSafe:
                 "operate.services.funding_manager.registry_contracts"
             ) as mock_registry,
             patch(
-                "operate.services.funding_manager.transfer_erc20_from_safe"
-            ) as mock_erc20_transfer,
-            patch(
-                "operate.services.funding_manager.transfer_from_safe"
-            ) as mock_native_transfer,
+                "operate.services.funding_manager.transfer_batch_from_safe",
+                side_effect=_mirror_batch,
+            ) as mock_batch,
             patch("operate.services.funding_manager.EthSafeTxBuilder"),
             patch(
                 "operate.services.funding_manager.get_asset_name", return_value="TOKEN"
@@ -1190,8 +1284,9 @@ class TestPartialWithdrawServiceSafe:
                 chain=Chain.GNOSIS,
             )
 
-        mock_erc20_transfer.assert_called_once()
-        mock_native_transfer.assert_not_called()
+        mock_batch.assert_called_once()
+        sent = mock_batch.call_args.kwargs["transfers"]
+        assert [(tr.asset, tr.amount) for tr in sent] == [(ERC20_TOKEN, 100)]
 
     def test_negative_amount_raises_value_error(self) -> None:
         """Raises ValueError when a negative amount string is provided."""
