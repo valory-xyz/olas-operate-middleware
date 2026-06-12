@@ -126,7 +126,7 @@ AGENT_TYPE_IDS = {
     "modius": 40,
     "trader": 25,
     "pett_ai": 80,
-    "basius": 0,
+    "basius": 115,  # Olas Registry mint: https://marketplace.olas.network/ethereum/ai-agents/115
 }
 
 logger = setup_logger("operate.services.service")
