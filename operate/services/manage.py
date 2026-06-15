@@ -88,6 +88,7 @@ from operate.services.service import (
 )
 from operate.utils.gnosis import (
     get_asset_balance,
+    simulate_safe_sub_tx,
     transfer_erc20_from_safe,
 )
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
@@ -557,12 +558,18 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                protocol_asset_requirements = self._compute_protocol_asset_requirements(
-                    service_config_id, chain
+                full_requirements = (
+                    self.funding_manager._compute_protocol_asset_requirements(service)
+                )
+                protocol_asset_requirements = dict(
+                    full_requirements.get(chain, {}).get(safe, {})
                 )
             elif on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                protocol_asset_requirements = self._compute_protocol_asset_requirements(
-                    service_config_id, chain
+                full_requirements = (
+                    self.funding_manager._compute_protocol_asset_requirements(service)
+                )
+                protocol_asset_requirements = dict(
+                    full_requirements.get(chain, {}).get(safe, {})
                 )
                 protocol_asset_requirements[target_staking_params["staking_token"]] = (
                     target_staking_params["min_staking_deposit"]
@@ -646,7 +653,6 @@ class ServiceManager:
             self.terminate_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
             )
-            # Update service
             if (
                 self._get_on_chain_state(service=service, chain=chain)
                 == OnChainState.PRE_REGISTRATION
@@ -655,43 +661,7 @@ class ServiceManager:
                 self._execute_recovery_module_flow_from_safe(
                     service_config_id=service_config_id, chain=chain
                 )
-
-                self.logger.info("Updating service")
-                receipt = (
-                    sftxb.new_tx()
-                    .add(
-                        sftxb.get_mint_tx_data(
-                            package_path=service.package_absolute_path,
-                            agent_id=agent_id,
-                            number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
-                            cost_of_bond=(
-                                target_staking_params["min_staking_deposit"]
-                                if user_params.use_staking
-                                else user_params.cost_of_bond
-                            ),
-                            threshold=len(service.agent_addresses),
-                            nft=IPFSHash(user_params.nft),
-                            update_token=chain_data.token,
-                            token=(
-                                target_staking_params["staking_token"]
-                                if user_params.use_staking
-                                else None
-                            ),
-                            metadata_description=service.description,
-                            skip_depencency_check=self.skip_depencency_check,
-                        )
-                    )
-                    .settle()
-                )
-                event_data, *_ = t.cast(
-                    t.Tuple,
-                    registry_contracts.service_registry.process_receipt(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=target_staking_params["service_registry"],
-                        event="UpdateService",
-                        receipt=receipt,
-                    ).get("events"),
-                )
+                # Update mint is included in the mega-batch below
 
         # Mint service
         if (
@@ -745,146 +715,137 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
-        # Activate service
+        # ── Mega-batch happy path ─────────────────────────────────
+        # When starting from PRE_REGISTRATION, batch the entire
+        # activate → register → deploy (→ stake) cycle into one
+        # Master Safe MultiSend transaction.
+        is_initial_funding = False
+        mega_batch_done = False
+
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
         ):
-            cost_of_bond = user_params.cost_of_bond
-            if user_params.use_staking:
-                token_utility = target_staking_params["service_registry_token_utility"]
-                olas_token = target_staking_params["staking_token"]
-                self.logger.info(
-                    f"Approving OLAS as bonding token from {safe} to {token_utility}"
-                )
-                cost_of_bond = (
-                    registry_contracts.service_registry_token_utility.get_agent_bond(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_utility,
-                        service_id=chain_data.token,
-                        agent_id=agent_id,
-                    ).get("bond")
-                )
-                sftxb.new_tx().add(
-                    sftxb.get_erc20_approval_data(
-                        spender=token_utility,
-                        amount=cost_of_bond,
-                        erc20_contract=olas_token,
-                    )
-                ).settle()
-                token_utility_allowance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=olas_token,
-                    )
-                    .functions.allowance(
-                        safe,
-                        token_utility,
-                    )
-                    .call()
-                )
-                self.logger.info(
-                    f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
-                )
-                cost_of_bond = MIN_AGENT_BOND
-
-            self.logger.info("Activating service")
-
-            native_balance = get_asset_balance(
-                ledger_api=sftxb.ledger_api,
-                asset_address=ZERO_ADDRESS,
-                address=safe,
-            )
-
-            if (
-                native_balance < cost_of_bond
-            ):  # TODO check that this is the security deposit
-                message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
-                self.logger.error(message)
-                raise ValueError(message)
-
-            sftxb.new_tx().add(
-                sftxb.get_activate_data(
-                    service_id=chain_data.token,
-                    cost_of_bond=cost_of_bond,
-                )
-            ).settle()
-
-        # Register agent instances
-        if (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.ACTIVE_REGISTRATION
-        ):
-            cost_of_bond = user_params.cost_of_bond
-            if user_params.use_staking:
-                token_utility = target_staking_params["service_registry_token_utility"]
-                olas_token = target_staking_params["staking_token"]
-                self.logger.info(
-                    f"Approving OLAS as bonding token from {safe} to {token_utility}"
-                )
-                cost_of_bond = (
-                    registry_contracts.service_registry_token_utility.get_agent_bond(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_utility,
-                        service_id=chain_data.token,
-                        agent_id=agent_id,
-                    ).get("bond")
-                )
-                sftxb.new_tx().add(
-                    sftxb.get_erc20_approval_data(
-                        spender=token_utility,
-                        amount=cost_of_bond,
-                        erc20_contract=olas_token,
-                    )
-                ).settle()
-                token_utility_allowance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=olas_token,
-                    )
-                    .functions.allowance(
-                        safe,
-                        token_utility,
-                    )
-                    .call()
-                )
-                self.logger.info(
-                    f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
-                )
-                cost_of_bond = MIN_AGENT_BOND
-
             self.logger.info(
-                f"Registering agent instances: {chain_data.token} -> {service.agent_addresses}"
+                "Mega-batch path: "
+                + ("update → " if is_update else "")
+                + "activate → register → deploy"
+                + (" → stake" if user_params.use_staking else "")
             )
 
-            native_balance = get_asset_balance(
-                ledger_api=sftxb.ledger_api,
-                asset_address=ZERO_ADDRESS,
-                address=safe,
-            )
-
-            if native_balance < cost_of_bond * len(service.agent_addresses):
-                message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
-                self.logger.error(message)
-                raise ValueError(message)
-
-            sftxb.new_tx().add(
-                sftxb.get_register_instances_data(
-                    service_id=chain_data.token,
-                    instances=service.agent_addresses,
-                    agents=[agent_id for _ in service.agent_addresses],
-                    cost_of_bond=cost_of_bond,
+            # Pre-flight: staking slot/reward availability
+            include_staking = False
+            target_staking_contract: t.Optional[str] = None
+            if user_params.use_staking:
+                target_staking_contract = get_staking_contract(
+                    chain=ledger_config.chain,
+                    staking_program_id=user_params.staking_program_id,
                 )
-            ).settle()
+                if not sftxb.staking_slots_available(
+                    staking_contract=target_staking_contract,
+                ):
+                    raise ValueError("No staking slots available")
+                if sftxb.staking_rewards_available(target_staking_contract):
+                    include_staking = True
+                else:
+                    self.logger.warning(
+                        "No staking rewards available, omitting stake from mega-batch"
+                    )
 
-        # Deploy service
-        is_initial_funding = False
-        if (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.FINISHED_REGISTRATION
-        ):
-            self.logger.info("Deploying service")
+            mega_tx = sftxb.new_tx(gas_fallback=3_000_000)
+            sub_tx_labels: t.List[str] = []
+            sub_txs: t.List[t.Dict] = []
 
+            # --- Update mint (update path only) ---
+            if is_update:
+                self.logger.info("Including update mint in mega-batch")
+                update_mint_data = sftxb.get_mint_tx_data(
+                    package_path=service.package_absolute_path,
+                    agent_id=agent_id,
+                    number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
+                    cost_of_bond=(
+                        target_staking_params["min_staking_deposit"]
+                        if user_params.use_staking
+                        else user_params.cost_of_bond
+                    ),
+                    threshold=len(service.agent_addresses),
+                    nft=IPFSHash(user_params.nft),
+                    update_token=chain_data.token,
+                    token=(
+                        target_staking_params["staking_token"]
+                        if user_params.use_staking
+                        else None
+                    ),
+                    metadata_description=service.description,
+                    skip_depencency_check=self.skip_depencency_check,
+                )
+                mega_tx.add(update_mint_data)
+                sub_tx_labels.append("update_mint")
+                sub_txs.append(update_mint_data)
+
+            # --- OLAS approval + activate ---
+            cost_of_bond = user_params.cost_of_bond
+            if user_params.use_staking:
+                token_utility = target_staking_params["service_registry_token_utility"]
+                olas_token = target_staking_params["staking_token"]
+                cost_of_bond_olas = (
+                    registry_contracts.service_registry_token_utility.get_agent_bond(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_utility,
+                        service_id=chain_data.token,
+                        agent_id=agent_id,
+                    ).get("bond")
+                )
+                approve_act = sftxb.get_erc20_approval_data(
+                    spender=token_utility,
+                    amount=cost_of_bond_olas,
+                    erc20_contract=olas_token,
+                )
+                mega_tx.add(approve_act)
+                sub_tx_labels.append("erc20_approve_activate")
+                sub_txs.append(approve_act)
+                cost_of_bond = MIN_AGENT_BOND
+
+            activate_data = sftxb.get_activate_data(
+                service_id=chain_data.token,
+                cost_of_bond=cost_of_bond,
+            )
+            mega_tx.add(activate_data)
+            sub_tx_labels.append("activate")
+            sub_txs.append(activate_data)
+
+            # --- OLAS approval + register ---
+            cost_of_bond_reg = user_params.cost_of_bond
+            if user_params.use_staking:
+                cost_of_bond_olas_reg = (
+                    registry_contracts.service_registry_token_utility.get_agent_bond(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_utility,
+                        service_id=chain_data.token,
+                        agent_id=agent_id,
+                    ).get("bond")
+                )
+                approve_reg = sftxb.get_erc20_approval_data(
+                    spender=token_utility,
+                    amount=cost_of_bond_olas_reg,
+                    erc20_contract=olas_token,
+                )
+                mega_tx.add(approve_reg)
+                sub_tx_labels.append("erc20_approve_register")
+                sub_txs.append(approve_reg)
+                cost_of_bond_reg = MIN_AGENT_BOND
+
+            register_data = sftxb.get_register_instances_data(
+                service_id=chain_data.token,
+                instances=service.agent_addresses,
+                agents=[agent_id for _ in service.agent_addresses],
+                cost_of_bond=cost_of_bond_reg,
+            )
+            mega_tx.add(register_data)
+            sub_tx_labels.append("register_instances")
+            sub_txs.append(register_data)
+
+            # --- Deploy ---
             info = sftxb.info(token_id=chain_data.token)
             service_safe_address = info["multisig"]
             if service_safe_address == ZERO_ADDRESS:
@@ -893,7 +854,6 @@ class ServiceManager:
                 is_recovery_module_enabled = True
             else:
                 reuse_multisig = True
-                is_initial_funding = False
                 is_recovery_module_enabled = (
                     registry_contracts.gnosis_safe.is_module_enabled(
                         ledger_api=sftxb.ledger_api,
@@ -901,15 +861,11 @@ class ServiceManager:
                         module_address=CONTRACTS[Chain(chain)]["recovery_module"],
                     ).get("enabled")
                 )
-
             self.logger.info(f"{reuse_multisig=}")
-            self.logger.info(f"{is_recovery_module_enabled=}")
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
-
-            self.logger.info(f"{use_poly_safe=}")
-            messages = sftxb.get_deploy_data_from_safe(
+            deploy_messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
@@ -919,10 +875,251 @@ class ServiceManager:
                     service.agent_addresses[0]
                 ),
             )
-            tx = sftxb.new_tx()
-            for message in messages:
-                tx.add(message)
-            tx.settle()
+            for msg in deploy_messages:
+                mega_tx.add(msg)
+                sub_tx_labels.append("deploy")
+                sub_txs.append(msg)
+
+            # --- Staking (if enabled and slots/rewards available) ---
+            if include_staking and target_staking_contract is not None:
+                nft_approve = sftxb.get_staking_approval_data(
+                    service_id=chain_data.token,
+                    service_registry=CONTRACTS[ledger_config.chain]["service_registry"],
+                    staking_contract=target_staking_contract,
+                )
+                mega_tx.add(nft_approve)
+                sub_tx_labels.append("staking_nft_approve")
+                sub_txs.append(nft_approve)
+
+                staking_params = sftxb.get_staking_params(
+                    staking_contract=target_staking_contract
+                )
+                for token_contract, min_amount in staking_params[
+                    "additional_staking_tokens"
+                ].items():
+                    token_appr = sftxb.get_erc20_approval_data(
+                        spender=target_staking_contract,
+                        amount=min_amount,
+                        erc20_contract=token_contract,
+                    )
+                    mega_tx.add(token_appr)
+                    sub_tx_labels.append(f"staking_token_approve_{token_contract[:10]}")
+                    sub_txs.append(token_appr)
+
+                stake_data = sftxb.get_staking_data(
+                    service_id=chain_data.token,
+                    staking_contract=target_staking_contract,
+                )
+                mega_tx.add(stake_data)
+                sub_tx_labels.append("stake")
+                sub_txs.append(stake_data)
+
+            # --- Settle ---
+            try:
+                mega_tx.settle()
+            except Exception:
+                self.logger.error("Mega-batch reverted, running revert attribution")
+                for label, sub_tx in zip(sub_tx_labels, sub_txs):
+                    error = simulate_safe_sub_tx(
+                        ledger_api=sftxb.ledger_api,
+                        safe=safe,
+                        tx=sub_tx,
+                    )
+                    if error is not None:
+                        self.logger.error(
+                            f"Mega-batch sub-tx '{label}' would revert: " f"{error}"
+                        )
+                raise
+
+            mega_batch_done = True
+
+        if not mega_batch_done:
+            # ── Stepwise resume / repair path ─────────────────
+            # Services interrupted mid-cycle or left mid-state by
+            # older versions enter at their actual on-chain state
+            # and proceed step by step.
+
+            # Activate service
+            if (
+                self._get_on_chain_state(service=service, chain=chain)
+                == OnChainState.PRE_REGISTRATION
+            ):
+                cost_of_bond = user_params.cost_of_bond
+                if user_params.use_staking:
+                    token_utility = target_staking_params[
+                        "service_registry_token_utility"
+                    ]
+                    olas_token = target_staking_params["staking_token"]
+                    self.logger.info(
+                        f"Approving OLAS as bonding token from {safe} to {token_utility}"
+                    )
+                    cost_of_bond = registry_contracts.service_registry_token_utility.get_agent_bond(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_utility,
+                        service_id=chain_data.token,
+                        agent_id=agent_id,
+                    ).get(
+                        "bond"
+                    )
+                    sftxb.new_tx().add(
+                        sftxb.get_erc20_approval_data(
+                            spender=token_utility,
+                            amount=cost_of_bond,
+                            erc20_contract=olas_token,
+                        )
+                    ).settle()
+                    token_utility_allowance = (
+                        registry_contracts.erc20.get_instance(
+                            ledger_api=sftxb.ledger_api,
+                            contract_address=olas_token,
+                        )
+                        .functions.allowance(
+                            safe,
+                            token_utility,
+                        )
+                        .call()
+                    )
+                    self.logger.info(
+                        f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
+                    )
+                    cost_of_bond = MIN_AGENT_BOND
+
+                self.logger.info("Activating service")
+
+                native_balance = get_asset_balance(
+                    ledger_api=sftxb.ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=safe,
+                )
+
+                if (
+                    native_balance < cost_of_bond
+                ):  # TODO check that this is the security deposit
+                    message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
+                    self.logger.error(message)
+                    raise ValueError(message)
+
+                sftxb.new_tx().add(
+                    sftxb.get_activate_data(
+                        service_id=chain_data.token,
+                        cost_of_bond=cost_of_bond,
+                    )
+                ).settle()
+
+            # Register agent instances
+            if (
+                self._get_on_chain_state(service=service, chain=chain)
+                == OnChainState.ACTIVE_REGISTRATION
+            ):
+                cost_of_bond = user_params.cost_of_bond
+                if user_params.use_staking:
+                    token_utility = target_staking_params[
+                        "service_registry_token_utility"
+                    ]
+                    olas_token = target_staking_params["staking_token"]
+                    self.logger.info(
+                        f"Approving OLAS as bonding token from {safe} to {token_utility}"
+                    )
+                    cost_of_bond = registry_contracts.service_registry_token_utility.get_agent_bond(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_utility,
+                        service_id=chain_data.token,
+                        agent_id=agent_id,
+                    ).get(
+                        "bond"
+                    )
+                    sftxb.new_tx().add(
+                        sftxb.get_erc20_approval_data(
+                            spender=token_utility,
+                            amount=cost_of_bond,
+                            erc20_contract=olas_token,
+                        )
+                    ).settle()
+                    token_utility_allowance = (
+                        registry_contracts.erc20.get_instance(
+                            ledger_api=sftxb.ledger_api,
+                            contract_address=olas_token,
+                        )
+                        .functions.allowance(
+                            safe,
+                            token_utility,
+                        )
+                        .call()
+                    )
+                    self.logger.info(
+                        f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
+                    )
+                    cost_of_bond = MIN_AGENT_BOND
+
+                self.logger.info(
+                    f"Registering agent instances: {chain_data.token} -> {service.agent_addresses}"
+                )
+
+                native_balance = get_asset_balance(
+                    ledger_api=sftxb.ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=safe,
+                )
+
+                if native_balance < cost_of_bond * len(service.agent_addresses):
+                    message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
+                    self.logger.error(message)
+                    raise ValueError(message)
+
+                sftxb.new_tx().add(
+                    sftxb.get_register_instances_data(
+                        service_id=chain_data.token,
+                        instances=service.agent_addresses,
+                        agents=[agent_id for _ in service.agent_addresses],
+                        cost_of_bond=cost_of_bond,
+                    )
+                ).settle()
+
+            # Deploy service
+            if (
+                self._get_on_chain_state(service=service, chain=chain)
+                == OnChainState.FINISHED_REGISTRATION
+            ):
+                self.logger.info("Deploying service")
+
+                info = sftxb.info(token_id=chain_data.token)
+                service_safe_address = info["multisig"]
+                if service_safe_address == ZERO_ADDRESS:
+                    reuse_multisig = False
+                    is_initial_funding = True
+                    is_recovery_module_enabled = True
+                else:
+                    reuse_multisig = True
+                    is_initial_funding = False
+                    is_recovery_module_enabled = (
+                        registry_contracts.gnosis_safe.is_module_enabled(
+                            ledger_api=sftxb.ledger_api,
+                            contract_address=service_safe_address,
+                            module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                        ).get("enabled")
+                    )
+
+                self.logger.info(f"{reuse_multisig=}")
+                self.logger.info(f"{is_recovery_module_enabled=}")
+
+                service_public_id = PublicId.from_str(service.service_public_id())
+                use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
+
+                self.logger.info(f"{use_poly_safe=}")
+                messages = sftxb.get_deploy_data_from_safe(
+                    service_id=chain_data.token,
+                    reuse_multisig=reuse_multisig,
+                    master_safe=safe,
+                    use_recovery_module=is_recovery_module_enabled,
+                    use_poly_safe=use_poly_safe,
+                    agent_eoa_crypto=self.keys_manager.get_crypto_instance(
+                        service.agent_addresses[0]
+                    ),
+                )
+                tx = sftxb.new_tx()
+                for message in messages:
+                    tx.add(message)
+                tx.settle()
 
         # Update local Service
         info = sftxb.info(token_id=chain_data.token)
@@ -1057,7 +1254,7 @@ class ServiceManager:
         )
         service.store()
 
-        if user_params.use_staking:
+        if user_params.use_staking and not mega_batch_done:
             self.stake_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
             )
