@@ -919,16 +919,21 @@ class ServiceManager:
                 mega_tx.settle()
             except Exception:
                 self.logger.error("Mega-batch reverted, running revert attribution")
-                for label, sub_tx in zip(sub_tx_labels, sub_txs):
-                    error = simulate_safe_sub_tx(
-                        ledger_api=sftxb.ledger_api,
-                        safe=safe,
-                        tx=sub_tx,
-                    )
-                    if error is not None:
-                        self.logger.error(
-                            f"Mega-batch sub-tx '{label}' would revert: " f"{error}"
+                try:
+                    for label, sub_tx in zip(sub_tx_labels, sub_txs):
+                        error = simulate_safe_sub_tx(
+                            ledger_api=sftxb.ledger_api,
+                            safe=safe,
+                            tx=sub_tx,
                         )
+                        if error is not None:
+                            self.logger.error(
+                                f"Mega-batch sub-tx '{label}' would revert: " f"{error}"
+                            )
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.warning(
+                        "Revert attribution failed (RPC/transport error)"
+                    )
                 raise
 
             mega_batch_done = True
