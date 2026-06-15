@@ -29,8 +29,7 @@ drains, Safe deployments, current bridge execution) **cannot** use MultiSend and
    (`{from: safe, to, data, value}`); drop failing entries from the batch and log what was skipped.
    Closest to today's tolerate-and-continue semantics.
 2. **Full scope:** wallet primitive, funding/drain/withdraw loops, the full
-   service-lifecycle mega-batch (incl. terminate side), cross-token service-safe drain,
-   conditional bridge batching.
+   service-lifecycle mega-batch (incl. terminate side), cross-token service-safe drain.
 3. **API compatibility: keep response shapes.** Withdrawal/drain responses keep the per-asset list
    structure, repeating the batch tx hash for each asset it covered. No Pearl coordination needed.
 
@@ -164,17 +163,13 @@ DEPLOYED + the NFT approval before it). Target tx counts per chain: fresh servic
   (reward token address, post-claim balance) are read from the claim receipt's logs (manage.py:1999–2008).
   Claim remains a single Safe tx; this flow is unchanged.
 
-### F. Conditional bridge batching — `operate/bridge/providers/provider.py`
-
-Bridge txs execute from `provider_request.params["from"]["address"]` — in practice the Master EOA,
-which cannot batch. Do **not** redesign bridge custody. Only: in `Provider.execute()`
-(provider.py:424–465), when the from-address checksum-equals the wallet's Master Safe on the
-source chain (`wallet.safes[chain]`, resolved via the wallet manager), route the tx list
-(approve + bridge/forward) through `send_safe_multisend_txs` instead of the sequential
-per-tx `TxSettler` loop. If from-address is an EOA (the normal case), behavior is unchanged.
-
 ## Out of scope (documented, intentional)
 
+- Bridge execution: `Provider.execute()` signs every bridge tx with the Master EOA key
+  (`wallet.crypto`) via a per-tx `TxSettler` loop — there is no Safe `execTransaction` path in
+  `operate/bridge/`. Although `bridge_manager._raise_if_invalid` accepts the Master Safe as a
+  `from` address, no working execution path sends a bridge tx from the Safe, so there is nothing
+  to batch. Bridges originate from the Master EOA (EOA-signed) and stay as-is.
 - EOA-signed flows: Master EOA transfers/drains (`master.py:324–486, 525–580`,
   `gnosis.py:500–550, 606–702`), agent-EOA drains (`funding_manager.drain_agents_eoas`, :124–244),
   Safe deployments. No EIP-4337/7702 work.
@@ -193,7 +188,6 @@ per-tx `TxSettler` loop. If from-address is an EOA (the normal case), behavior i
 | `operate/services/manage.py` | Mega-batch happy path + combined-receipt event parsing; stepwise-path approve+action merges; terminate-side batch |
 | `operate/services/protocol.py` | Explicit-nonce parameter on `get_safe_b_*_transfer_messages` |
 | `operate/cli.py` | `_wallet_withdraw` Safe-leg batching, response shape preserved |
-| `operate/bridge/providers/provider.py` | Safe-aware execute path |
 | `CLAUDE.md` | Fix `services/manager.py` → `manage.py` reference; note batching convention |
 | `docs/wallet-and-funding.md`, `docs/api.md` | Reflect batched semantics |
 
@@ -232,5 +226,5 @@ No JSON schema / persistence changes; no migration; no new endpoints or request 
 - Pre-filter simulation costs extra RPC calls (one `eth_call` per sub-tx) — acceptable; balance reads
   already happen per asset today.
 - Single delivery: Stacked PRs; suggested implementation order within it
-  is A → B → C/D → E → F (each section's tests written alongside), since A is the dependency of
+  is A → B → C/D → E (each section's tests written alongside), since A is the dependency of
   everything else.
