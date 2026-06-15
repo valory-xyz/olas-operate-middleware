@@ -1382,6 +1382,30 @@ class TestTerminateAndUnbond:
         sftxb.get_terminate_data.assert_not_called()
         tx.settle.assert_called_once()
 
+    def test_terminate_and_unbond_terminate_only_when_active_registration(
+        self, tmp_path: Path
+    ) -> None:
+        """When ACTIVE_REGISTRATION, only terminate is called (no unbond)."""
+        manager = _make_manager(tmp_path)
+        sftxb = self._make_sftxb()
+        service = MagicMock()
+        chain_data = MagicMock()
+        chain_data.token = 42
+
+        with patch.object(
+            manager,
+            "_get_on_chain_state",
+            return_value=OnChainState.ACTIVE_REGISTRATION,
+        ):
+            manager._terminate_and_unbond(sftxb, service, _CHAIN, chain_data)
+
+        sftxb.new_tx.assert_called_once()
+        tx = sftxb.new_tx.return_value
+        assert tx.add.call_count == 1
+        sftxb.get_terminate_data.assert_called_once_with(service_id=42)
+        sftxb.get_unbond_data.assert_not_called()
+        tx.settle.assert_called_once()
+
     def test_terminate_and_unbond_noop_when_pre_registration(
         self, tmp_path: Path
     ) -> None:
