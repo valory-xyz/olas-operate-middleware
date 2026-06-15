@@ -80,6 +80,12 @@ from operate.wallet.master import InsufficientFundsException, MasterWalletManage
 # Used to estimate the total native gas an EOA needs to drain its ERC20 balances.
 _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 
+# Conservative per-transfer gas estimate used when batching service-safe drain
+# txs via Master Safe. eth_estimateGas fails for multi-call batches due to
+# non-monotonic gasleft() behavior from the 63/64 EVM forwarding rule across
+# nested Gnosis Safe execTransaction calls; this fallback is applied instead.
+_GAS_PER_SAFE_B_TRANSFER = 500_000
+
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
@@ -252,12 +258,12 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         transfers: t.List[Transfer],
         require_all: bool = False,
     ) -> None:
-        """Execute transfers out of the service Safe in one batched tx.
+        """Execute transfers out of the service Safe.
 
         Agent-owned Safes batch all transfers in one MultiSend tx signed by
-        the agent key; master-owned Safes batch the approveHash +
-        execTransaction message pairs (with sequential Safe B nonces) into
-        one Master Safe tx. ``require_all`` raises when the agent-owned
+        the agent key; master-owned Safes send one outer Master Safe tx per
+        transfer (batching all into one tx exceeds gas-estimation limits on
+        some RPC providers). ``require_all`` raises when the agent-owned
         batch pre-filter drops any of the requested transfers.
         """
         wallet = self.wallet_manager.load(chain.ledger_type)
@@ -292,7 +298,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 .functions.nonce()
                 .call()
             )
-            tx = sftxb.new_tx()
+            # eth_estimateGas fails for multi-call batches because the
+            # 63/64 gas-forwarding rule across nested Safe execTransaction
+            # calls makes the binary search non-convergent. Supply a
+            # conservative per-transfer fallback so the outer tx is
+            # submitted with a workable gas limit when estimation fails.
+            gas_fallback = len(transfers) * _GAS_PER_SAFE_B_TRANSFER
+            tx = sftxb.new_tx(gas_fallback=gas_fallback)
             for i, (to, asset, amount) in enumerate(transfers):
                 if asset == ZERO_ADDRESS:
                     messages = sftxb.get_safe_b_native_transfer_messages(
@@ -312,10 +324,9 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 for message in messages:
                     tx.add(message)
             receipt = tx.settle()
-            # The outer Safe tx is mined with status 0 when any inner
-            # execTransaction fails, and TxSettler does not raise on a
-            # reverted receipt — check explicitly so a failed batch cannot
-            # report success.
+            # The outer Safe tx mines with status 0 when any inner
+            # execTransaction fails; TxSettler does not raise on a
+            # reverted receipt — check explicitly.
             if receipt is not None and receipt.get("status") == 0:
                 raise ChainInteractionError(
                     "Batched service safe transfer reverted on-chain "
@@ -1271,8 +1282,16 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
         self.fund_chain_amounts(service_initial_shortfalls)
 
-    def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
-        """Fund chain amounts"""
+    def fund_chain_amounts(
+        self, amounts: ChainAmounts, require_all: bool = False
+    ) -> None:
+        """Fund chain amounts.
+
+        When ``require_all`` is True, raises ``ValueError`` if the Master Safe
+        batch pre-filter drops any of the requested transfers (e.g. due to
+        insufficient balance), so callers receive an explicit error rather than
+        a silent no-op.
+        """
         for chain_str, addresses in amounts.items():
             chain = Chain(chain_str)
             wallet = self.wallet_manager.load(chain.ledger_type)
@@ -1295,7 +1314,12 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 continue
 
             # All transfers of a chain land in one MultiSend Safe tx.
-            wallet.transfer_batch(chain=chain, transfers=transfers)
+            result = wallet.transfer_batch(chain=chain, transfers=transfers)
+            if require_all and len(result.sent) != len(transfers):
+                raise ValueError(
+                    f"Failed to fund from Master Safe: requested {len(transfers)} "
+                    f"transfer(s), executed {len(result.sent)} on {chain.value}."
+                )
 
     def fund_service(self, service: Service, amounts: ChainAmounts) -> None:
         """Fund service-related wallets."""
@@ -1328,7 +1352,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts)
+            self.fund_chain_amounts(amounts, require_all=True)
         finally:
             # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:

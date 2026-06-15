@@ -555,6 +555,38 @@ class TestFundChainAmounts:
         manager.logger.warning.assert_called_once()  # type: ignore[attr-defined]
         mock_wallet.transfer.assert_not_called()
 
+    def test_require_all_raises_on_partial_execution(self) -> None:
+        """fund_chain_amounts(require_all=True) raises ValueError when batch drops transfers."""
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {Chain.GNOSIS: SAFE_ADDR}
+        mock_result = MagicMock()
+        mock_result.sent = []  # batch dropped all transfers (e.g. insufficient balance)
+        mock_wallet.transfer_batch.return_value = mock_result
+        mock_wallet_manager = MagicMock()
+        mock_wallet_manager.load.return_value = mock_wallet
+
+        manager = _make_manager(wallet_manager=mock_wallet_manager)
+        amounts = ChainAmounts({"gnosis": {EOA_ADDR: {ZERO_ADDRESS: BigInt(100)}}})
+
+        with pytest.raises(ValueError, match="Failed to fund from Master Safe"):
+            manager.fund_chain_amounts(amounts, require_all=True)
+
+    def test_require_all_false_does_not_raise_on_partial_execution(self) -> None:
+        """fund_chain_amounts(require_all=False) silently accepts partial batch execution."""
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {Chain.GNOSIS: SAFE_ADDR}
+        mock_result = MagicMock()
+        mock_result.sent = []  # batch dropped all transfers
+        mock_wallet.transfer_batch.return_value = mock_result
+        mock_wallet_manager = MagicMock()
+        mock_wallet_manager.load.return_value = mock_wallet
+
+        manager = _make_manager(wallet_manager=mock_wallet_manager)
+        amounts = ChainAmounts({"gnosis": {EOA_ADDR: {ZERO_ADDRESS: BigInt(100)}}})
+
+        # Should not raise
+        manager.fund_chain_amounts(amounts, require_all=False)
+
 
 # ---------------------------------------------------------------------------
 # compute_service_initial_shortfalls / fund_service_initial / topup_service_initial
@@ -1034,6 +1066,10 @@ class TestPartialWithdrawServiceSafe:
             mock_registry.erc20.get_instance.return_value = mock_token_instance
             # Native balance (fully withdrawable)
             mock_ledger_api.return_value.get_balance.return_value = 200
+            # Nonce for sequential Safe B approveHash+execTransaction pairs
+            mock_registry.gnosis_safe.get_instance.return_value.functions.nonce.return_value.call.return_value = (
+                7
+            )
 
             mock_sftxb = MagicMock()
             mock_sftxb_cls.return_value = mock_sftxb
@@ -1054,7 +1090,7 @@ class TestPartialWithdrawServiceSafe:
         assert mock_tx.settle.call_count == 1
 
     def test_master_safe_owner_reverted_batch_raises(self) -> None:
-        """A mined-but-reverted batched outer tx (status 0) raises."""
+        """A mined-but-reverted batched outer tx (status 0) raises ChainInteractionError."""
         master_safe = "0x" + "b" * 40
         wm = MagicMock()
         wallet = MagicMock()
@@ -1082,10 +1118,10 @@ class TestPartialWithdrawServiceSafe:
                 return_value="xDAI",
             ),
         ):
+            mock_ledger_api.return_value.get_balance.return_value = 200
             mock_registry.gnosis_safe.get_instance.return_value.functions.nonce.return_value.call.return_value = (
                 7
             )
-            mock_ledger_api.return_value.get_balance.return_value = 200
 
             mock_sftxb = MagicMock()
             mock_sftxb_cls.return_value = mock_sftxb

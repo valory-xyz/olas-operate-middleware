@@ -112,6 +112,7 @@ class GnosisSafeTransaction:
         crypto: Crypto,
         chain_type: ChainType,
         safe: str,
+        gas_fallback: int = 0,
     ) -> None:
         """Initiliaze a Gnosis safe tx"""
         self.ledger_api = ledger_api
@@ -119,6 +120,7 @@ class GnosisSafeTransaction:
         self.chain_type = chain_type
         self.safe = safe
         self._txs: t.List[t.Dict] = []
+        self._gas_fallback = gas_fallback
 
     def add(self, tx: t.Dict) -> "GnosisSafeTransaction":
         """Add a transaction"""
@@ -184,6 +186,12 @@ class GnosisSafeTransaction:
         )
         update_tx_with_gas_pricing(tx, self.ledger_api)
         update_tx_with_gas_estimate(tx, self.ledger_api)
+        # When gas estimation fails for complex batched txs (non-monotonic
+        # gasleft() behavior from 63/64 forwarding across nested Safe calls),
+        # gas ends up below the EIP intrinsic minimum. Apply caller-provided
+        # fallback so the tx is still submitted with a workable gas limit.
+        if tx.get("gas", 0) < 21_000 and self._gas_fallback > 0:
+            tx["gas"] = self._gas_fallback
         return t.cast(t.Dict, tx)
 
     def settle(self) -> TxReceipt:
@@ -1326,7 +1334,12 @@ class EthSafeTxBuilder(_ChainUtil):
 
     @classmethod
     def _new_tx(
-        cls, ledger_api: LedgerApi, crypto: Crypto, chain_type: ChainType, safe: str
+        cls,
+        ledger_api: LedgerApi,
+        crypto: Crypto,
+        chain_type: ChainType,
+        safe: str,
+        gas_fallback: int = 0,
     ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return GnosisSafeTransaction(
@@ -1334,10 +1347,14 @@ class EthSafeTxBuilder(_ChainUtil):
             crypto=crypto,
             chain_type=chain_type,
             safe=safe,
+            gas_fallback=gas_fallback,
         )
 
     def new_tx(
-        self, crypto: Optional[Crypto] = None, safe: Optional[str] = None
+        self,
+        crypto: Optional[Crypto] = None,
+        safe: Optional[str] = None,
+        gas_fallback: int = 0,
     ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return EthSafeTxBuilder._new_tx(
@@ -1348,6 +1365,7 @@ class EthSafeTxBuilder(_ChainUtil):
             crypto=crypto or self.crypto,
             chain_type=self.chain_type,
             safe=t.cast(str, safe or self.safe),
+            gas_fallback=gas_fallback,
         )
 
     def get_mint_tx_data(  # pylint: disable=too-many-arguments  # pragma: no cover
@@ -1620,14 +1638,17 @@ class EthSafeTxBuilder(_ChainUtil):
             txs=txs,
         )
 
-        # Compute inner Safe transaction hash
+        # Compute inner Safe transaction hash.
+        # operation must match what execTransaction will use (DELEGATE_CALL),
+        # because the Safe hashes all parameters including operation to verify
+        # the approved hash.
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=self.ledger_api,
             contract_address=safe_b_address,
             to_address=multisend_address,
             value=multisend_tx["value"],
             data=multisend_tx["data"],
-            operation=SafeOperation.CALL.value,
+            operation=SafeOperation.DELEGATE_CALL.value,
             safe_nonce=nonce,
         ).get("tx_hash")
 
@@ -1724,14 +1745,17 @@ class EthSafeTxBuilder(_ChainUtil):
             txs=txs,
         )
 
-        # Compute inner Safe transaction hash
+        # Compute inner Safe transaction hash.
+        # operation must match what execTransaction will use (DELEGATE_CALL),
+        # because the Safe hashes all parameters including operation to verify
+        # the approved hash.
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=self.ledger_api,
             contract_address=safe_b_address,
             to_address=multisend_address,
             value=multisend_tx["value"],
             data=multisend_tx["data"],
-            operation=SafeOperation.CALL.value,
+            operation=SafeOperation.DELEGATE_CALL.value,
             safe_nonce=nonce,
         ).get("tx_hash")
 

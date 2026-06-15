@@ -865,6 +865,49 @@ class TestDrain:
             chain=Chain.GNOSIS,
         )
 
+    def test_drain_acquires_withdrawal_lock(self, tmp_path: Path) -> None:
+        """drain() holds the per-(service, chain) withdrawal lock while draining.
+
+        Regression: a user withdrawal must serialize with a concurrent
+        maintenance drain, else both transfer the same balances and the
+        second reverts on an already-emptied safe.
+        """
+        manager = _make_manager(tmp_path)
+        mock_service = _make_mock_service()
+        lock = MagicMock()
+        manager.funding_manager.get_withdrawal_lock.return_value = lock  # type: ignore
+
+        with patch.object(manager, "load", return_value=mock_service):
+            manager.drain(
+                service_config_id="sc-1",
+                chain_str="gnosis",
+                withdrawal_address="0xWithdrawal",
+            )
+
+        manager.funding_manager.get_withdrawal_lock.assert_called_once_with(  # type: ignore
+            service_config_id="sc-1", chain=Chain.GNOSIS
+        )
+        lock.__enter__.assert_called_once()
+        lock.__exit__.assert_called_once()
+        manager.funding_manager.drain_service_safe.assert_called_once()  # type: ignore
+        manager.funding_manager.drain_agents_eoas.assert_called_once()  # type: ignore
+
+    def test_drain_unlocked_does_not_acquire_lock(self, tmp_path: Path) -> None:
+        """_drain_unlocked() drains without touching the lock (caller holds it)."""
+        manager = _make_manager(tmp_path)
+        mock_service = _make_mock_service()
+
+        with patch.object(manager, "load", return_value=mock_service):
+            manager._drain_unlocked(  # pylint: disable=protected-access
+                service_config_id="sc-1",
+                chain_str="gnosis",
+                withdrawal_address="0xWithdrawal",
+            )
+
+        manager.funding_manager.get_withdrawal_lock.assert_not_called()  # type: ignore
+        manager.funding_manager.drain_service_safe.assert_called_once()  # type: ignore
+        manager.funding_manager.drain_agents_eoas.assert_called_once()  # type: ignore
+
 
 class TestDeployServiceLocally:
     """Tests for deploy_service_locally()."""
@@ -1302,7 +1345,7 @@ class TestServiceMaintenance:
             patch.object(
                 manager, "_get_on_chain_state", return_value=state
             ) as state_mock,
-            patch.object(manager, "drain") as drain_mock,
+            patch.object(manager, "_drain_unlocked") as drain_mock,
         ):
             result = manager.service_maintenance()
         self._last_state_mock = state_mock
@@ -1391,7 +1434,7 @@ class TestServiceMaintenance:
                 "_get_on_chain_state",
                 side_effect=[RuntimeError("RPC down"), OnChainState.PRE_REGISTRATION],
             ),
-            patch.object(manager, "drain") as drain_mock,
+            patch.object(manager, "_drain_unlocked") as drain_mock,
         ):
             result = manager.service_maintenance()
         drain_mock.assert_called_once()
@@ -1487,7 +1530,7 @@ class TestServiceMaintenance:
         with (
             patch.object(manager, "get_all_services", return_value=([service], True)),
             patch.object(manager, "_get_on_chain_state") as state_mock,
-            patch.object(manager, "drain") as drain_mock,
+            patch.object(manager, "_drain_unlocked") as drain_mock,
         ):
             result = manager.service_maintenance()
         drain_mock.assert_not_called()
@@ -1512,9 +1555,11 @@ class TestServiceMaintenance:
                 "_get_on_chain_state",
                 return_value=OnChainState.PRE_REGISTRATION,
             ),
-            patch.object(manager, "drain") as drain_mock,
+            patch.object(manager, "_drain_unlocked") as drain_mock,
         ):
             result = manager.service_maintenance()
+        # Maintenance already holds the withdrawal lock, so it must use the
+        # unlocked drain (the public drain() would re-acquire and deadlock).
         drain_mock.assert_called_once()
         manager.funding_manager.get_withdrawal_lock.assert_called_once_with(
             service_config_id=service.service_config_id, chain=Chain.GNOSIS
@@ -1540,7 +1585,7 @@ class TestServiceMaintenance:
             patch.object(
                 manager, "_get_on_chain_state", return_value=OnChainState.DEPLOYED
             ),
-            patch.object(manager, "drain") as drain_mock,
+            patch.object(manager, "_drain_unlocked") as drain_mock,
         ):
             manager.service_maintenance()
         drain_mock.assert_not_called()

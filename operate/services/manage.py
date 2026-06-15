@@ -2275,7 +2275,34 @@ class ServiceManager:
     def drain(
         self, service_config_id: str, chain_str: str, withdrawal_address: str
     ) -> None:
-        """Drain service safe and agent EOAs."""
+        """Drain service safe and agent EOAs.
+
+        Serialized per (service, chain) with the same withdrawal lock that
+        background maintenance holds, so a user-triggered withdrawal cannot run
+        concurrently with a maintenance drain. Without it, the two read the
+        safe's balances before either executes, then both batch transfers for
+        those amounts — whichever lands second reverts on-chain (the safe is
+        already empty), surfacing as a 500.
+        """
+        chain = Chain(chain_str)
+        with self.funding_manager.get_withdrawal_lock(
+            service_config_id=service_config_id, chain=chain
+        ):
+            self._drain_unlocked(
+                service_config_id=service_config_id,
+                chain_str=chain_str,
+                withdrawal_address=withdrawal_address,
+            )
+
+    def _drain_unlocked(
+        self, service_config_id: str, chain_str: str, withdrawal_address: str
+    ) -> None:
+        """Drain service safe and agent EOAs.
+
+        The caller MUST hold the per-(service, chain) withdrawal lock (see
+        ``drain``). Balances are read fresh here, so a drain that runs after a
+        concurrent one already emptied the safe simply finds nothing to move.
+        """
         service = self.load(service_config_id=service_config_id)
         chain = Chain(chain_str)
         self.funding_manager.drain_service_safe(
@@ -2353,7 +2380,10 @@ class ServiceManager:
                                 f"[Maintenance] Maintaining service {multisig} -> "
                                 f"{master_safe} ({tag}, state={state.name})."
                             )
-                            self.drain(
+                            # Already holding the withdrawal lock for this
+                            # (service, chain) — use the unlocked drain to avoid
+                            # re-acquiring (which would deadlock).
+                            self._drain_unlocked(
                                 service_config_id=service.service_config_id,
                                 chain_str=chain_str,
                                 withdrawal_address=master_safe,
