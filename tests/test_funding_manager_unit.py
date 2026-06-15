@@ -1137,6 +1137,54 @@ class TestPartialWithdrawServiceSafe:
                     chain=Chain.GNOSIS,
                 )
 
+    def test_master_safe_owner_none_receipt_raises(self) -> None:
+        """A timed-out batch (settle returns None) raises instead of reporting success."""
+        master_safe = "0x" + "b" * 40
+        wm = MagicMock()
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: master_safe}
+        wm.load.return_value = wallet
+        mgr = _make_manager(wallet_manager=wm)
+        service = self._make_service()
+
+        with (
+            patch(
+                "operate.services.funding_manager.make_chain_ledger_api"
+            ) as mock_ledger_api,
+            patch(
+                "operate.services.funding_manager.get_owners",
+                return_value=[master_safe],
+            ),
+            patch(
+                "operate.services.funding_manager.registry_contracts"
+            ) as mock_registry,
+            patch(
+                "operate.services.funding_manager.EthSafeTxBuilder"
+            ) as mock_sftxb_cls,
+            patch(
+                "operate.services.funding_manager.get_currency_denom",
+                return_value="xDAI",
+            ),
+        ):
+            mock_ledger_api.return_value.get_balance.return_value = 200
+            mock_registry.gnosis_safe.get_instance.return_value.functions.nonce.return_value.call.return_value = (
+                7
+            )
+
+            mock_sftxb = MagicMock()
+            mock_sftxb_cls.return_value = mock_sftxb
+            mock_tx = MagicMock()
+            mock_sftxb.new_tx.return_value = mock_tx
+            mock_sftxb.get_safe_b_native_transfer_messages.return_value = [MagicMock()]
+            mock_tx.settle.return_value = None
+
+            with pytest.raises(ChainInteractionError, match="timed out"):
+                mgr.partial_withdraw_service_safe(
+                    service=service,
+                    amounts={ZERO_ADDRESS: "200"},
+                    chain=Chain.GNOSIS,
+                )
+
     def test_unrecognized_owner_raises_runtime_error_native(self) -> None:
         """Raises RuntimeError in native path if owners don't match known patterns."""
         unknown_owner = "0x" + "e" * 40

@@ -324,10 +324,23 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 for message in messages:
                     tx.add(message)
             receipt = tx.settle()
-            # The outer Safe tx mines with status 0 when any inner
-            # execTransaction fails; TxSettler does not raise on a
-            # reverted receipt — check explicitly.
-            if receipt is not None and receipt.get("status") == 0:
+            # TxSettler returns None on timeout (no receipt) and does not raise
+            # on a reverted receipt, so check both explicitly: a None receipt
+            # means we never confirmed the tx, and status 0 means an inner
+            # execTransaction failed.
+            #
+            # This relies on safeTxGas == 0 (the EthSafeTxBuilder default): a
+            # failed inner execTransaction only reverts the outer tx (status 0)
+            # when safeTxGas is 0. If safeTxGas ever becomes configurable, the
+            # Safe would swallow the inner failure (ExecutionFailure event,
+            # outer status 1) and this guard — plus any require_all check —
+            # would have to assert one ExecutionSuccess event per transfer.
+            if receipt is None:
+                raise ChainInteractionError(
+                    f"Batched service safe transfer timed out on {chain.value} "
+                    f"(assuming failure; {len(transfers)} transfer(s))."
+                )
+            if receipt.get("status") == 0:
                 raise ChainInteractionError(
                     "Batched service safe transfer reverted on-chain "
                     f"({len(transfers)} transfer(s) on {chain.value})."
@@ -410,8 +423,14 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 service_safe=service_safe,
                 transfers=to_drain,
             )
-
-        self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
+            self.logger.info(
+                f"Service safe {service.name} drained ({service_config_id=})"
+            )
+        else:
+            self.logger.info(
+                f"Service safe {service.name} had nothing to drain "
+                f"({service_config_id=})"
+            )
 
     def get_safe_withdrawable_balance(
         self, service: Service, chain: Chain

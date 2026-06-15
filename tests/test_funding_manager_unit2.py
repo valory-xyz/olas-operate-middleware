@@ -578,7 +578,12 @@ class TestDrainServiceSafe:
                 ):
                     manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
 
-        manager.logger.info.assert_called()  # type: ignore[attr-defined]
+        # Nothing was drained (all balances zero): the final log says so
+        # instead of claiming "drained".
+        assert any(
+            "had nothing to drain" in call.args[0]
+            for call in manager.logger.info.call_args_list  # type: ignore[attr-defined]
+        )
 
     def test_erc20_owners_are_agents_calls_transfer(self) -> None:
         """drain_service_safe batches via transfer_batch_from_safe when owners are agents."""
