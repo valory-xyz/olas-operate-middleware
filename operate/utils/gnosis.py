@@ -91,10 +91,19 @@ class BatchResult(t.NamedTuple):
     sent: t.List[Transfer]
 
 
-class MultiSendSubTx(t.TypedDict, total=False):
-    """A single sub-transaction of a MultiSend batch."""
+class _MultiSendSubTxRequired(t.TypedDict):
+    """Required fields of a MultiSend sub-transaction."""
 
     to: str
+
+
+class MultiSendSubTx(_MultiSendSubTxRequired, total=False):
+    """A single sub-transaction of a MultiSend batch.
+
+    ``to`` is required (the MultiSend encoder and ``simulate_safe_sub_tx``
+    both subscript it unguarded); the rest default at the call sites.
+    """
+
     value: int
     data: t.Union[str, bytes]
     operation: MultiSendOperation
@@ -529,7 +538,7 @@ def transfer_erc20_from_safe(
 def simulate_safe_sub_tx(
     ledger_api: LedgerApi,
     safe: str,
-    tx: t.Mapping,
+    tx: MultiSendSubTx,
 ) -> t.Optional[str]:
     """Simulate a MultiSend sub-transaction as the Safe via ``eth_call``.
 
@@ -574,7 +583,7 @@ def normalize_tx_data_to_bytes(data: t.Union[str, bytes]) -> bytes:
     return bytes.fromhex(hex_str)
 
 
-def send_safe_multisend_txs(
+def send_safe_multisend_txs(  # pylint: disable=too-many-locals
     txs: t.List[MultiSendSubTx],
     safe: str,
     multisend_address: str,
@@ -590,6 +599,9 @@ def send_safe_multisend_txs(
     sub-transaction runs with the Safe as ``msg.sender`` and the batch
     succeeds or reverts atomically.
     """
+    if not txs:
+        raise ValueError("send_safe_multisend_txs called with an empty txs list")
+
     owner = ledger_api.api.to_checksum_address(crypto.address)
 
     normalized_txs = []
@@ -599,13 +611,15 @@ def send_safe_multisend_txs(
         tx_copy.setdefault("operation", MultiSendOperation.CALL)
         normalized_txs.append(tx_copy)
 
-    multisend_data = bytes.fromhex(
-        registry_contracts.multisend.get_tx_data(
-            ledger_api=ledger_api,
-            contract_address=multisend_address,
-            multi_send_txs=normalized_txs,
-        ).get("data")[2:]
+    multisend_payload = registry_contracts.multisend.get_tx_data(
+        ledger_api=ledger_api,
+        contract_address=multisend_address,
+        multi_send_txs=normalized_txs,
     )
+    data_hex = multisend_payload.get("data")
+    if not data_hex:
+        raise ChainInteractionError("multisend.get_tx_data returned no data")
+    multisend_data = bytes.fromhex(data_hex[2:])
 
     def _build_tx() -> t.Optional[t.Dict]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(

@@ -1918,6 +1918,35 @@ class TestSendSafeMultisendTxs:
                     crypto=mock_crypto,
                 )
 
+    def test_empty_txs_raises(self) -> None:
+        """An empty txs list is rejected instead of paying gas for a no-op."""
+        with pytest.raises(ValueError, match="empty txs list"):
+            send_safe_multisend_txs(
+                txs=[],
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                ledger_api=MagicMock(),
+                crypto=MagicMock(),
+            )
+
+    def test_missing_multisend_data_raises(self) -> None:
+        """A get_tx_data response without a 'data' field raises a clear error."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xOwner"
+        mock_ledger.api.to_checksum_address.return_value = "0xOwner"
+
+        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+            mock_contracts.multisend.get_tx_data.return_value = {}
+            with pytest.raises(ChainInteractionError, match="no data"):
+                send_safe_multisend_txs(
+                    txs=[{"to": "0xA", "value": 1, "data": b""}],
+                    safe="0xSafe",
+                    multisend_address=MULTISEND_ADDR,
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                )
+
 
 class TestTransferBatchFromSafe:
     """Tests for transfer_batch_from_safe."""
