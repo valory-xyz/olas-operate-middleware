@@ -1233,6 +1233,46 @@ class ServiceManager:
                 service_config_id=service_config_id, chain=chain
             )
 
+    def _terminate_and_unbond(
+        self,
+        sftxb: EthSafeTxBuilder,
+        service: Service,
+        chain: str,
+        chain_data: t.Any,
+    ) -> None:
+        """Batch terminate + unbond into one tx when applicable."""
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+        needs_terminate = on_chain_state in (
+            OnChainState.ACTIVE_REGISTRATION,
+            OnChainState.FINISHED_REGISTRATION,
+            OnChainState.DEPLOYED,
+        )
+        needs_unbond = on_chain_state == OnChainState.TERMINATED_BONDED
+
+        if needs_terminate:
+            self.logger.info("Batching terminate → unbond")
+            (
+                sftxb.new_tx()
+                .add(
+                    sftxb.get_terminate_data(
+                        service_id=chain_data.token,
+                    )
+                )
+                .add(
+                    sftxb.get_unbond_data(
+                        service_id=chain_data.token,
+                    )
+                )
+                .settle()
+            )
+        elif needs_unbond:
+            self.logger.info("Unbonding service")
+            sftxb.new_tx().add(
+                sftxb.get_unbond_data(
+                    service_id=chain_data.token,
+                )
+            ).settle()
+
     def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
@@ -1274,43 +1314,66 @@ class ServiceManager:
         if is_staked and not can_unstake:
             self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
             return
-        # Unstake the service if applies
+
         if is_staked and can_unstake:
-            self.unstake_service_on_chain_from_safe(
+            # Claim + reward transfer stays separate (different signer
+            # for the reward transfer from service safe).
+            self.claim_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
+            )
+
+            # Batch unstake → terminate → unbond in one tx.
+            # After unstake the service is DEPLOYED mid-tx, so
+            # terminate is valid; after terminate it is
+            # TERMINATED_BONDED, so unbond is valid.
+            staking_contract = get_staking_contract(
+                chain=ledger_config.chain,
                 staking_program_id=current_staking_program,
             )
-        # At least claim the rewards if we cannot unstake yet
+            state = sftxb.staking_status(
+                service_id=chain_data.token,
+                staking_contract=staking_contract,
+            )
+            if state in {StakingState.STAKED, StakingState.EVICTED}:
+                self.logger.info("Batching unstake → terminate → unbond")
+                (
+                    sftxb.new_tx()
+                    .add(
+                        sftxb.get_unstaking_data(
+                            service_id=chain_data.token,
+                            staking_contract=staking_contract,
+                        )
+                    )
+                    .add(
+                        sftxb.get_terminate_data(
+                            service_id=chain_data.token,
+                        )
+                    )
+                    .add(
+                        sftxb.get_unbond_data(
+                            service_id=chain_data.token,
+                        )
+                    )
+                    .settle()
+                )
+            else:
+                self.logger.info(
+                    f"Service not staked after claim (state={state}), "
+                    "falling through to stepwise terminate"
+                )
+                # Fall through to stepwise terminate+unbond below
+                self._terminate_and_unbond(sftxb, service, chain, chain_data)
         elif is_staked:
+            # At least claim the rewards if we cannot unstake yet
             self.claim_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
             )
             return
-
-        if self._get_on_chain_state(service=service, chain=chain) in (
-            OnChainState.ACTIVE_REGISTRATION,
-            OnChainState.FINISHED_REGISTRATION,
-            OnChainState.DEPLOYED,
-        ):
-            self.logger.info("Terminating service")
-            sftxb.new_tx().add(
-                sftxb.get_terminate_data(
-                    service_id=chain_data.token,
-                )
-            ).settle()
-
-        if (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.TERMINATED_BONDED
-        ):
-            self.logger.info("Unbonding service")
-            sftxb.new_tx().add(
-                sftxb.get_unbond_data(
-                    service_id=chain_data.token,
-                )
-            ).settle()
+        else:
+            # Not staked: batch terminate + unbond
+            self._terminate_and_unbond(sftxb, service, chain, chain_data)
 
         # Swap service safe
         current_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
