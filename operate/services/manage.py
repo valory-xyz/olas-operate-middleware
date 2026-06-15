@@ -558,15 +558,15 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                full_requirements = (
-                    self.funding_manager._compute_protocol_asset_requirements(service)
+                full_requirements = self.funding_manager._compute_protocol_asset_requirements(  # pylint: disable=protected-access
+                    service
                 )
                 protocol_asset_requirements = dict(
                     full_requirements.get(chain, {}).get(safe, {})
                 )
             elif on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                full_requirements = (
-                    self.funding_manager._compute_protocol_asset_requirements(service)
+                full_requirements = self.funding_manager._compute_protocol_asset_requirements(  # pylint: disable=protected-access
+                    service
                 )
                 protocol_asset_requirements = dict(
                     full_requirements.get(chain, {}).get(safe, {})
@@ -1273,7 +1273,7 @@ class ServiceManager:
                 )
             ).settle()
 
-    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
+    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals,too-many-statements  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
