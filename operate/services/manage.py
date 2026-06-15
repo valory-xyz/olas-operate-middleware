@@ -1242,27 +1242,26 @@ class ServiceManager:
     ) -> None:
         """Batch terminate + unbond into one tx when applicable."""
         on_chain_state = self._get_on_chain_state(service=service, chain=chain)
-        needs_terminate = on_chain_state in (
-            OnChainState.ACTIVE_REGISTRATION,
-            OnChainState.FINISHED_REGISTRATION,
-            OnChainState.DEPLOYED,
-        )
         needs_unbond = on_chain_state == OnChainState.TERMINATED_BONDED
 
-        if needs_terminate:
+        if on_chain_state == OnChainState.ACTIVE_REGISTRATION:
+            # ACTIVE_REGISTRATION → terminate transitions to PRE_REGISTRATION
+            # (not TERMINATED_BONDED), so unbond must NOT be batched here.
+            self.logger.info("Terminating from ACTIVE_REGISTRATION (no unbond)")
+            sftxb.new_tx().add(
+                sftxb.get_terminate_data(service_id=chain_data.token)
+            ).settle()
+        elif on_chain_state in (
+            OnChainState.FINISHED_REGISTRATION,
+            OnChainState.DEPLOYED,
+        ):
+            # These states transition through TERMINATED_BONDED, so
+            # terminate + unbond can safely be batched in one MultiSend.
             self.logger.info("Batching terminate → unbond")
             (
                 sftxb.new_tx()
-                .add(
-                    sftxb.get_terminate_data(
-                        service_id=chain_data.token,
-                    )
-                )
-                .add(
-                    sftxb.get_unbond_data(
-                        service_id=chain_data.token,
-                    )
-                )
+                .add(sftxb.get_terminate_data(service_id=chain_data.token))
+                .add(sftxb.get_unbond_data(service_id=chain_data.token))
                 .settle()
             )
         elif needs_unbond:
