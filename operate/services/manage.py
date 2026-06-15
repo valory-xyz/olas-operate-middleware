@@ -939,12 +939,13 @@ class ServiceManager:
             # older versions enter at their actual on-chain state
             # and proceed step by step.
 
-            # Activate service
+            # Activate service (approve + activate in one tx)
             if (
                 self._get_on_chain_state(service=service, chain=chain)
                 == OnChainState.PRE_REGISTRATION
             ):
                 cost_of_bond = user_params.cost_of_bond
+                activate_tx = sftxb.new_tx()
                 if user_params.use_staking:
                     token_utility = target_staking_params[
                         "service_registry_token_utility"
@@ -961,26 +962,12 @@ class ServiceManager:
                     ).get(
                         "bond"
                     )
-                    sftxb.new_tx().add(
+                    activate_tx.add(
                         sftxb.get_erc20_approval_data(
                             spender=token_utility,
                             amount=cost_of_bond,
                             erc20_contract=olas_token,
                         )
-                    ).settle()
-                    token_utility_allowance = (
-                        registry_contracts.erc20.get_instance(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=olas_token,
-                        )
-                        .functions.allowance(
-                            safe,
-                            token_utility,
-                        )
-                        .call()
-                    )
-                    self.logger.info(
-                        f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                     )
                     cost_of_bond = MIN_AGENT_BOND
 
@@ -999,19 +986,20 @@ class ServiceManager:
                     self.logger.error(message)
                     raise ValueError(message)
 
-                sftxb.new_tx().add(
+                activate_tx.add(
                     sftxb.get_activate_data(
                         service_id=chain_data.token,
                         cost_of_bond=cost_of_bond,
                     )
                 ).settle()
 
-            # Register agent instances
+            # Register agent instances (approve + register in one tx)
             if (
                 self._get_on_chain_state(service=service, chain=chain)
                 == OnChainState.ACTIVE_REGISTRATION
             ):
                 cost_of_bond = user_params.cost_of_bond
+                register_tx = sftxb.new_tx()
                 if user_params.use_staking:
                     token_utility = target_staking_params[
                         "service_registry_token_utility"
@@ -1028,26 +1016,12 @@ class ServiceManager:
                     ).get(
                         "bond"
                     )
-                    sftxb.new_tx().add(
+                    register_tx.add(
                         sftxb.get_erc20_approval_data(
                             spender=token_utility,
                             amount=cost_of_bond,
                             erc20_contract=olas_token,
                         )
-                    ).settle()
-                    token_utility_allowance = (
-                        registry_contracts.erc20.get_instance(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=olas_token,
-                        )
-                        .functions.allowance(
-                            safe,
-                            token_utility,
-                        )
-                        .call()
-                    )
-                    self.logger.info(
-                        f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                     )
                     cost_of_bond = MIN_AGENT_BOND
 
@@ -1066,7 +1040,7 @@ class ServiceManager:
                     self.logger.error(message)
                     raise ValueError(message)
 
-                sftxb.new_tx().add(
+                register_tx.add(
                     sftxb.get_register_instances_data(
                         service_id=chain_data.token,
                         instances=service.agent_addresses,
@@ -1691,47 +1665,33 @@ class ServiceManager:
             and staking_slots_available
             and on_chain_state == OnChainState.DEPLOYED
         ):
-            self.logger.info(f"Approving staking: {chain_config.chain_data.token}")
-            sftxb.new_tx().add(
+            # Batch all approvals + stake into one tx
+            self.logger.info(f"Approving & staking: {chain_config.chain_data.token}")
+            stake_tx = sftxb.new_tx()
+
+            stake_tx.add(
                 sftxb.get_staking_approval_data(
                     service_id=chain_config.chain_data.token,
                     service_registry=CONTRACTS[ledger_config.chain]["service_registry"],
                     staking_contract=target_staking_contract,
                 )
-            ).settle()
+            )
 
-            # Approve additional_staking_tokens.
             staking_params = sftxb.get_staking_params(
                 staking_contract=target_staking_contract
             )
-
             for token_contract, min_staking_amount in staking_params[
                 "additional_staking_tokens"
             ].items():
-                sftxb.new_tx().add(
+                stake_tx.add(
                     sftxb.get_erc20_approval_data(
                         spender=target_staking_contract,
                         amount=min_staking_amount,
                         erc20_contract=token_contract,
                     )
-                ).settle()
-                staking_contract_allowance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_contract,
-                    )
-                    .functions.allowance(
-                        sftxb.safe,
-                        target_staking_contract,
-                    )
-                    .call()
-                )
-                self.logger.info(
-                    f"Approved {staking_contract_allowance} (token {token_contract}) from {sftxb.safe} to {target_staking_contract}"
                 )
 
-            self.logger.info(f"Staking service: {chain_config.chain_data.token}")
-            sftxb.new_tx().add(
+            stake_tx.add(
                 sftxb.get_staking_data(
                     service_id=chain_config.chain_data.token,
                     staking_contract=target_staking_contract,
