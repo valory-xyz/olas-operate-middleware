@@ -47,7 +47,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
-from operate.services.manage import get_assets_balances
+from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60

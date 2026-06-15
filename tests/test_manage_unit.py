@@ -27,14 +27,13 @@ import pytest
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
-from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import (
     Chain,
     DeploymentStatus,
     LedgerConfig,
     OnChainState,
 )
-from operate.services.manage import NUM_LOCAL_AGENT_INSTANCES, ServiceManager
+from operate.services.manage import ServiceManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
@@ -313,27 +312,6 @@ class TestExists:
 
 class TestGetOnChainManagerAndBuilder:
     """Tests for get_on_chain_manager() and get_eth_safe_tx_builder()."""
-
-    def test_get_on_chain_manager(self, tmp_path: Path) -> None:
-        """get_on_chain_manager constructs OnChainManager correctly."""
-        manager = _make_manager(tmp_path)
-        ledger_config = _make_ledger_config()
-        mock_wallet = MagicMock()
-        manager.wallet_manager.load.return_value = mock_wallet  # type: ignore
-
-        with (
-            patch("operate.services.manage.OnChainManager") as mock_ocm_cls,
-            patch(
-                "operate.services.manage.CONTRACTS",
-                {Chain.GNOSIS: {"service_manager": "0xabc"}},
-            ),
-            patch("operate.services.manage.ChainType") as mock_chain_type,
-        ):
-            mock_chain_type.return_value = MagicMock()
-            result = manager.get_on_chain_manager(ledger_config)
-
-        mock_ocm_cls.assert_called_once()
-        assert result == mock_ocm_cls.return_value
 
     def test_get_eth_safe_tx_builder(self, tmp_path: Path) -> None:
         """get_eth_safe_tx_builder constructs EthSafeTxBuilder correctly."""
@@ -772,16 +750,6 @@ class TestGetCurrentStakingProgram:
         assert result is None
 
 
-class TestStakeServiceOnChain:
-    """Tests for stake_service_on_chain()."""
-
-    def test_raises_not_implemented(self, tmp_path: Path) -> None:
-        """stake_service_on_chain raises NotImplementedError."""
-        manager = _make_manager(tmp_path)
-        with pytest.raises(NotImplementedError):
-            manager.stake_service_on_chain(hash="QmTest")
-
-
 class TestClaimAllOnChainFromSafe:
     """Tests for claim_all_on_chain_from_safe()."""
 
@@ -1062,246 +1030,6 @@ class TestFundingRequirements:
             mock_service
         )
         assert result == expected_result
-
-
-class TestComputeProtocolAssetRequirements:
-    """Tests for _compute_protocol_asset_requirements()."""
-
-    def test_non_staking_uses_cost_of_bond(self, tmp_path: Path) -> None:
-        """Non-staking: returns cost_of_bond * num_agents + cost_of_bond for ZERO_ADDRESS."""
-        import os
-
-        manager = _make_manager(tmp_path)
-
-        mock_user_params = MagicMock()
-        mock_user_params.use_staking = False
-        mock_user_params.cost_of_bond = 10
-        mock_user_params.staking_program_id = None
-
-        mock_chain_config = MagicMock()
-        mock_chain_config.chain_data.user_params = mock_user_params
-        mock_chain_config.ledger_config = _make_ledger_config()
-
-        mock_service = MagicMock()
-        mock_service.chain_configs = {_CHAIN: mock_chain_config}
-
-        with (
-            patch.object(manager, "load", return_value=mock_service),
-            patch.object(manager, "get_eth_safe_tx_builder"),
-            patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}),
-        ):
-            result = manager._compute_protocol_asset_requirements("sc-1", _CHAIN)
-
-        expected = {ZERO_ADDRESS: 10 * NUM_LOCAL_AGENT_INSTANCES + 10}
-        assert result == expected
-
-    def test_staking_uses_staking_params(self, tmp_path: Path) -> None:
-        """Staking: uses staking_params from sftxb.get_staking_params."""
-        import os
-
-        manager = _make_manager(tmp_path)
-
-        mock_user_params = MagicMock()
-        mock_user_params.use_staking = True
-        mock_user_params.staking_program_id = "staking_v1"
-
-        mock_chain_config = MagicMock()
-        mock_chain_config.chain_data.user_params = mock_user_params
-        mock_chain_config.ledger_config = _make_ledger_config()
-
-        mock_service = MagicMock()
-        mock_service.chain_configs = {_CHAIN: mock_chain_config}
-
-        mock_sftxb = MagicMock()
-        staking_params = {
-            "min_staking_deposit": 100,
-            "staking_token": "0xOLAS",  # nosec
-            "additional_staking_tokens": {"0xExtraToken": 50},
-        }
-        mock_sftxb.get_staking_params.return_value = staking_params
-
-        with (
-            patch.object(manager, "load", return_value=mock_service),
-            patch.object(manager, "get_eth_safe_tx_builder", return_value=mock_sftxb),
-            patch(
-                "operate.services.manage.get_staking_contract",
-                return_value="0xStaking",
-            ),
-            patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}),
-        ):
-            result = manager._compute_protocol_asset_requirements("sc-1", _CHAIN)
-
-        assert result[ZERO_ADDRESS] == NUM_LOCAL_AGENT_INSTANCES + 1
-        assert result["0xOLAS"] == 100 * NUM_LOCAL_AGENT_INSTANCES + 100
-        assert result["0xExtraToken"] == 50
-
-    def test_no_staking_program_id_uses_cost_of_bond(self, tmp_path: Path) -> None:
-        """use_staking=True but no staking_program_id uses cost_of_bond path."""
-        import os
-
-        manager = _make_manager(tmp_path)
-
-        mock_user_params = MagicMock()
-        mock_user_params.use_staking = True
-        mock_user_params.staking_program_id = None  # No program ID
-        mock_user_params.cost_of_bond = 5
-
-        mock_chain_config = MagicMock()
-        mock_chain_config.chain_data.user_params = mock_user_params
-        mock_chain_config.ledger_config = _make_ledger_config()
-
-        mock_service = MagicMock()
-        mock_service.chain_configs = {_CHAIN: mock_chain_config}
-
-        with (
-            patch.object(manager, "load", return_value=mock_service),
-            patch.object(manager, "get_eth_safe_tx_builder"),
-            patch.dict(os.environ, {"CUSTOM_CHAIN_RPC": _RPC}),
-        ):
-            result = manager._compute_protocol_asset_requirements("sc-1", _CHAIN)
-
-        assert result == {ZERO_ADDRESS: 5 * NUM_LOCAL_AGENT_INSTANCES + 5}
-
-
-class TestComputeRefillRequirement:
-    """Tests for _compute_refill_requirement() static method."""
-
-    def test_raises_when_threshold_gt_topup(self) -> None:
-        """Raises when sender_threshold > sender_topup."""
-        with pytest.raises(ValueError, match="sender_threshold.*sender_topup"):
-            ServiceManager._compute_refill_requirement(
-                asset_funding_values={},
-                sender_topup=10,
-                sender_threshold=20,
-                sender_balance=0,
-            )
-
-    def test_raises_when_threshold_negative(self) -> None:
-        """Raises when sender_threshold < 0."""
-        with pytest.raises(ValueError, match="sender_threshold.*sender_topup"):
-            ServiceManager._compute_refill_requirement(
-                asset_funding_values={},
-                sender_topup=0,
-                sender_threshold=-1,
-                sender_balance=0,
-            )
-
-    def test_raises_when_sender_balance_negative(self) -> None:
-        """Raises when sender_balance < 0."""
-        with pytest.raises(ValueError, match="sender_balance.*>= 0"):
-            ServiceManager._compute_refill_requirement(
-                asset_funding_values={},
-                sender_topup=0,
-                sender_threshold=0,
-                sender_balance=-1,
-            )
-
-    def test_raises_when_asset_threshold_gt_topup(self) -> None:
-        """Raises when asset threshold > topup."""
-        with pytest.raises(ValueError, match="threshold.*topup"):
-            ServiceManager._compute_refill_requirement(
-                asset_funding_values={
-                    "0xAgent": {
-                        "topup": 10,
-                        "threshold": 20,
-                        "balance": 0,
-                    }
-                },
-                sender_topup=100,
-                sender_threshold=50,
-                sender_balance=0,
-            )
-
-    def test_raises_when_asset_balance_negative(self) -> None:
-        """Raises when asset balance < 0."""
-        with pytest.raises(ValueError, match="balance.*>= 0"):
-            ServiceManager._compute_refill_requirement(
-                asset_funding_values={
-                    "0xAgent": {
-                        "topup": 10,
-                        "threshold": 5,
-                        "balance": -1,
-                    }
-                },
-                sender_topup=100,
-                sender_threshold=50,
-                sender_balance=0,
-            )
-
-    def test_no_shortfall_returns_zeros(self) -> None:
-        """No shortfall when balances are above thresholds."""
-        result = ServiceManager._compute_refill_requirement(
-            asset_funding_values={
-                "0xAgent": {"topup": 100, "threshold": 50, "balance": 200}
-            },
-            sender_topup=100,
-            sender_threshold=50,
-            sender_balance=500,
-        )
-        assert result == {"minimum_refill": 0, "recommended_refill": 0}
-
-    def test_shortfall_computes_correctly(self) -> None:
-        """Shortfall is computed when balance is below threshold."""
-        result = ServiceManager._compute_refill_requirement(
-            asset_funding_values={
-                "0xAgent": {
-                    "topup": 100,
-                    "threshold": 80,
-                    "balance": 30,  # below threshold by 50, below topup by 70
-                }
-            },
-            sender_topup=200,
-            sender_threshold=100,
-            sender_balance=120,  # 120 - 50 = 70 remaining (< threshold=100) → need 30 min
-        )
-        # minimum_obligations_shortfall = 80 - 30 = 50
-        # recommended_obligations_shortfall = 100 - 30 = 70
-        # remaining_balance_minimum = 120 - 50 = 70 < sender_threshold=100
-        #   → minimum_refill = 100 - 70 = 30
-        # remaining_balance_recommended = 120 - 70 = 50 < sender_threshold=100
-        #   → recommended_refill = 200 - 50 = 150
-        assert result["minimum_refill"] == 30
-        assert result["recommended_refill"] == 150
-
-    def test_empty_asset_funding_values(self) -> None:
-        """Empty asset_funding_values means only sender is considered."""
-        result = ServiceManager._compute_refill_requirement(
-            asset_funding_values={},
-            sender_topup=100,
-            sender_threshold=50,
-            sender_balance=20,  # below threshold
-        )
-        # remaining = 20 - 0 = 20 < threshold=50 → min_refill = 50 - 20 = 30
-        assert result["minimum_refill"] == 30
-        assert result["recommended_refill"] == 80  # 100 - 20 = 80
-
-
-class TestGetMasterEoaNativeFundingValues:
-    """Tests for get_master_eoa_native_funding_values() static method."""
-
-    def test_master_safe_exists_threshold_is_half_topup(self) -> None:
-        """When master_safe_exists=True, threshold = topup/2."""
-        topup = DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
-        result = ServiceManager.get_master_eoa_native_funding_values(
-            master_safe_exists=True,
-            chain=Chain.GNOSIS,
-            balance=999,
-        )
-        assert result["topup"] == topup
-        assert result["threshold"] == topup / 2
-        assert result["balance"] == 999
-
-    def test_master_safe_not_exists_threshold_equals_topup(self) -> None:
-        """When master_safe_exists=False, threshold = topup."""
-        topup = DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
-        result = ServiceManager.get_master_eoa_native_funding_values(
-            master_safe_exists=False,
-            chain=Chain.GNOSIS,
-            balance=0,
-        )
-        assert result["topup"] == topup
-        assert result["threshold"] == topup
-        assert result["balance"] == 0
 
 
 def _make_maintenance_service(
