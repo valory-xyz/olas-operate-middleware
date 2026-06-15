@@ -101,6 +101,10 @@ NUM_LOCAL_AGENT_INSTANCES = 1
 
 RPC_SYNC_TIMEOUT = 15
 
+# Fallback gas limit for the mega-batch MultiSend (roughly 5-8 sub-calls
+# at ~350-500k gas each). Used when on-chain estimation is unavailable.
+_MEGA_BATCH_GAS_FALLBACK = 3_000_000
+
 
 class ServiceManager:
     """Service manager."""
@@ -752,7 +756,7 @@ class ServiceManager:
                         "No staking rewards available, omitting stake from mega-batch"
                     )
 
-            mega_tx = sftxb.new_tx(gas_fallback=3_000_000)
+            mega_tx = sftxb.new_tx(gas_fallback=_MEGA_BATCH_GAS_FALLBACK)
             sub_tx_labels: t.List[str] = []
             sub_txs: t.List[t.Dict] = []
 
