@@ -820,8 +820,8 @@ class EthereumMasterWallet(
                 # fail loudly instead of silently skipping Safe transfers.
                 raise RuntimeError(
                     f"Safe batch transfer on chain {chain.name} executed "
-                    f"{len(batch.sent)} of {len(safe_leg)} due transfer(s); "
-                    "aborting before the EOA legs."
+                    f"{len(batch.sent)} of {len(safe_leg)} due transfer(s) "
+                    f"(tx={batch.tx_hash!r}); aborting before the EOA legs."
                 )
             tx_hashes.append(batch.tx_hash)
             # The Master EOA paid the batch tx gas: deduct it once from the
