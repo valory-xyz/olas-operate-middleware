@@ -116,6 +116,25 @@ class TestGnosisSafeTransaction:
 
         assert safe_tx._txs == [tx1, tx2]
 
+    def test_add_without_label_records_none(self) -> None:
+        """Test add() records a None label when none is provided."""
+        safe_tx = self._make_safe_tx()
+
+        safe_tx.add({"to": "0xA", "value": 0})
+
+        assert safe_tx._labels == [None]
+
+    def test_add_stores_label_and_labeled_txs_pairs_them(self) -> None:
+        """Test add(label=...) stores the label and labeled_txs zips them in order."""
+        safe_tx = self._make_safe_tx()
+        tx1 = {"to": "0xA", "value": 0}
+        tx2 = {"to": "0xB", "value": 1}
+
+        safe_tx.add(tx1, label="activate").add(tx2)
+
+        assert safe_tx._labels == ["activate", None]
+        assert safe_tx.labeled_txs == [("activate", tx1), (None, tx2)]
+
     def test_build_calls_registry_contracts(self) -> None:
         """Test build() calls multisend and gnosis_safe contract methods."""
         mock_ledger = MagicMock()

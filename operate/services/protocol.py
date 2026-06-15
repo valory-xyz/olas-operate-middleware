@@ -120,12 +120,19 @@ class GnosisSafeTransaction:
         self.chain_type = chain_type
         self.safe = safe
         self._txs: t.List[t.Dict] = []
+        self._labels: t.List[t.Optional[str]] = []
         self._gas_fallback = gas_fallback
 
-    def add(self, tx: t.Dict) -> "GnosisSafeTransaction":
-        """Add a transaction"""
+    def add(self, tx: t.Dict, label: t.Optional[str] = None) -> "GnosisSafeTransaction":
+        """Add a transaction, optionally tagged with a label for diagnostics."""
         self._txs.append(tx)
+        self._labels.append(label)
         return self
+
+    @property
+    def labeled_txs(self) -> t.List[t.Tuple[t.Optional[str], t.Dict]]:
+        """Return ``(label, tx)`` pairs in the order they were added."""
+        return list(zip(self._labels, self._txs))
 
     def build(self) -> t.Dict:
         """Build the transaction."""

@@ -757,8 +757,6 @@ class ServiceManager:
                     )
 
             mega_tx = sftxb.new_tx(gas_fallback=_MEGA_BATCH_GAS_FALLBACK)
-            sub_tx_labels: t.List[str] = []
-            sub_txs: t.List[t.Dict] = []
 
             # --- Update mint (update path only) ---
             if is_update:
@@ -783,9 +781,7 @@ class ServiceManager:
                     metadata_description=service.description,
                     skip_depencency_check=self.skip_depencency_check,
                 )
-                mega_tx.add(update_mint_data)
-                sub_tx_labels.append("update_mint")
-                sub_txs.append(update_mint_data)
+                mega_tx.add(update_mint_data, label="update_mint")
 
             # --- OLAS approval + activate ---
             cost_of_bond = user_params.cost_of_bond
@@ -805,18 +801,14 @@ class ServiceManager:
                     amount=cost_of_bond_olas,
                     erc20_contract=olas_token,
                 )
-                mega_tx.add(approve_act)
-                sub_tx_labels.append("erc20_approve_activate")
-                sub_txs.append(approve_act)
+                mega_tx.add(approve_act, label="erc20_approve_activate")
                 cost_of_bond = MIN_AGENT_BOND
 
             activate_data = sftxb.get_activate_data(
                 service_id=chain_data.token,
                 cost_of_bond=cost_of_bond,
             )
-            mega_tx.add(activate_data)
-            sub_tx_labels.append("activate")
-            sub_txs.append(activate_data)
+            mega_tx.add(activate_data, label="activate")
 
             # --- OLAS approval + register ---
             cost_of_bond_reg = user_params.cost_of_bond
@@ -834,9 +826,7 @@ class ServiceManager:
                     amount=cost_of_bond_olas_reg,
                     erc20_contract=olas_token,
                 )
-                mega_tx.add(approve_reg)
-                sub_tx_labels.append("erc20_approve_register")
-                sub_txs.append(approve_reg)
+                mega_tx.add(approve_reg, label="erc20_approve_register")
                 cost_of_bond_reg = MIN_AGENT_BOND
 
             register_data = sftxb.get_register_instances_data(
@@ -845,9 +835,7 @@ class ServiceManager:
                 agents=[agent_id for _ in service.agent_addresses],
                 cost_of_bond=cost_of_bond_reg,
             )
-            mega_tx.add(register_data)
-            sub_tx_labels.append("register_instances")
-            sub_txs.append(register_data)
+            mega_tx.add(register_data, label="register_instances")
 
             # --- Deploy ---
             info = sftxb.info(token_id=chain_data.token)
@@ -880,9 +868,7 @@ class ServiceManager:
                 ),
             )
             for msg in deploy_messages:
-                mega_tx.add(msg)
-                sub_tx_labels.append("deploy")
-                sub_txs.append(msg)
+                mega_tx.add(msg, label="deploy")
 
             # --- Staking (if enabled and slots/rewards available) ---
             if include_staking and target_staking_contract is not None:
@@ -891,9 +877,7 @@ class ServiceManager:
                     service_registry=CONTRACTS[ledger_config.chain]["service_registry"],
                     staking_contract=target_staking_contract,
                 )
-                mega_tx.add(nft_approve)
-                sub_tx_labels.append("staking_nft_approve")
-                sub_txs.append(nft_approve)
+                mega_tx.add(nft_approve, label="staking_nft_approve")
 
                 staking_params = sftxb.get_staking_params(
                     staking_contract=target_staking_contract
@@ -906,17 +890,16 @@ class ServiceManager:
                         amount=min_amount,
                         erc20_contract=token_contract,
                     )
-                    mega_tx.add(token_appr)
-                    sub_tx_labels.append(f"staking_token_approve_{token_contract[:10]}")
-                    sub_txs.append(token_appr)
+                    mega_tx.add(
+                        token_appr,
+                        label=f"staking_token_approve_{token_contract[:10]}",
+                    )
 
                 stake_data = sftxb.get_staking_data(
                     service_id=chain_data.token,
                     staking_contract=target_staking_contract,
                 )
-                mega_tx.add(stake_data)
-                sub_tx_labels.append("stake")
-                sub_txs.append(stake_data)
+                mega_tx.add(stake_data, label="stake")
 
             # --- Settle ---
             try:
@@ -924,7 +907,7 @@ class ServiceManager:
             except Exception:
                 self.logger.error("Mega-batch reverted, running revert attribution")
                 try:
-                    for label, sub_tx in zip(sub_tx_labels, sub_txs):
+                    for label, sub_tx in mega_tx.labeled_txs:
                         error = simulate_safe_sub_tx(
                             ledger_api=sftxb.ledger_api,
                             safe=safe,
