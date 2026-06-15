@@ -34,6 +34,7 @@ from operate.operate_types import (
     OnChainState,
 )
 from operate.services.manage import ServiceManager
+from operate.services.protocol import StakingState
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
@@ -1318,3 +1319,271 @@ class TestServiceMaintenance:
             manager.service_maintenance()
         drain_mock.assert_not_called()
         lock.release.assert_called_once_with()
+
+
+# ── Section E: Lifecycle batching ────────────────────────────
+
+
+class TestTerminateAndUnbond:
+    """Tests for _terminate_and_unbond helper."""
+
+    def _make_sftxb(self) -> MagicMock:
+        sftxb = MagicMock()
+        tx_mock = MagicMock()
+        tx_mock.add.return_value = tx_mock
+        sftxb.new_tx.return_value = tx_mock
+        sftxb.get_terminate_data.return_value = {"to": "0xReg", "data": "0xTerm"}
+        sftxb.get_unbond_data.return_value = {"to": "0xReg", "data": "0xUnbond"}
+        return sftxb
+
+    def test_terminate_and_unbond_batches_when_deployed(self, tmp_path: Path) -> None:
+        """When state is DEPLOYED, both terminate and unbond are batched."""
+        manager = _make_manager(tmp_path)
+        sftxb = self._make_sftxb()
+        service = MagicMock()
+        chain_data = MagicMock()
+        chain_data.token = 42
+
+        with patch.object(
+            manager,
+            "_get_on_chain_state",
+            return_value=OnChainState.DEPLOYED,
+        ):
+            manager._terminate_and_unbond(sftxb, service, _CHAIN, chain_data)
+
+        sftxb.new_tx.assert_called_once()
+        tx = sftxb.new_tx.return_value
+        assert tx.add.call_count == 2
+        sftxb.get_terminate_data.assert_called_once_with(service_id=42)
+        sftxb.get_unbond_data.assert_called_once_with(service_id=42)
+        tx.settle.assert_called_once()
+
+    def test_terminate_and_unbond_only_unbonds_when_terminated_bonded(
+        self, tmp_path: Path
+    ) -> None:
+        """When already TERMINATED_BONDED, only unbond is called."""
+        manager = _make_manager(tmp_path)
+        sftxb = self._make_sftxb()
+        service = MagicMock()
+        chain_data = MagicMock()
+        chain_data.token = 42
+
+        with patch.object(
+            manager,
+            "_get_on_chain_state",
+            return_value=OnChainState.TERMINATED_BONDED,
+        ):
+            manager._terminate_and_unbond(sftxb, service, _CHAIN, chain_data)
+
+        sftxb.new_tx.assert_called_once()
+        tx = sftxb.new_tx.return_value
+        assert tx.add.call_count == 1
+        sftxb.get_unbond_data.assert_called_once_with(service_id=42)
+        sftxb.get_terminate_data.assert_not_called()
+        tx.settle.assert_called_once()
+
+    def test_terminate_and_unbond_noop_when_pre_registration(
+        self, tmp_path: Path
+    ) -> None:
+        """When already PRE_REGISTRATION, nothing happens."""
+        manager = _make_manager(tmp_path)
+        sftxb = self._make_sftxb()
+        service = MagicMock()
+        chain_data = MagicMock()
+
+        with patch.object(
+            manager,
+            "_get_on_chain_state",
+            return_value=OnChainState.PRE_REGISTRATION,
+        ):
+            manager._terminate_and_unbond(sftxb, service, _CHAIN, chain_data)
+
+        sftxb.new_tx.assert_not_called()
+
+
+class TestTerminateBatching:
+    """Tests for batched terminate flow in terminate_service_on_chain_from_safe."""
+
+    def _setup_manager(
+        self, tmp_path: Path
+    ) -> t.Tuple[ServiceManager, MagicMock, MagicMock]:
+        manager = _make_manager(tmp_path)
+        service = MagicMock()
+        chain_data = MagicMock()
+        chain_data.token = 42
+        chain_data.multisig = "0xMultisig"
+        chain_data.user_params.use_staking = True
+        chain_data.user_params.staking_program_id = "pearl_beta"
+        chain_data.user_params.fund_requirements = {ZERO_ADDRESS: MagicMock(agent=100)}
+        chain_config = MagicMock()
+        chain_config.chain_data = chain_data
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+        service.agent_addresses = ["0xAgentAddr"]
+
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+
+        sftxb = MagicMock()
+        tx_mock = MagicMock()
+        tx_mock.add.return_value = tx_mock
+        sftxb.new_tx.return_value = tx_mock
+        sftxb.get_unstaking_data.return_value = {"to": "0xS", "data": "0xU"}
+        sftxb.get_terminate_data.return_value = {"to": "0xR", "data": "0xT"}
+        sftxb.get_unbond_data.return_value = {"to": "0xR", "data": "0xB"}
+        sftxb.get_service_safe_owners.return_value = ["0xMasterSafe"]
+
+        return manager, service, sftxb
+
+    def test_staked_service_batches_unstake_terminate_unbond(
+        self, tmp_path: Path
+    ) -> None:
+        """Staked + can_unstake → claim, then batch unstake+terminate+unbond."""
+        manager, service, sftxb = self._setup_manager(tmp_path)
+
+        sftxb.can_unstake.return_value = True
+        sftxb.staking_status.return_value = StakingState.STAKED
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                return_value="pearl_beta",
+            ),
+            patch.object(manager, "claim_on_chain_from_safe") as claim_mock,
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+        ):
+            manager.terminate_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN
+            )
+
+        # Claim is called separately first
+        claim_mock.assert_called_once()
+
+        # Batch: unstake + terminate + unbond = 3 adds
+        tx = sftxb.new_tx.return_value
+        assert tx.add.call_count == 3
+        sftxb.get_unstaking_data.assert_called_once()
+        sftxb.get_terminate_data.assert_called_once()
+        sftxb.get_unbond_data.assert_called_once()
+        tx.settle.assert_called_once()
+
+    def test_cannot_unstake_returns_early(self, tmp_path: Path) -> None:
+        """Staked but can_unstake=False → return without terminating."""
+        manager, service, sftxb = self._setup_manager(tmp_path)
+
+        sftxb.can_unstake.return_value = False
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                return_value="pearl_beta",
+            ),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+        ):
+            manager.terminate_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN
+            )
+
+        # No txs should be built
+        sftxb.new_tx.assert_not_called()
+
+    def test_not_staked_batches_terminate_unbond(self, tmp_path: Path) -> None:
+        """Not staked → batch terminate+unbond via _terminate_and_unbond."""
+        manager, service, sftxb = self._setup_manager(tmp_path)
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                return_value=None,
+            ),
+            patch.object(manager, "_terminate_and_unbond") as tab_mock,
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value=None,
+            ),
+        ):
+            manager.terminate_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN
+            )
+
+        tab_mock.assert_called_once()
+
+
+class TestStakeBatching:
+    """Tests for batched approve+stake in stake_service_on_chain_from_safe."""
+
+    def test_approvals_and_stake_in_one_tx(self, tmp_path: Path) -> None:
+        """NFT approve + additional token approves + stake in one tx."""
+        manager = _make_manager(tmp_path)
+        service = MagicMock()
+        chain_data = MagicMock()
+        chain_data.token = 42
+        chain_data.user_params.use_staking = True
+        chain_data.user_params.staking_program_id = "pearl_beta"
+        chain_config = MagicMock()
+        chain_config.chain_data = chain_data
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+
+        sftxb = MagicMock()
+        tx_mock = MagicMock()
+        tx_mock.add.return_value = tx_mock
+        sftxb.new_tx.return_value = tx_mock
+        sftxb.staking_status.return_value = StakingState.UNSTAKED
+        sftxb.staking_rewards_available.return_value = True
+        sftxb.staking_slots_available.return_value = True
+        sftxb.can_unstake.return_value = False
+        sftxb.get_staking_params.return_value = {
+            "additional_staking_tokens": {"0xOLAS": 1000},
+        }
+        sftxb.get_staking_approval_data.return_value = {"to": "0xR", "data": "a"}
+        sftxb.get_erc20_approval_data.return_value = {"to": "0xO", "data": "b"}
+        sftxb.get_staking_data.return_value = {"to": "0xS", "data": "c"}
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager,
+                "_get_on_chain_state",
+                return_value=OnChainState.DEPLOYED,
+            ),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                return_value=None,
+            ),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+        ):
+            manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN
+            )
+
+        # Single tx with NFT approve + token approve + stake = 3 adds
+        sftxb.new_tx.assert_called_once()
+        tx = sftxb.new_tx.return_value
+        assert tx.add.call_count == 3
+        tx.settle.assert_called_once()
