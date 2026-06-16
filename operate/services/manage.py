@@ -101,9 +101,26 @@ NUM_LOCAL_AGENT_INSTANCES = 1
 
 RPC_SYNC_TIMEOUT = 15
 
-# Fallback gas limit for the mega-batch MultiSend (roughly 5-8 sub-calls
-# at ~350-500k gas each). Used when on-chain estimation is unavailable.
+# Fallback gas limit for the mega-batch MultiSend. The full staking-update
+# path adds well over a dozen sub-calls (teardown + update mint + approvals +
+# activate/register/deploy + stake); this caps it generously and is only used
+# when on-chain gas estimation is unavailable.
 _MEGA_BATCH_GAS_FALLBACK = 3_000_000
+
+# Registry states from which `terminate` is valid (it moves the service toward
+# PRE_REGISTRATION). ACTIVE_REGISTRATION terminates straight to PRE_REGISTRATION;
+# the others pass through TERMINATED_BONDED first.
+_STATES_REQUIRING_TERMINATE = (
+    OnChainState.ACTIVE_REGISTRATION,
+    OnChainState.FINISHED_REGISTRATION,
+    OnChainState.DEPLOYED,
+)
+# Registry states that pass through TERMINATED_BONDED, so `unbond` is valid.
+_STATES_REQUIRING_UNBOND = (
+    OnChainState.FINISHED_REGISTRATION,
+    OnChainState.DEPLOYED,
+    OnChainState.TERMINATED_BONDED,
+)
 
 
 class ServiceManager:
@@ -742,13 +759,21 @@ class ServiceManager:
 
         # An update folds its teardown into this batch, so enter from the live
         # (pre-teardown) state too — the prepended sub-txs drive the registry to
-        # PRE_REGISTRATION before the update mint.
+        # PRE_REGISTRATION (via unbond, or terminate alone from
+        # ACTIVE_REGISTRATION) before the update mint.
         in_batch_teardown = bool(update_teardown_prefix)
+        teardown_labels = {label for _, label in update_teardown_prefix or []}
+        # A re-stake into the same program frees its own slot via the in-batch
+        # unstake, so the live slot count being full is not a blocker.
         teardown_frees_target_slot = (
             in_batch_teardown
             and current_staking_program == user_params.staking_program_id
-            and any(label == "unstake" for _, label in update_teardown_prefix or [])
+            and "unstake" in teardown_labels
         )
+        # recover_access (when present) transfers service-Safe control to the
+        # Master Safe earlier in this batch, so the deploy payload's live
+        # sole-owner pre-check must be skipped.
+        skip_owner_check = "recover_access" in teardown_labels
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
@@ -826,18 +851,17 @@ class ServiceManager:
                 mega_tx.add(update_mint_data, label="update_mint")
 
             # --- OLAS approval + activate ---
+            # The OLAS bond equals the target program's min staking deposit:
+            # the value update_mint writes and that activate/register will pull
+            # from the token utility. Read it from target params (not an
+            # on-chain get_agent_bond) because the update mint that sets it is a
+            # pending sub-tx earlier in this same batch, so the chain still
+            # reports the pre-update bond at build time.
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
                 token_utility = target_staking_params["service_registry_token_utility"]
                 olas_token = target_staking_params["staking_token"]
-                cost_of_bond_olas = (
-                    registry_contracts.service_registry_token_utility.get_agent_bond(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_utility,
-                        service_id=chain_data.token,
-                        agent_id=agent_id,
-                    ).get("bond")
-                )
+                cost_of_bond_olas = target_staking_params["min_staking_deposit"]
                 approve_act = sftxb.get_erc20_approval_data(
                     spender=token_utility,
                     amount=cost_of_bond_olas,
@@ -855,17 +879,9 @@ class ServiceManager:
             # --- OLAS approval + register ---
             cost_of_bond_reg = user_params.cost_of_bond
             if user_params.use_staking:
-                cost_of_bond_olas_reg = (
-                    registry_contracts.service_registry_token_utility.get_agent_bond(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_utility,
-                        service_id=chain_data.token,
-                        agent_id=agent_id,
-                    ).get("bond")
-                )
                 approve_reg = sftxb.get_erc20_approval_data(
                     spender=token_utility,
-                    amount=cost_of_bond_olas_reg,
+                    amount=cost_of_bond_olas,
                     erc20_contract=olas_token,
                 )
                 mega_tx.add(approve_reg, label="erc20_approve_register")
@@ -899,13 +915,6 @@ class ServiceManager:
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
-            # When recover_access is part of this batch, the service Safe
-            # ownership is transferred to the Master Safe earlier in the same
-            # MultiSend, so the live-ownership pre-flight in the deploy payload
-            # builder would fire prematurely — skip it in that case.
-            skip_owner_check = bool(update_teardown_prefix) and any(
-                label == "recover_access" for _, label in update_teardown_prefix or []
-            )
             deploy_messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
@@ -972,9 +981,11 @@ class ServiceManager:
                             self.logger.error(
                                 f"Mega-batch sub-tx '{label}' would revert: " f"{error}"
                             )
-                except Exception:  # pylint: disable=broad-except
+                except Exception as attribution_error:  # pylint: disable=broad-except
+                    # Diagnostics-only; never mask the original settle failure.
                     self.logger.warning(
-                        "Revert attribution failed (RPC/transport error)"
+                        "Revert attribution failed "
+                        f"({type(attribution_error).__name__}: {attribution_error})"
                     )
                 raise
 
@@ -1336,11 +1347,12 @@ class ServiceManager:
 
         Returns ``None`` when the combined path is not applicable and the
         caller must fall back to the legacy stepwise terminate + swap/recovery
-        flow. That happens only when ``recover_access`` is needed (the Master
-        Safe is not the service Safe owner) but cannot be performed in-batch
-        (recovery module not enabled, or inconsistent service Safe owners).
-        When ``recover_access`` is not needed, the combined path proceeds
-        without it.
+        flow. That happens in three cases: there is no prior service Safe to
+        reuse; the service is staked but cannot be unstaked yet; or
+        ``recover_access`` is needed (the Master Safe is not the service Safe
+        owner) but cannot be performed in-batch (recovery module not enabled, or
+        the agent is not the sole service Safe owner). When ``recover_access``
+        is not needed, the combined path proceeds without it.
         """
         state = self._get_on_chain_state(service=service, chain=chain)
         if chain_data.multisig in (None, ZERO_ADDRESS):
@@ -1362,9 +1374,13 @@ class ServiceManager:
         if is_staked and not sftxb.can_unstake(
             service_id=service_id, staking_contract=staking_contract
         ):
-            # Cannot unstake yet -> cannot tear down in-batch; the legacy path
-            # claims rewards and returns without proceeding.
-            self.logger.info("Update teardown: cannot unstake yet; using legacy path")
+            # Cannot unstake yet (e.g. still within the staking lock window) ->
+            # the service cannot be torn down, so the update cannot proceed this
+            # cycle. The legacy fallback only claims rewards and returns.
+            self.logger.warning(
+                "Update teardown: service is staked and cannot be unstaked yet; "
+                "the update will not be applied until it becomes unstakeable."
+            )
             return None
 
         # recover_access is only needed when the Master Safe is not already the
@@ -1403,27 +1419,21 @@ class ServiceManager:
                     )
                 )
 
-        if state in (
-            OnChainState.ACTIVE_REGISTRATION,
-            OnChainState.FINISHED_REGISTRATION,
-            OnChainState.DEPLOYED,
-        ):
+        if state in _STATES_REQUIRING_TERMINATE:
             prefix.append(
                 (sftxb.get_terminate_data(service_id=service_id), "terminate")
             )
         # ACTIVE_REGISTRATION terminates straight to PRE_REGISTRATION (no
         # bonded state), so unbond is only valid from the states that pass
         # through TERMINATED_BONDED.
-        if state in (
-            OnChainState.FINISHED_REGISTRATION,
-            OnChainState.DEPLOYED,
-            OnChainState.TERMINATED_BONDED,
-        ):
+        if state in _STATES_REQUIRING_UNBOND:
             prefix.append((sftxb.get_unbond_data(service_id=service_id), "unbond"))
 
         if need_recover:
-            # Valid once unbond moves the service to PRE_REGISTRATION earlier in
-            # the same MultiSend; recovers service Safe control to Master Safe.
+            # Valid once the service reaches PRE_REGISTRATION earlier in the
+            # same MultiSend — via unbond (FINISHED_REGISTRATION / DEPLOYED /
+            # TERMINATED_BONDED) or via terminate alone (ACTIVE_REGISTRATION,
+            # which skips unbond). Recovers service Safe control to Master Safe.
             prefix.append(
                 (
                     sftxb.get_recover_access_data(service_id=service_id),
@@ -1472,7 +1482,9 @@ class ServiceManager:
 
         # Cannot unstake, terminate flow.
         if is_staked and not can_unstake:
-            self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
+            self.logger.warning(
+                "Service cannot be terminated on-chain: cannot unstake yet."
+            )
             return
 
         if is_staked and can_unstake:
