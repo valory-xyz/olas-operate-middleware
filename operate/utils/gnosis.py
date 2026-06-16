@@ -56,6 +56,16 @@ logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1
 SENTINEL_OWNERS = "0x0000000000000000000000000000000000000001"
 
+# Bounded gas-limit fallback for an EOA ERC20 transfer when eth_estimateGas
+# cannot produce an estimate (e.g. some RPC providers / forks where the
+# gas-estimate fallback addresses hold no balance, so the binary search hits
+# the balance allowance cap). Comfortably covers a standard ERC20 transfer
+# (~37-65k gas), and stays within the native budget that
+# ``FundingManager.drain_agents_eoas`` pre-checks before draining (3 × a native
+# transfer per ERC20). Unused gas is refunded, so over-provisioning the limit
+# is free.
+_ERC20_TRANSFER_GAS_FALLBACK = 65_000
+
 
 class SafeOperation(Enum):
     """Operation types."""
@@ -838,6 +848,14 @@ def transfer_erc20_from_eoa(
         )
         update_tx_with_gas_pricing(tx, ledger_api)
         update_tx_with_gas_estimate(tx, ledger_api)
+        # eth_estimateGas can fail on some RPC providers (e.g. when the
+        # gas-estimate fallback addresses hold no balance on the fork),
+        # leaving update_tx_with_gas_estimate to restore the placeholder gas.
+        # Submitting that tx is rejected as "intrinsic gas too low" and
+        # TxSettler then reprices it (fee only, never gas) until it times out.
+        # Apply a bounded ERC20-transfer fallback so the transfer is sent.
+        if tx.get("gas", 0) < 21_000:
+            tx["gas"] = _ERC20_TRANSFER_GAS_FALLBACK
         return tx
 
     chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access

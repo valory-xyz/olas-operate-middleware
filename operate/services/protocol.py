@@ -112,6 +112,7 @@ class GnosisSafeTransaction:
         crypto: Crypto,
         chain_type: ChainType,
         safe: str,
+        gas_fallback: int = 0,
     ) -> None:
         """Initiliaze a Gnosis safe tx"""
         self.ledger_api = ledger_api
@@ -119,11 +120,19 @@ class GnosisSafeTransaction:
         self.chain_type = chain_type
         self.safe = safe
         self._txs: t.List[t.Dict] = []
+        self._labels: t.List[t.Optional[str]] = []
+        self._gas_fallback = gas_fallback
 
-    def add(self, tx: t.Dict) -> "GnosisSafeTransaction":
-        """Add a transaction"""
+    def add(self, tx: t.Dict, label: t.Optional[str] = None) -> "GnosisSafeTransaction":
+        """Add a transaction, optionally tagged with a label for diagnostics."""
         self._txs.append(tx)
+        self._labels.append(label)
         return self
+
+    @property
+    def labeled_txs(self) -> t.List[t.Tuple[t.Optional[str], t.Dict]]:
+        """Return ``(label, tx)`` pairs in the order they were added."""
+        return list(zip(self._labels, self._txs))
 
     def build(self) -> t.Dict:
         """Build the transaction."""
@@ -184,6 +193,12 @@ class GnosisSafeTransaction:
         )
         update_tx_with_gas_pricing(tx, self.ledger_api)
         update_tx_with_gas_estimate(tx, self.ledger_api)
+        # When gas estimation fails for complex batched txs (non-monotonic
+        # gasleft() behavior from 63/64 forwarding across nested Safe calls),
+        # gas ends up below the EIP intrinsic minimum. Apply caller-provided
+        # fallback so the tx is still submitted with a workable gas limit.
+        if tx.get("gas", 0) < 21_000 and self._gas_fallback > 0:
+            tx["gas"] = self._gas_fallback
         return t.cast(t.Dict, tx)
 
     def settle(self) -> TxReceipt:
@@ -617,12 +632,19 @@ class StakingManager:
         service_id: int,
         service_registry: str,
         staking_contract: str,
+        skip_compatibility_check: bool = False,
     ) -> bytes:
-        """Get stake approval tx data."""
-        self.check_staking_compatibility(
-            service_id=service_id,
-            staking_contract=staking_contract,
-        )
+        """Get stake approval tx data.
+
+        ``skip_compatibility_check`` skips the live "already staked"/slots
+        guard for the case where this approval is batched after an in-batch
+        unstake of the same program, which frees the slot before the re-stake.
+        """
+        if not skip_compatibility_check:
+            self.check_staking_compatibility(
+                service_id=service_id,
+                staking_contract=staking_contract,
+            )
         return registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
             contract_address=service_registry,
@@ -634,12 +656,23 @@ class StakingManager:
             ],
         )
 
-    def get_stake_tx_data(self, service_id: int, staking_contract: str) -> bytes:
-        """Get stake approval tx data."""
-        self.check_staking_compatibility(
-            service_id=service_id,
-            staking_contract=staking_contract,
-        )
+    def get_stake_tx_data(
+        self,
+        service_id: int,
+        staking_contract: str,
+        skip_compatibility_check: bool = False,
+    ) -> bytes:
+        """Get stake tx data.
+
+        ``skip_compatibility_check`` skips the live "already staked"/slots
+        guard for the case where this stake is batched after an in-batch
+        unstake of the same program, which frees the slot before the re-stake.
+        """
+        if not skip_compatibility_check:
+            self.check_staking_compatibility(
+                service_id=service_id,
+                staking_contract=staking_contract,
+            )
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -1326,7 +1359,12 @@ class EthSafeTxBuilder(_ChainUtil):
 
     @classmethod
     def _new_tx(
-        cls, ledger_api: LedgerApi, crypto: Crypto, chain_type: ChainType, safe: str
+        cls,
+        ledger_api: LedgerApi,
+        crypto: Crypto,
+        chain_type: ChainType,
+        safe: str,
+        gas_fallback: int = 0,
     ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return GnosisSafeTransaction(
@@ -1334,10 +1372,14 @@ class EthSafeTxBuilder(_ChainUtil):
             crypto=crypto,
             chain_type=chain_type,
             safe=safe,
+            gas_fallback=gas_fallback,
         )
 
     def new_tx(
-        self, crypto: Optional[Crypto] = None, safe: Optional[str] = None
+        self,
+        crypto: Optional[Crypto] = None,
+        safe: Optional[str] = None,
+        gas_fallback: int = 0,
     ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return EthSafeTxBuilder._new_tx(
@@ -1348,6 +1390,7 @@ class EthSafeTxBuilder(_ChainUtil):
             crypto=crypto or self.crypto,
             chain_type=self.chain_type,
             safe=t.cast(str, safe or self.safe),
+            gas_fallback=gas_fallback,
         )
 
     def get_mint_tx_data(  # pylint: disable=too-many-arguments  # pragma: no cover
@@ -1496,6 +1539,7 @@ class EthSafeTxBuilder(_ChainUtil):
         use_recovery_module: bool = True,
         use_poly_safe: bool = False,
         agent_eoa_crypto: t.Optional[Crypto] = None,
+        skip_owner_check: bool = False,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
         approve_hash_message = None
@@ -1526,6 +1570,7 @@ class EthSafeTxBuilder(_ChainUtil):
                     chain_type=self.chain_type,
                     service_id=service_id,
                     master_safe=master_safe,
+                    skip_owner_check=skip_owner_check,
                 )
                 if _deployment_payload is None:
                     raise ValueError(error)
@@ -1584,6 +1629,7 @@ class EthSafeTxBuilder(_ChainUtil):
         safe_b_address: str,
         to: str,
         amount: int,
+        nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
         Build the two messages (Safe calls) to withdraw native ETH from Safe B via this Safe (owner of Safe B).
@@ -1591,6 +1637,9 @@ class EthSafeTxBuilder(_ChainUtil):
         Builds the messages to be settled by this Safe:
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ETH
+
+        ``nonce`` is the Safe B nonce the inner tx hash is computed with;
+        ``None`` reads the current nonce on-chain.
         """
         safe_b_instance = registry_contracts.gnosis_safe.get_instance(
             ledger_api=self.ledger_api,
@@ -1616,14 +1665,18 @@ class EthSafeTxBuilder(_ChainUtil):
             txs=txs,
         )
 
-        # Compute inner Safe transaction hash
+        # Compute inner Safe transaction hash.
+        # operation must match what execTransaction will use (DELEGATE_CALL),
+        # because the Safe hashes all parameters including operation to verify
+        # the approved hash.
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=self.ledger_api,
             contract_address=safe_b_address,
             to_address=multisend_address,
             value=multisend_tx["value"],
             data=multisend_tx["data"],
-            operation=SafeOperation.CALL.value,
+            operation=SafeOperation.DELEGATE_CALL.value,
+            safe_nonce=nonce,
         ).get("tx_hash")
 
         # Build approveHash message
@@ -1669,6 +1722,7 @@ class EthSafeTxBuilder(_ChainUtil):
         token: str,
         to: str,
         amount: int,
+        nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
         Build the two messages (Safe calls) to withdraw ERC20 from Safe B via this Safe (owner of Safe B).
@@ -1676,6 +1730,9 @@ class EthSafeTxBuilder(_ChainUtil):
         Builds the messages to be settled by this Safe:
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ERC20 tokens
+
+        ``nonce`` is the Safe B nonce the inner tx hash is computed with;
+        ``None`` reads the current nonce on-chain.
         """
         safe_b_instance = registry_contracts.gnosis_safe.get_instance(
             ledger_api=self.ledger_api,
@@ -1715,14 +1772,18 @@ class EthSafeTxBuilder(_ChainUtil):
             txs=txs,
         )
 
-        # Compute inner Safe transaction hash
+        # Compute inner Safe transaction hash.
+        # operation must match what execTransaction will use (DELEGATE_CALL),
+        # because the Safe hashes all parameters including operation to verify
+        # the approved hash.
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=self.ledger_api,
             contract_address=safe_b_address,
             to_address=multisend_address,
             value=multisend_tx["value"],
             data=multisend_tx["data"],
-            operation=SafeOperation.CALL.value,
+            operation=SafeOperation.DELEGATE_CALL.value,
+            safe_nonce=nonce,
         ).get("tx_hash")
 
         # Build approveHash message
@@ -1793,6 +1854,7 @@ class EthSafeTxBuilder(_ChainUtil):
         service_id: int,
         service_registry: str,
         staking_contract: str,
+        skip_compatibility_check: bool = False,
     ) -> t.Dict:
         """Get staking approval data"""
         self._patch()
@@ -1802,6 +1864,7 @@ class EthSafeTxBuilder(_ChainUtil):
             service_id=service_id,
             service_registry=service_registry,
             staking_contract=staking_contract,
+            skip_compatibility_check=skip_compatibility_check,
         )
         return {
             "from": self.safe,
@@ -1815,6 +1878,7 @@ class EthSafeTxBuilder(_ChainUtil):
         self,
         service_id: int,
         staking_contract: str,
+        skip_compatibility_check: bool = False,
     ) -> t.Dict:
         """Get staking tx data"""
         self._patch()
@@ -1823,6 +1887,7 @@ class EthSafeTxBuilder(_ChainUtil):
         ).get_stake_tx_data(
             service_id=service_id,
             staking_contract=staking_contract,
+            skip_compatibility_check=skip_compatibility_check,
         )
         return {
             "to": staking_contract,
@@ -2158,8 +2223,17 @@ def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-m
     chain_type: ChainType,
     service_id: int,
     master_safe: str,
+    skip_owner_check: bool = False,
 ) -> t.Tuple[Optional[str], Optional[str]]:
-    """Reuse multisig."""
+    """Reuse multisig.
+
+    ``skip_owner_check`` bypasses the live service-Safe ownership guard. The
+    returned payload is just the service id and does not depend on the owner
+    set; the guard is only a pre-flight check that the Master Safe is the sole
+    owner. When the deploy is batched in the same MultiSend as the
+    ``recover_access`` that transfers ownership, that check is premature (it
+    runs before the batch settles), so the caller opts out of it.
+    """
     _, multisig_address, _, _, *_ = get_service_info(
         ledger_api=ledger_api,
         chain_type=chain_type,
@@ -2176,12 +2250,13 @@ def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-m
     )
 
     # Verify if the service was terminated properly or not
-    old_owners = multisig_instance.functions.getOwners().call()
-    if len(old_owners) != 1 or service_owner not in old_owners:
-        return (
-            None,
-            "Service was not terminated properly, the service owner should be the only owner of the safe",
-        )
+    if not skip_owner_check:
+        old_owners = multisig_instance.functions.getOwners().call()
+        if len(old_owners) != 1 or service_owner not in old_owners:
+            return (
+                None,
+                "Service was not terminated properly, the service owner should be the only owner of the safe",
+            )
 
     payload = "0x" + int(service_id).to_bytes(32, "big").hex()
     return payload, None

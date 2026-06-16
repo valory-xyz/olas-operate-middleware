@@ -108,7 +108,7 @@ from operate.services.funding_manager import FundingInProgressError, FundingMana
 from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
 from operate.utils import subtract_dicts
-from operate.utils.gnosis import gas_fees_spent_in_tx, get_assets_balances
+from operate.utils.gnosis import Transfer, get_assets_balances
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
@@ -1364,33 +1364,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 wallet = wallet_manager.load(chain.ledger_type)
                 transfer_txs[chain_str] = {}
 
-                # Process ERC20 first
-                gas_fee_spent = 0
-                for asset, amount in tokens.items():
-                    if asset != ZERO_ADDRESS:
-                        txs = wallet.transfer_from_safe_then_eoa(
-                            to=to,
-                            amount=int(amount),
-                            chain=chain,
-                            asset=asset,
-                        )
-                        transfer_txs[chain_str][asset] = txs
-                        for tx in txs:
-                            gas_fee_spent += gas_fees_spent_in_tx(
-                                ledger_api=wallet.ledger_api(chain=chain),
-                                tx_hash=tx,
-                            )
+                transfers = [
+                    Transfer(to=to, asset=asset, amount=int(amount))
+                    for asset, amount in tokens.items()
+                ]
+                if not transfers:
+                    continue
 
-                # Process native last
-                if ZERO_ADDRESS in tokens:
-                    asset = ZERO_ADDRESS
-                    amount = int(tokens[asset]) - gas_fee_spent
-                    txs = wallet.transfer_from_safe_then_eoa(
-                        to=to,
-                        amount=int(amount),
-                        chain=chain,
-                        asset=asset,
-                    )
+                txs = wallet.transfer_batch_from_safe_then_eoa(
+                    chain=chain,
+                    transfers=transfers,
+                )
+                # Backward compatibility: each asset reports the
+                # transaction list of the (shared) batched withdrawal.
+                for asset in tokens:
                     transfer_txs[chain_str][asset] = txs
 
         except InsufficientFundsException as e:

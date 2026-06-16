@@ -37,6 +37,7 @@ from operate.utils.gnosis import (
     SENTINEL_OWNERS,
     SafeOperation,
     Transfer,
+    _ERC20_TRANSFER_GAS_FALLBACK,
     _get_nonce,
     add_owner,
     create_safe,
@@ -1090,6 +1091,94 @@ class TestTransferErc20FromEoa:
         mock_instance.functions.transfer.assert_called_once_with("0x" + "c" * 40, 12)
         mock_update_gas_pricing.assert_called_once_with(built_tx, mock_ledger)
         mock_update_gas_estimate.assert_called_once_with(built_tx, mock_ledger)
+
+    def test_failed_gas_estimate_applies_fallback(self) -> None:
+        """A sub-intrinsic gas (failed estimate) is replaced by the fallback."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_ledger.api.eth.get_transaction_count.return_value = 7
+
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        # update_tx_with_gas_estimate restores the placeholder gas when the
+        # estimate fails; emulate that by leaving a sub-intrinsic value behind.
+        built_tx = {"to": "0x" + "b" * 40, "value": 0, "gas": 1}
+        mock_instance = MagicMock()
+        mock_instance.functions.transfer.return_value.build_transaction.return_value = (
+            built_tx
+        )
+
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing"),
+            patch("operate.utils.gnosis.update_tx_with_gas_estimate"),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.TxSettler") as mock_txsettler_cls,
+        ):
+            mock_contracts.erc20.get_instance.return_value = mock_instance
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
+                "0xhash"
+            )
+
+            transfer_erc20_from_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                token="0x" + "b" * 40,
+                to="0x" + "c" * 40,
+                amount=12,
+            )
+
+            tx_builder = mock_txsettler_cls.call_args.kwargs["tx_builder"]
+            tx = tx_builder()
+
+        assert tx["gas"] == _ERC20_TRANSFER_GAS_FALLBACK
+
+    def test_successful_gas_estimate_not_overridden(self) -> None:
+        """A valid (>= intrinsic) estimate is left untouched by the fallback."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_ledger.api.eth.get_transaction_count.return_value = 7
+
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        built_tx = {"to": "0x" + "b" * 40, "value": 0}
+        mock_instance = MagicMock()
+        mock_instance.functions.transfer.return_value.build_transaction.return_value = (
+            built_tx
+        )
+
+        def _set_real_estimate(tx: dict, _ledger: object) -> None:
+            tx["gas"] = 55_000
+
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing"),
+            patch(
+                "operate.utils.gnosis.update_tx_with_gas_estimate",
+                side_effect=_set_real_estimate,
+            ),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.TxSettler") as mock_txsettler_cls,
+        ):
+            mock_contracts.erc20.get_instance.return_value = mock_instance
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
+                "0xhash"
+            )
+
+            transfer_erc20_from_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                token="0x" + "b" * 40,
+                to="0x" + "c" * 40,
+                amount=12,
+            )
+
+            tx_builder = mock_txsettler_cls.call_args.kwargs["tx_builder"]
+            tx = tx_builder()
+
+        assert tx["gas"] == 55_000
 
     def test_gas_error_raises_insufficient_funds(self) -> None:
         """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
