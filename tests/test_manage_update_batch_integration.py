@@ -63,7 +63,6 @@ class TestCombinedUpdateBatchIntegration(OnTestnet):
     """Combined update mega-batch against a live Tenderly fork."""
 
     @pytest.mark.integration
-    @pytest.mark.flaky(reruns=2)
     def test_update_migrates_staking_program_via_combined_batch(
         self, test_env: OperateTestEnv
     ) -> None:

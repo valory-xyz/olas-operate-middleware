@@ -1482,6 +1482,8 @@ class ServiceManager:
 
         # Cannot unstake, terminate flow.
         if is_staked and not can_unstake:
+            # Cannot unstake yet (e.g. still within the staking lock window):
+            # skip termination entirely; the caller retries on a later cycle.
             self.logger.warning(
                 "Service cannot be terminated on-chain: cannot unstake yet."
             )
@@ -1536,13 +1538,6 @@ class ServiceManager:
                 )
                 # Fall through to stepwise terminate+unbond below
                 self._terminate_and_unbond(sftxb, service, chain, chain_data)
-        elif is_staked:
-            # At least claim the rewards if we cannot unstake yet
-            self.claim_on_chain_from_safe(
-                service_config_id=service_config_id,
-                chain=chain,
-            )
-            return
         else:
             # Not staked: batch terminate + unbond
             self._terminate_and_unbond(sftxb, service, chain, chain_data)
