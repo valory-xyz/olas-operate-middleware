@@ -1889,6 +1889,20 @@ class TestGnosisSafeTransactionSettle:
 
         assert result is mock_receipt
 
+    def test_settle_raises_on_reverted_receipt(self) -> None:
+        """Verify settle() raises ChainInteractionError on a mined status-0 receipt."""
+        gst = self._make_gst()
+        mock_txsettler_cls = MagicMock()
+        settler = (
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value
+        )
+        settler.tx_receipt = {"status": 0}
+        settler.tx_hash = "0xdeadbeef"
+
+        with patch("operate.services.protocol.TxSettler", mock_txsettler_cls):
+            with pytest.raises(ChainInteractionError, match="reverted on-chain"):
+                gst.settle()
+
     def test_settle_gas_error_raises_insufficient_funds(self) -> None:
         """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
         gst = self._make_gst()

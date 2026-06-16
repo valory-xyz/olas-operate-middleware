@@ -45,6 +45,7 @@ from autonomy.chain.constants import (
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
+from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
@@ -202,14 +203,20 @@ class GnosisSafeTransaction:
         return t.cast(t.Dict, tx)
 
     def settle(self) -> TxReceipt:
-        """Settle the transaction."""
+        """Settle the transaction.
+
+        Raises ``ChainInteractionError`` if the transaction is mined but
+        reverts (status 0): ``TxSettler`` does not raise on a reverted receipt,
+        so without this guard a silently-reverted Safe tx would be returned as
+        a success and callers would proceed believing on-chain state changed.
+        """
         with wrap_gas_spike_as_insufficient_funds(
             self.chain_type.value,
             "settle Safe transaction",
             ledger_api=self.ledger_api,
             signer_address=self.crypto.address,
         ):
-            return (
+            settler = (
                 TxSettler(
                     ledger_api=self.ledger_api,
                     crypto=self.crypto,
@@ -221,8 +228,14 @@ class GnosisSafeTransaction:
                 )
                 .transact()
                 .settle()
-                .tx_receipt
             )
+
+        receipt = settler.tx_receipt
+        if receipt is not None and receipt.get("status") == 0:
+            raise ChainInteractionError(
+                f"Safe transaction {settler.tx_hash} reverted on-chain."
+            )
+        return t.cast(TxReceipt, receipt)
 
 
 class StakingManager:
