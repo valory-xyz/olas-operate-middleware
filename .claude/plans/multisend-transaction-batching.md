@@ -49,8 +49,9 @@ drains, Safe deployments, current bridge execution) **cannot** use MultiSend and
   - Execute with `operation=SafeOperation.DELEGATE_CALL` via
     `registry_contracts.gnosis_safe.get_raw_safe_transaction_hash()` / `get_raw_safe_transaction()`
     + `TxSettler` — mirror `GnosisSafeTransaction.build()`/`.settle()` (protocol.py:153–235),
-    including the bytes normalization fix (`_normalize_tx_data_to_bytes`, protocol.py:97–121)
-    and the gas-pricing/estimation calls.
+    including the gas-pricing/estimation calls. The bytes-normalization helper is deduped
+    (user-approved): canonical `normalize_tx_data_to_bytes` lives in gnosis.py; protocol.py's
+    former private copy is removed and imported from gnosis.py instead.
   - `SafeOperation` / `MultiSendOperation` enums already exist in gnosis.py:59–71 — reuse.
 - `transfer_batch_from_safe(ledger_api, crypto, safe, transfers: list[tuple[to, asset, amount]]) -> str`
   - Compose sub-txs: native → `{"to": to, "value": amount, "data": b""}`; ERC20 → encode
@@ -186,7 +187,7 @@ DEPLOYED + the NFT approval before it). Target tx counts per chain: fresh servic
 | `operate/wallet/master.py` | Add `transfer_batch`, `transfer_batch_from_safe_then_eoa`; rewire `drain()` Safe path |
 | `operate/services/funding_manager.py` | `fund_chain_amounts` batch per chain; drain/partial-withdraw cross-token accumulation |
 | `operate/services/manage.py` | Mega-batch happy path + combined-receipt event parsing; stepwise-path approve+action merges; terminate-side batch |
-| `operate/services/protocol.py` | Explicit-nonce parameter on `get_safe_b_*_transfer_messages` |
+| `operate/services/protocol.py` | Explicit-nonce parameter on `get_safe_b_*_transfer_messages`; `_normalize_tx_data_to_bytes` removed in favor of `gnosis.normalize_tx_data_to_bytes` |
 | `operate/cli.py` | `_wallet_withdraw` Safe-leg batching, response shape preserved |
 | `CLAUDE.md` | Fix `services/manager.py` → `manage.py` reference; note batching convention |
 | `docs/wallet-and-funding.md`, `docs/api.md` | Reflect batched semantics |
@@ -221,8 +222,9 @@ No JSON schema / persistence changes; no migration; no new endpoints or request 
 ## Risks / notes
 
 - Layering: the new primitive lives in `operate/utils/gnosis.py` so the wallet layer never imports
-  from `operate/services/` (protocol.py's `GnosisSafeTransaction` is left untouched in this
-  change — no refactor to delegate to the new helper).
+  from `operate/services/` (protocol.py's `GnosisSafeTransaction` execution logic is left
+  untouched — no refactor to delegate to the new helper; the only protocol.py changes are the
+  normalization-helper dedup and the explicit-nonce parameter).
 - Pre-filter simulation costs extra RPC calls (one `eth_call` per sub-tx) — acceptable; balance reads
   already happen per asset today.
 - Single delivery: Stacked PRs; suggested implementation order within it
