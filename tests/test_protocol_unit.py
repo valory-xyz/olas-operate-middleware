@@ -116,6 +116,25 @@ class TestGnosisSafeTransaction:
 
         assert safe_tx._txs == [tx1, tx2]
 
+    def test_add_without_label_records_none(self) -> None:
+        """Test add() records a None label when none is provided."""
+        safe_tx = self._make_safe_tx()
+
+        safe_tx.add({"to": "0xA", "value": 0})
+
+        assert safe_tx._labels == [None]
+
+    def test_add_stores_label_and_labeled_txs_pairs_them(self) -> None:
+        """Test add(label=...) stores the label and labeled_txs zips them in order."""
+        safe_tx = self._make_safe_tx()
+        tx1 = {"to": "0xA", "value": 0}
+        tx2 = {"to": "0xB", "value": 1}
+
+        safe_tx.add(tx1, label="activate").add(tx2)
+
+        assert safe_tx._labels == ["activate", None]
+        assert safe_tx.labeled_txs == [("activate", tx1), (None, tx2)]
+
     def test_build_calls_registry_contracts(self) -> None:
         """Test build() calls multisend and gnosis_safe contract methods."""
         mock_ledger = MagicMock()
@@ -158,6 +177,46 @@ class TestGnosisSafeTransaction:
         mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.assert_called_once()
         mock_contracts.gnosis_safe.get_raw_safe_transaction.assert_called_once()
         assert isinstance(result, dict)
+
+    def test_build_applies_gas_fallback_when_estimate_below_intrinsic(self) -> None:
+        """build() applies gas_fallback when the estimate ends up sub-intrinsic."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_ledger.api.to_checksum_address.return_value = "0x" + "a" * 40
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+
+        safe_tx = GnosisSafeTransaction(
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            chain_type=ChainType.GNOSIS,
+            safe="0x" + "b" * 40,
+            gas_fallback=500_000,
+        )
+
+        multisend_addr = "0x" + "c" * 40
+        with (
+            patch("operate.services.protocol.registry_contracts") as mock_contracts,
+            patch("operate.services.protocol.ContractConfigs") as mock_config,
+            patch("operate.services.protocol.update_tx_with_gas_pricing"),
+            patch("operate.services.protocol.update_tx_with_gas_estimate"),
+        ):
+            mock_config.multisend.contracts.__getitem__.return_value = multisend_addr
+            mock_contracts.multisend.get_tx_data.return_value = {
+                "data": "0x" + "ab" * 16
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "aa" * 32
+            }
+            # No 'gas' key -> tx.get("gas", 0) == 0 < 21_000 -> fallback applies.
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "to": multisend_addr,
+                "value": 0,
+                "data": b"",
+            }
+
+            result = safe_tx.build()
+
+        assert result["gas"] == 500_000
 
     def test_build_normalizes_hex_string_data_with_0x_prefix(self) -> None:
         """Test build() converts '0x'-prefixed hex str data to bytes."""

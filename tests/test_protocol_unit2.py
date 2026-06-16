@@ -592,6 +592,59 @@ class TestStakingManagerTxDataMethods:
 
         assert result == _ENCODED
 
+    def test_get_stake_approval_tx_data_skips_check_when_flagged(self) -> None:
+        """skip_compatibility_check=True bypasses the compatibility guard."""
+        mgr = self._make_manager()
+        mock_erc20_instance = MagicMock()
+        mock_erc20_instance.encode_abi.return_value = _ENCODED
+
+        with (
+            patch.object(mgr, "check_staking_compatibility") as mock_check,
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+        ):
+            mock_rc.erc20.get_instance.return_value = mock_erc20_instance
+            result = mgr.get_stake_approval_tx_data(
+                service_id=1,
+                service_registry=_SERVICE_REGISTRY,
+                staking_contract=_STAKING_CONTRACT,
+                skip_compatibility_check=True,
+            )
+
+        assert result == _ENCODED
+        mock_check.assert_not_called()
+
+    def test_get_stake_tx_data_skips_check_when_flagged(self) -> None:
+        """skip_compatibility_check=True bypasses the compatibility guard."""
+        mgr = self._make_manager()
+        mock_instance = MagicMock()
+        mock_instance.encode_abi.return_value = _ENCODED
+        mock_ctr = self._mock_staking_ctr(mgr)
+        mock_ctr.get_instance.return_value = mock_instance
+
+        with (
+            patch.object(mgr, "check_staking_compatibility") as mock_check,
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_ctr,
+            ),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+        ):
+            result = mgr.get_stake_tx_data(
+                service_id=1,
+                staking_contract=_STAKING_CONTRACT,
+                skip_compatibility_check=True,
+            )
+
+        assert result == _ENCODED
+        mock_check.assert_not_called()
+
     def test_get_unstake_tx_data_calls_check_then_encode(self) -> None:
         """get_unstake_tx_data calls check_if_unstaking_possible and encodes."""
         mgr = self._make_manager()
@@ -1556,6 +1609,49 @@ class TestGetDeployDataFromSafe:
 
         assert len(result) == 1
 
+    def test_reuse_multisig_with_recovery_forwards_skip_owner_check(self) -> None:
+        """skip_owner_check is forwarded to the recovery payload builder."""
+        builder = _make_eth_safe_tx_builder()
+        mock_smi = MagicMock()
+        mock_smi.encode_abi.return_value = _ENCODED
+
+        with (
+            patch.object(builder, "_patch"),
+            patch.object(
+                type(builder),
+                "service_manager_instance",
+                new_callable=PropertyMock,
+                return_value=mock_smi,
+            ),
+            patch.object(
+                type(builder),
+                "service_manager_address",
+                new_callable=PropertyMock,
+                return_value="0xSM",
+            ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
+                return_value=("recovery_payload", None),
+            ) as mock_payload,
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
+            mock_cc.get.return_value.contracts = {builder.chain_type: "0xRM"}
+            builder.get_deploy_data_from_safe(
+                service_id=1,
+                master_safe=_MASTER_SAFE,
+                reuse_multisig=True,
+                use_recovery_module=True,
+                skip_owner_check=True,
+            )
+
+        assert mock_payload.call_args.kwargs["skip_owner_check"] is True
+
     def test_reuse_multisig_with_recovery_raises_when_payload_none(self) -> None:
         """Raises ValueError when recovery payload is None."""
         builder = _make_eth_safe_tx_builder()
@@ -1632,10 +1728,17 @@ class TestEthSafeTxBuilderStakingDataMethods:
                 service_id=1,
                 service_registry=_SERVICE_REGISTRY,
                 staking_contract=_STAKING_CONTRACT,
+                skip_compatibility_check=True,
             )
 
         assert result["to"] == _CONTRACTS["service_registry"]
         assert result["from"] == _SAFE_ADDRESS
+        assert (
+            mock_sm.get_stake_approval_tx_data.call_args.kwargs[
+                "skip_compatibility_check"
+            ]
+            is True
+        )
 
     def test_get_staking_data_delegates_to_staking_manager(self) -> None:
         """get_staking_data calls StakingManager and returns dict."""
@@ -1648,10 +1751,16 @@ class TestEthSafeTxBuilderStakingDataMethods:
             patch("operate.services.protocol.StakingManager", return_value=mock_sm),
         ):
             result = builder.get_staking_data(
-                service_id=1, staking_contract=_STAKING_CONTRACT
+                service_id=1,
+                staking_contract=_STAKING_CONTRACT,
+                skip_compatibility_check=True,
             )
 
         assert result["to"] == _STAKING_CONTRACT
+        assert (
+            mock_sm.get_stake_tx_data.call_args.kwargs["skip_compatibility_check"]
+            is True
+        )
 
     def test_get_unstaking_data_normal_path(self) -> None:
         """get_unstaking_data calls get_unstake_tx_data when force=False."""

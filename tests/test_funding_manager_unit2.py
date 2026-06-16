@@ -38,6 +38,7 @@ from operate.serialization import BigInt
 from operate.services.funding_manager import FundingManager
 from operate.services.protocol import StakingState
 from operate.services.service import NON_EXISTENT_TOKEN
+from operate.utils.gnosis import Transfer
 
 # ---------------------------------------------------------------------------
 # Helpers / constants
@@ -577,10 +578,15 @@ class TestDrainServiceSafe:
                 ):
                     manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
 
-        manager.logger.info.assert_called()  # type: ignore[attr-defined]
+        # Nothing was drained (all balances zero): the final log says so
+        # instead of claiming "drained".
+        assert any(
+            "had nothing to drain" in call.args[0]
+            for call in manager.logger.info.call_args_list  # type: ignore[attr-defined]
+        )
 
     def test_erc20_owners_are_agents_calls_transfer(self) -> None:
-        """drain_service_safe calls transfer_erc20_from_safe when owners are agents."""
+        """drain_service_safe batches via transfer_batch_from_safe when owners are agents."""
         manager = _make_manager(wallet_manager=self._make_wallet_manager())
         service = _mock_service()
 
@@ -612,7 +618,7 @@ class TestDrainServiceSafe:
                 return_value="OLAS",
             ),
             patch(
-                "operate.services.funding_manager.transfer_erc20_from_safe"
+                "operate.services.funding_manager.transfer_batch_from_safe"
             ) as mock_transfer,
             patch(
                 "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
@@ -623,6 +629,9 @@ class TestDrainServiceSafe:
             manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
 
         mock_transfer.assert_called_once()
+        assert mock_transfer.call_args.kwargs["transfers"] == [
+            Transfer(to=AGENT_ADDR, asset=TOKEN_ADDR, amount=1000)
+        ]
 
     def test_erc20_owners_are_master_safe_calls_sftxb(self) -> None:
         """drain_service_safe uses sftxb when owners == {master_safe}."""
@@ -718,7 +727,7 @@ class TestDrainServiceSafe:
                 manager.drain_service_safe(service, AGENT_ADDR, Chain.GNOSIS)
 
     def test_native_balance_positive_owners_are_agents(self) -> None:
-        """drain_service_safe calls transfer_from_safe for native with agent owners."""
+        """drain_service_safe batches the native drain when owners are agents."""
         manager = _make_manager(wallet_manager=self._make_wallet_manager())
         service = _mock_service()
 
@@ -750,11 +759,7 @@ class TestDrainServiceSafe:
                 return_value="ETH",
             ),
             patch(
-                "operate.services.funding_manager.transfer as transfer_from_safe",
-                create=True,
-            ),
-            patch(
-                "operate.services.funding_manager.transfer_from_safe"
+                "operate.services.funding_manager.transfer_batch_from_safe"
             ) as mock_transfer,
             patch(
                 "operate.services.funding_manager.ERC20_TOKENS_BY_CHAIN_ID",
@@ -1555,12 +1560,9 @@ class TestFundChainAmountsTransferPath:
         ):
             manager.fund_chain_amounts(amounts)
 
-        mock_wallet.transfer.assert_called_once_with(
+        mock_wallet.transfer_batch.assert_called_once_with(
             chain=Chain.GNOSIS,
-            to=AGENT_ADDR,
-            asset=ZERO_ADDRESS,
-            amount=BigInt(100),
-            from_safe=True,
+            transfers=[Transfer(to=AGENT_ADDR, asset=ZERO_ADDRESS, amount=100)],
         )
 
     def test_zero_amount_skips_wallet_transfer(self) -> None:
@@ -1586,7 +1588,7 @@ class TestFundChainAmountsTransferPath:
         ):
             manager.fund_chain_amounts(amounts)
 
-        mock_wallet.transfer.assert_not_called()
+        mock_wallet.transfer_batch.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -2171,7 +2173,13 @@ class TestFundingJob:
             ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            await _REAL_SLEEP(0.1)
+            # Poll until logger.exception is called rather than using a fixed
+            # sleep — the two sequential run_in_executor calls (claim then
+            # fund_master_eoa) may need more wall-clock time on slow CI runners.
+            for _ in range(40):
+                if manager.logger.exception.call_count > 0:  # type: ignore[attr-defined]
+                    break
+                await _REAL_SLEEP(0.05)
             task.cancel()
             try:
                 await task
@@ -2269,10 +2277,7 @@ class TestFundChainAmountsCallArgs:
         ):
             manager.fund_chain_amounts(amounts)
 
-        mock_wallet.transfer.assert_called_once_with(
+        mock_wallet.transfer_batch.assert_called_once_with(
             chain=Chain.GNOSIS,
-            to=AGENT_ADDR,
-            asset=ZERO_ADDRESS,
-            amount=BigInt(500),
-            from_safe=True,
+            transfers=[Transfer(to=AGENT_ADDR, asset=ZERO_ADDRESS, amount=500)],
         )
