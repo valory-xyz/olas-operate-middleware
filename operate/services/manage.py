@@ -653,19 +653,33 @@ class ServiceManager:
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
+        # For an update, prefer folding the teardown (unstake → terminate →
+        # unbond → recover_access) into the update mega-batch below so the whole
+        # update settles as one Master-Safe MultiSend. Falls back to the legacy
+        # stepwise terminate + swap/recovery only when recover_access is needed
+        # but cannot be performed in-batch.
+        update_teardown_prefix: t.Optional[t.List[t.Tuple[t.Dict, str]]] = None
         if is_update:
-            self.terminate_service_on_chain_from_safe(
-                service_config_id=service_config_id, chain=chain
+            update_teardown_prefix = self._build_update_teardown_prefix(
+                service=service,
+                chain=chain,
+                sftxb=sftxb,
+                chain_data=chain_data,
+                master_safe=safe,
             )
-            if (
-                self._get_on_chain_state(service=service, chain=chain)
-                == OnChainState.PRE_REGISTRATION
-            ):
-                self.logger.info("Execute recovery module operations")
-                self._execute_recovery_module_flow_from_safe(
+            if update_teardown_prefix is None:
+                self.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id, chain=chain
                 )
-                # Update mint is included in the mega-batch below
+                if (
+                    self._get_on_chain_state(service=service, chain=chain)
+                    == OnChainState.PRE_REGISTRATION
+                ):
+                    self.logger.info("Execute recovery module operations")
+                    self._execute_recovery_module_flow_from_safe(
+                        service_config_id=service_config_id, chain=chain
+                    )
+                    # Update mint is included in the mega-batch below
 
         # Mint service
         if (
@@ -726,13 +740,27 @@ class ServiceManager:
         is_initial_funding = False
         mega_batch_done = False
 
+        # An update folds its teardown into this batch, so enter from the live
+        # (pre-teardown) state too — the prepended sub-txs drive the registry to
+        # PRE_REGISTRATION before the update mint.
+        in_batch_teardown = bool(update_teardown_prefix)
+        teardown_frees_target_slot = (
+            in_batch_teardown
+            and current_staking_program == user_params.staking_program_id
+            and any(label == "unstake" for _, label in update_teardown_prefix or [])
+        )
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
+            or in_batch_teardown
         ):
             self.logger.info(
                 "Mega-batch path: "
-                + ("update → " if is_update else "")
+                + (
+                    "teardown → update → "
+                    if in_batch_teardown
+                    else ("update → " if is_update else "")
+                )
                 + "activate → register → deploy"
                 + (" → stake" if user_params.use_staking else "")
             )
@@ -748,7 +776,15 @@ class ServiceManager:
                 if not sftxb.staking_slots_available(
                     staking_contract=target_staking_contract,
                 ):
-                    raise ValueError("No staking slots available")
+                    # A re-stake into the same program frees its own slot via
+                    # the in-batch unstake, so the live count being full is not
+                    # a blocker in that case.
+                    if not teardown_frees_target_slot:
+                        raise ValueError("No staking slots available")
+                    self.logger.info(
+                        "Target staking slot occupied by this service; it will "
+                        "be freed by the in-batch unstake."
+                    )
                 if sftxb.staking_rewards_available(target_staking_contract):
                     include_staking = True
                 else:
@@ -757,6 +793,12 @@ class ServiceManager:
                     )
 
             mega_tx = sftxb.new_tx(gas_fallback=_MEGA_BATCH_GAS_FALLBACK)
+
+            # --- In-batch teardown (update path): unstake → terminate →
+            #     unbond → recover_access, as dictated by the live state ---
+            if update_teardown_prefix:
+                for tx_data, label in update_teardown_prefix:
+                    mega_tx.add(tx_data, label=label)
 
             # --- Update mint (update path only) ---
             if is_update:
@@ -857,6 +899,13 @@ class ServiceManager:
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
+            # When recover_access is part of this batch, the service Safe
+            # ownership is transferred to the Master Safe earlier in the same
+            # MultiSend, so the live-ownership pre-flight in the deploy payload
+            # builder would fire prematurely — skip it in that case.
+            skip_owner_check = bool(update_teardown_prefix) and any(
+                label == "recover_access" for _, label in update_teardown_prefix or []
+            )
             deploy_messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
@@ -866,16 +915,21 @@ class ServiceManager:
                 agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 ),
+                skip_owner_check=skip_owner_check,
             )
             for msg in deploy_messages:
                 mega_tx.add(msg, label="deploy")
 
             # --- Staking (if enabled and slots/rewards available) ---
             if include_staking and target_staking_contract is not None:
+                # A re-stake into the same program is preceded by an in-batch
+                # unstake, so the live "already staked"/slots guards are
+                # premature — skip them when that teardown is present.
                 nft_approve = sftxb.get_staking_approval_data(
                     service_id=chain_data.token,
                     service_registry=CONTRACTS[ledger_config.chain]["service_registry"],
                     staking_contract=target_staking_contract,
+                    skip_compatibility_check=teardown_frees_target_slot,
                 )
                 mega_tx.add(nft_approve, label="staking_nft_approve")
 
@@ -898,6 +952,7 @@ class ServiceManager:
                 stake_data = sftxb.get_staking_data(
                     service_id=chain_data.token,
                     staking_contract=target_staking_contract,
+                    skip_compatibility_check=teardown_frees_target_slot,
                 )
                 mega_tx.add(stake_data, label="stake")
 
@@ -1263,6 +1318,120 @@ class ServiceManager:
                     service_id=chain_data.token,
                 )
             ).settle()
+
+    def _build_update_teardown_prefix(  # pylint: disable=too-many-locals,too-many-return-statements  # pragma: no cover
+        self,
+        service: Service,
+        chain: str,
+        sftxb: EthSafeTxBuilder,
+        chain_data: t.Any,
+        master_safe: str,
+    ) -> t.Optional[t.List[t.Tuple[t.Dict, str]]]:
+        """Build the in-batch teardown prefix for an update mega-batch.
+
+        Returns the ``(tx_data, label)`` pairs to prepend to the update
+        mega-batch — unstake → terminate → unbond → recover_access as dictated
+        by the live on-chain state — so the whole update settles as one
+        Master-Safe MultiSend.
+
+        Returns ``None`` when the combined path is not applicable and the
+        caller must fall back to the legacy stepwise terminate + swap/recovery
+        flow. That happens only when ``recover_access`` is needed (the Master
+        Safe is not the service Safe owner) but cannot be performed in-batch
+        (recovery module not enabled, or inconsistent service Safe owners).
+        When ``recover_access`` is not needed, the combined path proceeds
+        without it.
+        """
+        state = self._get_on_chain_state(service=service, chain=chain)
+        if chain_data.multisig in (None, ZERO_ADDRESS):
+            # No service Safe to reuse; let the standard path handle minting.
+            return None
+
+        service_id = chain_data.token
+        current_staking_program = self._get_current_staking_program(service, chain)
+        is_staked = current_staking_program is not None
+        staking_contract = (
+            get_staking_contract(
+                chain=Chain(chain),
+                staking_program_id=current_staking_program,
+            )
+            if is_staked
+            else None
+        )
+
+        if is_staked and not sftxb.can_unstake(
+            service_id=service_id, staking_contract=staking_contract
+        ):
+            # Cannot unstake yet -> cannot tear down in-batch; the legacy path
+            # claims rewards and returns without proceeding.
+            self.logger.info("Update teardown: cannot unstake yet; using legacy path")
+            return None
+
+        # recover_access is only needed when the Master Safe is not already the
+        # service Safe owner.
+        service_safe_owners = sftxb.get_service_safe_owners(service_id=service_id)
+        master_is_owner = service_safe_owners == [master_safe]
+        agent_is_owner = service_safe_owners == [service.agent_addresses[0]]
+        need_recover = not master_is_owner
+        if need_recover:
+            recovery_enabled = registry_contracts.gnosis_safe.is_module_enabled(
+                ledger_api=sftxb.ledger_api,
+                contract_address=chain_data.multisig,
+                module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+            ).get("enabled")
+            if not (agent_is_owner and recovery_enabled):
+                self.logger.info(
+                    "Update teardown: recover_access needed but not feasible "
+                    f"({agent_is_owner=}, {recovery_enabled=}); using legacy path"
+                )
+                return None
+
+        # Eligible for the combined path
+        prefix: t.List[t.Tuple[t.Dict, str]] = []
+        if is_staked:
+            staking_state = sftxb.staking_status(
+                service_id=service_id, staking_contract=staking_contract
+            )
+            if staking_state in {StakingState.STAKED, StakingState.EVICTED}:
+                prefix.append(
+                    (
+                        sftxb.get_unstaking_data(
+                            service_id=service_id,
+                            staking_contract=staking_contract,
+                        ),
+                        "unstake",
+                    )
+                )
+
+        if state in (
+            OnChainState.ACTIVE_REGISTRATION,
+            OnChainState.FINISHED_REGISTRATION,
+            OnChainState.DEPLOYED,
+        ):
+            prefix.append(
+                (sftxb.get_terminate_data(service_id=service_id), "terminate")
+            )
+        # ACTIVE_REGISTRATION terminates straight to PRE_REGISTRATION (no
+        # bonded state), so unbond is only valid from the states that pass
+        # through TERMINATED_BONDED.
+        if state in (
+            OnChainState.FINISHED_REGISTRATION,
+            OnChainState.DEPLOYED,
+            OnChainState.TERMINATED_BONDED,
+        ):
+            prefix.append((sftxb.get_unbond_data(service_id=service_id), "unbond"))
+
+        if need_recover:
+            # Valid once unbond moves the service to PRE_REGISTRATION earlier in
+            # the same MultiSend; recovers service Safe control to Master Safe.
+            prefix.append(
+                (
+                    sftxb.get_recover_access_data(service_id=service_id),
+                    "recover_access",
+                )
+            )
+
+        return prefix
 
     def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals,too-many-statements  # pragma: no cover
         self,
