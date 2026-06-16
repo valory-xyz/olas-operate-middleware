@@ -380,23 +380,6 @@ class ChainConfig(LocalResource):
 ChainConfigs = t.Dict[str, ChainConfig]
 
 
-class FundingConfig(TypedDict):
-    """Funding config."""
-
-    topup: int
-    threshold: int
-
-
-class AssetFundingValues(TypedDict):
-    """Asset Funding values."""
-
-    agent: FundingConfig
-    safe: FundingConfig
-
-
-FundingValues = t.Dict[str, AssetFundingValues]  # str is the asset address
-
-
 @dataclass
 class MechMarketplaceConfig:
     """Mech Marketplace config."""

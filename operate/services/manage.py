@@ -25,8 +25,7 @@ import os
 import threading
 import traceback
 import typing as t
-from collections import Counter, defaultdict
-from contextlib import suppress
+from collections import Counter
 from http import HTTPStatus
 from pathlib import Path
 
@@ -35,7 +34,7 @@ from aea.configurations.data_types import PublicId
 from aea.helpers.base import IPFSHash
 from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
-from autonomy.chain.config import CHAIN_PROFILES, ChainType
+from autonomy.chain.config import ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
 
 from operate.constants import (
@@ -43,10 +42,8 @@ from operate.constants import (
     AGENT_LOG_ENV_VAR,
     AGENT_PERSISTENT_STORAGE_DIR,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
-    DEFAULT_TOPUP_THRESHOLD,
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
-    MIN_SECURITY_DEPOSIT,
     POLY_SAFE_SERVICE_NAMES,
     ZERO_ADDRESS,
 )
@@ -60,17 +57,14 @@ from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
-    DEFAULT_EOA_TOPUPS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
-    WRAPPED_NATIVE_ASSET,
     get_staking_contract,
 )
 from operate.operate_types import (
     Chain,
     ChainAmounts,
     DeploymentStatus,
-    FundingValues,
     LedgerConfig,
     MechMarketplaceConfig,
     OnChainState,
@@ -80,7 +74,6 @@ from operate.operate_types import (
 from operate.services.funding_manager import FundingManager
 from operate.services.protocol import (
     EthSafeTxBuilder,
-    OnChainManager,
     StakingManager,
     StakingState,
 )
@@ -89,14 +82,13 @@ from operate.services.service import (
     Deployment,
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
-    OnChainData,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
     Service,
 )
 from operate.utils.gnosis import (
     get_asset_balance,
-    get_assets_balances,
+    simulate_safe_sub_tx,
     transfer_erc20_from_safe,
 )
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
@@ -108,6 +100,27 @@ from operate.wallet.master import InsufficientFundsException, MasterWalletManage
 NUM_LOCAL_AGENT_INSTANCES = 1
 
 RPC_SYNC_TIMEOUT = 15
+
+# Fallback gas limit for the mega-batch MultiSend. The full staking-update
+# path adds well over a dozen sub-calls (teardown + update mint + approvals +
+# activate/register/deploy + stake); this caps it generously and is only used
+# when on-chain gas estimation is unavailable.
+_MEGA_BATCH_GAS_FALLBACK = 3_000_000
+
+# Registry states from which `terminate` is valid (it moves the service toward
+# PRE_REGISTRATION). ACTIVE_REGISTRATION terminates straight to PRE_REGISTRATION;
+# the others pass through TERMINATED_BONDED first.
+_STATES_REQUIRING_TERMINATE = (
+    OnChainState.ACTIVE_REGISTRATION,
+    OnChainState.FINISHED_REGISTRATION,
+    OnChainState.DEPLOYED,
+)
+# Registry states that pass through TERMINATED_BONDED, so `unbond` is valid.
+_STATES_REQUIRING_UNBOND = (
+    OnChainState.FINISHED_REGISTRATION,
+    OnChainState.DEPLOYED,
+    OnChainState.TERMINATED_BONDED,
+)
 
 
 class ServiceManager:
@@ -197,15 +210,6 @@ class ServiceManager:
     def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""
         return (self.path / service_config_id).exists()
-
-    def get_on_chain_manager(self, ledger_config: LedgerConfig) -> OnChainManager:
-        """Get OnChainManager instance."""
-        return OnChainManager(
-            rpc=ledger_config.rpc,
-            wallet=self.wallet_manager.load(ledger_config.chain.ledger_type),
-            contracts=CONTRACTS[ledger_config.chain],
-            chain_type=ChainType(ledger_config.chain.value),
-        )
 
     def get_eth_safe_tx_builder(self, ledger_config: LedgerConfig) -> EthSafeTxBuilder:
         """Get EthSafeTxBuilder instance."""
@@ -317,212 +321,6 @@ class ServiceManager:
         raise ValueError(
             f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"
         )
-
-    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
-        self,
-        service_config_id: str,
-    ) -> None:
-        """Deploy service on-chain"""
-        # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
-
-        service = self.load(service_config_id=service_config_id)
-        for chain in service.chain_configs.keys():
-            self._deploy_service_onchain(
-                service_config_id=service_config_id,
-                chain=chain,
-            )
-
-    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
-        self,
-        service_config_id: str,
-        chain: str,
-    ) -> None:
-        """Deploy as service on-chain"""
-        # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
-
-        self.logger.info(f"_deploy_service_onchain {chain=}")
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        user_params = chain_config.chain_data.user_params
-        ocm = self.get_on_chain_manager(ledger_config=ledger_config)
-
-        # TODO fix this
-        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-
-        current_agent_id = None
-        on_chain_state = OnChainState.NON_EXISTENT
-        if chain_data.token > -1:
-            self.logger.info("Syncing service state")
-            info = ocm.info(token_id=chain_data.token)
-            on_chain_state = OnChainState(info["service_state"])
-            chain_data.instances = info["instances"]
-            chain_data.multisig = info["multisig"]
-            service.store()
-        self.logger.info(f"Service state: {on_chain_state.name}")
-
-        if user_params.use_staking:
-            staking_params = ocm.get_staking_params(
-                staking_contract=get_staking_contract(
-                    chain=ledger_config.chain,
-                    staking_program_id=user_params.staking_program_id,
-                ),
-            )
-        else:  # TODO fix this - using pearl beta params
-            staking_params = dict(  # nosec
-                agent_ids=[25],
-                service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
-                staking_token="0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",  # nosec
-                service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
-                min_staking_deposit=20000000000000000000,
-                activity_checker="0x155547857680A6D51bebC5603397488988DEb1c8",  # nosec
-            )
-
-        if user_params.use_staking:
-            self.logger.info("Checking staking compatibility")
-
-            # TODO: Missing check when the service is currently staked in a program, but needs to be staked
-            # in a different target program. The In this case, balance = currently staked balance + safe balance
-
-            if on_chain_state in (
-                OnChainState.NON_EXISTENT,
-                OnChainState.PRE_REGISTRATION,
-            ):
-                required_olas = (
-                    staking_params["min_staking_deposit"]
-                    + staking_params["min_staking_deposit"]  # bond = staking
-                )
-            elif on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                required_olas = staking_params["min_staking_deposit"]
-            else:
-                required_olas = 0
-
-            balance = (
-                registry_contracts.erc20.get_instance(
-                    ledger_api=ocm.ledger_api,
-                    contract_address=OLAS[ledger_config.chain],
-                )
-                .functions.balanceOf(ocm.crypto.address)
-                .call()
-            )
-            if balance < required_olas:
-                raise ValueError(
-                    "You don't have enough olas to stake, "
-                    f"required olas: {required_olas}; your balance {balance}"
-                )
-
-        on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
-        on_chain_hash = on_chain_metadata.get("code_uri", "")[len(IPFS_URI_PREFIX) :]
-        on_chain_description = on_chain_metadata.get("description")
-
-        current_agent_bond = staking_params[
-            "min_staking_deposit"
-        ]  # TODO fixme, read from service registry token utility contract
-        is_first_mint = (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.NON_EXISTENT
-        )
-        is_update = (
-            (not is_first_mint)
-            and (on_chain_hash is not None)
-            and (
-                on_chain_hash != service.hash
-                or current_agent_id != staking_params["agent_ids"][0]
-                or (
-                    user_params.use_staking
-                    and current_agent_bond != staking_params["min_staking_deposit"]
-                )
-                # TODO Missing complete this check for non-staked services it should compare the current_agent_bond from the protocol, now it's only read for the staking contract.
-                or on_chain_description != service.description
-            )
-        )
-        current_staking_program = self._get_current_staking_program(service, chain)
-
-        self.logger.info(f"{chain_data.token=}")
-        self.logger.info(f"{user_params.use_staking=}")
-        self.logger.info(f"{current_staking_program=}")
-        self.logger.info(f"{user_params.staking_program_id=}")
-        self.logger.info(f"{on_chain_hash=}")
-        self.logger.info(f"{service.hash=}")
-        self.logger.info(f"{current_agent_id=}")
-        self.logger.info(f"{staking_params['agent_ids']=}")
-        self.logger.info(f"{current_agent_bond=}")
-        self.logger.info(f"{staking_params['min_staking_deposit']=}")
-        self.logger.info(f"{is_first_mint=}")
-        self.logger.info(f"{is_update=}")
-
-        if on_chain_state == OnChainState.NON_EXISTENT:
-            self.logger.info("Minting service")
-            chain_data.token = t.cast(
-                int,
-                ocm.mint(
-                    package_path=service.package_absolute_path_absolute_path,
-                    agent_id=staking_params["agent_ids"][0],
-                    number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
-                    cost_of_bond=(
-                        staking_params["min_staking_deposit"]
-                        if user_params.use_staking
-                        else user_params.cost_of_bond
-                    ),
-                    threshold=len(service.agent_addresses),
-                    nft=IPFSHash(user_params.nft),
-                    update_token=chain_data.token if is_update else None,
-                    token=(
-                        OLAS[ledger_config.chain] if user_params.use_staking else None
-                    ),
-                    metadata_description=service.description,
-                    skip_dependency_check=self.skip_depencency_check,
-                ).get("token"),
-            )
-            on_chain_state = OnChainState.PRE_REGISTRATION
-            service.store()
-
-        info = ocm.info(token_id=chain_data.token)
-        on_chain_state = OnChainState(info["service_state"])
-
-        if on_chain_state == OnChainState.PRE_REGISTRATION:
-            self.logger.info("Activating service")
-            ocm.activate(
-                service_id=chain_data.token,
-                token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
-            )
-            on_chain_state = OnChainState.ACTIVE_REGISTRATION
-
-        info = ocm.info(token_id=chain_data.token)
-        on_chain_state = OnChainState(info["service_state"])
-
-        if on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-            self.logger.info("Registering agent instances")
-            agent_id = staking_params["agent_ids"][0]
-            ocm.register(
-                service_id=chain_data.token,
-                instances=service.agent_addresses,
-                agents=[agent_id for _ in service.agent_addresses],
-                token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
-            )
-            on_chain_state = OnChainState.FINISHED_REGISTRATION
-
-        info = ocm.info(token_id=chain_data.token)
-        on_chain_state = OnChainState(info["service_state"])
-
-        if on_chain_state == OnChainState.FINISHED_REGISTRATION:
-            self.logger.info("Deploying service")
-            ocm.deploy(
-                service_id=chain_data.token,
-                reuse_multisig=is_update,
-                token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
-            )
-            on_chain_state = OnChainState.DEPLOYED
-
-        info = ocm.info(token_id=chain_data.token)
-        chain_data = OnChainData(
-            token=chain_data.token,
-            instances=info["instances"],
-            multisig=info["multisig"],
-            user_params=chain_data.user_params,
-        )
-        service.store()
 
     def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
@@ -781,12 +579,18 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                protocol_asset_requirements = self._compute_protocol_asset_requirements(
-                    service_config_id, chain
+                full_requirements = self.funding_manager._compute_protocol_asset_requirements(  # pylint: disable=protected-access
+                    service
+                )
+                protocol_asset_requirements = dict(
+                    full_requirements.get(chain, {}).get(safe, {})
                 )
             elif on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                protocol_asset_requirements = self._compute_protocol_asset_requirements(
-                    service_config_id, chain
+                full_requirements = self.funding_manager._compute_protocol_asset_requirements(  # pylint: disable=protected-access
+                    service
+                )
+                protocol_asset_requirements = dict(
+                    full_requirements.get(chain, {}).get(safe, {})
                 )
                 protocol_asset_requirements[target_staking_params["staking_token"]] = (
                     target_staking_params["min_staking_deposit"]
@@ -866,56 +670,33 @@ class ServiceManager:
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
+        # For an update, prefer folding the teardown (unstake → terminate →
+        # unbond → recover_access) into the update mega-batch below so the whole
+        # update settles as one Master-Safe MultiSend. Falls back to the legacy
+        # stepwise terminate + swap/recovery only when recover_access is needed
+        # but cannot be performed in-batch.
+        update_teardown_prefix: t.Optional[t.List[t.Tuple[t.Dict, str]]] = None
         if is_update:
-            self.terminate_service_on_chain_from_safe(
-                service_config_id=service_config_id, chain=chain
+            update_teardown_prefix = self._build_update_teardown_prefix(
+                service=service,
+                chain=chain,
+                sftxb=sftxb,
+                chain_data=chain_data,
+                master_safe=safe,
             )
-            # Update service
-            if (
-                self._get_on_chain_state(service=service, chain=chain)
-                == OnChainState.PRE_REGISTRATION
-            ):
-                self.logger.info("Execute recovery module operations")
-                self._execute_recovery_module_flow_from_safe(
+            if update_teardown_prefix is None:
+                self.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id, chain=chain
                 )
-
-                self.logger.info("Updating service")
-                receipt = (
-                    sftxb.new_tx()
-                    .add(
-                        sftxb.get_mint_tx_data(
-                            package_path=service.package_absolute_path,
-                            agent_id=agent_id,
-                            number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
-                            cost_of_bond=(
-                                target_staking_params["min_staking_deposit"]
-                                if user_params.use_staking
-                                else user_params.cost_of_bond
-                            ),
-                            threshold=len(service.agent_addresses),
-                            nft=IPFSHash(user_params.nft),
-                            update_token=chain_data.token,
-                            token=(
-                                target_staking_params["staking_token"]
-                                if user_params.use_staking
-                                else None
-                            ),
-                            metadata_description=service.description,
-                            skip_depencency_check=self.skip_depencency_check,
-                        )
+                if (
+                    self._get_on_chain_state(service=service, chain=chain)
+                    == OnChainState.PRE_REGISTRATION
+                ):
+                    self.logger.info("Execute recovery module operations")
+                    self._execute_recovery_module_flow_from_safe(
+                        service_config_id=service_config_id, chain=chain
                     )
-                    .settle()
-                )
-                event_data, *_ = t.cast(
-                    t.Tuple,
-                    registry_contracts.service_registry.process_receipt(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=target_staking_params["service_registry"],
-                        event="UpdateService",
-                        receipt=receipt,
-                    ).get("events"),
-                )
+                    # Update mint is included in the mega-batch below
 
         # Mint service
         if (
@@ -969,146 +750,152 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
-        # Activate service
+        # ── Mega-batch happy path ─────────────────────────────────
+        # When starting from PRE_REGISTRATION, batch the entire
+        # activate → register → deploy (→ stake) cycle into one
+        # Master Safe MultiSend transaction.
+        is_initial_funding = False
+        mega_batch_done = False
+
+        # An update folds its teardown into this batch, so enter from the live
+        # (pre-teardown) state too — the prepended sub-txs drive the registry to
+        # PRE_REGISTRATION (via unbond, or terminate alone from
+        # ACTIVE_REGISTRATION) before the update mint.
+        in_batch_teardown = bool(update_teardown_prefix)
+        teardown_labels = {label for _, label in update_teardown_prefix or []}
+        # A re-stake into the same program frees its own slot via the in-batch
+        # unstake, so the live slot count being full is not a blocker.
+        teardown_frees_target_slot = (
+            in_batch_teardown
+            and current_staking_program == user_params.staking_program_id
+            and "unstake" in teardown_labels
+        )
+        # recover_access (when present) transfers service-Safe control to the
+        # Master Safe earlier in this batch, so the deploy payload's live
+        # sole-owner pre-check must be skipped.
+        skip_owner_check = "recover_access" in teardown_labels
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
+            or in_batch_teardown
         ):
-            cost_of_bond = user_params.cost_of_bond
-            if user_params.use_staking:
-                token_utility = target_staking_params["service_registry_token_utility"]
-                olas_token = target_staking_params["staking_token"]
-                self.logger.info(
-                    f"Approving OLAS as bonding token from {safe} to {token_utility}"
-                )
-                cost_of_bond = (
-                    registry_contracts.service_registry_token_utility.get_agent_bond(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_utility,
-                        service_id=chain_data.token,
-                        agent_id=agent_id,
-                    ).get("bond")
-                )
-                sftxb.new_tx().add(
-                    sftxb.get_erc20_approval_data(
-                        spender=token_utility,
-                        amount=cost_of_bond,
-                        erc20_contract=olas_token,
-                    )
-                ).settle()
-                token_utility_allowance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=olas_token,
-                    )
-                    .functions.allowance(
-                        safe,
-                        token_utility,
-                    )
-                    .call()
-                )
-                self.logger.info(
-                    f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
-                )
-                cost_of_bond = MIN_AGENT_BOND
-
-            self.logger.info("Activating service")
-
-            native_balance = get_asset_balance(
-                ledger_api=sftxb.ledger_api,
-                asset_address=ZERO_ADDRESS,
-                address=safe,
-            )
-
-            if (
-                native_balance < cost_of_bond
-            ):  # TODO check that this is the security deposit
-                message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
-                self.logger.error(message)
-                raise ValueError(message)
-
-            sftxb.new_tx().add(
-                sftxb.get_activate_data(
-                    service_id=chain_data.token,
-                    cost_of_bond=cost_of_bond,
-                )
-            ).settle()
-
-        # Register agent instances
-        if (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.ACTIVE_REGISTRATION
-        ):
-            cost_of_bond = user_params.cost_of_bond
-            if user_params.use_staking:
-                token_utility = target_staking_params["service_registry_token_utility"]
-                olas_token = target_staking_params["staking_token"]
-                self.logger.info(
-                    f"Approving OLAS as bonding token from {safe} to {token_utility}"
-                )
-                cost_of_bond = (
-                    registry_contracts.service_registry_token_utility.get_agent_bond(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_utility,
-                        service_id=chain_data.token,
-                        agent_id=agent_id,
-                    ).get("bond")
-                )
-                sftxb.new_tx().add(
-                    sftxb.get_erc20_approval_data(
-                        spender=token_utility,
-                        amount=cost_of_bond,
-                        erc20_contract=olas_token,
-                    )
-                ).settle()
-                token_utility_allowance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=olas_token,
-                    )
-                    .functions.allowance(
-                        safe,
-                        token_utility,
-                    )
-                    .call()
-                )
-                self.logger.info(
-                    f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
-                )
-                cost_of_bond = MIN_AGENT_BOND
-
             self.logger.info(
-                f"Registering agent instances: {chain_data.token} -> {service.agent_addresses}"
-            )
-
-            native_balance = get_asset_balance(
-                ledger_api=sftxb.ledger_api,
-                asset_address=ZERO_ADDRESS,
-                address=safe,
-            )
-
-            if native_balance < cost_of_bond * len(service.agent_addresses):
-                message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
-                self.logger.error(message)
-                raise ValueError(message)
-
-            sftxb.new_tx().add(
-                sftxb.get_register_instances_data(
-                    service_id=chain_data.token,
-                    instances=service.agent_addresses,
-                    agents=[agent_id for _ in service.agent_addresses],
-                    cost_of_bond=cost_of_bond,
+                "Mega-batch path: "
+                + (
+                    "teardown → update → "
+                    if in_batch_teardown
+                    else ("update → " if is_update else "")
                 )
-            ).settle()
+                + "activate → register → deploy"
+                + (" → stake" if user_params.use_staking else "")
+            )
 
-        # Deploy service
-        is_initial_funding = False
-        if (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.FINISHED_REGISTRATION
-        ):
-            self.logger.info("Deploying service")
+            # Pre-flight: staking slot/reward availability
+            include_staking = False
+            target_staking_contract: t.Optional[str] = None
+            if user_params.use_staking:
+                target_staking_contract = get_staking_contract(
+                    chain=ledger_config.chain,
+                    staking_program_id=user_params.staking_program_id,
+                )
+                if not sftxb.staking_slots_available(
+                    staking_contract=target_staking_contract,
+                ):
+                    # A re-stake into the same program frees its own slot via
+                    # the in-batch unstake, so the live count being full is not
+                    # a blocker in that case.
+                    if not teardown_frees_target_slot:
+                        raise ValueError("No staking slots available")
+                    self.logger.info(
+                        "Target staking slot occupied by this service; it will "
+                        "be freed by the in-batch unstake."
+                    )
+                if sftxb.staking_rewards_available(target_staking_contract):
+                    include_staking = True
+                else:
+                    self.logger.warning(
+                        "No staking rewards available, omitting stake from mega-batch"
+                    )
 
+            mega_tx = sftxb.new_tx(gas_fallback=_MEGA_BATCH_GAS_FALLBACK)
+
+            # --- In-batch teardown (update path): unstake → terminate →
+            #     unbond → recover_access, as dictated by the live state ---
+            if update_teardown_prefix:
+                for tx_data, label in update_teardown_prefix:
+                    mega_tx.add(tx_data, label=label)
+
+            # --- Update mint (update path only) ---
+            if is_update:
+                self.logger.info("Including update mint in mega-batch")
+                update_mint_data = sftxb.get_mint_tx_data(
+                    package_path=service.package_absolute_path,
+                    agent_id=agent_id,
+                    number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
+                    cost_of_bond=(
+                        target_staking_params["min_staking_deposit"]
+                        if user_params.use_staking
+                        else user_params.cost_of_bond
+                    ),
+                    threshold=len(service.agent_addresses),
+                    nft=IPFSHash(user_params.nft),
+                    update_token=chain_data.token,
+                    token=(
+                        target_staking_params["staking_token"]
+                        if user_params.use_staking
+                        else None
+                    ),
+                    metadata_description=service.description,
+                    skip_depencency_check=self.skip_depencency_check,
+                )
+                mega_tx.add(update_mint_data, label="update_mint")
+
+            # --- OLAS approval + activate ---
+            # The OLAS bond equals the target program's min staking deposit:
+            # the value update_mint writes and that activate/register will pull
+            # from the token utility. Read it from target params (not an
+            # on-chain get_agent_bond) because the update mint that sets it is a
+            # pending sub-tx earlier in this same batch, so the chain still
+            # reports the pre-update bond at build time.
+            cost_of_bond = user_params.cost_of_bond
+            if user_params.use_staking:
+                token_utility = target_staking_params["service_registry_token_utility"]
+                olas_token = target_staking_params["staking_token"]
+                cost_of_bond_olas = target_staking_params["min_staking_deposit"]
+                approve_act = sftxb.get_erc20_approval_data(
+                    spender=token_utility,
+                    amount=cost_of_bond_olas,
+                    erc20_contract=olas_token,
+                )
+                mega_tx.add(approve_act, label="erc20_approve_activate")
+                cost_of_bond = MIN_AGENT_BOND
+
+            activate_data = sftxb.get_activate_data(
+                service_id=chain_data.token,
+                cost_of_bond=cost_of_bond,
+            )
+            mega_tx.add(activate_data, label="activate")
+
+            # --- OLAS approval + register ---
+            cost_of_bond_reg = user_params.cost_of_bond
+            if user_params.use_staking:
+                approve_reg = sftxb.get_erc20_approval_data(
+                    spender=token_utility,
+                    amount=cost_of_bond_olas,
+                    erc20_contract=olas_token,
+                )
+                mega_tx.add(approve_reg, label="erc20_approve_register")
+                cost_of_bond_reg = MIN_AGENT_BOND
+
+            register_data = sftxb.get_register_instances_data(
+                service_id=chain_data.token,
+                instances=service.agent_addresses,
+                agents=[agent_id for _ in service.agent_addresses],
+                cost_of_bond=cost_of_bond_reg,
+            )
+            mega_tx.add(register_data, label="register_instances")
+
+            # --- Deploy ---
             info = sftxb.info(token_id=chain_data.token)
             service_safe_address = info["multisig"]
             if service_safe_address == ZERO_ADDRESS:
@@ -1117,7 +904,6 @@ class ServiceManager:
                 is_recovery_module_enabled = True
             else:
                 reuse_multisig = True
-                is_initial_funding = False
                 is_recovery_module_enabled = (
                     registry_contracts.gnosis_safe.is_module_enabled(
                         ledger_api=sftxb.ledger_api,
@@ -1125,15 +911,11 @@ class ServiceManager:
                         module_address=CONTRACTS[Chain(chain)]["recovery_module"],
                     ).get("enabled")
                 )
-
             self.logger.info(f"{reuse_multisig=}")
-            self.logger.info(f"{is_recovery_module_enabled=}")
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
-
-            self.logger.info(f"{use_poly_safe=}")
-            messages = sftxb.get_deploy_data_from_safe(
+            deploy_messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
@@ -1142,11 +924,234 @@ class ServiceManager:
                 agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 ),
+                skip_owner_check=skip_owner_check,
             )
-            tx = sftxb.new_tx()
-            for message in messages:
-                tx.add(message)
-            tx.settle()
+            for msg in deploy_messages:
+                mega_tx.add(msg, label="deploy")
+
+            # --- Staking (if enabled and slots/rewards available) ---
+            if include_staking and target_staking_contract is not None:
+                # A re-stake into the same program is preceded by an in-batch
+                # unstake, so the live "already staked"/slots guards are
+                # premature — skip them when that teardown is present.
+                nft_approve = sftxb.get_staking_approval_data(
+                    service_id=chain_data.token,
+                    service_registry=CONTRACTS[ledger_config.chain]["service_registry"],
+                    staking_contract=target_staking_contract,
+                    skip_compatibility_check=teardown_frees_target_slot,
+                )
+                mega_tx.add(nft_approve, label="staking_nft_approve")
+
+                staking_params = sftxb.get_staking_params(
+                    staking_contract=target_staking_contract
+                )
+                for token_contract, min_amount in staking_params[
+                    "additional_staking_tokens"
+                ].items():
+                    token_appr = sftxb.get_erc20_approval_data(
+                        spender=target_staking_contract,
+                        amount=min_amount,
+                        erc20_contract=token_contract,
+                    )
+                    mega_tx.add(
+                        token_appr,
+                        label=f"staking_token_approve_{token_contract[:10]}",
+                    )
+
+                stake_data = sftxb.get_staking_data(
+                    service_id=chain_data.token,
+                    staking_contract=target_staking_contract,
+                    skip_compatibility_check=teardown_frees_target_slot,
+                )
+                mega_tx.add(stake_data, label="stake")
+
+            # --- Settle ---
+            try:
+                mega_tx.settle()
+            except Exception:
+                self.logger.error("Mega-batch reverted, running revert attribution")
+                try:
+                    for label, sub_tx in mega_tx.labeled_txs:
+                        error = simulate_safe_sub_tx(
+                            ledger_api=sftxb.ledger_api,
+                            safe=safe,
+                            tx=sub_tx,
+                        )
+                        if error is not None:
+                            self.logger.error(
+                                f"Mega-batch sub-tx '{label}' would revert: " f"{error}"
+                            )
+                except Exception as attribution_error:  # pylint: disable=broad-except
+                    # Diagnostics-only; never mask the original settle failure.
+                    self.logger.warning(
+                        "Revert attribution failed "
+                        f"({type(attribution_error).__name__}: {attribution_error})"
+                    )
+                raise
+
+            mega_batch_done = True
+
+        if not mega_batch_done:
+            # ── Stepwise resume / repair path ─────────────────
+            # Services interrupted mid-cycle or left mid-state by
+            # older versions enter at their actual on-chain state
+            # and proceed step by step.
+
+            # Activate service (approve + activate in one tx)
+            if (
+                self._get_on_chain_state(service=service, chain=chain)
+                == OnChainState.PRE_REGISTRATION
+            ):
+                cost_of_bond = user_params.cost_of_bond
+                activate_tx = sftxb.new_tx()
+                if user_params.use_staking:
+                    token_utility = target_staking_params[
+                        "service_registry_token_utility"
+                    ]
+                    olas_token = target_staking_params["staking_token"]
+                    self.logger.info(
+                        f"Approving OLAS as bonding token from {safe} to {token_utility}"
+                    )
+                    cost_of_bond = registry_contracts.service_registry_token_utility.get_agent_bond(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_utility,
+                        service_id=chain_data.token,
+                        agent_id=agent_id,
+                    ).get(
+                        "bond"
+                    )
+                    activate_tx.add(
+                        sftxb.get_erc20_approval_data(
+                            spender=token_utility,
+                            amount=cost_of_bond,
+                            erc20_contract=olas_token,
+                        )
+                    )
+                    cost_of_bond = MIN_AGENT_BOND
+
+                self.logger.info("Activating service")
+
+                native_balance = get_asset_balance(
+                    ledger_api=sftxb.ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=safe,
+                )
+
+                if (
+                    native_balance < cost_of_bond
+                ):  # TODO check that this is the security deposit
+                    message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
+                    self.logger.error(message)
+                    raise ValueError(message)
+
+                activate_tx.add(
+                    sftxb.get_activate_data(
+                        service_id=chain_data.token,
+                        cost_of_bond=cost_of_bond,
+                    )
+                ).settle()
+
+            # Register agent instances (approve + register in one tx)
+            if (
+                self._get_on_chain_state(service=service, chain=chain)
+                == OnChainState.ACTIVE_REGISTRATION
+            ):
+                cost_of_bond = user_params.cost_of_bond
+                register_tx = sftxb.new_tx()
+                if user_params.use_staking:
+                    token_utility = target_staking_params[
+                        "service_registry_token_utility"
+                    ]
+                    olas_token = target_staking_params["staking_token"]
+                    self.logger.info(
+                        f"Approving OLAS as bonding token from {safe} to {token_utility}"
+                    )
+                    cost_of_bond = registry_contracts.service_registry_token_utility.get_agent_bond(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_utility,
+                        service_id=chain_data.token,
+                        agent_id=agent_id,
+                    ).get(
+                        "bond"
+                    )
+                    register_tx.add(
+                        sftxb.get_erc20_approval_data(
+                            spender=token_utility,
+                            amount=cost_of_bond,
+                            erc20_contract=olas_token,
+                        )
+                    )
+                    cost_of_bond = MIN_AGENT_BOND
+
+                self.logger.info(
+                    f"Registering agent instances: {chain_data.token} -> {service.agent_addresses}"
+                )
+
+                native_balance = get_asset_balance(
+                    ledger_api=sftxb.ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=safe,
+                )
+
+                if native_balance < cost_of_bond * len(service.agent_addresses):
+                    message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
+                    self.logger.error(message)
+                    raise ValueError(message)
+
+                register_tx.add(
+                    sftxb.get_register_instances_data(
+                        service_id=chain_data.token,
+                        instances=service.agent_addresses,
+                        agents=[agent_id for _ in service.agent_addresses],
+                        cost_of_bond=cost_of_bond,
+                    )
+                ).settle()
+
+            # Deploy service
+            if (
+                self._get_on_chain_state(service=service, chain=chain)
+                == OnChainState.FINISHED_REGISTRATION
+            ):
+                self.logger.info("Deploying service")
+
+                info = sftxb.info(token_id=chain_data.token)
+                service_safe_address = info["multisig"]
+                if service_safe_address == ZERO_ADDRESS:
+                    reuse_multisig = False
+                    is_initial_funding = True
+                    is_recovery_module_enabled = True
+                else:
+                    reuse_multisig = True
+                    is_initial_funding = False
+                    is_recovery_module_enabled = (
+                        registry_contracts.gnosis_safe.is_module_enabled(
+                            ledger_api=sftxb.ledger_api,
+                            contract_address=service_safe_address,
+                            module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                        ).get("enabled")
+                    )
+
+                self.logger.info(f"{reuse_multisig=}")
+                self.logger.info(f"{is_recovery_module_enabled=}")
+
+                service_public_id = PublicId.from_str(service.service_public_id())
+                use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
+
+                self.logger.info(f"{use_poly_safe=}")
+                messages = sftxb.get_deploy_data_from_safe(
+                    service_id=chain_data.token,
+                    reuse_multisig=reuse_multisig,
+                    master_safe=safe,
+                    use_recovery_module=is_recovery_module_enabled,
+                    use_poly_safe=use_poly_safe,
+                    agent_eoa_crypto=self.keys_manager.get_crypto_instance(
+                        service.agent_addresses[0]
+                    ),
+                )
+                tx = sftxb.new_tx()
+                for message in messages:
+                    tx.add(message)
+                tx.settle()
 
         # Update local Service
         info = sftxb.info(token_id=chain_data.token)
@@ -1281,41 +1286,164 @@ class ServiceManager:
         )
         service.store()
 
-        if user_params.use_staking:
+        if user_params.use_staking and not mega_batch_done:
             self.stake_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
             )
 
-    def terminate_service_on_chain(  # pragma: no cover
-        self, service_config_id: str, chain: t.Optional[str] = None
+    def _terminate_and_unbond(
+        self,
+        sftxb: EthSafeTxBuilder,
+        service: Service,
+        chain: str,
+        chain_data: t.Any,
     ) -> None:
-        """Terminate service on-chain"""
-        # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
+        """Batch terminate + unbond into one tx when applicable."""
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+        needs_unbond = on_chain_state == OnChainState.TERMINATED_BONDED
 
-        self.logger.info("terminate_service_on_chain")
-        service = self.load(service_config_id=service_config_id)
+        if on_chain_state == OnChainState.ACTIVE_REGISTRATION:
+            # ACTIVE_REGISTRATION → terminate transitions to PRE_REGISTRATION
+            # (not TERMINATED_BONDED), so unbond must NOT be batched here.
+            self.logger.info("Terminating from ACTIVE_REGISTRATION (no unbond)")
+            sftxb.new_tx().add(
+                sftxb.get_terminate_data(service_id=chain_data.token)
+            ).settle()
+        elif on_chain_state in (
+            OnChainState.FINISHED_REGISTRATION,
+            OnChainState.DEPLOYED,
+        ):
+            # These states transition through TERMINATED_BONDED, so
+            # terminate + unbond can safely be batched in one MultiSend.
+            self.logger.info("Batching terminate → unbond")
+            (
+                sftxb.new_tx()
+                .add(sftxb.get_terminate_data(service_id=chain_data.token))
+                .add(sftxb.get_unbond_data(service_id=chain_data.token))
+                .settle()
+            )
+        elif needs_unbond:
+            self.logger.info("Unbonding service")
+            sftxb.new_tx().add(
+                sftxb.get_unbond_data(
+                    service_id=chain_data.token,
+                )
+            ).settle()
 
-        chain_config = service.chain_configs[chain or service.home_chain]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        ocm = self.get_on_chain_manager(ledger_config=ledger_config)
-        info = ocm.info(token_id=chain_data.token)
+    def _build_update_teardown_prefix(  # pylint: disable=too-many-locals,too-many-return-statements  # pragma: no cover
+        self,
+        service: Service,
+        chain: str,
+        sftxb: EthSafeTxBuilder,
+        chain_data: t.Any,
+        master_safe: str,
+    ) -> t.Optional[t.List[t.Tuple[t.Dict, str]]]:
+        """Build the in-batch teardown prefix for an update mega-batch.
 
-        if OnChainState(info["service_state"]) != OnChainState.DEPLOYED:
-            self.logger.info("Cannot terminate service")
-            return
+        Returns the ``(tx_data, label)`` pairs to prepend to the update
+        mega-batch — unstake → terminate → unbond → recover_access as dictated
+        by the live on-chain state — so the whole update settles as one
+        Master-Safe MultiSend.
 
-        self.logger.info("Terminating service")
-        ocm.terminate(
-            service_id=chain_data.token,
-            token=(
-                OLAS[ledger_config.chain]
-                if chain_data.user_params.use_staking
-                else None
-            ),
+        Returns ``None`` when the combined path is not applicable and the
+        caller must fall back to the legacy stepwise terminate + swap/recovery
+        flow. That happens in three cases: there is no prior service Safe to
+        reuse; the service is staked but cannot be unstaked yet; or
+        ``recover_access`` is needed (the Master Safe is not the service Safe
+        owner) but cannot be performed in-batch (recovery module not enabled, or
+        the agent is not the sole service Safe owner). When ``recover_access``
+        is not needed, the combined path proceeds without it.
+        """
+        state = self._get_on_chain_state(service=service, chain=chain)
+        if chain_data.multisig in (None, ZERO_ADDRESS):
+            # No service Safe to reuse; let the standard path handle minting.
+            return None
+
+        service_id = chain_data.token
+        current_staking_program = self._get_current_staking_program(service, chain)
+        is_staked = current_staking_program is not None
+        staking_contract = (
+            get_staking_contract(
+                chain=Chain(chain),
+                staking_program_id=current_staking_program,
+            )
+            if is_staked
+            else None
         )
 
-    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
+        if is_staked and not sftxb.can_unstake(
+            service_id=service_id, staking_contract=staking_contract
+        ):
+            # Cannot unstake yet (e.g. still within the staking lock window) ->
+            # the service cannot be torn down, so the update cannot proceed this
+            # cycle. The legacy fallback only claims rewards and returns.
+            self.logger.warning(
+                "Update teardown: service is staked and cannot be unstaked yet; "
+                "the update will not be applied until it becomes unstakeable."
+            )
+            return None
+
+        # recover_access is only needed when the Master Safe is not already the
+        # service Safe owner.
+        service_safe_owners = sftxb.get_service_safe_owners(service_id=service_id)
+        master_is_owner = service_safe_owners == [master_safe]
+        agent_is_owner = service_safe_owners == [service.agent_addresses[0]]
+        need_recover = not master_is_owner
+        if need_recover:
+            recovery_enabled = registry_contracts.gnosis_safe.is_module_enabled(
+                ledger_api=sftxb.ledger_api,
+                contract_address=chain_data.multisig,
+                module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+            ).get("enabled")
+            if not (agent_is_owner and recovery_enabled):
+                self.logger.info(
+                    "Update teardown: recover_access needed but not feasible "
+                    f"({agent_is_owner=}, {recovery_enabled=}); using legacy path"
+                )
+                return None
+
+        # Eligible for the combined path
+        prefix: t.List[t.Tuple[t.Dict, str]] = []
+        if is_staked:
+            staking_state = sftxb.staking_status(
+                service_id=service_id, staking_contract=staking_contract
+            )
+            if staking_state in {StakingState.STAKED, StakingState.EVICTED}:
+                prefix.append(
+                    (
+                        sftxb.get_unstaking_data(
+                            service_id=service_id,
+                            staking_contract=staking_contract,
+                        ),
+                        "unstake",
+                    )
+                )
+
+        if state in _STATES_REQUIRING_TERMINATE:
+            prefix.append(
+                (sftxb.get_terminate_data(service_id=service_id), "terminate")
+            )
+        # ACTIVE_REGISTRATION terminates straight to PRE_REGISTRATION (no
+        # bonded state), so unbond is only valid from the states that pass
+        # through TERMINATED_BONDED.
+        if state in _STATES_REQUIRING_UNBOND:
+            prefix.append((sftxb.get_unbond_data(service_id=service_id), "unbond"))
+
+        if need_recover:
+            # Valid once the service reaches PRE_REGISTRATION earlier in the
+            # same MultiSend — via unbond (FINISHED_REGISTRATION / DEPLOYED /
+            # TERMINATED_BONDED) or via terminate alone (ACTIVE_REGISTRATION,
+            # which skips unbond). Recovers service Safe control to Master Safe.
+            prefix.append(
+                (
+                    sftxb.get_recover_access_data(service_id=service_id),
+                    "recover_access",
+                )
+            )
+
+        return prefix
+
+    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals,too-many-statements  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1354,45 +1482,65 @@ class ServiceManager:
 
         # Cannot unstake, terminate flow.
         if is_staked and not can_unstake:
-            self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
-            return
-        # Unstake the service if applies
-        if is_staked and can_unstake:
-            self.unstake_service_on_chain_from_safe(
-                service_config_id=service_config_id,
-                chain=chain,
-                staking_program_id=current_staking_program,
+            # Cannot unstake yet (e.g. still within the staking lock window):
+            # skip termination entirely; the caller retries on a later cycle.
+            self.logger.warning(
+                "Service cannot be terminated on-chain: cannot unstake yet."
             )
-        # At least claim the rewards if we cannot unstake yet
-        elif is_staked:
+            return
+
+        if is_staked and can_unstake:
+            # Claim + reward transfer stays separate (different signer
+            # for the reward transfer from service safe).
             self.claim_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
             )
-            return
 
-        if self._get_on_chain_state(service=service, chain=chain) in (
-            OnChainState.ACTIVE_REGISTRATION,
-            OnChainState.FINISHED_REGISTRATION,
-            OnChainState.DEPLOYED,
-        ):
-            self.logger.info("Terminating service")
-            sftxb.new_tx().add(
-                sftxb.get_terminate_data(
-                    service_id=chain_data.token,
+            # Batch unstake → terminate → unbond in one tx.
+            # After unstake the service is DEPLOYED mid-tx, so
+            # terminate is valid; after terminate it is
+            # TERMINATED_BONDED, so unbond is valid.
+            staking_contract = get_staking_contract(
+                chain=ledger_config.chain,
+                staking_program_id=current_staking_program,
+            )
+            state = sftxb.staking_status(
+                service_id=chain_data.token,
+                staking_contract=staking_contract,
+            )
+            if state in {StakingState.STAKED, StakingState.EVICTED}:
+                self.logger.info("Batching unstake → terminate → unbond")
+                (
+                    sftxb.new_tx()
+                    .add(
+                        sftxb.get_unstaking_data(
+                            service_id=chain_data.token,
+                            staking_contract=staking_contract,
+                        )
+                    )
+                    .add(
+                        sftxb.get_terminate_data(
+                            service_id=chain_data.token,
+                        )
+                    )
+                    .add(
+                        sftxb.get_unbond_data(
+                            service_id=chain_data.token,
+                        )
+                    )
+                    .settle()
                 )
-            ).settle()
-
-        if (
-            self._get_on_chain_state(service=service, chain=chain)
-            == OnChainState.TERMINATED_BONDED
-        ):
-            self.logger.info("Unbonding service")
-            sftxb.new_tx().add(
-                sftxb.get_unbond_data(
-                    service_id=chain_data.token,
+            else:
+                self.logger.info(
+                    f"Service not staked after claim (state={state}), "
+                    "falling through to stepwise terminate"
                 )
-            ).settle()
+                # Fall through to stepwise terminate+unbond below
+                self._terminate_and_unbond(sftxb, service, chain, chain_data)
+        else:
+            # Not staked: batch terminate + unbond
+            self._terminate_and_unbond(sftxb, service, chain, chain_data)
 
         # Swap service safe
         current_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
@@ -1615,42 +1763,6 @@ class ServiceManager:
             service_id=service.chain_configs[chain].chain_data.token
         )
 
-    def unbond_service_on_chain(  # pragma: no cover
-        self, service_config_id: str, chain: t.Optional[str] = None
-    ) -> None:
-        """Unbond service on-chain"""
-        # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
-
-        service = self.load(service_config_id=service_config_id)
-
-        chain_config = service.chain_configs[chain or service.home_chain]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        ocm = self.get_on_chain_manager(ledger_config=ledger_config)
-        info = ocm.info(token_id=chain_data.token)
-
-        if OnChainState(info["service_state"]) != OnChainState.TERMINATED_BONDED:
-            self.logger.info("Cannot unbond service")
-            return
-
-        self.logger.info("Unbonding service")
-        ocm.unbond(
-            service_id=chain_data.token,
-            token=(
-                OLAS[ledger_config.chain]
-                if chain_data.user_params.use_staking
-                else None
-            ),
-        )
-
-    def stake_service_on_chain(self, hash: str) -> None:
-        """
-        Stake service on-chain
-
-        :param hash: Service hash
-        """
-        raise NotImplementedError
-
     def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> None:
@@ -1783,47 +1895,33 @@ class ServiceManager:
             and staking_slots_available
             and on_chain_state == OnChainState.DEPLOYED
         ):
-            self.logger.info(f"Approving staking: {chain_config.chain_data.token}")
-            sftxb.new_tx().add(
+            # Batch all approvals + stake into one tx
+            self.logger.info(f"Approving & staking: {chain_config.chain_data.token}")
+            stake_tx = sftxb.new_tx()
+
+            stake_tx.add(
                 sftxb.get_staking_approval_data(
                     service_id=chain_config.chain_data.token,
                     service_registry=CONTRACTS[ledger_config.chain]["service_registry"],
                     staking_contract=target_staking_contract,
                 )
-            ).settle()
+            )
 
-            # Approve additional_staking_tokens.
             staking_params = sftxb.get_staking_params(
                 staking_contract=target_staking_contract
             )
-
             for token_contract, min_staking_amount in staking_params[
                 "additional_staking_tokens"
             ].items():
-                sftxb.new_tx().add(
+                stake_tx.add(
                     sftxb.get_erc20_approval_data(
                         spender=target_staking_contract,
                         amount=min_staking_amount,
                         erc20_contract=token_contract,
                     )
-                ).settle()
-                staking_contract_allowance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=token_contract,
-                    )
-                    .functions.allowance(
-                        sftxb.safe,
-                        target_staking_contract,
-                    )
-                    .call()
-                )
-                self.logger.info(
-                    f"Approved {staking_contract_allowance} (token {token_contract}) from {sftxb.safe} to {target_staking_contract}"
                 )
 
-            self.logger.info(f"Staking service: {chain_config.chain_data.token}")
-            sftxb.new_tx().add(
+            stake_tx.add(
                 sftxb.get_staking_data(
                     service_id=chain_config.chain_data.token,
                     staking_contract=target_staking_contract,
@@ -1836,39 +1934,6 @@ class ServiceManager:
         )
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
-
-    def unstake_service_on_chain(  # pragma: no cover
-        self, service_config_id: str, chain: t.Optional[str] = None
-    ) -> None:
-        """Unbond service on-chain"""
-        # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
-
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain or service.home_chain]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        ocm = self.get_on_chain_manager(ledger_config=ledger_config)
-
-        state = ocm.staking_status(
-            service_id=chain_data.token,
-            staking_contract=get_staking_contract(
-                chain=ledger_config.chain,
-                staking_program_id=chain_data.user_params.staking_program_id,
-            ),
-        )
-        self.logger.info(f"Staking status for service {chain_data.token}: {state}")
-        if state not in {StakingState.STAKED, StakingState.EVICTED}:
-            self.logger.info("Cannot unstake service, it's not staked")
-            return
-
-        self.logger.info(f"Unstaking service: {chain_data.token}")
-        ocm.unstake(
-            service_id=chain_data.token,
-            staking_contract=get_staking_contract(
-                chain=ledger_config.chain,
-                staking_program_id=chain_data.user_params.staking_program_id,
-            ),
-        )
 
     def unstake_service_on_chain_from_safe(  # pragma: no cover
         self,
@@ -2026,251 +2091,6 @@ class ServiceManager:
         """Fund service if required."""
         service = self.load(service_config_id=service_config_id)
         self.funding_manager.fund_service(service=service, amounts=amounts)
-
-    # TODO deprecate
-    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements  # pragma: no cover
-        self,
-        service_config_id: str,
-        rpc: t.Optional[str] = None,
-        funding_values: t.Optional[FundingValues] = None,
-        from_safe: bool = True,
-        chain: str = "gnosis",
-    ) -> None:
-        """Fund service if required."""
-
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        ledger_api = wallet.ledger_api(
-            chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
-        )
-
-        for (
-            asset_address,
-            fund_requirements,
-        ) in chain_data.user_params.fund_requirements.items():
-            on_chain_operations_buffer = 0
-            if asset_address == ZERO_ADDRESS:
-                on_chain_state = self._get_on_chain_state(service=service, chain=chain)
-                if on_chain_state != OnChainState.DEPLOYED:
-                    if chain_data.user_params.use_staking:
-                        on_chain_operations_buffer = 1 + len(service.agent_addresses)
-                    else:
-                        on_chain_operations_buffer = (
-                            chain_data.user_params.cost_of_bond
-                            * (
-                                MIN_SECURITY_DEPOSIT
-                                + MIN_AGENT_BOND * len(service.agent_addresses)
-                            )
-                        )
-
-            asset_funding_values = (
-                funding_values.get(asset_address)
-                if funding_values is not None
-                else None
-            )
-            agent_fund_threshold = (
-                asset_funding_values["agent"]["threshold"]
-                if asset_funding_values is not None
-                else fund_requirements.agent
-            )
-
-            for agent_address in service.agent_addresses:
-                agent_balance = get_asset_balance(
-                    ledger_api=ledger_api,
-                    asset_address=asset_address,
-                    address=agent_address,
-                )
-                self.logger.info(
-                    f"[FUNDING_JOB] Agent {agent_address} Asset: {asset_address} balance: {agent_balance}"
-                )
-                if agent_fund_threshold > 0:
-                    self.logger.info(
-                        f"[FUNDING_JOB] Required balance: {agent_fund_threshold}"
-                    )
-                    if agent_balance < agent_fund_threshold:
-                        self.logger.info(f"[FUNDING_JOB] Funding agent {agent_address}")
-                        target_balance = (
-                            asset_funding_values["agent"]["topup"]
-                            if asset_funding_values is not None
-                            else fund_requirements.agent
-                        )
-                        available_balance = get_asset_balance(
-                            ledger_api=ledger_api,
-                            asset_address=asset_address,
-                            address=wallet.safes[ledger_config.chain],
-                        )
-                        available_balance = max(
-                            available_balance - on_chain_operations_buffer, 0
-                        )
-                        to_transfer = max(
-                            min(available_balance, target_balance - agent_balance), 0
-                        )
-                        if to_transfer <= 0:
-                            continue
-
-                        self.logger.info(
-                            f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to agent {agent_address}"
-                        )
-                        wallet.transfer(
-                            asset=asset_address,
-                            to=agent_address,
-                            amount=int(to_transfer),
-                            chain=ledger_config.chain,
-                            from_safe=from_safe,
-                            rpc=rpc or ledger_config.rpc,
-                        )
-
-            if chain_data.multisig == NON_EXISTENT_MULTISIG:
-                self.logger.info("[FUNDING_JOB] Service Safe not deployed")
-                continue
-
-            safe_balance = get_asset_balance(
-                ledger_api=ledger_api,
-                asset_address=asset_address,
-                address=chain_data.multisig,
-            )
-            if asset_address == ZERO_ADDRESS and chain in WRAPPED_NATIVE_ASSET:
-                # also count the balance of the wrapped native asset
-                safe_balance += get_asset_balance(
-                    ledger_api=ledger_api,
-                    asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
-                    address=chain_data.multisig,
-                )
-
-            safe_fund_treshold = (
-                asset_funding_values["safe"]["threshold"]
-                if asset_funding_values is not None
-                else fund_requirements.safe
-            )
-            self.logger.info(
-                f"[FUNDING_JOB] Safe {chain_data.multisig} Asset: {asset_address} balance: {safe_balance}"
-            )
-            self.logger.info(f"[FUNDING_JOB] Required balance: {safe_fund_treshold}")
-            if safe_balance < safe_fund_treshold:
-                self.logger.info("[FUNDING_JOB] Funding safe")
-                target_balance = (
-                    asset_funding_values["safe"]["topup"]
-                    if asset_funding_values is not None
-                    else fund_requirements.safe
-                )
-                available_balance = get_asset_balance(
-                    ledger_api=ledger_api,
-                    asset_address=asset_address,
-                    address=wallet.safes[ledger_config.chain],
-                )
-                available_balance = max(
-                    available_balance - on_chain_operations_buffer, 0
-                )
-                to_transfer = max(
-                    min(available_balance, target_balance - safe_balance), 0
-                )
-
-                self.logger.debug(f"{available_balance=}")
-                self.logger.debug(f"{target_balance=}")
-                self.logger.debug(f"{safe_balance=}")
-                self.logger.debug(f"{to_transfer=}")
-
-                if to_transfer > 0:
-                    self.logger.info(
-                        f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to {chain_data.multisig}"
-                    )
-                    # TODO: This is a temporary fix
-                    # we avoid the error here because there is a seperate prompt on the UI
-                    # when not enough funds are present, and the FE doesn't let the user to start the agent.
-                    # Ideally this error should be allowed, and then the FE should ask the user for more funds.
-                    with suppress(RuntimeError):
-                        wallet.transfer(
-                            asset=asset_address,
-                            to=t.cast(str, chain_data.multisig),
-                            amount=int(to_transfer),
-                            chain=ledger_config.chain,
-                            rpc=rpc or ledger_config.rpc,
-                        )
-
-    # TODO Deprecate
-    # TODO This method is possibly not used anymore
-    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
-        self,
-        service_config_id: str,
-        token: str,
-        rpc: t.Optional[str] = None,
-        agent_topup: t.Optional[float] = None,
-        safe_topup: t.Optional[float] = None,
-        agent_fund_threshold: t.Optional[float] = None,
-        safe_fund_treshold: t.Optional[float] = None,
-        from_safe: bool = True,
-        chain: str = "gnosis",
-    ) -> None:
-        """Fund service if required."""
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        ledger_api = wallet.ledger_api(
-            chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
-        )
-        agent_fund_threshold = (
-            agent_fund_threshold
-            or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
-        )
-
-        for agent_address in service.agent_addresses:
-            agent_balance = ledger_api.get_balance(address=agent_address)
-            self.logger.info(f"Agent {agent_address} balance: {agent_balance}")
-            self.logger.info(f"Required balance: {agent_fund_threshold}")
-            if agent_balance < agent_fund_threshold:
-                self.logger.info("Funding agents")
-                to_transfer = (
-                    agent_topup
-                    or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
-                )
-                if to_transfer <= 0:
-                    continue
-
-                self.logger.info(f"Transferring {to_transfer} units to {agent_address}")
-                wallet.transfer(
-                    asset=token,
-                    to=agent_address,
-                    amount=int(to_transfer),
-                    chain=ledger_config.chain,
-                    from_safe=from_safe,
-                    rpc=rpc or ledger_config.rpc,
-                )
-
-        safe_balance = (
-            registry_contracts.erc20.get_instance(ledger_api, token)
-            .functions.balanceOf(chain_data.multisig)
-            .call()
-        )
-        safe_fund_treshold = (
-            safe_fund_treshold
-            or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
-        )
-        self.logger.info(f"Safe {chain_data.multisig} balance: {safe_balance}")
-        self.logger.info(f"Required balance: {safe_fund_treshold}")
-        if safe_balance < safe_fund_treshold:
-            self.logger.info("Funding safe")
-            to_transfer = (
-                safe_topup
-                or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
-            )
-            if to_transfer <= 0:
-                return
-
-            self.logger.info(
-                f"Transferring {to_transfer} units to {chain_data.multisig}"
-            )
-            wallet.transfer(
-                asset=token,
-                to=t.cast(str, chain_data.multisig),
-                amount=int(to_transfer),
-                chain=ledger_config.chain,
-                rpc=rpc or ledger_config.rpc,
-            )
 
     def drain(
         self, service_config_id: str, chain_str: str, withdrawal_address: str
@@ -2490,461 +2310,3 @@ class ServiceManager:
         """Get the funding requirements for a service."""
         service = self.load(service_config_id=service_config_id)
         return self.funding_manager.funding_requirements(service)
-
-    # TODO deprecate
-    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks  # pragma: no cover
-        self, service_config_id: str
-    ) -> t.Dict:
-        """Get user refill requirements for a service."""
-        service = self.load(service_config_id=service_config_id)
-
-        balances: t.Dict = {}
-        bonded_assets: t.Dict = {}
-        protocol_asset_requirements: t.Dict = {}
-        refill_requirements: t.Dict = {}
-        total_requirements: t.Dict = {}
-        allow_start_agent = True
-        is_refill_required = False
-
-        for chain, chain_config in service.chain_configs.items():
-            ledger_config = chain_config.ledger_config
-            chain_data = chain_config.chain_data
-            wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-            ledger_api = wallet.ledger_api(
-                chain=ledger_config.chain, rpc=ledger_config.rpc
-            )
-            os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-
-            master_eoa = wallet.address
-            master_safe_exists = wallet.safes.get(Chain(chain)) is not None
-            master_safe = wallet.safes.get(Chain(chain), "master_safe")
-
-            agent_addresses = set(service.agent_addresses)
-            service_safe = (
-                chain_data.multisig if chain_data.multisig else "service_safe"
-            )
-
-            if not master_safe_exists:
-                allow_start_agent = False
-
-            # Protocol asset requirements
-            protocol_asset_requirements[chain] = (
-                self._compute_protocol_asset_requirements(service_config_id, chain)
-            )
-            service_asset_requirements = chain_data.user_params.fund_requirements
-
-            # Bonded assets
-            bonded_assets[chain] = self._compute_bonded_assets(service_config_id, chain)
-
-            # Balances
-            addresses = agent_addresses | {service_safe, master_eoa, master_safe}
-            asset_addresses = (
-                {ZERO_ADDRESS}
-                | service_asset_requirements.keys()
-                | protocol_asset_requirements[chain].keys()
-                | bonded_assets[chain].keys()
-            )
-
-            balances[chain] = get_assets_balances(
-                ledger_api=ledger_api,
-                addresses=addresses,
-                asset_addresses=asset_addresses,
-                raise_on_invalid_address=False,
-            )
-
-            # TODO this is a patch for the case when excess balance is in MasterEOA
-            # and MasterSafe is not created (typically for onboarding bridging).
-            # It simulates the "balance in the future" for both addesses when
-            # transfering the excess assets.
-            if master_safe == "master_safe":
-                eoa_funding_values = self.get_master_eoa_native_funding_values(
-                    master_safe_exists=master_safe_exists,
-                    chain=Chain(chain),
-                    balance=balances[chain][master_eoa][ZERO_ADDRESS],
-                )
-
-                for asset in balances[chain][master_safe]:
-                    if asset == ZERO_ADDRESS:
-                        balances[chain][master_safe][asset] = max(
-                            balances[chain][master_eoa][asset]
-                            - eoa_funding_values["topup"],
-                            0,
-                        )
-                        balances[chain][master_eoa][asset] = min(
-                            balances[chain][master_eoa][asset],
-                            eoa_funding_values["topup"],
-                        )
-                    else:
-                        balances[chain][master_safe][asset] = balances[chain][
-                            master_eoa
-                        ][asset]
-                        balances[chain][master_eoa][asset] = 0
-
-            # TODO this is a balances patch to count wrapped native asset as
-            # native assets for the service safe
-            if Chain(chain) in WRAPPED_NATIVE_ASSET:
-                if WRAPPED_NATIVE_ASSET[Chain(chain)] not in asset_addresses:
-                    balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
-                        ledger_api=ledger_api,
-                        asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
-                        address=service_safe,
-                        raise_on_invalid_address=False,
-                    )
-
-            # Refill requirements
-            refill_requirements[chain] = {}
-            total_requirements[chain] = {}
-
-            # Refill requirements for Master Safe
-            for asset_address in (
-                service_asset_requirements.keys()
-                | protocol_asset_requirements[chain].keys()
-            ):
-                agent_asset_funding_values = {}
-                if asset_address in service_asset_requirements:
-                    fund_requirements = service_asset_requirements[asset_address]
-                    agent_asset_funding_values = {
-                        address: {
-                            "topup": fund_requirements.agent,
-                            "threshold": int(
-                                fund_requirements.agent * DEFAULT_TOPUP_THRESHOLD
-                            ),  # TODO make threshold configurable
-                            "balance": balances[chain][address][asset_address],
-                        }
-                        for address in agent_addresses
-                    }
-                    agent_asset_funding_values[service_safe] = {
-                        "topup": fund_requirements.safe,
-                        "threshold": int(
-                            fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
-                        ),  # TODO make threshold configurable
-                        "balance": balances[chain][service_safe][asset_address],
-                    }
-
-                recommended_refill = self._compute_refill_requirement(
-                    asset_funding_values=agent_asset_funding_values,
-                    sender_topup=protocol_asset_requirements[chain].get(
-                        asset_address, 0
-                    ),
-                    sender_threshold=protocol_asset_requirements[chain].get(
-                        asset_address, 0
-                    ),
-                    sender_balance=balances[chain][master_safe][asset_address]
-                    + bonded_assets[chain].get(asset_address, 0),
-                )["recommended_refill"]
-
-                refill_requirements[chain].setdefault(master_safe, {})[
-                    asset_address
-                ] = recommended_refill
-
-                total_requirements[chain].setdefault(master_safe, {})[asset_address] = (
-                    sum(
-                        agent_asset_funding_values[address]["topup"]
-                        for address in agent_asset_funding_values
-                    )
-                    + protocol_asset_requirements[chain].get(asset_address, 0)
-                )
-
-                if asset_address == ZERO_ADDRESS and any(
-                    balances[chain][master_safe][asset_address] == 0
-                    and balances[chain][address][asset_address] == 0
-                    and agent_asset_funding_values[address]["threshold"] > 0
-                    for address in agent_asset_funding_values
-                ):
-                    allow_start_agent = False
-
-            # Refill requirements for Master EOA
-            eoa_funding_values = self.get_master_eoa_native_funding_values(
-                master_safe_exists=master_safe_exists,
-                chain=Chain(chain),
-                balance=balances[chain][master_eoa][ZERO_ADDRESS],
-            )
-
-            eoa_recommended_refill = self._compute_refill_requirement(
-                asset_funding_values={},
-                sender_topup=eoa_funding_values["topup"],
-                sender_threshold=eoa_funding_values["threshold"],
-                sender_balance=balances[chain][master_eoa][ZERO_ADDRESS],
-            )["recommended_refill"]
-
-            refill_requirements[chain].setdefault(master_eoa, {})[
-                ZERO_ADDRESS
-            ] = eoa_recommended_refill
-
-            total_requirements[chain].setdefault(master_eoa, {})[ZERO_ADDRESS] = (
-                eoa_funding_values["topup"]
-            )
-
-        is_refill_required = any(
-            amount > 0
-            for chain in refill_requirements.values()
-            for asset in chain.values()
-            for amount in asset.values()
-        )
-
-        return {
-            "balances": balances,
-            "bonded_assets": bonded_assets,
-            "total_requirements": total_requirements,
-            "refill_requirements": refill_requirements,
-            "protocol_asset_requirements": protocol_asset_requirements,
-            "is_refill_required": is_refill_required,
-            "allow_start_agent": allow_start_agent,
-        }
-
-    # TODO deprecate
-    def _compute_bonded_assets(  # pylint: disable=too-many-locals  # pragma: no cover
-        self, service_config_id: str, chain: str
-    ) -> t.Dict:
-        """Computes the bonded tokens: current agent bonds and current security deposit"""
-
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
-        user_params = chain_config.chain_data.user_params
-        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        bonded_assets: defaultdict = defaultdict(int)
-
-        if Chain(chain) not in wallet.safes:
-            return dict(bonded_assets)
-
-        master_safe = wallet.safes[Chain(chain)]
-
-        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
-
-        service_id = chain_config.chain_data.token
-        if service_id == NON_EXISTENT_TOKEN:
-            return dict(bonded_assets)
-
-        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-
-        # Determine bonded native amount
-        service_registry_address = CHAIN_PROFILES[chain]["service_registry"]
-        service_registry = registry_contracts.service_registry.get_instance(
-            ledger_api=ledger_api,
-            contract_address=service_registry_address,
-        )
-        service_info = service_registry.functions.getService(service_id).call()
-        security_deposit = service_info[0]
-        service_state = service_info[6]
-        agent_ids = service_info[7]
-
-        if (
-            OnChainState.ACTIVE_REGISTRATION
-            <= service_state
-            < OnChainState.TERMINATED_BONDED
-        ):
-            bonded_assets[ZERO_ADDRESS] += security_deposit
-
-        operator_balance = service_registry.functions.getOperatorBalance(
-            master_safe, service_id
-        ).call()
-        bonded_assets[ZERO_ADDRESS] += operator_balance
-
-        # Determine bonded token amount for staking programs
-        current_staking_program = self._get_current_staking_program(service, chain)
-        target_staking_program = user_params.staking_program_id
-        staking_contract = get_staking_contract(
-            chain=ledger_config.chain,
-            staking_program_id=current_staking_program or target_staking_program,
-        )
-
-        if not staking_contract:
-            return dict(bonded_assets)
-
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        staking_params = sftxb.get_staking_params(staking_contract=staking_contract)
-        service_registry_token_utility_address = staking_params[
-            "service_registry_token_utility"
-        ]
-        service_registry_token_utility = (
-            registry_contracts.service_registry_token_utility.get_instance(
-                ledger_api=ledger_api,
-                contract_address=service_registry_token_utility_address,
-            )
-        )
-
-        agent_bonds = 0
-        for agent_id in agent_ids:
-            num_agent_instances = service_registry.functions.getInstancesForAgentId(
-                service_id, agent_id
-            ).call()[0]
-            agent_bond = service_registry_token_utility.functions.getAgentBond(
-                service_id, agent_id
-            ).call()
-            agent_bonds += num_agent_instances * agent_bond
-
-        if service_state == OnChainState.TERMINATED_BONDED:
-            num_agent_instances = service_info[5]
-            token_bond = service_registry_token_utility.functions.getOperatorBalance(
-                master_safe,
-                service_id,
-            ).call()
-            agent_bonds += num_agent_instances * token_bond
-
-        security_deposit = 0
-        if (
-            OnChainState.ACTIVE_REGISTRATION
-            <= service_state
-            < OnChainState.TERMINATED_BONDED
-        ):
-            security_deposit = (
-                service_registry_token_utility.functions.mapServiceIdTokenDeposit(
-                    service_id
-                ).call()[1]
-            )
-
-        bonded_assets[staking_params["staking_token"]] += agent_bonds
-        bonded_assets[staking_params["staking_token"]] += security_deposit
-
-        staking_state = sftxb.staking_status(
-            service_id=service_id,
-            staking_contract=staking_params["staking_contract"],
-        )
-
-        if staking_state in (StakingState.STAKED, StakingState.EVICTED):
-            for token, amount in staking_params["additional_staking_tokens"].items():
-                bonded_assets[token] += amount
-
-        return dict(bonded_assets)
-
-    # TODO deprecate
-    def _compute_protocol_asset_requirements(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain: str
-    ) -> t.Dict:
-        """Computes the protocol asset requirements to deploy on-chain and stake (if necessary)"""
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain]
-        user_params = chain_config.chain_data.user_params
-        ledger_config = chain_config.ledger_config
-        number_of_agents = NUM_LOCAL_AGENT_INSTANCES
-        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        service_asset_requirements: defaultdict = defaultdict(int)
-
-        if not user_params.use_staking or not user_params.staking_program_id:
-            agent_bonds = user_params.cost_of_bond * number_of_agents
-            security_deposit = user_params.cost_of_bond
-            service_asset_requirements[ZERO_ADDRESS] += agent_bonds
-            service_asset_requirements[ZERO_ADDRESS] += security_deposit
-            return dict(service_asset_requirements)
-
-        agent_bonds = 1 * number_of_agents
-        security_deposit = 1
-        service_asset_requirements[ZERO_ADDRESS] += agent_bonds
-        service_asset_requirements[ZERO_ADDRESS] += security_deposit
-
-        staking_params = sftxb.get_staking_params(
-            staking_contract=get_staking_contract(
-                chain=ledger_config.chain,
-                staking_program_id=user_params.staking_program_id,
-            ),
-        )
-
-        # TODO address this comment in FundingManager
-        # This computation assumes the service will be/has been minted with these
-        # parameters. Otherwise, these values should be retrieved on-chain as follows:
-        # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
-        #   and ServiceRegistryTokenUtility .getAgentBond
-        # - security_deposit: as the maximum agent bond.
-        agent_bonds = staking_params["min_staking_deposit"] * number_of_agents
-        security_deposit = staking_params["min_staking_deposit"]
-        service_asset_requirements[staking_params["staking_token"]] += agent_bonds
-        service_asset_requirements[staking_params["staking_token"]] += security_deposit
-
-        for token, amount in staking_params["additional_staking_tokens"].items():
-            service_asset_requirements[token] = amount
-
-        return dict(service_asset_requirements)
-
-    # TODO deprecate
-    @staticmethod
-    def _compute_refill_requirement(
-        asset_funding_values: t.Dict,
-        sender_topup: int = 0,
-        sender_threshold: int = 0,
-        sender_balance: int = 0,
-    ) -> t.Dict:
-        """
-        Compute refill requirement.
-
-        The `asset_funding_values` dictionary specifies the funding obligations the sender must cover for other parties.
-        Additionally, the sender must ensure its own balance remains above `sender_threshold` (minimum required balance)
-        and ideally reaches `sender_topup` (recommended balance). If no funding is required for the sender after covering
-        the obligations for other parties, set `sender_topup = sender_threshold = 0`.
-
-        Args:
-            asset_funding_values (dict): Maps parties (identifiers) to their funding details:
-                - "topup": Recommended funding balance.
-                - "threshold": Minimum required balance.
-                - "balance": Current balance.
-            sender_topup (int): Recommended balance for the sender after meeting obligations.
-            sender_threshold (int): Minimum balance required for the sender after meeting obligations.
-            sender_balance (int): Sender's current balance.
-
-        Returns:
-            dict: A dictionary with:
-                - "minimum_refill": The minimum amount the sender needs to add.
-                - "recommended_refill": The suggested amount the sender should add.
-        """
-        if 0 > sender_threshold or sender_threshold > sender_topup:
-            raise ValueError(
-                f"Arguments must satisfy 0 <= 'sender_threshold' <= 'sender_topup' ({sender_threshold=}, {sender_topup=})."
-            )
-
-        if 0 > sender_balance:
-            raise ValueError(
-                f"Argument 'sender_balance' must be >= 0 ({sender_balance=})."
-            )
-
-        minimum_obligations_shortfall = 0
-        recommended_obligations_shortfall = 0
-
-        for address, requirements in asset_funding_values.items():
-            topup = requirements["topup"]
-            threshold = requirements["threshold"]
-            balance = requirements["balance"]
-
-            if 0 > threshold or threshold > topup:
-                raise ValueError(
-                    f"Arguments must satisfy 0 <= 'threshold' <= 'topup' ({address=}, {threshold=}, {topup=}, {balance=})."
-                )
-            if 0 > balance:
-                raise ValueError(
-                    f"Argument 'balance' must be >= 0 ({address=}, {balance=})."
-                )
-
-            if balance < threshold:
-                minimum_obligations_shortfall += threshold - balance
-                recommended_obligations_shortfall += topup - balance
-
-        # Compute sender's remaining balance after covering obligations
-        remaining_balance_minimum = sender_balance - minimum_obligations_shortfall
-        remaining_balance_recommended = (
-            sender_balance - recommended_obligations_shortfall
-        )
-
-        # Determine if the sender needs additional refill
-        minimum_refill = 0
-        recommended_refill = 0
-        if remaining_balance_minimum < sender_threshold:
-            minimum_refill = sender_threshold - remaining_balance_minimum
-
-        if remaining_balance_recommended < sender_threshold:
-            recommended_refill = sender_topup - remaining_balance_recommended
-
-        return {
-            "minimum_refill": minimum_refill,
-            "recommended_refill": recommended_refill,
-        }
-
-    # TODO deprecate
-    @staticmethod
-    def get_master_eoa_native_funding_values(
-        master_safe_exists: bool, chain: Chain, balance: int
-    ) -> t.Dict:
-        """Get Master EOA native funding values."""
-
-        topup = DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS]
-        threshold = topup / 2 if master_safe_exists else topup
-        return {"topup": topup, "threshold": threshold, "balance": balance}
