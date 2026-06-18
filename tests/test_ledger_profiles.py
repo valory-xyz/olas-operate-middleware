@@ -276,8 +276,8 @@ def _onchain_metadata_name(chain: Chain, address: str) -> str:
     """Read metadataHash() on-chain and resolve the metadata's ``name`` via IPFS.
 
     Tries several gateways for endpoint diversity; raises _MetadataUnavailable
-    on RPC/IPFS failure. The caller marks the test ``flaky`` so transient
-    failures are retried rather than failing CI on a momentary outage.
+    on RPC/IPFS failure so the caller can skip rather than fail CI when a
+    public endpoint is unreachable or blocked.
     """
     try:
         w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
@@ -330,7 +330,6 @@ class TestStakingProgramIdConvention:
             ), f"{chain.value} legacy exceptions reference unknown ids: {sorted(unknown)}"
 
     @pytest.mark.integration
-    @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.skipif(
         sys.platform != "linux",
         reason="OS-independent on-chain/IPFS check; run once on Linux",
@@ -351,13 +350,18 @@ class TestStakingProgramIdConvention:
         grandfathered via _LEGACY_STAKING_ID_EXCEPTIONS; any newly added
         contract must satisfy ``id == lower_snake_case(metadata["name"])``.
 
-        Marked ``flaky`` so transient RPC/IPFS failures are retried instead of
-        failing CI on a momentary public-endpoint outage.
+        Skips (rather than fails) when the public RPC/IPFS endpoint is
+        unreachable or blocked (e.g. CI runners get HTTP 401 from some public
+        RPCs), so the convention is enforced whenever the data is reachable
+        without redding CI on infrastructure we do not control.
         """
         if program_id in _LEGACY_STAKING_ID_EXCEPTIONS.get(chain, set()):
             pytest.skip(f"{program_id} is a grandfathered legacy id")
 
-        name = _onchain_metadata_name(chain, address)
+        try:
+            name = _onchain_metadata_name(chain, address)
+        except _MetadataUnavailable as error:
+            pytest.skip(str(error))
         slug = _slugify(name)
         assert program_id == slug, (
             f"{chain.value} staking id {program_id!r} does not match the slug "
