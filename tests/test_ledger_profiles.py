@@ -21,6 +21,7 @@
 
 import json
 import re
+import sys
 import typing as t
 import urllib.request
 from unittest.mock import MagicMock, patch
@@ -236,7 +237,14 @@ _METADATA_HASH_ABI = [
 _IPFS_GATEWAYS = (
     "https://gateway.autonolas.tech/ipfs/",
     "https://ipfs.io/ipfs/",
+    "https://cloudflare-ipfs.com/ipfs/",
+    "https://dweb.link/ipfs/",
 )
+
+
+class _MetadataUnavailable(Exception):
+    """Raised when on-chain/IPFS metadata cannot be retrieved (transient)."""
+
 
 _BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
@@ -265,12 +273,22 @@ def _base58(data: bytes) -> str:
 
 
 def _onchain_metadata_name(chain: Chain, address: str) -> str:
-    """Read metadataHash() on-chain and resolve the metadata's ``name`` via IPFS."""
-    w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
-    contract = w3.eth.contract(
-        address=Web3.to_checksum_address(address), abi=_METADATA_HASH_ABI
-    )
-    metadata_hash = contract.functions.metadataHash().call()
+    """Read metadataHash() on-chain and resolve the metadata's ``name`` via IPFS.
+
+    Tries several gateways for endpoint diversity; raises _MetadataUnavailable
+    on RPC/IPFS failure. The caller marks the test ``flaky`` so transient
+    failures are retried rather than failing CI on a momentary outage.
+    """
+    try:
+        w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
+        contract = w3.eth.contract(
+            address=Web3.to_checksum_address(address), abi=_METADATA_HASH_ABI
+        )
+        metadata_hash = contract.functions.metadataHash().call()
+    except Exception as error:  # pylint: disable=broad-except
+        raise _MetadataUnavailable(
+            f"RPC metadataHash() failed for {chain.value} {address}: {error}"
+        )
     # bytes32 sha2-256 digest -> CIDv0 (prepend the 0x1220 multihash prefix).
     cid = _base58(b"\x12\x20" + metadata_hash)
     last_error: t.Optional[Exception] = None
@@ -282,9 +300,9 @@ def _onchain_metadata_name(chain: Chain, address: str) -> str:
             ) as response:
                 return json.loads(response.read())["name"]
         except (OSError, ValueError, KeyError) as error:
-            # Any gateway/parse failure -> fall through and try the next gateway.
+            # Gateway/parse failure -> try the next gateway.
             last_error = error
-    raise AssertionError(
+    raise _MetadataUnavailable(
         f"Could not fetch staking metadata for {chain.value} {address} "
         f"(cid {cid}): {last_error}"
     )
@@ -312,6 +330,11 @@ class TestStakingProgramIdConvention:
             ), f"{chain.value} legacy exceptions reference unknown ids: {sorted(unknown)}"
 
     @pytest.mark.integration
+    @pytest.mark.flaky(reruns=3, reruns_delay=30)
+    @pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="OS-independent on-chain/IPFS check; run once on Linux",
+    )
     @pytest.mark.parametrize(
         ("chain", "program_id", "address"),
         _STAKING_ENTRIES,
@@ -327,6 +350,9 @@ class TestStakingProgramIdConvention:
         Existing divergent ids are frozen for backward compatibility and are
         grandfathered via _LEGACY_STAKING_ID_EXCEPTIONS; any newly added
         contract must satisfy ``id == lower_snake_case(metadata["name"])``.
+
+        Marked ``flaky`` so transient RPC/IPFS failures are retried instead of
+        failing CI on a momentary public-endpoint outage.
         """
         if program_id in _LEGACY_STAKING_ID_EXCEPTIONS.get(chain, set()):
             pytest.skip(f"{program_id} is a grandfathered legacy id")
