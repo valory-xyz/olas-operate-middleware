@@ -1413,26 +1413,49 @@ class TestWalletWithdrawRoute:
         """Successful withdraw."""
         m = self._basic()
         wallet_mock = MagicMock()
-        wallet_mock.transfer_from_safe_then_eoa.return_value = ["0xtx"]
+        wallet_mock.transfer_batch_from_safe_then_eoa.return_value = ["0xtx"]
         wallet_mock.ledger_api.return_value = MagicMock()
         m.wallet_manager.load.return_value = wallet_mock
-        with patch("operate.cli.gas_fees_spent_in_tx", return_value=0):
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as c:
-                    resp = c.post(
-                        "/api/wallet/withdraw",
-                        json={
-                            "password": "pass",  # nosec
-                            "to": "0xto",
-                            "withdraw_assets": {
-                                "gnosis": {
-                                    "0x0000000000000000000000000000000000000000": 1000
-                                }
-                            },
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post(
+                    "/api/wallet/withdraw",
+                    json={
+                        "password": "pass",  # nosec
+                        "to": "0xto",
+                        "withdraw_assets": {
+                            "gnosis": {
+                                "0x0000000000000000000000000000000000000000": 1000
+                            }
                         },
-                    )
-                assert resp.status_code == HTTPStatus.OK
+                    },
+                )
+            assert resp.status_code == HTTPStatus.OK
+            body = resp.json()
+            assert body["transfer_txs"]["gnosis"][
+                "0x0000000000000000000000000000000000000000"
+            ] == ["0xtx"]
+
+    def test_empty_chain_assets_skipped(self) -> None:
+        """A chain with no requested assets is skipped without a transfer."""
+        m = self._basic()
+        wallet_mock = MagicMock()
+        m.wallet_manager.load.return_value = wallet_mock
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post(
+                    "/api/wallet/withdraw",
+                    json={
+                        "password": "pass",  # nosec
+                        "to": "0xto",
+                        "withdraw_assets": {"gnosis": {}},
+                    },
+                )
+            assert resp.status_code == HTTPStatus.OK
+            assert resp.json()["transfer_txs"] == {"gnosis": {}}
+        wallet_mock.transfer_batch_from_safe_then_eoa.assert_not_called()
 
     def test_insufficient_funds_exception(self) -> None:
         """Insufficient funds exception."""
@@ -1474,34 +1497,50 @@ class TestWalletWithdrawRoute:
         """Cover lines 1025-1051: ERC20 first, then native with gas deduction."""
         m = self._basic()
         wallet_mock = MagicMock()
-        wallet_mock.transfer_from_safe_then_eoa.return_value = ["0xtx"]
+        wallet_mock.transfer_batch_from_safe_then_eoa.return_value = [
+            "0xbatch",
+            "0xeoa",
+        ]
         wallet_mock.ledger_api.return_value = MagicMock()
         m.wallet_manager.load.return_value = wallet_mock
         ZERO = "0x0000000000000000000000000000000000000000"
-        with patch("operate.cli.gas_fees_spent_in_tx", return_value=10):
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as c:
-                    resp = c.post(
-                        "/api/wallet/withdraw",
-                        json={
-                            "password": "pass",  # nosec
-                            "to": "0xto",
-                            "withdraw_assets": {
-                                "gnosis": {
-                                    "0xtoken": 500,
-                                    ZERO: 1000,
-                                }
-                            },
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post(
+                    "/api/wallet/withdraw",
+                    json={
+                        "password": "pass",  # nosec
+                        "to": "0xto",
+                        "withdraw_assets": {
+                            "gnosis": {
+                                ZERO: 1000,
+                                "0xtoken": 500,
+                            }
                         },
-                    )
-                assert resp.status_code == HTTPStatus.OK
+                    },
+                )
+            assert resp.status_code == HTTPStatus.OK
+            # One batched call in raw request order — the wallet method
+            # reorders native last internally, not the endpoint.
+            wallet_mock.transfer_batch_from_safe_then_eoa.assert_called_once()
+            transfers = wallet_mock.transfer_batch_from_safe_then_eoa.call_args.kwargs[
+                "transfers"
+            ]
+            assert [(tr.asset, tr.amount) for tr in transfers] == [
+                (ZERO, 1000),
+                ("0xtoken", 500),
+            ]
+            # Per-asset response shape preserved: both assets share the txs
+            body = resp.json()
+            assert body["transfer_txs"]["gnosis"]["0xtoken"] == ["0xbatch", "0xeoa"]
+            assert body["transfer_txs"]["gnosis"][ZERO] == ["0xbatch", "0xeoa"]
 
     def test_insufficient_funds_structured_error(self) -> None:
         """Structured error fields returned when insufficient-funds exception fires inside loop."""
         m = self._basic()
         wallet_mock = MagicMock()
-        wallet_mock.transfer_from_safe_then_eoa.side_effect = (
+        wallet_mock.transfer_batch_from_safe_then_eoa.side_effect = (
             InsufficientFundsException("no gas", chain="gnosis")
         )
         m.wallet_manager.load.return_value = wallet_mock
@@ -1529,7 +1568,7 @@ class TestWalletWithdrawRoute:
         """Chain-specific prefill_amount_wei is returned for base chain."""
         m = self._basic()
         wallet_mock = MagicMock()
-        wallet_mock.transfer_from_safe_then_eoa.side_effect = (
+        wallet_mock.transfer_batch_from_safe_then_eoa.side_effect = (
             InsufficientFundsException("no gas", chain="base")
         )
         m.wallet_manager.load.return_value = wallet_mock
