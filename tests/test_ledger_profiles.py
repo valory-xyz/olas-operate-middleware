@@ -364,9 +364,7 @@ class TestStakingProgramIdConvention:
             pytest.skip(str(error))
         slug = _slugify(name)
         if not slug:
-            # An empty/non-alphanumeric on-chain name yields an empty slug; skip
-            # with a clear reason instead of a confusing `program_id == ""` assert.
-            pytest.skip(
+            raise ValueError(
                 f"on-chain metadata name is empty for {chain.value} {address!r}"
             )
         assert program_id == slug, (
