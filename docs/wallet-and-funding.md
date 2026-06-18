@@ -97,6 +97,27 @@ Funding is not left entirely to each service because the middleware needs one co
 - avoiding duplicate or conflicting funding actions,
 - handling periodic refill and claim behavior over time.
 
+### Batched execution
+When a single operation moves several assets or funds several addresses
+from Safe custody (the periodic funding pass, a drain, a withdrawal),
+those transfers execute together as one batched on-chain transaction per
+chain (a Gnosis Safe MultiSend) rather than as a sequence of individual
+transactions. This keeps gas overhead and settlement latency down and
+narrows the window in which an operation can be left half-done.
+
+Two durable properties follow from this model:
+
+- Entries that cannot succeed (insufficient balance for the requested
+  amount, a transfer that would revert) are filtered out and logged
+  before the batch is sent, so one infeasible asset does not block the
+  rest of the operation. Flows that promise exact amounts (such as
+  partial withdrawals) instead fail loudly when any requested transfer
+  cannot be included.
+- Only Safe-signed transfers can join a batch. Transfers signed by an
+  EOA (the root wallet, or an agent key acting alone) always settle as
+  individual transactions, so mixed operations consist of one batched
+  Safe transaction plus individual EOA transactions for any remainder.
+
 ## Health and funding relationship
 
 Funding is related to service health, but it is not identical to it.

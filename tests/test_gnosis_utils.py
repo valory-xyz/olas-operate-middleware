@@ -24,15 +24,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from autonomy.chain.exceptions import ChainInteractionError
+from web3.exceptions import ContractLogicError
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.utils.gnosis import (
+    BatchResult,
     MultiSendOperation,
+    MultiSendSubTx,
     SENTINEL_OWNERS,
     SafeOperation,
+    Transfer,
+    _ERC20_TRANSFER_GAS_FALLBACK,
     _get_nonce,
     add_owner,
     create_safe,
@@ -44,11 +49,15 @@ from operate.utils.gnosis import (
     get_owners,
     get_prev_owner,
     hash_payload_to_hex,
+    normalize_tx_data_to_bytes,
     remove_owner,
+    send_safe_multisend_txs,
     send_safe_txs,
+    simulate_safe_sub_tx,
     skill_input_hex_to_payload,
     swap_owner,
     transfer,
+    transfer_batch_from_safe,
     transfer_erc20_from_eoa,
     transfer_erc20_from_safe,
 )
@@ -1083,6 +1092,94 @@ class TestTransferErc20FromEoa:
         mock_update_gas_pricing.assert_called_once_with(built_tx, mock_ledger)
         mock_update_gas_estimate.assert_called_once_with(built_tx, mock_ledger)
 
+    def test_failed_gas_estimate_applies_fallback(self) -> None:
+        """A sub-intrinsic gas (failed estimate) is replaced by the fallback."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_ledger.api.eth.get_transaction_count.return_value = 7
+
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        # update_tx_with_gas_estimate restores the placeholder gas when the
+        # estimate fails; emulate that by leaving a sub-intrinsic value behind.
+        built_tx = {"to": "0x" + "b" * 40, "value": 0, "gas": 1}
+        mock_instance = MagicMock()
+        mock_instance.functions.transfer.return_value.build_transaction.return_value = (
+            built_tx
+        )
+
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing"),
+            patch("operate.utils.gnosis.update_tx_with_gas_estimate"),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.TxSettler") as mock_txsettler_cls,
+        ):
+            mock_contracts.erc20.get_instance.return_value = mock_instance
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
+                "0xhash"
+            )
+
+            transfer_erc20_from_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                token="0x" + "b" * 40,
+                to="0x" + "c" * 40,
+                amount=12,
+            )
+
+            tx_builder = mock_txsettler_cls.call_args.kwargs["tx_builder"]
+            tx = tx_builder()
+
+        assert tx["gas"] == _ERC20_TRANSFER_GAS_FALLBACK
+
+    def test_successful_gas_estimate_not_overridden(self) -> None:
+        """A valid (>= intrinsic) estimate is left untouched by the fallback."""
+        mock_ledger = MagicMock()
+        mock_ledger._chain_id = Chain.GNOSIS.id
+        mock_ledger.api.eth.get_transaction_count.return_value = 7
+
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+
+        built_tx = {"to": "0x" + "b" * 40, "value": 0}
+        mock_instance = MagicMock()
+        mock_instance.functions.transfer.return_value.build_transaction.return_value = (
+            built_tx
+        )
+
+        def _set_real_estimate(tx: dict, _ledger: object) -> None:
+            tx["gas"] = 55_000
+
+        with (
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing"),
+            patch(
+                "operate.utils.gnosis.update_tx_with_gas_estimate",
+                side_effect=_set_real_estimate,
+            ),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
+            patch("operate.utils.gnosis.TxSettler") as mock_txsettler_cls,
+        ):
+            mock_contracts.erc20.get_instance.return_value = mock_instance
+            mock_txsettler_cls.return_value.transact.return_value.settle.return_value.tx_hash = (
+                "0xhash"
+            )
+
+            transfer_erc20_from_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                token="0x" + "b" * 40,
+                to="0x" + "c" * 40,
+                amount=12,
+            )
+
+            tx_builder = mock_txsettler_cls.call_args.kwargs["tx_builder"]
+            tx = tx_builder()
+
+        assert tx["gas"] == 55_000
+
     def test_gas_error_raises_insufficient_funds(self) -> None:
         """Verify ValueError with gas message is re-raised as InsufficientFundsException."""
         mock_ledger = MagicMock()
@@ -1473,6 +1570,7 @@ class TestDrainEoa:
 def _calling_txsettler_cls(
     tx_hash: str = "0xhash",
     events: t.Optional[t.List] = None,
+    tx_receipt: t.Optional[t.Dict] = None,
 ) -> t.Type:
     """Return a fake TxSettler class that invokes tx_builder() inside transact().
 
@@ -1485,6 +1583,7 @@ def _calling_txsettler_cls(
         def __init__(self, *, tx_builder: t.Callable, **_kwargs: t.Any) -> None:
             self._tx_builder = tx_builder
             self.tx_hash = tx_hash
+            self.tx_receipt = tx_receipt if tx_receipt is not None else {"status": 1}
 
         def transact(self) -> "_Fake":
             self._tx_builder()
@@ -1695,3 +1794,537 @@ class TestDrainEoaBuildClosure:
         assert result == "0xdrainsuccess"
         mock_ledger.get_transfer_transaction.assert_called_once()
         mock_ledger.update_with_gas_estimate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# MultiSend batching: simulate_safe_sub_tx / send_safe_multisend_txs /
+# transfer_batch_from_safe
+# ---------------------------------------------------------------------------
+
+MULTISEND_ADDR = "0xMultiSend"
+
+
+class TestNormalizeTxDataToBytes:
+    """Tests for the multisend tx data normalization helper."""
+
+    def test_passes_bytes_through_unchanged(self) -> None:
+        """Bytes input is returned as-is."""
+        data = b"\x12\x34\x56"
+        assert normalize_tx_data_to_bytes(data) is data
+
+    def test_converts_hex_string_with_0x_prefix(self) -> None:
+        """Hex string with ``0x`` prefix is decoded to bytes."""
+        assert normalize_tx_data_to_bytes("0xdeadbeef") == b"\xde\xad\xbe\xef"
+
+    def test_converts_raw_hex_string_without_prefix(self) -> None:
+        """Hex string without ``0x`` prefix is decoded to bytes."""
+        assert normalize_tx_data_to_bytes("deadbeef") == b"\xde\xad\xbe\xef"
+
+    def test_handles_empty_string(self) -> None:
+        """Empty string converts to empty bytes."""
+        assert normalize_tx_data_to_bytes("") == b""
+
+    def test_handles_empty_bytes(self) -> None:
+        """Empty bytes pass through."""
+        assert normalize_tx_data_to_bytes(b"") == b""
+
+
+class TestSimulateSafeSubTx:
+    """Tests for simulate_safe_sub_tx."""
+
+    def test_success_returns_none(self) -> None:
+        """A successful eth_call simulation returns None."""
+        mock_ledger = MagicMock()
+        mock_ledger.api.to_checksum_address.side_effect = lambda a: a
+
+        result = simulate_safe_sub_tx(
+            ledger_api=mock_ledger,
+            safe="0xSafe",
+            tx={"to": "0xTo", "value": 1, "data": b""},
+        )
+
+        assert result is None
+        mock_ledger.api.eth.call.assert_called_once_with(
+            {"from": "0xSafe", "to": "0xTo", "value": 1, "data": b""}
+        )
+
+    def test_revert_returns_error_message(self) -> None:
+        """An EVM-level revert returns the revert reason."""
+        mock_ledger = MagicMock()
+        mock_ledger.api.to_checksum_address.side_effect = lambda a: a
+        mock_ledger.api.eth.call.side_effect = ContractLogicError("execution reverted")
+
+        result = simulate_safe_sub_tx(
+            ledger_api=mock_ledger,
+            safe="0xSafe",
+            tx={"to": "0xTo", "value": 0, "data": b"\x01"},
+        )
+
+        assert result is not None
+        assert "execution reverted" in result
+
+    def test_transport_error_propagates(self) -> None:
+        """Transport-level RPC failures are NOT classified as reverts."""
+        mock_ledger = MagicMock()
+        mock_ledger.api.to_checksum_address.side_effect = lambda a: a
+        mock_ledger.api.eth.call.side_effect = ConnectionError("RPC down")
+
+        with pytest.raises(ConnectionError, match="RPC down"):
+            simulate_safe_sub_tx(
+                ledger_api=mock_ledger,
+                safe="0xSafe",
+                tx={"to": "0xTo", "value": 1, "data": b""},
+            )
+
+
+class TestSendSafeMultisendTxs:
+    """Tests for send_safe_multisend_txs."""
+
+    def test_encodes_batch_and_executes_delegate_call(self) -> None:
+        """Sub-txs are normalized/ordered and executed as DELEGATE_CALL to MultiSend."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xOwner"
+        mock_ledger.api.to_checksum_address.return_value = "0xOwner"
+        mock_ledger.api.eth.get_transaction_count.return_value = 7
+        mock_crypto.sign_message.return_value = MagicMock()
+
+        fake_settler_cls = _calling_txsettler_cls(tx_hash="0xbatchhash")
+
+        txs: t.List[MultiSendSubTx] = [
+            {"to": "0xA", "value": 1, "data": "0xdead"},  # hex-str data
+            {"to": "0xB", "value": 0, "data": b"\xbe\xef"},  # bytes data
+        ]
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing") as mock_pricing,
+            patch("operate.utils.gnosis.update_tx_with_gas_estimate") as mock_estimate,
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
+            mock_contracts.multisend.get_tx_data.return_value = {"data": "0xcafe"}
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "ab" * 32
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "data": "0xbeef"
+            }
+
+            result = send_safe_multisend_txs(
+                txs=txs,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+            )
+
+        assert result == "0xbatchhash"
+
+        # MultiSend encoding: order preserved, data normalized to bytes,
+        # default operation CALL applied.
+        multisend_call = mock_contracts.multisend.get_tx_data.call_args
+        assert multisend_call.kwargs["contract_address"] == MULTISEND_ADDR
+        sent_txs = multisend_call.kwargs["multi_send_txs"]
+        assert [tx["to"] for tx in sent_txs] == ["0xA", "0xB"]
+        assert sent_txs[0]["data"] == b"\xde\xad"
+        assert sent_txs[1]["data"] == b"\xbe\xef"
+        assert all(tx["operation"] == MultiSendOperation.CALL for tx in sent_txs)
+
+        # Outer Safe tx: DELEGATE_CALL into the MultiSend address.
+        hash_call = mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.call_args
+        assert hash_call.kwargs["operation"] == SafeOperation.DELEGATE_CALL.value
+        assert hash_call.kwargs["to_address"] == MULTISEND_ADDR
+        raw_call = mock_contracts.gnosis_safe.get_raw_safe_transaction.call_args
+        assert raw_call.kwargs["operation"] == SafeOperation.DELEGATE_CALL.value
+        assert raw_call.kwargs["to_address"] == MULTISEND_ADDR
+        assert raw_call.kwargs["value"] == 0
+
+        # Gas pricing/estimation applied to the built tx.
+        mock_pricing.assert_called_once()
+        mock_estimate.assert_called_once()
+
+    def test_gas_spike_raises_insufficient_funds(self) -> None:
+        """A gas-spike ValueError surfaces as InsufficientFundsException."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xOwner"
+        mock_ledger.api.to_checksum_address.return_value = "0xOwner"
+
+        mock_txsettler_cls = MagicMock()
+        mock_txsettler_cls.return_value.transact.side_effect = ValueError(
+            "max fee per gas less than block base fee"
+        )
+        mock_chain = MagicMock()
+        mock_chain.value = "gnosis"
+
+        with (
+            patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
+            patch("operate.utils.gnosis.Chain.from_id", return_value=mock_chain),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
+            mock_contracts.multisend.get_tx_data.return_value = {"data": "0xcafe"}
+            with pytest.raises(InsufficientFundsException):
+                send_safe_multisend_txs(
+                    txs=[{"to": "0xA", "value": 1, "data": b""}],
+                    safe="0xSafe",
+                    multisend_address=MULTISEND_ADDR,
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                )
+
+    def test_reverted_batch_raises(self) -> None:
+        """A mined-but-reverted batch tx (status 0) raises instead of returning."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xOwner"
+        mock_ledger.api.to_checksum_address.return_value = "0xOwner"
+        mock_crypto.sign_message.return_value = MagicMock()
+
+        fake_settler_cls = _calling_txsettler_cls(
+            tx_hash="0xreverted", tx_receipt={"status": 0}
+        )
+        with (
+            patch("operate.utils.gnosis.TxSettler", fake_settler_cls),
+            patch("operate.utils.gnosis.Chain.from_id"),
+            patch("operate.utils.gnosis.update_tx_with_gas_pricing"),
+            patch("operate.utils.gnosis.update_tx_with_gas_estimate"),
+            patch("operate.utils.gnosis.registry_contracts") as mock_contracts,
+        ):
+            mock_contracts.multisend.get_tx_data.return_value = {"data": "0xcafe"}
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "ab" * 32
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "data": "0xbeef"
+            }
+            with pytest.raises(ChainInteractionError, match="reverted on-chain"):
+                send_safe_multisend_txs(
+                    txs=[{"to": "0xA", "value": 1, "data": b""}],
+                    safe="0xSafe",
+                    multisend_address=MULTISEND_ADDR,
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                )
+
+    def test_empty_txs_raises(self) -> None:
+        """An empty txs list is rejected instead of paying gas for a no-op."""
+        with pytest.raises(ValueError, match="empty txs list"):
+            send_safe_multisend_txs(
+                txs=[],
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                ledger_api=MagicMock(),
+                crypto=MagicMock(),
+            )
+
+    def test_missing_multisend_data_raises(self) -> None:
+        """A get_tx_data response without a 'data' field raises a clear error."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xOwner"
+        mock_ledger.api.to_checksum_address.return_value = "0xOwner"
+
+        with patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+            mock_contracts.multisend.get_tx_data.return_value = {}
+            with pytest.raises(ChainInteractionError, match="no data"):
+                send_safe_multisend_txs(
+                    txs=[{"to": "0xA", "value": 1, "data": b""}],
+                    safe="0xSafe",
+                    multisend_address=MULTISEND_ADDR,
+                    ledger_api=mock_ledger,
+                    crypto=mock_crypto,
+                )
+
+
+class TestTransferBatchFromSafe:
+    """Tests for transfer_batch_from_safe."""
+
+    def _erc20_contracts_mock(self) -> MagicMock:
+        """registry_contracts mock whose erc20 encode_abi returns hex calldata."""
+        mock_contracts = MagicMock()
+        mock_instance = MagicMock()
+        mock_instance.encode_abi.return_value = "0xa9059cbb"
+        mock_contracts.erc20.get_instance.return_value = mock_instance
+        return mock_contracts
+
+    def test_batches_multiple_transfers_in_order(self) -> None:
+        """Native + ERC20 transfers are batched in input order into one MultiSend."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ),
+            patch("operate.utils.gnosis.simulate_safe_sub_tx", return_value=None),
+            patch(
+                "operate.utils.gnosis.registry_contracts",
+                self._erc20_contracts_mock(),
+            ),
+            patch(
+                "operate.utils.gnosis.send_safe_multisend_txs",
+                return_value="0xbatched",
+            ) as mock_send,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[
+                    Transfer("0xAlice", ZERO_ADDRESS, 100),
+                    Transfer("0xBob", "0xToken", 200),
+                ],
+            )
+
+        assert result.tx_hash == "0xbatched"
+        mock_send.assert_called_once()
+        sent_txs = mock_send.call_args.kwargs["txs"]
+        assert len(sent_txs) == 2
+        # Native: value rides on the sub-tx, empty data.
+        assert sent_txs[0]["to"] == "0xAlice"
+        assert sent_txs[0]["value"] == 100
+        assert sent_txs[0]["data"] == b""
+        # ERC20: zero value, transfer calldata targeting the token.
+        assert sent_txs[1]["to"] == "0xToken"
+        assert sent_txs[1]["value"] == 0
+        assert sent_txs[1]["data"] == bytes.fromhex("a9059cbb")
+        assert mock_send.call_args.kwargs["multisend_address"] == MULTISEND_ADDR
+
+    def test_prefilter_drops_failing_simulation(self) -> None:
+        """An entry whose simulation reverts is dropped; the rest are batched."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ),
+            patch(
+                "operate.utils.gnosis.simulate_safe_sub_tx",
+                side_effect=[None, "execution reverted", None],
+            ),
+            patch(
+                "operate.utils.gnosis.registry_contracts",
+                self._erc20_contracts_mock(),
+            ),
+            patch(
+                "operate.utils.gnosis.send_safe_multisend_txs",
+                return_value="0xbatched",
+            ) as mock_send,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[
+                    Transfer("0xAlice", ZERO_ADDRESS, 100),
+                    Transfer("0xBob", "0xBadToken", 200),
+                    Transfer("0xCarol", ZERO_ADDRESS, 300),
+                ],
+            )
+
+        assert result.tx_hash == "0xbatched"
+        sent_txs = mock_send.call_args.kwargs["txs"]
+        assert [tx["to"] for tx in sent_txs] == ["0xAlice", "0xCarol"]
+
+    def test_all_filtered_returns_none_without_sending(self) -> None:
+        """When nothing survives the pre-filter, no tx is sent and None returned."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ),
+            patch(
+                "operate.utils.gnosis.simulate_safe_sub_tx",
+                return_value="execution reverted",
+            ),
+            patch("operate.utils.gnosis.send_safe_multisend_txs") as mock_send,
+            patch("operate.utils.gnosis.transfer") as mock_transfer,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[Transfer("0xAlice", ZERO_ADDRESS, 100)],
+            )
+
+        assert result == BatchResult(tx_hash=None, sent=[])
+        mock_send.assert_not_called()
+        mock_transfer.assert_not_called()
+
+    def test_single_native_survivor_uses_plain_transfer(self) -> None:
+        """One surviving native transfer routes through transfer(), not MultiSend."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ),
+            patch("operate.utils.gnosis.simulate_safe_sub_tx", return_value=None),
+            patch("operate.utils.gnosis.send_safe_multisend_txs") as mock_send,
+            patch(
+                "operate.utils.gnosis.transfer", return_value="0xsingle"
+            ) as mock_transfer,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[Transfer("0xAlice", ZERO_ADDRESS, 100)],
+            )
+
+        assert result.tx_hash == "0xsingle"
+        assert result.sent == [Transfer("0xAlice", ZERO_ADDRESS, 100)]
+        mock_send.assert_not_called()
+        mock_transfer.assert_called_once_with(
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            safe="0xSafe",
+            to="0xAlice",
+            amount=100,
+        )
+
+    def test_single_erc20_survivor_uses_plain_erc20_transfer(self) -> None:
+        """One surviving ERC20 transfer routes through transfer_erc20_from_safe()."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ),
+            patch("operate.utils.gnosis.simulate_safe_sub_tx", return_value=None),
+            patch(
+                "operate.utils.gnosis.registry_contracts",
+                self._erc20_contracts_mock(),
+            ),
+            patch("operate.utils.gnosis.send_safe_multisend_txs") as mock_send,
+            patch(
+                "operate.utils.gnosis.transfer_erc20_from_safe",
+                return_value="0xsingleerc20",
+            ) as mock_erc20,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[Transfer("0xBob", "0xToken", 200)],
+            )
+
+        assert result.tx_hash == "0xsingleerc20"
+        mock_send.assert_not_called()
+        mock_erc20.assert_called_once_with(  # nosec B106
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            safe="0xSafe",
+            token="0xToken",
+            to="0xBob",
+            amount=200,
+        )
+
+    def test_non_positive_amounts_skipped(self) -> None:
+        """Zero/negative amounts are dropped before simulation."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ),
+            patch(
+                "operate.utils.gnosis.simulate_safe_sub_tx", return_value=None
+            ) as mock_sim,
+            patch("operate.utils.gnosis.send_safe_multisend_txs") as mock_send,
+            patch(
+                "operate.utils.gnosis.transfer", return_value="0xok"
+            ) as mock_transfer,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[
+                    Transfer("0xAlice", ZERO_ADDRESS, 0),
+                    Transfer("0xBob", ZERO_ADDRESS, -5),
+                    Transfer("0xCarol", ZERO_ADDRESS, 100),
+                ],
+            )
+
+        assert result.tx_hash == "0xok"
+        assert mock_sim.call_count == 1  # only the positive entry simulated
+        mock_send.assert_not_called()
+        mock_transfer.assert_called_once()
+
+    def test_cumulative_balance_check_drops_excess_entry(self) -> None:
+        """A transfer exceeding the remaining per-asset Safe balance is dropped."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch("operate.utils.gnosis.get_asset_balance", return_value=BigInt(100)),
+            patch("operate.utils.gnosis.simulate_safe_sub_tx", return_value=None),
+            patch("operate.utils.gnosis.send_safe_multisend_txs") as mock_send,
+            patch(
+                "operate.utils.gnosis.transfer", return_value="0xfirstonly"
+            ) as mock_transfer,
+        ):
+            result = transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[
+                    Transfer("0xAlice", ZERO_ADDRESS, 80),
+                    Transfer("0xBob", ZERO_ADDRESS, 30),  # 80 + 30 > 100 — dropped
+                ],
+            )
+
+        # Only the first entry survives → single-tx path.
+        assert result.tx_hash == "0xfirstonly"
+        mock_send.assert_not_called()
+        mock_transfer.assert_called_once_with(
+            ledger_api=mock_ledger,
+            crypto=mock_crypto,
+            safe="0xSafe",
+            to="0xAlice",
+            amount=80,
+        )
+
+    def test_balance_fetched_once_per_asset(self) -> None:
+        """The Safe balance is read once per distinct asset, not per transfer."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+
+        with (
+            patch(
+                "operate.utils.gnosis.get_asset_balance", return_value=BigInt(10**18)
+            ) as mock_balance,
+            patch("operate.utils.gnosis.simulate_safe_sub_tx", return_value=None),
+            patch(
+                "operate.utils.gnosis.send_safe_multisend_txs",
+                return_value="0xbatched",
+            ),
+        ):
+            transfer_batch_from_safe(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                multisend_address=MULTISEND_ADDR,
+                transfers=[
+                    Transfer("0xAlice", ZERO_ADDRESS, 1),
+                    Transfer("0xBob", ZERO_ADDRESS, 2),
+                    Transfer("0xCarol", ZERO_ADDRESS, 3),
+                ],
+            )
+
+        mock_balance.assert_called_once()

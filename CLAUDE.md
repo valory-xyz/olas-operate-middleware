@@ -185,7 +185,7 @@ operate daemon
 
 ### Where To Look First
 - Daemon, CLI entrypoint, HTTP API routes and request handling: `operate/cli.py`
-- Service lifecycle and deployment logic: `operate/services/` - especially `manager.py`, `service.py`, `protocol.py`
+- Service lifecycle and deployment logic: `operate/services/` - especially `manage.py`, `service.py`, `protocol.py`
 - Wallet and recovery workflows: `operate/wallet/`
 - Chain profiles and bridge logic: `operate/ledger/`, `operate/bridge/`
 
@@ -198,7 +198,7 @@ operate daemon
 
 **Services Layer (`operate/services/`)**
 - `service.py`: Core `Service` class representing an autonomous agent service
-- `manager.py`: `ServiceManager` for managing multiple services
+- `manage.py`: `ServiceManager` for managing multiple services
 - `protocol.py`: Protocol interactions for on-chain service operations
 - `agent_runner.py`: Manages agent_runner binary execution
 - `deployment_runner.py`: Handles service deployment lifecycle
@@ -237,6 +237,7 @@ operate daemon
 - **Service deployment states:** BUILT=1, DEPLOYING=2, DEPLOYED=3, STOPPING=4, STOPPED=5
 - **Service env variables:** `fixed`, `computed`, `user`
 - **Funding flow:** Master EOA funds Master Safe, which funds Agent Safe/EOA; agents can request funds via `healthcheck.json`
+- **Transaction batching:** Safe-signed multi-transfer flows (funding loop, drains, withdrawals) execute as one Gnosis MultiSend transaction per chain. The primitives live in `operate/utils/gnosis.py` (`Transfer`, `BatchResult`, `transfer_batch_from_safe`, `send_safe_multisend_txs`); wallet-level APIs are `MasterWallet.transfer_batch` and `transfer_batch_from_safe_then_eoa`. Infeasible entries are pre-filtered (simulated via `eth_call`) and logged instead of reverting the whole batch; EOA-signed transfers cannot join a batch
 
 ## Important Conventions
 
