@@ -363,6 +363,12 @@ class TestStakingProgramIdConvention:
         except _MetadataUnavailable as error:
             pytest.skip(str(error))
         slug = _slugify(name)
+        if not slug:
+            # An empty/non-alphanumeric on-chain name yields an empty slug; skip
+            # with a clear reason instead of a confusing `program_id == ""` assert.
+            pytest.skip(
+                f"on-chain metadata name is empty for {chain.value} {address!r}"
+            )
         assert program_id == slug, (
             f"{chain.value} staking id {program_id!r} does not match the slug "
             f"{slug!r} of its on-chain metadata name {name!r}. Either fix the id "
