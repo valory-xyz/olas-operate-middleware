@@ -19,17 +19,24 @@
 
 """Tests for operate.ledger.profiles module."""
 
+import json
+import re
+import typing as t
+import urllib.request
 from unittest.mock import MagicMock, patch
 
+import pytest
 from autonomy.chain.base import registry_contracts
+from web3 import Web3
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger import NATIVE_CURRENCY_DECIMALS
+from operate.ledger import NATIVE_CURRENCY_DECIMALS, get_default_rpc
 from operate.ledger.profiles import (
     ERC20_TOKENS,
     ERC20_TOKENS_BY_CHAIN_ID,
     OLAS,
     PUSD,
+    STAKING,
     WRAPPED_NATIVE_ASSET,
     format_asset_amount,
     get_asset_decimals,
@@ -156,3 +163,179 @@ class TestPUSDRegistration:
         """The pUSD address must appear in ERC20_TOKENS_BY_CHAIN_ID for the Polygon chain ID."""
         polygon_id = Chain.POLYGON.id
         assert PUSD_ADDRESS in ERC20_TOKENS_BY_CHAIN_ID[polygon_id]
+
+
+# --- staking_program_id convention (see the STAKING docstring in profiles.py) ---
+
+#: Matches a well-formed lower_snake_case id: lowercase alphanumerics in groups
+#: joined by single underscores, with no leading/trailing/double underscores.
+_STAKING_ID_FORMAT = re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*$")
+
+#: Existing ids whose slug does not equal their on-chain metadata name. These
+#: predate the convention and are frozen for backward compatibility (the id is
+#: hardcoded in the frontend and persisted on users' machines), so they are
+#: grandfathered out of the slug-matches-name check. Do NOT add new entries
+#: here: a new contract should instead be given an id that matches its slug.
+_LEGACY_STAKING_ID_EXCEPTIONS: t.Dict[Chain, t.Set[str]] = {
+    Chain.GNOSIS: {
+        "quickstart_beta_expert_15_mech_marketplace",
+        "quickstart_beta_expert_16_mech_marketplace",
+        "quickstart_beta_expert_17_mech_marketplace",
+        "quickstart_beta_expert_18_mech_marketplace",
+        "pearl_beta_mech_marketplace_1",
+        "pearl_beta_mech_marketplace_2",
+        "pearl_beta_mech_marketplace_3",
+        "pearl_beta_mech_marketplace_4",
+        "pearl_beta_mech_marketplace_5",
+        "pearl_beta_mech_marketplace_6",
+        "pearl_beta_mech_marketplace_7",
+        "pearl_beta_mech_marketplace_8",
+        "mech_marketplace",
+    },
+    Chain.OPTIMISM: {
+        "optimus_alpha_1",
+        "optimus_alpha_2",
+        "optimus_alpha_3",
+        "optimus_alpha_4",
+    },
+    Chain.BASE: {
+        "meme_base_alpha_2",
+        "meme_base_beta",
+        "meme_base_beta_2",
+        "meme_base_beta_3",
+        "pett_ai_agent_1",
+        "pett_ai_agent_2",
+        "pett_ai_agent_3",
+        "pett_ai_agent_4",
+    },
+    Chain.CELO: {
+        "meme_celo_alpha_2",
+    },
+    Chain.MODE: {
+        "modius_alpha_2",
+        "modius_alpha_3",
+        "modius_alpha_4",
+    },
+    Chain.POLYGON: {
+        "polygon_beta_1",
+        "polygon_beta_2",
+        "polygon_beta_3",
+    },
+}
+
+_METADATA_HASH_ABI = [
+    {
+        "inputs": [],
+        "name": "metadataHash",
+        "outputs": [{"type": "bytes32"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
+_IPFS_GATEWAYS = (
+    "https://gateway.autonolas.tech/ipfs/",
+    "https://ipfs.io/ipfs/",
+)
+
+_BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+#: Flattened (chain, staking_program_id, address) triples across every chain.
+_STAKING_ENTRIES = [
+    (chain, program_id, address)
+    for chain, programs in STAKING.items()
+    for program_id, address in programs.items()
+]
+
+
+def _slugify(name: str) -> str:
+    """Lower_snake_case slug of a metadata name (the documented convention)."""
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+
+
+def _base58(data: bytes) -> str:
+    """Minimal base58 (btc alphabet) encoder for building an IPFS CIDv0."""
+    number = int.from_bytes(data, "big")
+    encoded = ""
+    while number > 0:
+        number, remainder = divmod(number, 58)
+        encoded = _BASE58_ALPHABET[remainder] + encoded
+    leading_zeros = len(data) - len(data.lstrip(b"\x00"))
+    return "1" * leading_zeros + encoded
+
+
+def _onchain_metadata_name(chain: Chain, address: str) -> str:
+    """Read metadataHash() on-chain and resolve the metadata's ``name`` via IPFS."""
+    w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(address), abi=_METADATA_HASH_ABI
+    )
+    metadata_hash = contract.functions.metadataHash().call()
+    # bytes32 sha2-256 digest -> CIDv0 (prepend the 0x1220 multihash prefix).
+    cid = _base58(b"\x12\x20" + metadata_hash)
+    last_error: t.Optional[Exception] = None
+    for gateway in _IPFS_GATEWAYS:
+        try:
+            # Gateways are fixed https:// constants, so the scheme is safe.
+            with urllib.request.urlopen(  # nosec B310
+                gateway + cid, timeout=30
+            ) as response:
+                return json.loads(response.read())["name"]
+        except (OSError, ValueError, KeyError) as error:
+            # Any gateway/parse failure -> fall through and try the next gateway.
+            last_error = error
+    raise AssertionError(
+        f"Could not fetch staking metadata for {chain.value} {address} "
+        f"(cid {cid}): {last_error}"
+    )
+
+
+class TestStakingProgramIdConvention:
+    """Enforce the staking_program_id naming convention documented on STAKING."""
+
+    def test_ids_are_lower_snake_case(self) -> None:
+        """Every staking_program_id must be well-formed lower_snake_case (offline)."""
+        malformed = [
+            f"{chain.value}:{program_id}"
+            for chain, program_id, _ in _STAKING_ENTRIES
+            if not _STAKING_ID_FORMAT.match(program_id)
+        ]
+        assert not malformed, f"staking ids are not lower_snake_case: {malformed}"
+
+    def test_legacy_exceptions_reference_real_ids(self) -> None:
+        """The grandfathering allowlist must not contain stale/unknown ids (offline)."""
+        for chain, exceptions in _LEGACY_STAKING_ID_EXCEPTIONS.items():
+            known = set(STAKING.get(chain, {}))
+            unknown = exceptions - known
+            assert (
+                not unknown
+            ), f"{chain.value} legacy exceptions reference unknown ids: {sorted(unknown)}"
+
+    @pytest.mark.integration
+    @pytest.mark.parametrize(
+        ("chain", "program_id", "address"),
+        _STAKING_ENTRIES,
+        ids=[
+            f"{chain.value}-{program_id}" for chain, program_id, _ in _STAKING_ENTRIES
+        ],
+    )
+    def test_id_matches_onchain_metadata_name(
+        self, chain: Chain, program_id: str, address: str
+    ) -> None:
+        """A staking_program_id must equal the slug of its on-chain metadata name.
+
+        Existing divergent ids are frozen for backward compatibility and are
+        grandfathered via _LEGACY_STAKING_ID_EXCEPTIONS; any newly added
+        contract must satisfy ``id == lower_snake_case(metadata["name"])``.
+        """
+        if program_id in _LEGACY_STAKING_ID_EXCEPTIONS.get(chain, set()):
+            pytest.skip(f"{program_id} is a grandfathered legacy id")
+
+        name = _onchain_metadata_name(chain, address)
+        slug = _slugify(name)
+        assert program_id == slug, (
+            f"{chain.value} staking id {program_id!r} does not match the slug "
+            f"{slug!r} of its on-chain metadata name {name!r}. Either fix the id "
+            f"or (only for a pre-existing frozen id) add it to "
+            f"_LEGACY_STAKING_ID_EXCEPTIONS."
+        )

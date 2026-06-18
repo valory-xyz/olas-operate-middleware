@@ -70,6 +70,29 @@ for _chain in CHAINS:
             contracts_dict["sign_message_lib"] = profile["sign_message_lib"]
         CONTRACTS[_chain] = ContractAddresses(contracts_dict)
 
+#: Curated staking programs, mapping ``staking_program_id`` -> staking
+#: contract address, per chain.
+#:
+#: ``staking_program_id`` is a **frozen, public identifier**: it is hardcoded
+#: in the frontend and persisted in users' local service configs. Once an id
+#: has shipped it must never change, or it would orphan every service that
+#: references it. Therefore existing ids below are kept as-is even where they
+#: violate the convention (these are grandfathered in the test allowlist).
+#:
+#: Convention for ids of **newly added** contracts:
+#:   1. Default to ``lower_snake_case(metadataHash()["name"])`` -- the slug of
+#:      the contract's on-chain metadata name. The slug lowercases the name and
+#:      replaces every run of non-alphanumeric characters with a single ``_``.
+#:   2. Ids must be unique per chain. If the slug collides with an existing id
+#:      (on-chain names are not unique), disambiguate with a numeric suffix.
+#:   3. If the contract joins an existing numbered family whose ids predate this
+#:      convention (e.g. ``optimus_alpha_*``), match that family's suffix style
+#:      instead of the raw slug so the series stays readable.
+#:   4. The chosen id must be agreed with the frontend in the same release,
+#:      since both repos hardcode it.
+#:
+#: ``test_ledger_profiles`` enforces (1) the lower_snake_case format offline and
+#: (2) the slug-matches-on-chain-name rule as an integration test.
 STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.ARBITRUM_ONE: {},
     Chain.GNOSIS: {
@@ -124,12 +147,22 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_supply_alpha": "0xCAbD0C941E54147D40644CF7DA7e36d70DF46f44",
         "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
         "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
+        "omenstrat_i": "0x1E215da0541B4a77a66e21F17413A877B84Ab129",
+        "omenstrat_ii": "0xC2BbfC0d2F5a341DcdCc9f3B78FAF7B04f0244ff",
+        "omenstrat_iii": "0xABD4f159a088E7f18FEE8241cF9367f1d746780f",
+        "omenstrat_iv": "0xc9940B9dACA9FDf1B0cD6dE8e3D25ddDC8C9fd0D",
+        "omenstrat_v": "0x93aAA7155942700cad74c250263fB2D0c6F72B27",
+        "omenstrat_vi": "0xB7ab6F7e6993Df1f0c6A9B177B169Faf4b0C9CCa",
+        "omenstrat_vii": "0xB801FD1728Eef27418FE03720b1FF3E769F35152",
     },
     Chain.OPTIMISM: {
         "optimus_alpha_1": "0x88996bbdE7f982D93214881756840cE2c77C4992",
         "optimus_alpha_2": "0xBCA056952D2A7a8dD4A002079219807CFDF9fd29",
         "optimus_alpha_3": "0x0f69f35652B1acdbD769049334f1AC580927E139",
         "optimus_alpha_4": "0x6891Cf116f9a3bDbD1e89413118eF81F69D298C3",
+        "optimus_i": "0xCDA7deEf16f6b1BfC1bB5C89B7E4FAa91D9ebF7b",
+        "optimus_ii": "0x746281b8fbDbd008729Dc9382392810F771B1BfD",
+        "optimus_iii": "0x5a4317A5695aD6E86744eFC824414cF899f07C68",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
@@ -147,6 +180,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "pett_ai_agent_2": "0xEA15F76D7316B09b3f89613e32d3B780619d61e2",
         "pett_ai_agent_3": "0xFA0ca3935758cB81D35A8F1395b9Eb5a596ce301",
         "pett_ai_agent_4": "0x00D544c10BDC0E9b0a71CeAF52C1342BB8f21c1D",
+        "basius_i": "0x0fB55CEf7B12B76ea52900325461a5443F51B43F",
+        "basius_ii": "0x728ca3b024Ba4c273695Df6e45e79DB675B8c756",
+        "basius_iii": "0x9593C4524DF86f46935aa0eC996B4ccBe71c8234",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
@@ -162,6 +198,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "polygon_beta_1": "0x9F1936f6afB5EAaA2220032Cf5e265F2Cc9511Cc",
         "polygon_beta_2": "0x22D58680F643333F93205B956a4Aa1dC203a16Ad",
         "polygon_beta_3": "0x8887C2852986e7cbaC99B6065fFe53074A6BCC26",  # Note: “Polygon Alpha 3” is a typo in apps — the correct name is Polygon Beta 3.
+        "polystrat_i": "0x35C9C87a8caD9B7fd9d367Eb4Fd287365688E000",
+        "polystrat_ii": "0xD7F69649691039E86F15153c7BD567aA0049d122",
+        "polystrat_iii": "0x7dbF10769CA7528ec9aA440b668C716Caf08e7EA",
     },
 }
 
@@ -182,6 +221,10 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
     "0x343F2B005cF6D70bA610CD9F1F1927049414B582": (
         "0x45F25db135E83d7a010b05FFc1202F8473E3ae7D",
         25,
+    ),
+    "0x46C0D07F55d4F9B5Eed2Fc9680B5953e5fd7b461": (
+        "TBD",  # TOFIX
+        0,
     ),
 }
 
