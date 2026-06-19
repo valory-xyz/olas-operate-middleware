@@ -761,6 +761,63 @@ class TestDeploymentStop:
         mock_hstop.assert_called_once()
         assert depl.status == DeploymentStatus.BUILT
 
+    def test_stop_exception_resets_status_to_built(self, tmp_path: Path) -> None:
+        """stop() resets status to BUILT and re-raises when the stop fails.
+
+        Guards against wedging the service in the transient STOPPING state when
+        stop_host_deployment raises (e.g. "Service already in transition").
+        """
+        depl = _make_deployment(tmp_path, DeploymentStatus.DEPLOYED)
+
+        with patch(
+            "operate.services.service.stop_host_deployment",
+            side_effect=ValueError("Service already in transition"),
+        ):
+            with pytest.raises(ValueError, match="already in transition"):
+                depl.stop(force=True)
+
+        assert depl.status == DeploymentStatus.BUILT
+        # The recoverable status is persisted, not just held in memory.
+        assert Deployment.load(path=tmp_path).status == DeploymentStatus.BUILT
+
+
+class TestDeploymentRecoverStaleStatus:
+    """Tests for Deployment.recover_stale_transition_status()."""
+
+    @pytest.mark.parametrize(
+        "stale_status",
+        [DeploymentStatus.DEPLOYING, DeploymentStatus.STOPPING],
+    )
+    def test_resets_transient_status_to_built(
+        self, tmp_path: Path, stale_status: DeploymentStatus
+    ) -> None:
+        """A status left mid-transition by a crash is reset to BUILT."""
+        depl = _make_deployment(tmp_path, stale_status)
+
+        assert depl.recover_stale_transition_status() is True
+        assert depl.status == DeploymentStatus.BUILT
+        # Persisted, so the recovery survives the next load.
+        assert Deployment.load(path=tmp_path).status == DeploymentStatus.BUILT
+
+    @pytest.mark.parametrize(
+        "stable_status",
+        [
+            DeploymentStatus.CREATED,
+            DeploymentStatus.BUILT,
+            DeploymentStatus.DEPLOYED,
+            DeploymentStatus.STOPPED,
+            DeploymentStatus.DELETED,
+        ],
+    )
+    def test_leaves_non_transient_status_untouched(
+        self, tmp_path: Path, stable_status: DeploymentStatus
+    ) -> None:
+        """Statuses that are not mid-transition are left as-is."""
+        depl = _make_deployment(tmp_path, stable_status)
+
+        assert depl.recover_stale_transition_status() is False
+        assert depl.status == stable_status
+
 
 class TestDeploymentDelete:
     """Tests for Deployment.delete()."""

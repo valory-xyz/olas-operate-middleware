@@ -765,16 +765,44 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.STOPPING
         self.store()
 
-        if use_docker:
-            stop_deployment(
-                build_dir=self.path / DEPLOYMENT_DIR,
-                project_name=self.path.name,
-            )
-        else:
-            stop_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
+        try:
+            if use_docker:
+                stop_deployment(
+                    build_dir=self.path / DEPLOYMENT_DIR,
+                    project_name=self.path.name,
+                )
+            else:
+                stop_host_deployment(
+                    build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea
+                )
+        except Exception:
+            # Never leave the deployment persisted in the transient STOPPING
+            # state. A stop that raises (e.g. "Service already in transition")
+            # would otherwise wedge the service so it can be neither started nor
+            # stopped from the UI. BUILT is the recoverable terminal state, and
+            # mirrors the failure handling in start().
+            self.status = DeploymentStatus.BUILT
+            self.store()
+            raise
 
         self.status = DeploymentStatus.BUILT
         self.store()
+
+    def recover_stale_transition_status(self) -> bool:
+        """Reset a status left transient by a crash, to be called at startup.
+
+        A middleware process killed mid-transition (e.g. SIGKILL while the
+        agent is being set up) can leave the persisted status in DEPLOYING or
+        STOPPING. Such a service is wedged: it can be neither started nor
+        stopped from the UI. At startup no deployment from this fresh process
+        is running yet, so any transient status is stale and is reset to the
+        recoverable BUILT state. Returns True if a reset was performed.
+        """
+        if self.status in (DeploymentStatus.DEPLOYING, DeploymentStatus.STOPPING):
+            self.status = DeploymentStatus.BUILT
+            self.store()
+            return True
+        return False
 
     def delete(self) -> None:
         """Delete the deployment."""

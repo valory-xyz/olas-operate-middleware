@@ -571,8 +571,25 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             run_in_executor(operate.service_manager().service_maintenance)
         )
 
+    def recover_stale_deployment_statuses() -> None:
+        """Heal services left mid-transition by a crash before pausing them."""
+        service_manager = operate.service_manager()
+        for entry in service_manager.json:
+            service_config_id = entry["service_config_id"]
+            if not service_manager.exists(service_config_id=service_config_id):
+                continue
+            deployment = service_manager.load(
+                service_config_id=service_config_id
+            ).deployment
+            if deployment.recover_stale_transition_status():
+                logger.warning(
+                    f"Recovered service {service_config_id} from a stale "
+                    f"transitional deployment status (set to BUILT)."
+                )
+
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
+        recover_stale_deployment_statuses()
         pause_all_services()
         logger.info("Stopping services on startup done.")
 
