@@ -57,6 +57,11 @@ from operate.utils.pid_file import (
 
 from .agent_assets import AgentAssetManager, get_agent_code_path, get_agent_runner_path
 
+# On Linux /proc/<pid>/cmdline is world-readable, so a password passed via
+# argv is visible to every local user for the whole agent lifetime. Binaries
+# advertising this flag read the password from the first line of stdin instead.
+PASSWORD_STDIN_ARG = "--password-stdin"  # nosec B105
+
 
 class AbstractDeploymentRunner(ABC):
     """Abstract deployment runner."""
@@ -550,23 +555,78 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Return aea_bin path."""
         raise NotImplementedError  # pragma: no cover
 
-    def get_agent_start_args(self, password: str) -> List[str]:
-        """Return agent start arguments."""
-        return (
-            [self._agent_runner_bin]
-            + (
-                [
-                    "-s",
-                    "run",
-                ]
-                if self._is_aea
-                else []
+    # Generous because a pyinstaller one-file binary self-extracts on start.
+    PASSWORD_STDIN_PROBE_TIMEOUT = 60  # seconds
+
+    def _agent_runner_supports_password_stdin(self, binary: str) -> bool:
+        """Check the agent binary's --help output for --password-stdin support."""
+        try:
+            result = subprocess.run(  # nosec
+                [binary, "--help"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=self.PASSWORD_STDIN_PROBE_TIMEOUT,
+                check=False,
+                creationflags=(
+                    0x08000000 if platform.system() == "Windows" else 0
+                ),  # CREATE_NO_WINDOW: don't flash a console for the probe
             )
-            + [
-                "--password",
-                password,
-            ]
-        )
+        except (OSError, subprocess.SubprocessError) as e:
+            self.logger.warning(
+                f"Could not probe agent binary for {PASSWORD_STDIN_ARG} support, "
+                f"falling back to the argv password: {e}"
+            )
+            return False
+        if PASSWORD_STDIN_ARG in result.stdout.decode(errors="replace"):
+            self.logger.info(f"Agent binary supports {PASSWORD_STDIN_ARG}")
+            return True
+        if result.returncode != 0:
+            self.logger.warning(
+                f"{PASSWORD_STDIN_ARG} probe exited with code {result.returncode} "
+                f"(output: {result.stdout[:200]!r}); "
+                f"falling back to the argv password"
+            )
+        else:
+            self.logger.info(f"Agent binary does not support {PASSWORD_STDIN_ARG}")
+        return False
+
+    def _resolve_agent_start_args(self, password: str) -> t.Tuple[List[str], bool]:
+        """Return agent argv and whether the password is piped via stdin.
+
+        The boolean comes from the branch taken here, never re-derived from the
+        argv content, so a password value equal to the flag cannot flip the mode.
+        """
+        binary = self._agent_runner_bin
+        if self._is_aea:
+            # aea's CLI only accepts the password as an argument
+            return [binary, "-s", "run", "--password", password], False
+        if self._agent_runner_supports_password_stdin(binary=binary):
+            return [binary, PASSWORD_STDIN_ARG], True
+        # Legacy binaries without stdin support still need argv
+        return [binary, "--password", password], False
+
+    def _write_password_to_stdin(
+        self, process: subprocess.Popen, password: str
+    ) -> None:
+        """Deliver the keystore password as the first line of the child's stdin."""
+        if process.stdin is None:
+            return
+        try:
+            process.stdin.write(f"{password}\n".encode("utf-8"))
+            process.stdin.flush()
+        except (BrokenPipeError, OSError) as e:
+            # The child died (or closed stdin) before reading the password;
+            # treat it as a failed start so the caller's retry loop handles it.
+            raise RuntimeError(
+                f"Agent process did not accept the keystore password on stdin "
+                f"(exit code: {process.poll()}): {e}"
+            ) from e
+        finally:
+            try:
+                process.stdin.close()
+            except OSError as e:
+                self.logger.debug(f"Error closing agent stdin pipe: {e}")
 
 
 class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
@@ -673,14 +733,18 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     ) -> subprocess.Popen:
         """Start agent process."""
         self._agent_log_file = self._open_agent_runner_log_file()
+        args, use_password_stdin = self._resolve_agent_start_args(password=password)
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
-            args=self.get_agent_start_args(password=password),
+            args=args,
             cwd=working_dir / "agent",
+            stdin=subprocess.PIPE if use_password_stdin else None,
             stdout=self._agent_log_file,
             stderr=self._agent_log_file,
             env=env,
             preexec_fn=os.setpgrp,
         )
+        if use_password_stdin:
+            self._write_password_to_stdin(process=process, password=password)
         return process
 
     def _start_tendermint_process(
@@ -816,15 +880,19 @@ class PyInstallerHostDeploymentRunnerWindows(
     ) -> subprocess.Popen:
         """Start agent process."""
         self._agent_log_file = self._open_agent_runner_log_file()
+        args, use_password_stdin = self._resolve_agent_start_args(password=password)
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=self.get_agent_start_args(password=password),
+            args=args,
             cwd=working_dir / "agent",
+            stdin=subprocess.PIPE if use_password_stdin else None,
             stdout=self._agent_log_file,
             stderr=self._agent_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
         self.assign_to_job(process._handle)  # type: ignore # pylint: disable=protected-access
+        if use_password_stdin:
+            self._write_password_to_stdin(process=process, password=password)
         return process
 
     def _start_tendermint_process(
@@ -871,16 +939,20 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = self._inject_runtime_ca_bundle({**os.environ, **env})
         self._agent_log_file = self._open_agent_runner_log_file()
 
+        args, use_password_stdin = self._resolve_agent_start_args(password=password)
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=self.get_agent_start_args(password=password),
+            args=args,
             cwd=str(working_dir / "agent"),
             env=env,
+            stdin=subprocess.PIPE if use_password_stdin else None,
             stdout=self._agent_log_file,
             stderr=self._agent_log_file,
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
+        if use_password_stdin:
+            self._write_password_to_stdin(process=process, password=password)
 
         # Write PID file with validation and locking
         pid_file = working_dir / "agent.pid"

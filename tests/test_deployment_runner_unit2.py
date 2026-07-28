@@ -37,6 +37,7 @@ from operate.services.deployment_runner import (
     BaseDeploymentRunner,
     DeploymentManager,
     HostPythonHostDeploymentRunner,
+    PASSWORD_STDIN_ARG,
     PyInstallerHostDeploymentRunnerLinux,
     PyInstallerHostDeploymentRunnerMac,
     _kill_process,
@@ -71,7 +72,7 @@ class ConcreteDeploymentRunner(BaseDeploymentRunner):
 
 
 class TestKillProcessHelper:
-    """Tests for the module-level _kill_process function (lines 74-91)."""
+    """Tests for the module-level _kill_process function."""
 
     def test_pid_does_not_exist_returns_early(self) -> None:
         """When pid_exists returns False, _kill_process returns immediately."""
@@ -178,7 +179,7 @@ class TestKillProcessHelper:
 
 
 class TestKillProcess:
-    """Tests for the module-level kill_process function (lines 94-104)."""
+    """Tests for the module-level kill_process function."""
 
     def test_pid_does_not_exist_returns_early(self) -> None:
         """When pid_exists returns False, kill_process returns immediately."""
@@ -222,7 +223,7 @@ class TestKillProcess:
 
 
 class TestBaseDeploymentRunnerInit:
-    """Tests for BaseDeploymentRunner.__init__ (lines 115-118)."""
+    """Tests for BaseDeploymentRunner.__init__."""
 
     def test_init_stores_work_directory_and_is_aea(self, tmp_path: Path) -> None:
         """__init__ stores work_directory and is_aea correctly."""
@@ -237,7 +238,7 @@ class TestBaseDeploymentRunnerInit:
 
 
 class TestOpenLogFiles:
-    """Tests for _open_agent_runner_log_file and _open_tendermint_log_file (lines 120-138)."""
+    """Tests for _open_agent_runner_log_file and _open_tendermint_log_file."""
 
     def test_open_agent_runner_log_file(self, tmp_path: Path) -> None:
         """_open_agent_runner_log_file opens a file in the operate dir."""
@@ -278,7 +279,7 @@ class TestGetOperateDir:
 
 
 class TestRunAeaCommand:
-    """Tests for _run_aea_command (lines 144-167)."""
+    """Tests for _run_aea_command."""
 
     def test_success_with_exitcode_zero(self, tmp_path: Path) -> None:
         """When process exitcode is 0, no exception is raised."""
@@ -365,7 +366,7 @@ class TestRunAeaCommand:
 
 
 class TestRunCmd:
-    """Tests for _run_cmd (lines 190-203)."""
+    """Tests for _run_cmd."""
 
     def test_success_with_returncode_zero(self, tmp_path: Path) -> None:
         """When subprocess returncode is 0, no exception is raised."""
@@ -402,7 +403,7 @@ class TestRunCmd:
 
 
 class TestPrepareAgentEnv:
-    """Tests for _prepare_agent_env (lines 205-227)."""
+    """Tests for _prepare_agent_env."""
 
     def _make_agent_json(self, work_dir: Path, env: Dict[str, str]) -> None:
         """Write an agent.json file in work_dir."""
@@ -475,7 +476,7 @@ def _create_test_service_config(service_dir: Path, version: str = "v0.31.3") -> 
 
 
 class TestSetupAgent:
-    """Tests for _setup_agent (lines 229-313)."""
+    """Tests for _setup_agent."""
 
     def _make_basic_work_dir(self, tmp_path: Path) -> Path:
         """Create a minimal work dir with agent.json and ethereum key."""
@@ -587,7 +588,7 @@ class TestSetupAgent:
 
 
 class TestStart:
-    """Tests for start (lines 315-325) and _start (lines 327-333)."""
+    """Tests for start and _start."""
 
     def test_start_succeeds_first_try(self, tmp_path: Path) -> None:
         """start() calls _start and returns on first success."""
@@ -750,7 +751,7 @@ class TestKillProcessesOnPort:
 
 
 class TestStop:
-    """Tests for stop (lines 335-339)."""
+    """Tests for stop."""
 
     def test_stop_calls_stop_tendermint_when_is_aea(self, tmp_path: Path) -> None:
         """stop() calls _stop_tendermint when is_aea=True."""
@@ -820,7 +821,7 @@ class TestCloseLogFiles:
 
 
 class TestStopAgent:
-    """Tests for _stop_agent (lines 341-364)."""
+    """Tests for _stop_agent."""
 
     def test_returns_early_if_pid_file_does_not_exist(self, tmp_path: Path) -> None:
         """_stop_agent returns without action when pid file is absent."""
@@ -999,7 +1000,7 @@ class TestGetTmExitUrl:
 
 
 class TestStopTendermint:
-    """Tests for _stop_tendermint (lines 369-402)."""
+    """Tests for _stop_tendermint."""
 
     def test_requests_get_succeeds_and_no_pid_file(self, tmp_path: Path) -> None:
         """_stop_tendermint calls requests.get and returns if no pid file."""
@@ -1143,30 +1144,238 @@ class TestStopTendermint:
 
 
 # ---------------------------------------------------------------------------
-# get_agent_start_args tests
+# _resolve_agent_start_args tests
 # ---------------------------------------------------------------------------
 
 
-class TestGetAgentStartArgs:
-    """Tests for get_agent_start_args (lines 418-434)."""
+class TestResolveAgentStartArgs:
+    """Tests for _resolve_agent_start_args."""
 
     def test_is_aea_true_includes_run_args(self, tmp_path: Path) -> None:
-        """get_agent_start_args includes '-s run' when is_aea=True."""
+        """The aea path keeps '-s run --password' argv and never probes."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        args = runner.get_agent_start_args(password="pw")  # nosec B106
-        assert "/fake/agent_runner" in args
-        assert "-s" in args
-        assert "run" in args
-        assert "--password" in args
-        assert "pw" in args  # nosec B106
+        with patch.object(
+            runner, "_agent_runner_supports_password_stdin"
+        ) as mock_probe:
+            args, use_stdin = runner._resolve_agent_start_args(
+                password="pw"  # nosec B106
+            )
+        mock_probe.assert_not_called()
+        assert args == ["/fake/agent_runner", "-s", "run", "--password", "pw"]
+        assert use_stdin is False
 
-    def test_is_aea_false_excludes_run_args(self, tmp_path: Path) -> None:
-        """get_agent_start_args omits '-s run' when is_aea=False."""
+    def test_is_aea_false_legacy_binary_keeps_argv(self, tmp_path: Path) -> None:
+        """A legacy binary without stdin support keeps the argv password."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
-        args = runner.get_agent_start_args(password="pw")  # nosec B106
-        assert "/fake/agent_runner" in args
-        assert "run" not in args
-        assert "--password" in args
+        with patch.object(
+            runner, "_agent_runner_supports_password_stdin", return_value=False
+        ) as mock_probe:
+            args, use_stdin = runner._resolve_agent_start_args(
+                password="pw"  # nosec B106
+            )
+        mock_probe.assert_called_once_with(binary="/fake/agent_runner")
+        assert args == ["/fake/agent_runner", "--password", "pw"]
+        assert use_stdin is False
+
+    def test_is_aea_false_with_stdin_support_omits_password(
+        self, tmp_path: Path
+    ) -> None:
+        """A stdin-capable binary gets --password-stdin and no password on argv."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        with patch.object(
+            runner, "_agent_runner_supports_password_stdin", return_value=True
+        ):
+            args, use_stdin = runner._resolve_agent_start_args(
+                password="pw"  # nosec B106
+            )
+        assert args == ["/fake/agent_runner", PASSWORD_STDIN_ARG]
+        assert use_stdin is True
+        assert "pw" not in args  # nosec B105
+
+    def test_password_equal_to_flag_does_not_flip_mode(self, tmp_path: Path) -> None:
+        """A password value equal to the flag string never enables stdin mode."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        with patch.object(
+            runner, "_agent_runner_supports_password_stdin", return_value=False
+        ):
+            args, use_stdin = runner._resolve_agent_start_args(
+                password=PASSWORD_STDIN_ARG  # nosec B106
+            )
+        assert args == ["/fake/agent_runner", "--password", PASSWORD_STDIN_ARG]
+        assert use_stdin is False
+
+
+# ---------------------------------------------------------------------------
+# _agent_runner_supports_password_stdin tests
+# ---------------------------------------------------------------------------
+
+
+class TestPasswordStdinProbe:
+    """Tests for _agent_runner_supports_password_stdin."""
+
+    def test_supported_when_help_mentions_flag(self, tmp_path: Path) -> None:
+        """Probe returns True when --help output advertises --password-stdin."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        completed = subprocess.CompletedProcess(
+            args=["/fake/agent_runner", "--help"],
+            returncode=0,
+            stdout=f"Usage: agent [OPTIONS]\n  {PASSWORD_STDIN_ARG}  read pw\n".encode(),
+        )
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            return_value=completed,
+        ) as mock_run:
+            assert (
+                runner._agent_runner_supports_password_stdin(
+                    binary="/fake/agent_runner"
+                )
+                is True
+            )
+        assert mock_run.call_args.args[0] == ["/fake/agent_runner", "--help"]
+        # A dropped timeout would hang every agent start on a hung binary, and
+        # an inherited stdin handle breaks the probe on console-less Windows.
+        assert (
+            mock_run.call_args.kwargs["timeout"]
+            == BaseDeploymentRunner.PASSWORD_STDIN_PROBE_TIMEOUT
+        )
+        assert mock_run.call_args.kwargs["stdin"] is subprocess.DEVNULL
+
+    def test_supported_despite_non_utf8_bytes_in_help(self, tmp_path: Path) -> None:
+        """Non-UTF-8 bytes in --help output do not break flag detection."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        completed = subprocess.CompletedProcess(
+            args=["/fake/agent_runner", "--help"],
+            returncode=0,
+            stdout=b"\xff\xfe garbage \xff " + PASSWORD_STDIN_ARG.encode() + b"\n",
+        )
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            return_value=completed,
+        ):
+            assert (
+                runner._agent_runner_supports_password_stdin(
+                    binary="/fake/agent_runner"
+                )
+                is True
+            )
+
+    def test_unsupported_when_help_lacks_flag(self, tmp_path: Path) -> None:
+        """Probe returns False when --help output has no --password-stdin."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        completed = subprocess.CompletedProcess(
+            args=["/fake/agent_runner", "--help"],
+            returncode=0,
+            stdout=b"Usage: agent [OPTIONS]\n  --password TEXT\n",
+        )
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            return_value=completed,
+        ):
+            assert (
+                runner._agent_runner_supports_password_stdin(
+                    binary="/fake/agent_runner"
+                )
+                is False
+            )
+
+    def test_crashing_binary_logs_warning_and_falls_back(self, tmp_path: Path) -> None:
+        """A --help that crashes is logged at WARNING, distinct from 'unsupported'."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        completed = subprocess.CompletedProcess(
+            args=["/fake/agent_runner", "--help"],
+            returncode=127,
+            stdout=b"error while loading shared libraries",
+        )
+        with (
+            patch(
+                "operate.services.deployment_runner.subprocess.run",
+                return_value=completed,
+            ),
+            patch.object(runner.logger, "warning") as mock_warning,
+        ):
+            assert (
+                runner._agent_runner_supports_password_stdin(
+                    binary="/fake/agent_runner"
+                )
+                is False
+            )
+        mock_warning.assert_called_once()
+        assert "127" in mock_warning.call_args.args[0]
+
+    @pytest.mark.parametrize(
+        "side_effect",
+        [
+            OSError("no such file"),
+            subprocess.TimeoutExpired(cmd="agent --help", timeout=60),
+        ],
+        ids=["oserror", "timeout"],
+    )
+    def test_unsupported_on_probe_failure(
+        self, tmp_path: Path, side_effect: Exception
+    ) -> None:
+        """Probe failure (missing/broken binary, or a hang) falls back to False."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            side_effect=side_effect,
+        ):
+            assert (
+                runner._agent_runner_supports_password_stdin(
+                    binary="/fake/agent_runner"
+                )
+                is False
+            )
+
+
+# ---------------------------------------------------------------------------
+# _write_password_to_stdin tests
+# ---------------------------------------------------------------------------
+
+
+class TestWritePasswordToStdin:
+    """Tests for _write_password_to_stdin."""
+
+    def test_writes_password_line_and_closes_pipe(self, tmp_path: Path) -> None:
+        """Password plus newline is written as bytes, then the pipe is closed."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        runner._write_password_to_stdin(process=process, password="pw")  # nosec B106
+        process.stdin.write.assert_called_once_with(b"pw\n")
+        process.stdin.flush.assert_called_once()
+        process.stdin.close.assert_called_once()
+
+    def test_noop_when_stdin_not_piped(self, tmp_path: Path) -> None:
+        """Nothing happens when the process has no stdin pipe."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        process.stdin = None
+        runner._write_password_to_stdin(process=process, password="pw")  # nosec B106
+
+    def test_broken_pipe_raises_start_failure_and_closes_pipe(
+        self, tmp_path: Path
+    ) -> None:
+        """A child dying before reading raises RuntimeError; pipe still closed."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        process.stdin.write.side_effect = BrokenPipeError("child exited")
+        process.poll.return_value = 1
+        with pytest.raises(RuntimeError, match="did not accept the keystore"):
+            runner._write_password_to_stdin(
+                process=process, password="pw"  # nosec B106
+            )
+        process.stdin.close.assert_called_once()
+
+    def test_close_error_is_logged_not_raised(self, tmp_path: Path) -> None:
+        """An error while closing the pipe is logged at DEBUG, not propagated."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        process.stdin.close.side_effect = OSError("close failed")
+        with patch.object(runner.logger, "debug") as mock_debug:
+            runner._write_password_to_stdin(
+                process=process, password="pw"  # nosec B106
+            )
+        process.stdin.write.assert_called_once_with(b"pw\n")
+        mock_debug.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -1175,7 +1384,7 @@ class TestGetAgentStartArgs:
 
 
 class TestPyInstallerBinProperties:
-    """Tests for PyInstallerHostDeploymentRunner properties (lines 440-450)."""
+    """Tests for PyInstallerHostDeploymentRunner properties."""
 
     def test_agent_runner_bin_calls_get_agent_runner_path(self, tmp_path: Path) -> None:
         """_agent_runner_bin uses get_agent_runner_path with service dir."""
@@ -1204,7 +1413,7 @@ class TestPyInstallerBinProperties:
 
 
 class TestPyInstallerStartAgent:
-    """Tests for PyInstallerHostDeploymentRunner._start_agent (lines 452-479)."""
+    """Tests for PyInstallerHostDeploymentRunner._start_agent."""
 
     def _make_work_dir(self, tmp_path: Path) -> Path:
         """Create work dir with agent.json."""
@@ -1372,7 +1581,7 @@ class TestInjectRuntimeCABundle:
 
 
 class TestPyInstallerStartTendermint:
-    """Tests for PyInstallerHostDeploymentRunner._start_tendermint (lines 487-516)."""
+    """Tests for PyInstallerHostDeploymentRunner._start_tendermint."""
 
     def _make_work_dir(self, tmp_path: Path) -> Path:
         """Create work dir with tendermint.json."""
@@ -1460,7 +1669,7 @@ class TestPyInstallerStartTendermint:
     reason="PyInstallerHostDeploymentRunnerMac uses os.setpgrp which is Unix-only",
 )
 class TestPyInstallerMacStartProcessMethods:
-    """Tests for Mac-specific process start methods (lines 527-559)."""
+    """Tests for Mac-specific process start methods."""
 
     def test_start_agent_process_returns_popen(self, tmp_path: Path) -> None:
         """_start_agent_process returns a subprocess.Popen object."""
@@ -1482,8 +1691,11 @@ class TestPyInstallerMacStartProcessMethods:
             ) as mock_popen_cls,
             patch.object(
                 runner,
-                "get_agent_start_args",
-                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+                "_resolve_agent_start_args",
+                return_value=(
+                    ["/fake/runner", "--password", "pw"],
+                    False,
+                ),  # nosec B106
             ),
         ):
             result = runner._start_agent_process(
@@ -1494,6 +1706,45 @@ class TestPyInstallerMacStartProcessMethods:
 
         assert result is mock_popen
         mock_popen_cls.assert_called_once()
+        assert mock_popen_cls.call_args.kwargs["stdin"] is None
+
+    def test_start_agent_process_pipes_password_via_stdin(self, tmp_path: Path) -> None:
+        """With a stdin-capable binary the password goes down a stdin pipe."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        (build_dir / "agent").mkdir()
+        runner = PyInstallerHostDeploymentRunnerMac(build_dir, is_aea=False)
+
+        mock_popen = MagicMock(spec=subprocess.Popen)
+        mock_log_file = MagicMock()
+
+        with (
+            patch.object(
+                runner, "_open_agent_runner_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_popen,
+            ) as mock_popen_cls,
+            patch.object(
+                runner,
+                "_resolve_agent_start_args",
+                return_value=(["/fake/runner", PASSWORD_STDIN_ARG], True),
+            ),
+            patch.object(runner, "_write_password_to_stdin") as mock_write,
+        ):
+            result = runner._start_agent_process(
+                env={"VAR": "val"},
+                working_dir=build_dir,
+                password="pw",  # nosec B106
+            )
+
+        assert result is mock_popen
+        assert mock_popen_cls.call_args.kwargs["stdin"] is subprocess.PIPE
+        assert "pw" not in mock_popen_cls.call_args.kwargs["args"]  # nosec B105
+        mock_write.assert_called_once_with(
+            process=mock_popen, password="pw"
+        )  # nosec B106
 
     def test_start_tendermint_process_returns_popen(self, tmp_path: Path) -> None:
         """_start_tendermint_process returns a subprocess.Popen object."""
@@ -1553,7 +1804,7 @@ class TestPyInstallerLinux:
 
 
 class TestHostPythonAgentRunnerBin:
-    """Tests for HostPythonHostDeploymentRunner._agent_runner_bin (lines 692-700)."""
+    """Tests for HostPythonHostDeploymentRunner._agent_runner_bin."""
 
     def test_is_aea_true_returns_venv_aea_path(self, tmp_path: Path) -> None:
         """When is_aea=True, _agent_runner_bin returns venv/bin/aea path."""
@@ -1583,7 +1834,7 @@ class TestHostPythonAgentRunnerBin:
 
 
 class TestHostPythonStartAgent:
-    """Tests for HostPythonHostDeploymentRunner._start_agent (lines 702-736)."""
+    """Tests for HostPythonHostDeploymentRunner._start_agent."""
 
     def _make_work_dir(self, tmp_path: Path) -> Path:
         """Create work dir with agent.json."""
@@ -1613,14 +1864,69 @@ class TestHostPythonStartAgent:
             ),
             patch.object(
                 runner,
-                "get_agent_start_args",
-                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+                "_resolve_agent_start_args",
+                return_value=(
+                    ["/fake/runner", "--password", "pw"],
+                    False,
+                ),  # nosec B106
             ),
             patch("operate.services.deployment_runner.write_pid_file") as mock_write,
         ):
             runner._start_agent(password="pw")  # nosec B106
 
         mock_write.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("start_args", "use_stdin", "expected_stdin"),
+        [
+            (["/fake/runner", PASSWORD_STDIN_ARG], True, subprocess.PIPE),
+            (["/fake/runner", "--password", "pw"], False, None),  # nosec B106
+        ],
+        ids=["stdin_capable", "legacy_argv"],
+    )
+    def test_start_agent_password_delivery(
+        self,
+        tmp_path: Path,
+        start_args: List[str],
+        use_stdin: bool,
+        expected_stdin: Any,
+    ) -> None:
+        """Password is piped via stdin when supported, otherwise kept on argv."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        work_dir = self._make_work_dir(build_dir)
+        runner = HostPythonHostDeploymentRunner(work_dir, is_aea=False)
+
+        mock_process = MagicMock()
+        mock_process.pid = 77
+        mock_log_file = MagicMock()
+
+        with (
+            patch.object(
+                runner, "_open_agent_runner_log_file", return_value=mock_log_file
+            ),
+            patch(
+                "operate.services.deployment_runner.subprocess.Popen",
+                return_value=mock_process,
+            ) as mock_popen_cls,
+            patch.object(
+                runner,
+                "_resolve_agent_start_args",
+                return_value=(start_args, use_stdin),
+            ),
+            patch.object(runner, "_write_password_to_stdin") as mock_stdin_write,
+            patch("operate.services.deployment_runner.write_pid_file"),
+        ):
+            runner._start_agent(password="pw")  # nosec B106
+
+        assert mock_popen_cls.call_args.kwargs["stdin"] is expected_stdin
+        if use_stdin:
+            assert "pw" not in mock_popen_cls.call_args.kwargs["args"]  # nosec B105
+            mock_stdin_write.assert_called_once_with(
+                process=mock_process, password="pw"  # nosec B106
+            )
+        else:
+            mock_stdin_write.assert_not_called()
 
     def test_start_agent_kills_process_on_pid_file_error(self, tmp_path: Path) -> None:
         """_start_agent kills process and re-raises on PIDFileError."""
@@ -1643,8 +1949,11 @@ class TestHostPythonStartAgent:
             ),
             patch.object(
                 runner,
-                "get_agent_start_args",
-                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+                "_resolve_agent_start_args",
+                return_value=(
+                    ["/fake/runner", "--password", "pw"],
+                    False,
+                ),  # nosec B106
             ),
             patch(
                 "operate.services.deployment_runner.write_pid_file",
@@ -1680,8 +1989,11 @@ class TestHostPythonStartAgent:
             ),
             patch.object(
                 runner,
-                "get_agent_start_args",
-                return_value=["/fake/runner", "--password", "pw"],  # nosec B106
+                "_resolve_agent_start_args",
+                return_value=(
+                    ["/fake/runner", "--password", "pw"],
+                    False,
+                ),  # nosec B106
             ),
             patch(
                 "operate.services.deployment_runner.write_pid_file",
@@ -1702,7 +2014,7 @@ class TestHostPythonStartAgent:
 
 
 class TestHostPythonStartTendermint:
-    """Tests for HostPythonHostDeploymentRunner._start_tendermint (lines 738-778)."""
+    """Tests for HostPythonHostDeploymentRunner._start_tendermint."""
 
     def _make_work_dir(self, tmp_path: Path) -> Path:
         """Create work dir with tendermint.json."""
@@ -1803,7 +2115,7 @@ class TestHostPythonVenvDir:
 
 
 class TestHostPythonSetupVenv:
-    """Tests for HostPythonHostDeploymentRunner._setup_venv (lines 785-809)."""
+    """Tests for HostPythonHostDeploymentRunner._setup_venv."""
 
     def test_setup_venv_returns_early_when_not_is_aea(self, tmp_path: Path) -> None:
         """_setup_venv returns early when is_aea=False."""
@@ -1837,7 +2149,7 @@ class TestHostPythonSetupVenv:
 
 
 class TestHostPythonSetupAgent:
-    """Tests for HostPythonHostDeploymentRunner._setup_agent (lines 811-830)."""
+    """Tests for HostPythonHostDeploymentRunner._setup_agent."""
 
     def test_setup_agent_not_aea_returns_after_super(self, tmp_path: Path) -> None:
         """_setup_agent returns early after super() call when is_aea=False."""
@@ -1875,7 +2187,7 @@ class TestHostPythonSetupAgent:
 
 
 class TestSetupAgentRuntimeErrorHandling:
-    """Tests for RuntimeError handling in _setup_agent (lines 281-282, 292-293)."""
+    """Tests for RuntimeError handling in _setup_agent."""
 
     def test_setup_agent_handles_runtime_error_on_remove_key(
         self, tmp_path: Path
@@ -1970,7 +2282,7 @@ class TestSetupAgentRuntimeErrorHandling:
 
 
 class TestHostPythonSetupAgentRuntimeErrorHandling:
-    """Tests for RuntimeError handling in HostPythonHostDeploymentRunner._setup_agent (lines 852-854)."""
+    """Tests for RuntimeError handling in HostPythonHostDeploymentRunner._setup_agent."""
 
     def test_setup_agent_handles_runtime_error_on_set_start_method(
         self, tmp_path: Path
