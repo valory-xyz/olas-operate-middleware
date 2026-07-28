@@ -151,6 +151,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
     START_TRIES = constants.DEPLOYMENT_START_TRIES_NUM
+    # A pyinstaller one-file binary self-extracts on start; real agent
+    # runners measure ~1.5s on --help, so 15s is ~10x headroom while
+    # bounding a wedged binary's cost per start attempt.
+    PASSWORD_STDIN_PROBE_TIMEOUT = 15  # seconds
     logger = setup_logger(name="operate.base_deployment_runner")
 
     @staticmethod
@@ -555,9 +559,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Return aea_bin path."""
         raise NotImplementedError  # pragma: no cover
 
-    # Generous because a pyinstaller one-file binary self-extracts on start.
-    PASSWORD_STDIN_PROBE_TIMEOUT = 60  # seconds
-
     def _agent_runner_supports_password_stdin(self, binary: str) -> bool:
         """Check the agent binary's --help output for --password-stdin support."""
         try:
@@ -582,9 +583,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             self.logger.info(f"Agent binary supports {PASSWORD_STDIN_ARG}")
             return True
         if result.returncode != 0:
+            # A crashing --help is not a determination of "unsupported"; make
+            # the argv-password fallback visible and diagnosable.
             self.logger.warning(
-                f"{PASSWORD_STDIN_ARG} probe exited with code {result.returncode} "
-                f"(output: {result.stdout[:200]!r}); "
+                f"{PASSWORD_STDIN_ARG} probe exited with code "
+                f"{result.returncode} (output: {result.stdout[:200]!r}); "
                 f"falling back to the argv password"
             )
         else:
@@ -609,13 +612,18 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _write_password_to_stdin(
         self, process: subprocess.Popen, password: str
     ) -> None:
-        """Deliver the keystore password as the first line of the child's stdin."""
+        """Deliver the keystore password on the child's stdin, docker-style.
+
+        The agent reads stdin until EOF and strips exactly one trailing
+        newline, so any password content survives (including embedded
+        newlines) and closing the pipe below is what terminates the read.
+        """
         if process.stdin is None:
             return
         try:
             process.stdin.write(f"{password}\n".encode("utf-8"))
             process.stdin.flush()
-        except (BrokenPipeError, OSError) as e:
+        except OSError as e:  # includes BrokenPipeError, the expected case
             # The child died (or closed stdin) before reading the password;
             # treat it as a failed start so the caller's retry loop handles it.
             raise RuntimeError(
@@ -627,6 +635,22 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 process.stdin.close()
             except OSError as e:
                 self.logger.debug(f"Error closing agent stdin pipe: {e}")
+
+    def _deliver_password_or_kill(
+        self, process: subprocess.Popen, password: str
+    ) -> None:
+        """Write the password to the child's stdin; reap the child on failure.
+
+        Delivery failure raises before the caller records a PID file, so the
+        child must be killed here or it would outlive the failed start attempt
+        and collide with the retry's process.
+        """
+        try:
+            self._write_password_to_stdin(process=process, password=password)
+        except Exception:
+            with suppress(Exception):
+                kill_process(process.pid)
+            raise
 
 
 class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
@@ -744,7 +768,7 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
             preexec_fn=os.setpgrp,
         )
         if use_password_stdin:
-            self._write_password_to_stdin(process=process, password=password)
+            self._deliver_password_or_kill(process=process, password=password)
         return process
 
     def _start_tendermint_process(
@@ -892,7 +916,7 @@ class PyInstallerHostDeploymentRunnerWindows(
         )
         self.assign_to_job(process._handle)  # type: ignore # pylint: disable=protected-access
         if use_password_stdin:
-            self._write_password_to_stdin(process=process, password=password)
+            self._deliver_password_or_kill(process=process, password=password)
         return process
 
     def _start_tendermint_process(
@@ -952,7 +976,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
             ),  # Detach process from the main process
         )
         if use_password_stdin:
-            self._write_password_to_stdin(process=process, password=password)
+            self._deliver_password_or_kill(process=process, password=password)
 
         # Write PID file with validation and locking
         pid_file = working_dir / "agent.pid"

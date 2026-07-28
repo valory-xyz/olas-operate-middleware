@@ -1306,7 +1306,7 @@ class TestPasswordStdinProbe:
         "side_effect",
         [
             OSError("no such file"),
-            subprocess.TimeoutExpired(cmd="agent --help", timeout=60),
+            subprocess.TimeoutExpired(cmd="agent --help", timeout=15),
         ],
         ids=["oserror", "timeout"],
     )
@@ -1376,6 +1376,86 @@ class TestWritePasswordToStdin:
             )
         process.stdin.write.assert_called_once_with(b"pw\n")
         mock_debug.assert_called_once()
+
+    def test_embedded_newline_password_delivered_verbatim(self, tmp_path: Path) -> None:
+        r"""Any password content is written as-is plus one terminator.
+
+        The agent reads stdin until EOF, docker-style, stripping exactly one
+        trailing newline — so an embedded "\n" must reach the pipe untouched
+        rather than being rejected or mangled here. Pins the writer against
+        regressing to line-based delivery, which would truncate the password
+        and lock the agent out of its keystore.
+        """
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        runner._write_password_to_stdin(
+            process=process, password="line1\nline2"  # nosec B106
+        )
+        process.stdin.write.assert_called_once_with(b"line1\nline2\n")
+        process.stdin.close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _deliver_password_or_kill tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeliverPasswordOrKill:
+    """Tests for _deliver_password_or_kill."""
+
+    def test_success_delegates_to_writer(self, tmp_path: Path) -> None:
+        """The happy path just writes; nothing is killed."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        with (
+            patch.object(runner, "_write_password_to_stdin") as mock_write,
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
+            runner._deliver_password_or_kill(
+                process=process, password="pw"  # nosec B106
+            )
+        mock_write.assert_called_once_with(process=process, password="pw")  # nosec B106
+        mock_kill.assert_not_called()
+
+    def test_delivery_failure_kills_child_and_reraises(self, tmp_path: Path) -> None:
+        """A failed write reaps the unrecorded child before propagating."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        process.pid = 4242
+        with (
+            patch.object(
+                runner,
+                "_write_password_to_stdin",
+                side_effect=RuntimeError("delivery failed"),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+            pytest.raises(RuntimeError, match="delivery failed"),
+        ):
+            runner._deliver_password_or_kill(
+                process=process, password="pw"  # nosec B106
+            )
+        mock_kill.assert_called_once_with(4242)
+
+    def test_kill_failure_does_not_mask_delivery_error(self, tmp_path: Path) -> None:
+        """A failing kill is suppressed; the original error still propagates."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        process = MagicMock()
+        process.pid = 4242
+        with (
+            patch.object(
+                runner,
+                "_write_password_to_stdin",
+                side_effect=RuntimeError("delivery failed"),
+            ),
+            patch(
+                "operate.services.deployment_runner.kill_process",
+                side_effect=OSError("kill failed"),
+            ),
+            pytest.raises(RuntimeError, match="delivery failed"),
+        ):
+            runner._deliver_password_or_kill(
+                process=process, password="pw"  # nosec B106
+            )
 
 
 # ---------------------------------------------------------------------------
