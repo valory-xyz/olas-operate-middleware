@@ -151,10 +151,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
     START_TRIES = constants.DEPLOYMENT_START_TRIES_NUM
-    # A pyinstaller one-file binary self-extracts on start; real agent
-    # runners measure ~1.5s on --help, so 15s is ~10x headroom while
-    # bounding a wedged binary's cost per start attempt.
-    PASSWORD_STDIN_PROBE_TIMEOUT = 15  # seconds
+    # A pyinstaller one-file binary self-extracts on start; worst case is
+    # ~45s for a 100MB Optimus binary on macOS with ARM chip
+    PASSWORD_STDIN_PROBE_TIMEOUT = 60  # seconds
     logger = setup_logger(name="operate.base_deployment_runner")
 
     @staticmethod
