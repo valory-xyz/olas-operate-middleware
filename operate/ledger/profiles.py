@@ -377,8 +377,8 @@ EXPLORER_URL = {
         "address": "https://etherscan.io/address/{address}",
     },
     Chain.GNOSIS: {
-        "tx": "https://gnosisscan.io/tx/{tx_hash}",
-        "address": "https://gnosisscan.io/address/{address}",
+        "tx": "https://gnosis.blockscout.com/tx/{tx_hash}",
+        "address": "https://gnosis.blockscout.com/address/{address}",
     },
     Chain.MODE: {
         "tx": "https://explorer.mode.network/tx/{tx_hash}",
