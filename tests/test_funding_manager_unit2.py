@@ -2090,6 +2090,180 @@ class TestFundingRequirements:
 
         assert result["is_refill_required"] is True
 
+    def test_deployed_safe_deficit_passes_verbatim(self) -> None:
+        """For a deployed service (real safe), agent deficit passes through verbatim.
+
+        When the Agent Safe is a real (non-placeholder) address:
+        (a) service_initial_shortfalls is empty (funding_manager.py:1143),
+        (b) agent_funding_requests equals the verbatim deficit from
+            service.get_funding_requests() — no middleware threshold comparison.
+        """
+        manager = _make_manager()
+        service = self._make_service_with_safe()
+
+        deficit_amount = BigInt(42000000000000000000)
+        mock_requests = ChainAmounts(
+            {"gnosis": {AGENT_ADDR: {ZERO_ADDRESS: deficit_amount}}}
+        )
+        service.get_funding_requests.return_value = mock_requests
+
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
+            ),
+        ):
+            result = manager.funding_requirements(service)
+
+        # (b) agent_funding_requests matches the verbatim deficit
+        assert result["agent_funding_requests"] == mock_requests.json
+        assert result["agent_funding_requests"]["gnosis"][AGENT_ADDR][
+            ZERO_ADDRESS
+        ] == str(deficit_amount)
+
+    def test_deployed_safe_zero_deficit_returns_empty_requests(self) -> None:
+        """For a deployed service with zero deficit, agent_funding_requests is empty.
+
+        Validates the expected steady state after the funds_manager threshold
+        increase ships and the agent restarts with the higher threshold.
+        """
+        manager = _make_manager()
+        service = self._make_service_with_safe()
+        service.get_funding_requests.return_value = ChainAmounts()
+
+        with (
+            self._patch_all_sub_methods(manager),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
+            ),
+        ):
+            result = manager.funding_requirements(service)
+
+        assert result["agent_funding_requests"] == {}
+        assert result["agent_funding_requests_cooldown"] is False
+        assert result["agent_funding_in_progress"] is False
+
+    def test_deployed_safe_initial_shortfalls_empty(self) -> None:
+        """service_initial_shortfalls is empty for deployed-safe services.
+
+        When the Agent Safe is a real multisig (not SERVICE_SAFE_PLACEHOLDER),
+        funding_manager.py:1139-1143 sets service_initial_shortfalls =
+        ChainAmounts(). This test verifies that fund_requirements.safe does NOT
+        contribute to total_requirements or refill_requirements for running
+        agents — any regression routing through fund_requirements.safe would
+        cause the test to fail.
+        """
+        manager = _make_manager()
+        service = self._make_service_with_safe()
+
+        # Set a large fund_requirements.safe value; if it leaks into
+        # refill_requirements the assertion below will catch it.
+        large_safe_amount = BigInt(999 * 10**18)
+        service.get_initial_funding_amounts.return_value = ChainAmounts(
+            {"gnosis": {SAFE_ADDR: {ZERO_ADDRESS: large_safe_amount}}}
+        )
+        service.get_funding_requests.return_value = ChainAmounts()
+
+        # Use a spy on _aggregate_as_master_safe_amounts to capture
+        # the service_initial_shortfalls argument passed to it.
+        original_aggregate = manager._aggregate_as_master_safe_amounts
+        captured_args: list = []
+
+        def spy_aggregate(*args: ChainAmounts) -> ChainAmounts:
+            captured_args.append(args)
+            return original_aggregate(*args)
+
+        with (
+            patch.multiple(
+                manager,
+                _compute_protocol_asset_requirements=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _compute_protocol_bonded_assets=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _get_master_eoa_balances=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}}}
+                    )
+                ),
+                _get_master_safe_balances=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(10**18)}}}
+                    )
+                ),
+                _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
+                _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_ADDR),
+                _compute_shortfalls=MagicMock(
+                    return_value=ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    )
+                ),
+                _aggregate_as_master_safe_amounts=MagicMock(side_effect=spy_aggregate),
+                _split_excess_assets_master_eoa_balances=MagicMock(
+                    return_value=(
+                        ChainAmounts(),
+                        ChainAmounts(
+                            {
+                                "gnosis": {
+                                    MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}
+                                }
+                            }
+                        ),
+                    )
+                ),
+                _split_critical_eoa_shortfalls=MagicMock(
+                    return_value=(
+                        ChainAmounts(),
+                        ChainAmounts(
+                            {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                        ),
+                    )
+                ),
+            ),
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                    ChainAmounts(
+                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
+                    ),
+                ),
+            ),
+        ):
+            manager.funding_requirements(service)
+
+        # _aggregate_as_master_safe_amounts is called twice:
+        #   1. for master_safe_thresholds (master_eoa, protocol, service_initial)
+        #   2. for excess_master_eoa_balances
+        # The first call's third argument is service_initial_shortfalls.
+        assert len(captured_args) >= 1
+        first_call_args = captured_args[0]
+        service_initial_shortfalls = first_call_args[2]
+        assert service_initial_shortfalls == ChainAmounts()
+
 
 # ---------------------------------------------------------------------------
 # Tests for funding_job async loop (lines 1017-1048)
