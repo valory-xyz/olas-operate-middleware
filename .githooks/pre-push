@@ -10,7 +10,7 @@ RESULT=$?
 # Run safety separately — non-fatal, as it has known environment
 # incompatibilities (nltk vs Python 3.13 import security) that are
 # unrelated to code quality.
-if ! uv run tox -e safety 2>/dev/null; then
+if ! uv run tox -e safety; then
     echo "WARNING: safety check failed (non-fatal — see tox output above)"
 fi
 
