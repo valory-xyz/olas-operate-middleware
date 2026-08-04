@@ -2093,10 +2093,12 @@ class TestFundingRequirements:
     def test_deployed_safe_deficit_passes_verbatim(self) -> None:
         """For a deployed service (real safe), agent deficit passes through verbatim.
 
-        When the Agent Safe is a real (non-placeholder) address:
-        (a) service_initial_shortfalls is empty (funding_manager.py:1143),
-        (b) agent_funding_requests equals the verbatim deficit from
-            service.get_funding_requests() — no middleware threshold comparison.
+        When the Agent Safe is a real (non-placeholder) address,
+        agent_funding_requests equals the verbatim deficit from
+        service.get_funding_requests() — no middleware threshold comparison.
+
+        See test_deployed_safe_initial_shortfalls_empty for the companion
+        assertion that service_initial_shortfalls is empty.
         """
         manager = _make_manager()
         service = self._make_service_with_safe()
