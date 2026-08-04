@@ -2192,56 +2192,11 @@ class TestFundingRequirements:
             return original_aggregate(*args)
 
         with (
-            patch.multiple(
+            self._patch_all_sub_methods(manager),
+            patch.object(
                 manager,
-                _compute_protocol_asset_requirements=MagicMock(
-                    return_value=ChainAmounts(
-                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                    )
-                ),
-                _compute_protocol_bonded_assets=MagicMock(
-                    return_value=ChainAmounts(
-                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                    )
-                ),
-                _get_master_eoa_balances=MagicMock(
-                    return_value=ChainAmounts(
-                        {"gnosis": {MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}}}
-                    )
-                ),
-                _get_master_safe_balances=MagicMock(
-                    return_value=ChainAmounts(
-                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(10**18)}}}
-                    )
-                ),
-                _resolve_master_eoa=MagicMock(return_value=MASTER_EOA_ADDR),
-                _resolve_master_safe=MagicMock(return_value=MASTER_SAFE_ADDR),
-                _compute_shortfalls=MagicMock(
-                    return_value=ChainAmounts(
-                        {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                    )
-                ),
-                _aggregate_as_master_safe_amounts=MagicMock(side_effect=spy_aggregate),
-                _split_excess_assets_master_eoa_balances=MagicMock(
-                    return_value=(
-                        ChainAmounts(),
-                        ChainAmounts(
-                            {
-                                "gnosis": {
-                                    MASTER_EOA_ADDR: {ZERO_ADDRESS: BigInt(10**18)}
-                                }
-                            }
-                        ),
-                    )
-                ),
-                _split_critical_eoa_shortfalls=MagicMock(
-                    return_value=(
-                        ChainAmounts(),
-                        ChainAmounts(
-                            {"gnosis": {MASTER_SAFE_ADDR: {ZERO_ADDRESS: BigInt(0)}}}
-                        ),
-                    )
-                ),
+                "_aggregate_as_master_safe_amounts",
+                side_effect=spy_aggregate,
             ),
             patch(
                 "operate.services.funding_manager.concurrent_execute",
