@@ -75,7 +75,10 @@ from operate.utils.gnosis import (
     swap_owner,
 )
 from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_batch_from_safe, transfer_erc20_from_safe
+from operate.utils.gnosis import (
+    transfer_batch_from_safe,
+    transfer_erc20_from_safe,
+)
 
 logger = setup_logger(name="master_wallet")
 
