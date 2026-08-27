@@ -214,6 +214,8 @@ class AgentAssetManager:
             agent_release_asset_name
         )
 
+        sidecar_path = target_path.parent / (target_path.name + ".sha256")
+
         if target_path.exists():
             # check sha
             current_file_hash = cls.get_local_file_sha256(target_path)
@@ -221,6 +223,9 @@ class AgentAssetManager:
                 cls.logger.info(
                     "local and remote files hashes are match, nothing to download"
                 )
+                # Write sidecar so the offline fallback can validate even
+                # for zips downloaded before this feature shipped.
+                sidecar_path.write_text(remote_file_hash, encoding="utf-8")
                 return
             cls.logger.info(
                 "local and remote files hashes does not match, go to download"
@@ -243,6 +248,7 @@ class AgentAssetManager:
                     )
                 cls.logger.info(f"Hash verification passed: {downloaded_hash}")
                 shutil.copy2(tmp_file, target_path)
+                sidecar_path.write_text(remote_file_hash, encoding="utf-8")
                 # Make executable only for agent runner (detect by filename pattern)
                 if (
                     os.name == "posix" and "agent_runner" in target_filename
@@ -272,18 +278,47 @@ class AgentAssetManager:
 
     @classmethod
     def get_agent_code_path(cls, service_dir: Path) -> str:
-        """Get path to the agent code zip archive."""
+        """Get path to the agent code zip archive.
+
+        Falls back to a cached agent.zip validated via its .sha256 sidecar
+        when the GitHub API is unreachable (network error, 403 rate limit, etc.).
+        """
         agent_cache_dir = service_dir / "agent_cache"
         agent_cache_dir.mkdir(exist_ok=True)
         agent_zip_path: Path = agent_cache_dir / "agent.zip"
         agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
 
-        cls.update_agent_release_asset(
-            target_path=agent_zip_path,
-            agent_release_asset_name="agent.zip",
-            target_filename="agent.zip",
-            agent_release=agent_release,
-        )
+        try:
+            cls.update_agent_release_asset(
+                target_path=agent_zip_path,
+                agent_release_asset_name="agent.zip",
+                target_filename="agent.zip",
+                agent_release=agent_release,
+            )
+        except requests.RequestException as exc:
+            # Offline fallback: use the cached zip if it passes sidecar validation
+            sidecar_path = agent_zip_path.parent / "agent.zip.sha256"
+            if not agent_zip_path.exists():
+                raise RuntimeError(
+                    f"GitHub API unavailable ({exc}) and no cached agent.zip found"
+                ) from exc
+            if not sidecar_path.exists():
+                raise RuntimeError(
+                    f"GitHub API unavailable ({exc}) and no .sha256 sidecar "
+                    f"found for cached agent.zip — cannot verify integrity"
+                ) from exc
+            stored_hash = sidecar_path.read_text(encoding="utf-8").strip()
+            local_hash = cls.get_local_file_sha256(agent_zip_path)
+            if stored_hash != local_hash:
+                raise RuntimeError(
+                    f"GitHub API unavailable ({exc}) and cached agent.zip "
+                    f"hash mismatch (expected {stored_hash}, got {local_hash})"
+                ) from exc
+            cls.logger.warning(
+                "GitHub API unavailable; using cached agent.zip, "
+                "last-known-good hash verified"
+            )
+
         return str(agent_zip_path)
 
     @staticmethod
