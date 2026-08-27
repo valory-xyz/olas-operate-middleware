@@ -19,6 +19,7 @@
 
 """Unit tests for operate/services/agent_assets.py."""
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Generator
@@ -30,7 +31,7 @@ import requests
 from operate.services.agent_assets import (
     AgentAssetManager,
     AgentRelease,
-    _release_metadata_cache,
+    clear_release_metadata_cache,
 )
 
 VALID_RELEASE_DATA = {
@@ -58,9 +59,9 @@ SERVICE_CONFIG = {
 @pytest.fixture(autouse=True)
 def _clear_cache() -> Generator[None, None, None]:
     """Clear the release metadata cache before each test."""
-    _release_metadata_cache.clear()
+    clear_release_metadata_cache()
     yield
-    _release_metadata_cache.clear()
+    clear_release_metadata_cache()
 
 
 class TestGetUrlAndHash:
@@ -137,32 +138,34 @@ class TestUpdateAgentReleaseAsset:
     """Tests for AgentAssetManager.update_agent_release_asset sidecar writes."""
 
     @patch.object(AgentAssetManager, "download_file")
-    @patch.object(AgentAssetManager, "get_local_file_sha256")
     def test_sidecar_written_on_download(
-        self, mock_sha256: MagicMock, mock_download: MagicMock, tmp_path: Path
+        self, mock_download: MagicMock, tmp_path: Path
     ) -> None:
         """After a successful download, the .sha256 sidecar is written."""
         target_path = tmp_path / "agent.zip"
         sidecar_path = tmp_path / "agent.zip.sha256"
+        fake_content = b"fake zip content"
 
         release = AgentRelease(
             owner="valory-xyz", repo="trader", release="v0.40.7", is_aea=True
         )
 
-        # First call: get_url_and_hash returns remote hash
+        def fake_download(url: str, save_path: Path) -> None:
+            save_path.write_bytes(fake_content)
+
+        mock_download.side_effect = fake_download
+
+        # Pre-compute the hash of fake_content so we can pass it as the
+        # "remote" hash and let get_local_file_sha256 run for real.
+        # Using distinct values (real hash vs a constant) proves the
+        # sidecar records the verified hash, not an arbitrary value.
+        expected_hash = "sha256:" + hashlib.sha256(fake_content).hexdigest()
+
         with patch.object(
             release,
             "get_url_and_hash",
-            return_value=("https://example.com/agent.zip", "sha256:abc123"),
+            return_value=("https://example.com/agent.zip", expected_hash),
         ):
-            # download_file creates the file in tmp dir; copy2 will be called
-            def fake_download(url: str, save_path: Path) -> None:
-                save_path.write_bytes(b"fake zip content")
-
-            mock_download.side_effect = fake_download
-            # get_local_file_sha256 is called for hash verification of downloaded file
-            mock_sha256.return_value = "sha256:abc123"
-
             AgentAssetManager.update_agent_release_asset(
                 target_path=target_path,
                 agent_release_asset_name="agent.zip",
@@ -172,7 +175,7 @@ class TestUpdateAgentReleaseAsset:
 
         assert target_path.exists()
         assert sidecar_path.exists()
-        assert sidecar_path.read_text(encoding="utf-8") == "sha256:abc123"
+        assert sidecar_path.read_text(encoding="utf-8") == expected_hash
 
     @patch.object(AgentAssetManager, "get_local_file_sha256")
     def test_sidecar_written_on_hash_match(
@@ -239,17 +242,17 @@ class TestGetAgentCodePathFallback:
 
     @patch.object(AgentAssetManager, "update_agent_release_asset")
     def test_fallback_no_zip(self, mock_update: MagicMock, tmp_path: Path) -> None:
-        """Fallback raises RuntimeError when no cached zip exists."""
+        """Fallback re-raises original RequestException when no cached zip exists."""
         service_dir = self._setup_service_dir(tmp_path)
 
         mock_update.side_effect = requests.ConnectionError("network down")
 
-        with pytest.raises(RuntimeError, match="no cached agent.zip found"):
+        with pytest.raises(requests.ConnectionError):
             AgentAssetManager.get_agent_code_path(service_dir)
 
     @patch.object(AgentAssetManager, "update_agent_release_asset")
     def test_fallback_no_sidecar(self, mock_update: MagicMock, tmp_path: Path) -> None:
-        """Fallback raises RuntimeError when sidecar is absent."""
+        """Fallback re-raises original RequestException when sidecar is absent."""
         service_dir = self._setup_service_dir(tmp_path)
         agent_cache = service_dir / "agent_cache"
         agent_cache.mkdir()
@@ -258,14 +261,14 @@ class TestGetAgentCodePathFallback:
 
         mock_update.side_effect = requests.ConnectionError("network down")
 
-        with pytest.raises(RuntimeError, match="no .sha256 sidecar"):
+        with pytest.raises(requests.ConnectionError):
             AgentAssetManager.get_agent_code_path(service_dir)
 
     @patch.object(AgentAssetManager, "update_agent_release_asset")
     def test_fallback_hash_mismatch(
         self, mock_update: MagicMock, tmp_path: Path
     ) -> None:
-        """Fallback raises RuntimeError when sidecar hash doesn't match."""
+        """Fallback re-raises original RequestException when sidecar hash doesn't match."""
         service_dir = self._setup_service_dir(tmp_path)
         agent_cache = service_dir / "agent_cache"
         agent_cache.mkdir()
@@ -276,5 +279,5 @@ class TestGetAgentCodePathFallback:
 
         mock_update.side_effect = requests.ConnectionError("network down")
 
-        with pytest.raises(RuntimeError, match="hash mismatch"):
+        with pytest.raises(requests.ConnectionError):
             AgentAssetManager.get_agent_code_path(service_dir)

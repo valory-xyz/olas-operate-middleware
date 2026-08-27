@@ -308,6 +308,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 agent_dir_full_path = Path(working_dir) / agent_alias_name
 
                 if not self._is_aea:  # pragma: no cover
+                    # Clear agent directory for a clean start (matches AEA branch)
+                    if agent_dir_full_path.exists():
+                        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
                     # copy key here
                     # Add keys securely
                     secure_copy_private_key(
@@ -414,12 +417,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self.logger.info("Checking and downloading agent zip!")
         agent_zip_path = Path(get_agent_code_path(service_dir))
         self.logger.info(f"Agentsource zip file is {agent_zip_path}")
-        # Clear agent directory only after a successful metadata fetch / zip
-        # validation so the offline fallback can still use a previously
-        # extracted agent dir if the GitHub API is unreachable.
+        # Clear agent directory before extraction so each attempt starts clean.
         if agent_dir_full_path.exists():
-            with suppress(Exception):
-                shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+            shutil.rmtree(agent_dir_full_path, ignore_errors=True)
         AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
 
         # Ensure parent directory exists before trying to delete file

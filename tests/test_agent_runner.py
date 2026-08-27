@@ -32,7 +32,7 @@ import requests
 from operate.services.agent_assets import (
     AgentAssetManager,
     AgentRelease,
-    _release_metadata_cache,
+    clear_release_metadata_cache,
     get_agent_runner_path,
 )
 
@@ -40,9 +40,9 @@ from operate.services.agent_assets import (
 @pytest.fixture(autouse=True)
 def _clear_cache() -> Generator[None, None, None]:
     """Clear the release metadata cache before each test."""
-    _release_metadata_cache.clear()
+    clear_release_metadata_cache()
     yield
-    _release_metadata_cache.clear()
+    clear_release_metadata_cache()
 
 
 class TestAgentRelease:
@@ -473,10 +473,10 @@ class TestAgentAssetManagerMethods:
             )
         assert target.exists()
 
-    def test_update_agent_release_asset_download_error_removes_target(
+    def test_update_agent_release_asset_download_error_preserves_target(
         self, tmp_path: Path
     ) -> None:
-        """Test that a download error causes the target file to be removed."""
+        """A download error preserves the existing cached file for offline fallback."""
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
@@ -501,7 +501,9 @@ class TestAgentAssetManagerMethods:
                     target_filename="runner",
                     agent_release=mock_release,
                 )
-        assert not target.exists()
+        # Target should still exist — download wrote to a temp file, not target
+        assert target.exists()
+        assert target.read_bytes() == b"old content"
 
     def test_get_agent_runner_path_class_method(self, tmp_path: Path) -> None:
         """Test AgentAssetManager.get_agent_runner_path returns the correct path."""

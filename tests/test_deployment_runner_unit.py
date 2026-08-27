@@ -441,7 +441,7 @@ class TestSetupAgent403EarlyExit:
     """Tests for 403 early exit in BaseDeploymentRunner._setup_agent."""
 
     def test_403_aborts_without_sleep(self, tmp_path: Path) -> None:
-        """HTTP 403 in inner loop re-raises immediately without sleeping."""
+        """HTTP 403 propagates through get_agent_code_path and aborts the retry loop."""
         import requests as req
 
         runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
@@ -456,14 +456,69 @@ class TestSetupAgent403EarlyExit:
                 "_prepare_agent_env",
                 return_value={},
             ),
-            patch.object(
-                runner,
-                "prepare_agent_sources",
+            # Mock get_agent_code_path (not prepare_agent_sources) so the
+            # test exercises the real exception-handling chain.
+            patch(
+                "operate.services.deployment_runner.get_agent_code_path",
                 side_effect=http_error,
             ),
             patch("operate.services.deployment_runner.time.sleep") as mock_sleep,
         ):
             with pytest.raises(req.HTTPError):
                 runner._setup_agent(password="pass")  # nosec B106
+
+        mock_sleep.assert_not_called()
+
+    def test_403_with_valid_cache_completes_setup(self, tmp_path: Path) -> None:
+        """HTTP 403 with a valid cached zip + sidecar completes agent setup."""
+        import json
+
+        import requests as req
+
+        from operate.services.agent_assets import AgentAssetManager
+
+        # Build a minimal service dir with config.json, agent_cache, and cached zip
+        service_dir = tmp_path / "service"
+        build_dir = service_dir / "build"
+        build_dir.mkdir(parents=True)
+        (build_dir / "agent.json").write_text("{}", encoding="utf-8")
+        (build_dir / "ethereum_private_key.txt").write_text("dummy", encoding="utf-8")
+
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.40.7",
+                },
+            }
+        }
+        (service_dir / "config.json").write_text(json.dumps(config))
+
+        agent_cache = service_dir / "agent_cache"
+        agent_cache.mkdir()
+        zip_path = agent_cache / "agent.zip"
+        zip_path.write_bytes(b"valid cached zip")
+        real_hash = AgentAssetManager.get_local_file_sha256(zip_path)
+        (agent_cache / "agent.zip.sha256").write_text(real_hash, encoding="utf-8")
+
+        mock_403_response = MagicMock()
+        mock_403_response.status_code = 403
+        http_error = req.HTTPError("403 rate limited", response=mock_403_response)
+
+        runner = PyInstallerHostDeploymentRunnerMac(build_dir, is_aea=True)
+
+        with (
+            patch.object(runner, "_prepare_agent_env", return_value={}),
+            patch.object(
+                AgentAssetManager, "update_agent_release_asset", side_effect=http_error
+            ),
+            patch.object(AgentAssetManager, "extract_agent_zip"),
+            patch.object(runner, "_run_aea_command"),
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch("operate.services.deployment_runner.time.sleep") as mock_sleep,
+        ):
+            runner._setup_agent(password="pass")  # nosec B106
 
         mock_sleep.assert_not_called()
