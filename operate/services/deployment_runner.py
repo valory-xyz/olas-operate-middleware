@@ -304,12 +304,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     working_dir / "agent" / "ethereum_private_key.txt"
                 )
 
-                # Clear agent directory before each attempt to avoid partial state
                 agent_alias_name = "agent"
                 agent_dir_full_path = Path(working_dir) / agent_alias_name
-                if agent_dir_full_path.exists():
-                    with suppress(Exception):
-                        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
 
                 if not self._is_aea:  # pragma: no cover
                     # copy key here
@@ -382,6 +378,16 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 self.logger.warning(
                     f"Agent setup attempt {attempt}/{max_attempts} failed: {e}"
                 )
+                # 403 = GitHub rate limit; retrying only burns more quota.
+                if (
+                    isinstance(e, requests.HTTPError)
+                    and getattr(e.response, "status_code", None) == 403
+                ):
+                    self.logger.error(
+                        "GitHub API returned 403 (rate limit); "
+                        "aborting retries to preserve quota"
+                    )
+                    raise
                 if attempt < max_attempts:
                     sleep_time = attempt * 5
                     self.logger.info(f"Retrying agent setup in {sleep_time} seconds...")
@@ -408,6 +414,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self.logger.info("Checking and downloading agent zip!")
         agent_zip_path = Path(get_agent_code_path(service_dir))
         self.logger.info(f"Agentsource zip file is {agent_zip_path}")
+        # Clear agent directory only after a successful metadata fetch / zip
+        # validation so the offline fallback can still use a previously
+        # extracted agent dir if the GitHub API is unreachable.
+        if agent_dir_full_path.exists():
+            with suppress(Exception):
+                shutil.rmtree(agent_dir_full_path, ignore_errors=True)
         AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
 
         # Ensure parent directory exists before trying to delete file
