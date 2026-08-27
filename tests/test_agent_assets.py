@@ -22,7 +22,7 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -54,14 +54,6 @@ SERVICE_CONFIG = {
         },
     }
 }
-
-
-@pytest.fixture(autouse=True)
-def _clear_cache() -> Generator[None, None, None]:
-    """Clear the release metadata cache before each test."""
-    clear_release_metadata_cache()
-    yield
-    clear_release_metadata_cache()
 
 
 class TestGetUrlAndHash:
@@ -462,3 +454,52 @@ class TestReleaseMetadataCacheInvalidation:
             release.get_url_and_hash("agent.zip")
 
         assert mock_get.call_count == 2
+
+
+class TestOfflineFallbackSidecarRead:
+    """Tests for sidecar read failures inside the offline fallback."""
+
+    def test_unreadable_sidecar_reraises_original_error(self, tmp_path: Path) -> None:
+        """An unreadable sidecar must still surface the original request error."""
+        asset_path = tmp_path / "agent.zip"
+        asset_path.write_bytes(b"cached zip")
+        sidecar_path = tmp_path / "agent.zip.sha256"
+        sidecar_path.write_text("sha256:abc123", encoding="utf-8")
+
+        response = MagicMock()
+        response.status_code = 403
+        original = requests.HTTPError("403 rate limited", response=response)
+
+        with patch.object(Path, "read_text", side_effect=OSError("input/output error")):
+            with pytest.raises(requests.HTTPError) as exc_info:
+                AgentAssetManager._asset_offline_fallback(asset_path, original)
+
+        assert exc_info.value is original
+        assert exc_info.value.response.status_code == 403
+
+
+class TestStaleSidecarRemoval:
+    """Tests that a failed sidecar write does not leave a stale hash behind."""
+
+    def test_failed_write_removes_stale_sidecar(self, tmp_path: Path) -> None:
+        """A stale sidecar is removed so the fallback reports a missing one."""
+        sidecar_path = tmp_path / "agent.zip.sha256"
+        sidecar_path.write_text("sha256:previous-version", encoding="utf-8")
+
+        with patch.object(Path, "write_text", side_effect=OSError("disk full")):
+            AgentAssetManager._write_sidecar(sidecar_path, "sha256:new-version")
+
+        assert not sidecar_path.exists()
+
+    def test_unlink_failure_is_tolerated(self, tmp_path: Path) -> None:
+        """A read-only filesystem blocks the cleanup without raising."""
+        sidecar_path = tmp_path / "agent.zip.sha256"
+        sidecar_path.write_text("sha256:previous-version", encoding="utf-8")
+
+        with (
+            patch.object(Path, "write_text", side_effect=OSError("read-only")),
+            patch.object(Path, "unlink", side_effect=OSError("read-only")),
+        ):
+            AgentAssetManager._write_sidecar(sidecar_path, "sha256:new-version")
+
+        assert sidecar_path.exists()

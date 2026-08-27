@@ -59,6 +59,7 @@ from operate.operate_types import (
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
+from operate.services.agent_assets import clear_release_metadata_cache
 from operate.services.manage import ServiceManager
 from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
@@ -265,6 +266,14 @@ def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
 
     response = requests.post(rpc, headers=headers, data=json.dumps(data), timeout=30)
     response.raise_for_status()
+
+
+@pytest.fixture(autouse=True)
+def _clear_release_metadata_cache() -> Generator[None, None, None]:
+    """Keep the in-process release metadata cache from leaking across tests."""
+    clear_release_metadata_cache()
+    yield
+    clear_release_metadata_cache()
 
 
 @pytest.fixture

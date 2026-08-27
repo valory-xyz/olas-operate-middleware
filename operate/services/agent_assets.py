@@ -29,6 +29,7 @@ import sys
 import sysconfig
 import time
 import zipfile
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -235,6 +236,10 @@ class AgentAssetManager:
                 "Failed to write sidecar %s; offline fallback may not work",
                 sidecar_path,
             )
+            # A leftover sidecar would claim the previous version's hash, so the
+            # fallback would report a mismatch rather than a missing sidecar.
+            with suppress(OSError):
+                sidecar_path.unlink(missing_ok=True)
 
     @classmethod
     def update_agent_release_asset(
@@ -330,7 +335,16 @@ class AgentAssetManager:
                 asset_path.name,
             )
             raise exc
-        stored_hash = sidecar_path.read_text(encoding="utf-8").strip()
+        try:
+            stored_hash = sidecar_path.read_text(encoding="utf-8").strip()
+        except OSError as read_exc:
+            cls.logger.error(
+                "GitHub API unavailable (%s) and sidecar %s unreadable (%s)",
+                exc,
+                sidecar_path.name,
+                read_exc,
+            )
+            raise exc from read_exc
         local_hash = cls.get_local_file_sha256(asset_path)
         if stored_hash != local_hash:
             cls.logger.error(
