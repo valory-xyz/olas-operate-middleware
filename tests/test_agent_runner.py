@@ -23,7 +23,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,8 +32,17 @@ import requests
 from operate.services.agent_assets import (
     AgentAssetManager,
     AgentRelease,
+    _release_metadata_cache,
     get_agent_runner_path,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache() -> Generator[None, None, None]:
+    """Clear the release metadata cache before each test."""
+    _release_metadata_cache.clear()
+    yield
+    _release_metadata_cache.clear()
 
 
 class TestAgentRelease:
