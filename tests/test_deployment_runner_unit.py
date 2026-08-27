@@ -430,3 +430,40 @@ class TestModuleLevelFunctions:
         with patch.object(dr.deployment_manager, "stop") as mock_stop:
             stop_deployment_manager()
         mock_stop.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 403-aware early exit in _setup_agent
+# ---------------------------------------------------------------------------
+
+
+class TestSetupAgent403EarlyExit:
+    """Tests for 403 early exit in BaseDeploymentRunner._setup_agent."""
+
+    def test_403_aborts_without_sleep(self, tmp_path: Path) -> None:
+        """HTTP 403 in inner loop re-raises immediately without sleeping."""
+        import requests as req
+
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+
+        mock_403_response = MagicMock()
+        mock_403_response.status_code = 403
+        http_error = req.HTTPError("403 rate limited", response=mock_403_response)
+
+        with (
+            patch.object(
+                runner,
+                "_prepare_agent_env",
+                return_value={},
+            ),
+            patch.object(
+                runner,
+                "prepare_agent_sources",
+                side_effect=http_error,
+            ),
+            patch("operate.services.deployment_runner.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(req.HTTPError):
+                runner._setup_agent(password="pass")  # nosec B106
+
+        mock_sleep.assert_not_called()
