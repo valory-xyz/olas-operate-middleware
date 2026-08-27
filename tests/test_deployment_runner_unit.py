@@ -33,6 +33,7 @@ from operate.services.deployment_runner import (
     PyInstallerHostDeploymentRunnerMac,
     PyInstallerHostDeploymentRunnerWindows,
     States,
+    is_github_rate_limited,
     run_host_deployment,
     stop_deployment_manager,
     stop_host_deployment,
@@ -565,3 +566,56 @@ class TestClearAgentDir:
         mock_rmtree.assert_called_once()
         mock_logger.warning.assert_called_once()
         assert "not fully cleared" in mock_logger.warning.call_args[0][0]
+
+
+class TestStart403Awareness:
+    """Tests for 403 handling in BaseDeploymentRunner.start."""
+
+    def test_403_aborts_start_without_further_tries(self, tmp_path: Path) -> None:
+        """A rate-limited start must not spend the remaining START_TRIES."""
+        import requests as req
+
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+        response = MagicMock()
+        response.status_code = 403
+        http_error = req.HTTPError("403 rate limited", response=response)
+
+        with patch.object(runner, "_start", side_effect=http_error) as mock_start:
+            with pytest.raises(req.HTTPError):
+                runner.start(password="pass")  # nosec B106
+
+        assert mock_start.call_count == 1
+
+    def test_other_errors_still_retry_and_chain_the_cause(self, tmp_path: Path) -> None:
+        """Non-403 failures exhaust the retries and keep the last error as cause."""
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+        boom = ValueError("boom")
+
+        with patch.object(runner, "_start", side_effect=boom) as mock_start:
+            with pytest.raises(RuntimeError) as exc_info:
+                runner.start(password="pass")  # nosec B106
+
+        assert mock_start.call_count == runner.START_TRIES
+        assert exc_info.value.__cause__ is boom
+
+
+class TestIsGithubRateLimited:
+    """Tests for the shared 403 predicate."""
+
+    def test_detects_403_http_error(self) -> None:
+        """An HTTPError carrying a 403 response is a rate limit."""
+        import requests as req
+
+        response = MagicMock()
+        response.status_code = 403
+        assert is_github_rate_limited(req.HTTPError("nope", response=response))
+
+    def test_rejects_other_status_and_types(self) -> None:
+        """Other statuses and unrelated exceptions are not rate limits."""
+        import requests as req
+
+        response = MagicMock()
+        response.status_code = 500
+        assert not is_github_rate_limited(req.HTTPError("nope", response=response))
+        assert not is_github_rate_limited(req.HTTPError("no response", response=None))
+        assert not is_github_rate_limited(ValueError("unrelated"))

@@ -63,6 +63,14 @@ from .agent_assets import AgentAssetManager, get_agent_code_path, get_agent_runn
 PASSWORD_STDIN_ARG = "--password-stdin"  # nosec B105
 
 
+def is_github_rate_limited(exc: BaseException) -> bool:
+    """Check whether an exception is a GitHub 403 rate-limit response."""
+    return (
+        isinstance(exc, requests.HTTPError)
+        and getattr(exc.response, "status_code", None) == 403
+    )
+
+
 class AbstractDeploymentRunner(ABC):
     """Abstract deployment runner."""
 
@@ -381,10 +389,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     f"Agent setup attempt {attempt}/{max_attempts} failed: {e}"
                 )
                 # 403 = GitHub rate limit; retrying only burns more quota.
-                if (
-                    isinstance(e, requests.HTTPError)
-                    and getattr(e.response, "status_code", None) == 403
-                ):
+                if is_github_rate_limited(e):
                     self.logger.error(
                         "GitHub API returned 403 (rate limit); "
                         "aborting retries to preserve quota"
@@ -458,15 +463,23 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def start(self, password: str) -> None:
         """Start the deployment with retries."""
+        last_error: t.Optional[BaseException] = None
         for _ in range(self.START_TRIES):
             try:
                 self._start(password=password)
                 return
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.exception(f"Error on starting deployment: {e}")
+                last_error = e
+                if is_github_rate_limited(e):
+                    self.logger.error(
+                        "GitHub API returned 403 (rate limit); "
+                        "aborting deployment start to preserve quota"
+                    )
+                    raise
         raise RuntimeError(
             f"Failed to start the deployment after {self.START_TRIES} attempts! Check logs"
-        )
+        ) from last_error
 
     def _start(self, password: str) -> None:
         """Start the deployment."""
