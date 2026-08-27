@@ -31,13 +31,18 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Tuple
+from typing import Dict, Tuple
 
 import requests
 from aea.configurations.data_types import PublicId
 from aea.helpers.logging import setup_logger
 
 from operate.constants import AGENT_RUNNER_PREFIX, CONFIG_JSON, DEFAULT_TIMEOUT
+
+# In-process cache for release metadata keyed by (owner, repo, release).
+# Tags are immutable on GitHub, so caching eliminates redundant API calls
+# during retry loops within a single deployment run.
+_release_metadata_cache: Dict[Tuple[str, str, str], dict] = {}
 
 
 @dataclass
@@ -56,7 +61,21 @@ class AgentRelease:
 
     def get_url_and_hash(self, asset_name: str) -> tuple[str, str]:
         """Get download url and asset sha256 hash."""
-        release_data = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT).json()
+        cache_key = (self.owner, self.repo, self.release)
+        if cache_key in _release_metadata_cache:
+            release_data = _release_metadata_cache[cache_key]
+        else:
+            response = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            release_data = response.json()
+            if "assets" not in release_data:
+                body_preview = response.text[:200]
+                raise ValueError(
+                    f"GitHub release response for {self.release_url} "
+                    f"(status {response.status_code}) missing 'assets' key. "
+                    f"Body: {body_preview}"
+                )
+            _release_metadata_cache[cache_key] = release_data
 
         assets_filtered = [i for i in release_data["assets"] if i["name"] == asset_name]
         if not assets_filtered:
