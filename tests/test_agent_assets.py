@@ -21,12 +21,12 @@
 
 import json
 from pathlib import Path
+from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
-from operate.services import agent_assets
 from operate.services.agent_assets import (
     AgentAssetManager,
     AgentRelease,
@@ -56,7 +56,7 @@ SERVICE_CONFIG = {
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache():
+def _clear_cache() -> Generator[None, None, None]:
     """Clear the release metadata cache before each test."""
     _release_metadata_cache.clear()
     yield
@@ -156,7 +156,7 @@ class TestUpdateAgentReleaseAsset:
             return_value=("https://example.com/agent.zip", "sha256:abc123"),
         ):
             # download_file creates the file in tmp dir; copy2 will be called
-            def fake_download(url, save_path):
+            def fake_download(url: str, save_path: Path) -> None:
                 save_path.write_bytes(b"fake zip content")
 
             mock_download.side_effect = fake_download
