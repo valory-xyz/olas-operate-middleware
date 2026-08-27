@@ -325,7 +325,7 @@ class AgentAssetManager:
             )
             raise exc
         cls.logger.warning(
-            "GitHub API unavailable; using cached %s, " "last-known-good hash verified",
+            "GitHub API unavailable; using cached %s, last-known-good hash verified",
             asset_path.name,
         )
         return str(asset_path)
