@@ -22,7 +22,7 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -281,3 +281,184 @@ class TestGetAgentCodePathFallback:
 
         with pytest.raises(requests.ConnectionError):
             AgentAssetManager.get_agent_code_path(service_dir)
+
+
+class TestSidecarWriteFailures:
+    """Tests for tolerating .sha256 sidecar I/O failures."""
+
+    @staticmethod
+    def _readonly_sidecar_write(original: Any) -> Any:
+        """Patch Path.write_text so only sidecar writes fail."""
+
+        def _write(self: Path, *args: Any, **kwargs: Any) -> Any:
+            if self.name.endswith(".sha256"):
+                raise OSError(30, "Read-only file system")
+            return original(self, *args, **kwargs)
+
+        return _write
+
+    @patch.object(AgentAssetManager, "get_local_file_sha256")
+    def test_hash_match_survives_sidecar_oserror(
+        self, mock_sha256: MagicMock, tmp_path: Path
+    ) -> None:
+        """An unwritable sidecar must not fail the already-up-to-date fast path."""
+        target_path = tmp_path / "agent.zip"
+        target_path.write_bytes(b"already current")
+        mock_sha256.return_value = "sha256:abc123"
+
+        release = AgentRelease(
+            owner="valory-xyz", repo="trader", release="v0.40.7", is_aea=True
+        )
+
+        with (
+            patch.object(
+                release,
+                "get_url_and_hash",
+                return_value=("https://example.com/agent.zip", "sha256:abc123"),
+            ),
+            patch.object(
+                Path, "write_text", self._readonly_sidecar_write(Path.write_text)
+            ),
+        ):
+            AgentAssetManager.update_agent_release_asset(
+                target_path=target_path,
+                agent_release_asset_name="agent.zip",
+                target_filename="agent.zip",
+                agent_release=release,
+            )
+
+        assert target_path.read_bytes() == b"already current"
+
+
+class TestGetAgentRunnerPathFallback:
+    """Tests for the offline fallback on the agent runner binary."""
+
+    def _setup_service_dir(self, tmp_path: Path) -> Path:
+        """Create a minimal service dir with config.json."""
+        service_dir = tmp_path / "service"
+        service_dir.mkdir()
+        (service_dir / "config.json").write_text(json.dumps(SERVICE_CONFIG))
+        return service_dir
+
+    @patch.object(AgentAssetManager, "update_agent_release_asset")
+    def test_runner_fallback_valid_sidecar(
+        self, mock_update: MagicMock, tmp_path: Path
+    ) -> None:
+        """A 403 with a sidecar-verified cached binary returns the cached path."""
+        service_dir = self._setup_service_dir(tmp_path)
+        runner_name = AgentAssetManager.get_agent_runner_executable_name()
+        runner_path = service_dir / runner_name
+        runner_path.write_bytes(b"cached runner binary")
+        sidecar_path = service_dir / (runner_name + ".sha256")
+        sidecar_path.write_text(
+            AgentAssetManager.get_local_file_sha256(runner_path), encoding="utf-8"
+        )
+
+        response = MagicMock()
+        response.status_code = 403
+        mock_update.side_effect = requests.HTTPError(
+            "403 rate limited", response=response
+        )
+
+        assert AgentAssetManager.get_agent_runner_path(service_dir) == str(runner_path)
+
+    @patch.object(AgentAssetManager, "update_agent_release_asset")
+    def test_runner_fallback_no_cache_preserves_403(
+        self, mock_update: MagicMock, tmp_path: Path
+    ) -> None:
+        """Without a cached binary the original HTTPError (and its 403) propagates."""
+        service_dir = self._setup_service_dir(tmp_path)
+
+        response = MagicMock()
+        response.status_code = 403
+        mock_update.side_effect = requests.HTTPError(
+            "403 rate limited", response=response
+        )
+
+        with pytest.raises(requests.HTTPError) as exc_info:
+            AgentAssetManager.get_agent_runner_path(service_dir)
+
+        assert exc_info.value.response.status_code == 403
+
+
+class TestReleaseMetadataCacheInvalidation:
+    """Tests for TTL expiry and explicit invalidation of cached release metadata."""
+
+    def _make_release(self) -> AgentRelease:
+        return AgentRelease(
+            owner="valory-xyz", repo="trader", release="v0.40.7", is_aea=True
+        )
+
+    def _mock_response(self) -> MagicMock:
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = VALID_RELEASE_DATA
+        response.raise_for_status.return_value = None
+        response.text = json.dumps(VALID_RELEASE_DATA)
+        return response
+
+    @patch("operate.services.agent_assets.requests.get")
+    def test_cache_expires_after_ttl(self, mock_get: MagicMock) -> None:
+        """A lookup past the TTL refetches instead of serving stale metadata."""
+        mock_get.return_value = self._mock_response()
+        release = self._make_release()
+
+        with patch("operate.services.agent_assets.time.monotonic", return_value=0.0):
+            release.get_url_and_hash("agent.zip")
+        with patch(
+            "operate.services.agent_assets.time.monotonic",
+            return_value=1e9,
+        ):
+            release.get_url_and_hash("agent.zip")
+
+        assert mock_get.call_count == 2
+
+    @patch("operate.services.agent_assets.requests.get")
+    def test_invalidate_cache_forces_refetch(self, mock_get: MagicMock) -> None:
+        """Invalidating an entry refetches even inside the TTL window."""
+        mock_get.return_value = self._mock_response()
+        release = self._make_release()
+
+        release.get_url_and_hash("agent.zip")
+        release.invalidate_cache()
+        release.get_url_and_hash("agent.zip")
+
+        assert mock_get.call_count == 2
+
+    @patch("operate.services.agent_assets.requests.get")
+    def test_clear_cache_forces_refetch(self, mock_get: MagicMock) -> None:
+        """The public clear helper drops entries for every release."""
+        mock_get.return_value = self._mock_response()
+        release = self._make_release()
+
+        release.get_url_and_hash("agent.zip")
+        clear_release_metadata_cache()
+        release.get_url_and_hash("agent.zip")
+
+        assert mock_get.call_count == 2
+
+    @patch.object(AgentAssetManager, "download_file")
+    @patch.object(AgentAssetManager, "get_local_file_sha256")
+    def test_hash_mismatch_invalidates_cache(
+        self, mock_sha256: MagicMock, mock_download: MagicMock, tmp_path: Path
+    ) -> None:
+        """A failed hash check drops the cached digest so a retry can refetch."""
+        release = self._make_release()
+        mock_sha256.return_value = "sha256:something-else"
+        mock_download.side_effect = lambda url, save_path: save_path.write_bytes(b"x")
+
+        with patch(
+            "operate.services.agent_assets.requests.get",
+            return_value=self._mock_response(),
+        ) as mock_get:
+            release.get_url_and_hash("agent.zip")
+            with pytest.raises(ValueError, match="Hash verification failed"):
+                AgentAssetManager.update_agent_release_asset(
+                    target_path=tmp_path / "agent.zip",
+                    agent_release_asset_name="agent.zip",
+                    target_filename="agent.zip",
+                    agent_release=release,
+                )
+            release.get_url_and_hash("agent.zip")
+
+        assert mock_get.call_count == 2

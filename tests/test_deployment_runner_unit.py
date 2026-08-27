@@ -522,3 +522,46 @@ class TestSetupAgent403EarlyExit:
             runner._setup_agent(password="pass")  # nosec B106
 
         mock_sleep.assert_not_called()
+
+
+class TestClearAgentDir:
+    """Tests for BaseDeploymentRunner._clear_agent_dir."""
+
+    def _runner(self, tmp_path: Path) -> PyInstallerHostDeploymentRunnerMac:
+        return PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+
+    def test_missing_dir_is_a_noop(self, tmp_path: Path) -> None:
+        """A directory that does not exist needs no removal."""
+        runner = self._runner(tmp_path)
+        with patch("operate.services.deployment_runner.shutil.rmtree") as mock_rmtree:
+            runner._clear_agent_dir(tmp_path / "absent")
+        mock_rmtree.assert_not_called()
+
+    def test_existing_dir_is_removed(self, tmp_path: Path) -> None:
+        """An existing directory is removed and nothing is logged."""
+        runner = self._runner(tmp_path)
+        agent_dir = tmp_path / "agent"
+        agent_dir.mkdir()
+        (agent_dir / "stale.txt").write_text("stale", encoding="utf-8")
+
+        with patch.object(runner, "logger") as mock_logger:
+            runner._clear_agent_dir(agent_dir)
+
+        assert not agent_dir.exists()
+        mock_logger.warning.assert_not_called()
+
+    def test_partial_clear_is_logged(self, tmp_path: Path) -> None:
+        """A directory that survives removal must produce a warning."""
+        runner = self._runner(tmp_path)
+        agent_dir = tmp_path / "agent"
+        agent_dir.mkdir()
+
+        with (
+            patch("operate.services.deployment_runner.shutil.rmtree") as mock_rmtree,
+            patch.object(runner, "logger") as mock_logger,
+        ):
+            runner._clear_agent_dir(agent_dir)
+
+        mock_rmtree.assert_called_once()
+        mock_logger.warning.assert_called_once()
+        assert "not fully cleared" in mock_logger.warning.call_args[0][0]

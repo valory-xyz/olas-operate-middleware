@@ -72,6 +72,10 @@ class AgentRelease:
         """Get release  api url."""
         return f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/tags/{self.release}"
 
+    def invalidate_cache(self) -> None:
+        """Drop this release's cached metadata so the next lookup refetches."""
+        _release_metadata_cache.pop((self.owner, self.repo, self.release), None)
+
     def get_url_and_hash(self, asset_name: str) -> tuple[str, str]:
         """Get download url and asset sha256 hash."""
         cache_key = (self.owner, self.repo, self.release)
@@ -216,6 +220,22 @@ class AgentAssetManager:
                 sha256_hash.update(byte_block)
         return "sha256:" + sha256_hash.hexdigest()
 
+    @staticmethod
+    def _sidecar_path(asset_path: Path) -> Path:
+        """Get the path of the .sha256 sidecar recording an asset's verified hash."""
+        return asset_path.parent / (asset_path.name + ".sha256")
+
+    @classmethod
+    def _write_sidecar(cls, sidecar_path: Path, file_hash: str) -> None:
+        """Record a verified hash; an I/O failure here must not fail the deployment."""
+        try:
+            sidecar_path.write_text(file_hash, encoding="utf-8")
+        except OSError:
+            cls.logger.warning(
+                "Failed to write sidecar %s; offline fallback may not work",
+                sidecar_path,
+            )
+
     @classmethod
     def update_agent_release_asset(
         cls,
@@ -229,7 +249,7 @@ class AgentAssetManager:
             agent_release_asset_name
         )
 
-        sidecar_path = target_path.parent / (target_path.name + ".sha256")
+        sidecar_path = cls._sidecar_path(target_path)
 
         if target_path.exists():
             # check sha
@@ -240,7 +260,7 @@ class AgentAssetManager:
                 )
                 # Write sidecar so the offline fallback can validate even
                 # for zips downloaded before this feature shipped.
-                sidecar_path.write_text(remote_file_hash, encoding="utf-8")
+                cls._write_sidecar(sidecar_path, remote_file_hash)
                 return
             cls.logger.info(
                 "local and remote files hashes does not match, go to download"
@@ -254,6 +274,10 @@ class AgentAssetManager:
             # Verify hash of downloaded file
             downloaded_hash = cls.get_local_file_sha256(tmp_file)
             if downloaded_hash != remote_file_hash:
+                # The cached digest may predate an asset re-upload under the
+                # same tag; drop it so a retry refetches instead of failing
+                # identically for the rest of the TTL window.
+                agent_release.invalidate_cache()
                 raise ValueError(
                     f"Hash verification failed for {target_filename}!\n"
                     f"Expected: {remote_file_hash}\n"
@@ -276,15 +300,9 @@ class AgentAssetManager:
             ):  # pragma: no cover
                 target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
 
-        # Write sidecar outside the download block so a sidecar I/O failure
-        # does not destroy the freshly verified asset.
-        try:
-            sidecar_path.write_text(remote_file_hash, encoding="utf-8")
-        except OSError:
-            cls.logger.warning(
-                "Failed to write sidecar %s; offline fallback may not work",
-                sidecar_path,
-            )
+        # Written outside the download block so a sidecar I/O failure does not
+        # destroy the freshly verified asset.
+        cls._write_sidecar(sidecar_path, remote_file_hash)
 
     @classmethod
     def _asset_offline_fallback(
@@ -296,7 +314,7 @@ class AgentAssetManager:
         attribute for callers that need 403 detection) when the fallback
         cannot be used.
         """
-        sidecar_path = asset_path.parent / (asset_path.name + ".sha256")
+        sidecar_path = cls._sidecar_path(asset_path)
         if not asset_path.exists():
             cls.logger.error(
                 "GitHub API unavailable (%s) and no cached %s found",

@@ -309,8 +309,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
                 if not self._is_aea:  # pragma: no cover
                     # Clear agent directory for a clean start (matches AEA branch)
-                    if agent_dir_full_path.exists():
-                        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+                    self._clear_agent_dir(agent_dir_full_path)
                     # copy key here
                     # Add keys securely
                     secure_copy_private_key(
@@ -399,6 +398,17 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     self.logger.error(f"All {max_attempts} agent setup attempts failed")
                     raise
 
+    def _clear_agent_dir(self, agent_dir_full_path: Path) -> None:
+        """Clear the agent directory; a partial clear must be visible in the logs."""
+        if not agent_dir_full_path.exists():
+            return
+        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+        if agent_dir_full_path.exists():
+            self.logger.warning(
+                f"Agent directory {agent_dir_full_path} was not fully cleared; "
+                "it may still hold files from a previous agent version"
+            )
+
     def prepare_agent_sources(
         self, working_dir: Path, private_key_in_agent: Path, agent_dir_full_path: Path
     ) -> None:
@@ -418,8 +428,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         agent_zip_path = Path(get_agent_code_path(service_dir))
         self.logger.info(f"Agentsource zip file is {agent_zip_path}")
         # Clear agent directory before extraction so each attempt starts clean.
-        if agent_dir_full_path.exists():
-            shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+        self._clear_agent_dir(agent_dir_full_path)
         AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
 
         # Ensure parent directory exists before trying to delete file
