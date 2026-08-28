@@ -205,6 +205,10 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
 }
 
 
+# Mirrors the frontend's `frontend/config/activityCheckers.ts`. A new decoupled
+# program batch must be added here, to STAKING, and to _DECOUPLED_PROGRAMS in
+# tests/test_ledger_profiles.py together; miss this table and the agent silently
+# stays on the on-chain path.
 DECOUPLED_ACTIVITY_CHECKERS: t.Dict[Chain, str] = {
     Chain.GNOSIS: "0x3514EeA47C03dF8d9FdD68A469908755d2870c48",
     Chain.BASE: "0xE73C4e90983aa65d42b2de968E0C8F25Ced835A8",

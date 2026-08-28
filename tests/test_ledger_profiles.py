@@ -27,6 +27,7 @@ import urllib.request
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from autonomy.chain.base import registry_contracts
 from web3 import Web3
 
@@ -415,10 +416,6 @@ class TestDecoupledActivityCheckers:
         assert set(DECOUPLED_ACTIVITY_CHECKERS) == set(_DECOUPLED_PROGRAMS)
 
     @pytest.mark.integration
-    @pytest.mark.skipif(
-        sys.platform != "linux",
-        reason="OS-independent on-chain check; run once on Linux",
-    )
     @pytest.mark.parametrize(
         ("chain", "program_id", "address"),
         _DECOUPLED_ENTRIES,
@@ -433,12 +430,16 @@ class TestDecoupledActivityCheckers:
 
         USE_OFFCHAIN is derived from this address match, and enabling offchain
         dispatch on a V1 program silently stops its rewards, so both directions
-        matter. Skips (rather than fails) when the public RPC is unreachable.
+        matter.
+
+        Only transport failures skip. A contract-level error (BadFunctionCallOutput)
+        means the configured address has no staking contract on the chain the RPC
+        serves, which is exactly what this test exists to catch, so it fails.
         """
         try:
             checker = _onchain_activity_checker(chain, address)
-        except Exception as error:  # pylint: disable=broad-except
-            pytest.skip(f"RPC activityChecker() failed for {chain.value}: {error}")
+        except requests.exceptions.RequestException as error:
+            pytest.skip(f"RPC unreachable for {chain.value}: {error}")
 
         expected_decoupled = program_id in _DECOUPLED_PROGRAMS[chain]
         assert uses_decoupled_activity(chain, checker) == expected_decoupled, (
