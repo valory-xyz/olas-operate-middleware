@@ -60,6 +60,7 @@ from operate.ledger.profiles import (
     DEFAULT_PRIORITY_MECH,
     OLAS,
     get_staking_contract,
+    uses_decoupled_activity,
 )
 from operate.operate_types import (
     Chain,
@@ -555,6 +556,14 @@ class ServiceManager:
                     "MECH_CONTRACT_ADDRESS": mech_configs.priority_mech_address,
                     "MECH_REQUEST_PRICE": "10000000000000000",
                     "USE_MECH_MARKETPLACE": mech_configs.use_mech_marketplace,
+                    "USE_OFFCHAIN": str(
+                        uses_decoupled_activity(
+                            chain=ledger_config.chain,
+                            activity_checker=target_staking_params.get(
+                                "activity_checker"
+                            ),
+                        )
+                    ).lower(),
                 }
             )
 
