@@ -205,6 +205,18 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
 }
 
 
+# Mirrors the frontend's `frontend/config/activityCheckers.ts`. A new decoupled
+# program batch must be added here, to STAKING, and to _DECOUPLED_PROGRAMS in
+# tests/test_ledger_profiles.py together; miss this table and the agent silently
+# stays on the on-chain path.
+DECOUPLED_ACTIVITY_CHECKERS: t.Dict[Chain, str] = {
+    Chain.GNOSIS: "0x3514EeA47C03dF8d9FdD68A469908755d2870c48",
+    Chain.BASE: "0xE73C4e90983aa65d42b2de968E0C8F25Ced835A8",
+    Chain.OPTIMISM: "0x408dCA2b565f5eC7779C181870feFb51Ed67C3F4",
+    Chain.POLYGON: "0x5B70A66fe68c4c86FFd724B58cc56049c70e9D3D",
+}
+
+
 DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priority mech address and service id
     "0x4554fE75c1f5576c1d7F765B2A036c199Adae329": (
         "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053",
@@ -445,3 +457,12 @@ def get_staking_contract(
         staking_program_id,
         staking_program_id,
     )
+
+
+def uses_decoupled_activity(chain: Chain, activity_checker: t.Optional[str]) -> bool:
+    """Whether the activity checker runs the decoupled-activity (V2) regime."""
+    expected = DECOUPLED_ACTIVITY_CHECKERS.get(chain)
+    if expected is None or activity_checker is None:
+        return False
+
+    return activity_checker.lower() == expected.lower()

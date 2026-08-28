@@ -56,10 +56,12 @@ from operate.keys import KeysManager
 from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
+    DECOUPLED_ACTIVITY_CHECKERS,
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_PRIORITY_MECH,
     OLAS,
     get_staking_contract,
+    uses_decoupled_activity,
 )
 from operate.operate_types import (
     Chain,
@@ -502,6 +504,18 @@ class ServiceManager:
                 staking_program_id=user_params.staking_program_id,
             )
 
+            activity_checker = target_staking_params["activity_checker"]
+            use_offchain = uses_decoupled_activity(
+                chain=ledger_config.chain,
+                activity_checker=activity_checker,
+            )
+            self.logger.info(
+                f"Resolved USE_OFFCHAIN={str(use_offchain).lower()} for staking program "
+                f"{user_params.staking_program_id} on {chain}: activity checker is "
+                f"{activity_checker}, decoupled-activity (V2) checker for this chain is "
+                f"{DECOUPLED_ACTIVITY_CHECKERS.get(ledger_config.chain)}"
+            )
+
             if (
                 "PRIORITY_MECH_ADDRESS" in service.env_variables
                 and service.env_variables["PRIORITY_MECH_ADDRESS"]["provision_type"]
@@ -555,6 +569,7 @@ class ServiceManager:
                     "MECH_CONTRACT_ADDRESS": mech_configs.priority_mech_address,
                     "MECH_REQUEST_PRICE": "10000000000000000",
                     "USE_MECH_MARKETPLACE": mech_configs.use_mech_marketplace,
+                    "USE_OFFCHAIN": str(use_offchain).lower(),
                 }
             )
 

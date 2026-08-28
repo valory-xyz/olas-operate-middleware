@@ -27,12 +27,14 @@ import urllib.request
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from autonomy.chain.base import registry_contracts
 from web3 import Web3
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
 from operate.ledger import NATIVE_CURRENCY_DECIMALS, get_default_rpc
 from operate.ledger.profiles import (
+    DECOUPLED_ACTIVITY_CHECKERS,
     ERC20_TOKENS,
     ERC20_TOKENS_BY_CHAIN_ID,
     OLAS,
@@ -43,6 +45,7 @@ from operate.ledger.profiles import (
     get_asset_decimals,
     get_asset_name,
     get_staking_contract,
+    uses_decoupled_activity,
 )
 from operate.operate_types import Chain
 
@@ -134,6 +137,54 @@ class TestGetStakingContract:
         """Test an unknown staking program ID is returned unchanged (line 383)."""
         result = get_staking_contract("gnosis", "not_a_real_program_xyz")
         assert result == "not_a_real_program_xyz"
+
+
+class TestUsesDecoupledActivity:
+    """Tests for uses_decoupled_activity function."""
+
+    def test_v2_checker_returns_true(self) -> None:
+        """Test the chain's V2 checker is recognised as decoupled."""
+        assert uses_decoupled_activity(
+            Chain.GNOSIS, DECOUPLED_ACTIVITY_CHECKERS[Chain.GNOSIS]
+        )
+
+    def test_checker_match_is_case_insensitive(self) -> None:
+        """Test a non-checksummed V2 checker address still matches."""
+        assert uses_decoupled_activity(
+            Chain.BASE, DECOUPLED_ACTIVITY_CHECKERS[Chain.BASE].lower()
+        )
+
+    def test_v1_checker_returns_false(self) -> None:
+        """Test a legacy V1 checker is not recognised as decoupled."""
+        assert not uses_decoupled_activity(
+            Chain.GNOSIS, "0x155547857680A6D51bebC5603397488988DEb1c8"
+        )
+
+    def test_other_chains_v2_checker_returns_false(self) -> None:
+        """Test the match is chain-scoped.
+
+        Gnosis quickstart_beta_expert_4 (V1) reuses the address that is Base's
+        V2 checker, so a chain-agnostic lookup would wrongly enable offchain
+        dispatch for it.
+        """
+        assert not uses_decoupled_activity(
+            Chain.GNOSIS, DECOUPLED_ACTIVITY_CHECKERS[Chain.BASE]
+        )
+
+    def test_none_activity_checker_returns_false(self) -> None:
+        """Test a missing activity checker is not decoupled."""
+        assert not uses_decoupled_activity(Chain.GNOSIS, None)
+
+    def test_zero_address_returns_false(self) -> None:
+        """Test the fallback ZERO_ADDRESS checker is not decoupled."""
+        assert not uses_decoupled_activity(Chain.GNOSIS, ZERO_ADDRESS)
+
+    def test_chain_without_v2_checker_returns_false(self) -> None:
+        """Test a chain with no registered V2 checker is never decoupled."""
+        assert Chain.MODE not in DECOUPLED_ACTIVITY_CHECKERS
+        assert not uses_decoupled_activity(
+            Chain.MODE, DECOUPLED_ACTIVITY_CHECKERS[Chain.GNOSIS]
+        )
 
 
 PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
@@ -306,6 +357,96 @@ def _onchain_metadata_name(chain: Chain, address: str) -> str:
         f"Could not fetch staking metadata for {chain.value} {address} "
         f"(cid {cid}): {last_error}"
     )
+
+
+_ACTIVITY_CHECKER_ABI = [
+    {
+        "inputs": [],
+        "name": "activityChecker",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
+_DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
+    Chain.GNOSIS: {
+        "omenstrat_i",
+        "omenstrat_ii",
+        "omenstrat_iii",
+        "omenstrat_iv",
+        "omenstrat_v",
+        "omenstrat_vi",
+        "omenstrat_vii",
+    },
+    Chain.BASE: {"basius_i", "basius_ii", "basius_iii"},
+    Chain.OPTIMISM: {"optimus_i", "optimus_ii", "optimus_iii"},
+    Chain.POLYGON: {"polystrat_i", "polystrat_ii", "polystrat_iii"},
+}
+
+_DECOUPLED_ENTRIES = [
+    (chain, program_id, address)
+    for chain, program_id, address in _STAKING_ENTRIES
+    if chain in DECOUPLED_ACTIVITY_CHECKERS
+]
+
+
+def _onchain_activity_checker(chain: Chain, address: str) -> str:
+    """Read activityChecker() off the staking contract."""
+    w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(address), abi=_ACTIVITY_CHECKER_ABI
+    )
+    return contract.functions.activityChecker().call()
+
+
+class TestDecoupledActivityCheckers:
+    """Pin DECOUPLED_ACTIVITY_CHECKERS against the real staking programs."""
+
+    def test_decoupled_programs_reference_real_ids(self) -> None:
+        """The decoupled program allowlist must not name unknown ids (offline)."""
+        for chain, programs in _DECOUPLED_PROGRAMS.items():
+            unknown = programs - set(STAKING.get(chain, {}))
+            assert (
+                not unknown
+            ), f"{chain.value} decoupled list references unknown ids: {sorted(unknown)}"
+
+    def test_every_configured_chain_has_decoupled_programs(self) -> None:
+        """Each chain with a V2 checker must have decoupled programs (offline)."""
+        assert set(DECOUPLED_ACTIVITY_CHECKERS) == set(_DECOUPLED_PROGRAMS)
+
+    @pytest.mark.integration
+    @pytest.mark.parametrize(
+        ("chain", "program_id", "address"),
+        _DECOUPLED_ENTRIES,
+        ids=[
+            f"{chain.value}-{program_id}" for chain, program_id, _ in _DECOUPLED_ENTRIES
+        ],
+    )
+    def test_v2_checker_matches_decoupled_programs(
+        self, chain: Chain, program_id: str, address: str
+    ) -> None:
+        """A program runs the configured V2 checker iff it is decoupled-activity.
+
+        USE_OFFCHAIN is derived from this address match, and enabling offchain
+        dispatch on a V1 program silently stops its rewards, so both directions
+        matter.
+
+        Only transport failures skip. A contract-level error (BadFunctionCallOutput)
+        means the configured address has no staking contract on the chain the RPC
+        serves, which is exactly what this test exists to catch, so it fails.
+        """
+        try:
+            checker = _onchain_activity_checker(chain, address)
+        except requests.exceptions.RequestException as error:
+            pytest.skip(f"RPC unreachable for {chain.value}: {error}")
+
+        expected_decoupled = program_id in _DECOUPLED_PROGRAMS[chain]
+        assert uses_decoupled_activity(chain, checker) == expected_decoupled, (
+            f"{chain.value} {program_id} on-chain activity checker {checker} "
+            f"{'does not match' if expected_decoupled else 'unexpectedly matches'} "
+            f"the configured V2 checker {DECOUPLED_ACTIVITY_CHECKERS[chain]}."
+        )
 
 
 class TestStakingProgramIdConvention:
