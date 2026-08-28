@@ -64,11 +64,13 @@ PASSWORD_STDIN_ARG = "--password-stdin"  # nosec B105
 
 
 def is_github_rate_limited(exc: BaseException) -> bool:
-    """Check whether an exception is a GitHub 403 rate-limit response."""
-    return (
-        isinstance(exc, requests.HTTPError)
-        and getattr(exc.response, "status_code", None) == 403
-    )
+    """Check whether an exception is a GitHub rate-limit response.
+
+    Primary limits answer 403, secondary limits 429.
+    """
+    return isinstance(exc, requests.HTTPError) and getattr(
+        exc.response, "status_code", None
+    ) in (403, 429)
 
 
 class AbstractDeploymentRunner(ABC):
@@ -388,11 +390,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 self.logger.warning(
                     f"Agent setup attempt {attempt}/{max_attempts} failed: {e}"
                 )
-                # 403 = GitHub rate limit; retrying only burns more quota.
+                # Retrying a rate limit only burns more quota.
                 if is_github_rate_limited(e):
                     self.logger.error(
-                        "GitHub API returned 403 (rate limit); "
-                        "aborting retries to preserve quota"
+                        "GitHub API rate limit (HTTP %s); "
+                        "aborting retries to preserve quota",
+                        getattr(e.response, "status_code", None),  # type: ignore[attr-defined]
                     )
                     raise
                 if attempt < max_attempts:
@@ -473,8 +476,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 last_error = e
                 if is_github_rate_limited(e):
                     self.logger.error(
-                        "GitHub API returned 403 (rate limit); "
-                        "aborting deployment start to preserve quota"
+                        "GitHub API rate limit (HTTP %s); "
+                        "aborting deployment start to preserve quota",
+                        getattr(e.response, "status_code", None),  # type: ignore[attr-defined]
                     )
                     raise
         raise RuntimeError(

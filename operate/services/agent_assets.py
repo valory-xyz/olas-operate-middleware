@@ -51,11 +51,7 @@ _release_metadata_cache: Dict[Tuple[str, str, str], Tuple[dict, float]] = {}
 
 
 def clear_release_metadata_cache() -> None:
-    """Clear the release metadata cache.
-
-    Exposed for tests and operational resets — prefer this over reaching
-    into the private ``_release_metadata_cache`` dict directly.
-    """
+    """Clear the release metadata cache, rather than reaching into the private dict."""
     _release_metadata_cache.clear()
 
 
@@ -85,6 +81,7 @@ class AgentRelease:
         if cached is not None and (now - cached[1]) < _CACHE_TTL_SECONDS:
             release_data = cached[0]
         else:
+            _release_metadata_cache.pop(cache_key, None)
             response = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()
             release_data = response.json()
@@ -227,10 +224,18 @@ class AgentAssetManager:
         return asset_path.parent / (asset_path.name + ".sha256")
 
     @classmethod
-    def _write_sidecar(cls, sidecar_path: Path, file_hash: str) -> None:
-        """Record a verified hash; an I/O failure here must not fail the deployment."""
+    def _write_sidecar(cls, sidecar_path: Path, release: str, file_hash: str) -> None:
+        """Record a verified hash; an I/O failure here must not fail the deployment.
+
+        The release tag is stored alongside the hash: while the API is down the
+        expected content hash is unknowable, but the expected tag is not, so it
+        is what lets the fallback tell a current asset from a stale one.
+        """
         try:
-            sidecar_path.write_text(file_hash, encoding="utf-8")
+            sidecar_path.write_text(
+                json.dumps({"release": release, "sha256": file_hash}),
+                encoding="utf-8",
+            )
         except OSError:
             cls.logger.warning(
                 "Failed to write sidecar %s; offline fallback may not work",
@@ -265,7 +270,9 @@ class AgentAssetManager:
                 )
                 # Write sidecar so the offline fallback can validate even
                 # for zips downloaded before this feature shipped.
-                cls._write_sidecar(sidecar_path, remote_file_hash)
+                cls._write_sidecar(
+                    sidecar_path, agent_release.release, remote_file_hash
+                )
                 return
             cls.logger.info(
                 "local and remote files hashes does not match, go to download"
@@ -296,28 +303,31 @@ class AgentAssetManager:
             # untouched so the offline fallback can still use it.
             try:
                 shutil.copy2(tmp_file, target_path)
+                # Inside the guard: a chmod failure would otherwise leave a
+                # correct-but-unexecutable binary that the next run's hash-match
+                # fast path would accept.
+                if (
+                    os.name == "posix" and "agent_runner" in target_filename
+                ):  # pragma: no cover
+                    target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
             except Exception:
                 target_path.unlink(missing_ok=True)
                 raise
-            # Make executable only for agent runner (detect by filename pattern)
-            if (
-                os.name == "posix" and "agent_runner" in target_filename
-            ):  # pragma: no cover
-                target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
 
         # Written outside the download block so a sidecar I/O failure does not
         # destroy the freshly verified asset.
-        cls._write_sidecar(sidecar_path, remote_file_hash)
+        cls._write_sidecar(sidecar_path, agent_release.release, remote_file_hash)
 
     @classmethod
     def _asset_offline_fallback(
-        cls, asset_path: Path, exc: requests.RequestException
+        cls, asset_path: Path, exc: requests.RequestException, expected_release: str
     ) -> str:
         """Validate a cached asset via its .sha256 sidecar when the API is down.
 
         Re-raises the original ``exc`` (preserving its type and ``.response``
         attribute for callers that need 403 detection) when the fallback
-        cannot be used.
+        cannot be used, including when the cached asset belongs to a different
+        release than ``expected_release``.
         """
         sidecar_path = cls._sidecar_path(asset_path)
         if not asset_path.exists():
@@ -336,7 +346,9 @@ class AgentAssetManager:
             )
             raise exc
         try:
-            stored_hash = sidecar_path.read_text(encoding="utf-8").strip()
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            stored_release = sidecar["release"]
+            stored_hash = sidecar["sha256"]
         except OSError as read_exc:
             cls.logger.error(
                 "GitHub API unavailable (%s) and sidecar %s unreadable (%s)",
@@ -345,6 +357,28 @@ class AgentAssetManager:
                 read_exc,
             )
             raise exc from read_exc
+        except (ValueError, KeyError, TypeError) as parse_exc:
+            # Pre-dates the tagged sidecar, so it cannot prove which release the
+            # cached asset belongs to. Refuse rather than risk a stale agent.
+            cls.logger.error(
+                "GitHub API unavailable (%s) and sidecar %s does not record a "
+                "release tag (%s) — cannot confirm the cached %s is current",
+                exc,
+                sidecar_path.name,
+                parse_exc,
+                asset_path.name,
+            )
+            raise exc from parse_exc
+        if stored_release != expected_release:
+            cls.logger.error(
+                "GitHub API unavailable (%s) and cached %s is release %s, but %s "
+                "is configured — refusing to deploy a stale agent",
+                exc,
+                asset_path.name,
+                stored_release,
+                expected_release,
+            )
+            raise exc
         local_hash = cls.get_local_file_sha256(asset_path)
         if stored_hash != local_hash:
             cls.logger.error(
@@ -382,7 +416,9 @@ class AgentAssetManager:
                 agent_release=agent_release,
             )
         except requests.RequestException as exc:
-            return cls._asset_offline_fallback(agent_runner_path, exc)
+            return cls._asset_offline_fallback(
+                agent_runner_path, exc, agent_release.release
+            )
 
         return str(agent_runner_path)
 
@@ -406,7 +442,9 @@ class AgentAssetManager:
                 agent_release=agent_release,
             )
         except requests.RequestException as exc:
-            return cls._asset_offline_fallback(agent_zip_path, exc)
+            return cls._asset_offline_fallback(
+                agent_zip_path, exc, agent_release.release
+            )
 
         return str(agent_zip_path)
 

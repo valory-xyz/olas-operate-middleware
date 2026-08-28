@@ -318,6 +318,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"binary content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -343,6 +344,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -372,6 +374,7 @@ class TestAgentAssetManagerMethods:
         """Test that a missing target file triggers a download."""
         target = tmp_path / "runner"  # does not exist
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -408,6 +411,7 @@ class TestAgentAssetManagerMethods:
         """Test that a hash mismatch after download raises ValueError."""
         target = tmp_path / "runner"
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:EXPECTED",
@@ -436,6 +440,7 @@ class TestAgentAssetManagerMethods:
         """Test that on posix the downloaded file gets executable permission."""
         target = tmp_path / "runner"
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -471,6 +476,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -598,6 +604,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"existing content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -639,6 +646,7 @@ class TestAgentAssetManagerMethods:
         """Test that missing_ok=True handles case when target doesn't exist on exception."""
         target = tmp_path / "runner"  # Does not exist
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -729,6 +737,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -799,7 +808,9 @@ class TestAgentAssetManagerMethods:
             result = AgentAssetManager.get_agent_runner_path(tmp_path)
 
         assert result == "/cached/runner_linux_x64"
-        mock_fallback.assert_called_once_with(tmp_path / "runner_linux_x64", http_error)
+        mock_fallback.assert_called_once_with(
+            tmp_path / "runner_linux_x64", http_error, "v1.0.0"
+        )
 
     def test_get_agent_code_path_module_function(self, tmp_path: Path) -> None:
         """Test module-level get_agent_code_path delegates correctly."""

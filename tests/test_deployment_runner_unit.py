@@ -502,7 +502,9 @@ class TestSetupAgent403EarlyExit:
         zip_path = agent_cache / "agent.zip"
         zip_path.write_bytes(b"valid cached zip")
         real_hash = AgentAssetManager.get_local_file_sha256(zip_path)
-        (agent_cache / "agent.zip.sha256").write_text(real_hash, encoding="utf-8")
+        (agent_cache / "agent.zip.sha256").write_text(
+            json.dumps({"release": "v0.40.7", "sha256": real_hash}), encoding="utf-8"
+        )
 
         mock_403_response = MagicMock()
         mock_403_response.status_code = 403
@@ -609,6 +611,14 @@ class TestIsGithubRateLimited:
         response = MagicMock()
         response.status_code = 403
         assert is_github_rate_limited(req.HTTPError("nope", response=response))
+
+    def test_detects_429_secondary_limit(self) -> None:
+        """Secondary rate limits answer 429, which also counts."""
+        import requests as req
+
+        response = MagicMock()
+        response.status_code = 429
+        assert is_github_rate_limited(req.HTTPError("slow down", response=response))
 
     def test_rejects_other_status_and_types(self) -> None:
         """Other statuses and unrelated exceptions are not rate limits."""

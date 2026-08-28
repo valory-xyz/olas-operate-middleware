@@ -167,7 +167,10 @@ class TestUpdateAgentReleaseAsset:
 
         assert target_path.exists()
         assert sidecar_path.exists()
-        assert sidecar_path.read_text(encoding="utf-8") == expected_hash
+        assert json.loads(sidecar_path.read_text(encoding="utf-8")) == {
+            "release": "v0.40.7",
+            "sha256": expected_hash,
+        }
 
     @patch.object(AgentAssetManager, "get_local_file_sha256")
     def test_sidecar_written_on_hash_match(
@@ -197,7 +200,10 @@ class TestUpdateAgentReleaseAsset:
             )
 
         assert sidecar_path.exists()
-        assert sidecar_path.read_text(encoding="utf-8") == "sha256:abc123"
+        assert json.loads(sidecar_path.read_text(encoding="utf-8")) == {
+            "release": "v0.40.7",
+            "sha256": "sha256:abc123",
+        }
 
 
 class TestGetAgentCodePathFallback:
@@ -225,7 +231,9 @@ class TestGetAgentCodePathFallback:
 
         # Write the correct hash
         real_hash = AgentAssetManager.get_local_file_sha256(zip_path)
-        sidecar_path.write_text(real_hash, encoding="utf-8")
+        sidecar_path.write_text(
+            json.dumps({"release": "v0.40.7", "sha256": real_hash}), encoding="utf-8"
+        )
 
         mock_update.side_effect = requests.ConnectionError("network down")
 
@@ -267,7 +275,10 @@ class TestGetAgentCodePathFallback:
         zip_path = agent_cache / "agent.zip"
         zip_path.write_bytes(b"some content")
         sidecar_path = agent_cache / "agent.zip.sha256"
-        sidecar_path.write_text("sha256:wrong_hash", encoding="utf-8")
+        sidecar_path.write_text(
+            json.dumps({"release": "v0.40.7", "sha256": "sha256:wrong_hash"}),
+            encoding="utf-8",
+        )
 
         mock_update.side_effect = requests.ConnectionError("network down")
 
@@ -343,7 +354,13 @@ class TestGetAgentRunnerPathFallback:
         runner_path.write_bytes(b"cached runner binary")
         sidecar_path = service_dir / (runner_name + ".sha256")
         sidecar_path.write_text(
-            AgentAssetManager.get_local_file_sha256(runner_path), encoding="utf-8"
+            json.dumps(
+                {
+                    "release": "v0.40.7",
+                    "sha256": AgentAssetManager.get_local_file_sha256(runner_path),
+                }
+            ),
+            encoding="utf-8",
         )
 
         response = MagicMock()
@@ -464,7 +481,10 @@ class TestOfflineFallbackSidecarRead:
         asset_path = tmp_path / "agent.zip"
         asset_path.write_bytes(b"cached zip")
         sidecar_path = tmp_path / "agent.zip.sha256"
-        sidecar_path.write_text("sha256:abc123", encoding="utf-8")
+        sidecar_path.write_text(
+            json.dumps({"release": "v0.40.7", "sha256": "sha256:abc123"}),
+            encoding="utf-8",
+        )
 
         response = MagicMock()
         response.status_code = 403
@@ -472,7 +492,9 @@ class TestOfflineFallbackSidecarRead:
 
         with patch.object(Path, "read_text", side_effect=OSError("input/output error")):
             with pytest.raises(requests.HTTPError) as exc_info:
-                AgentAssetManager._asset_offline_fallback(asset_path, original)
+                AgentAssetManager._asset_offline_fallback(
+                    asset_path, original, "v0.40.7"
+                )
 
         assert exc_info.value is original
         assert exc_info.value.response.status_code == 403
@@ -484,22 +506,122 @@ class TestStaleSidecarRemoval:
     def test_failed_write_removes_stale_sidecar(self, tmp_path: Path) -> None:
         """A stale sidecar is removed so the fallback reports a missing one."""
         sidecar_path = tmp_path / "agent.zip.sha256"
-        sidecar_path.write_text("sha256:previous-version", encoding="utf-8")
+        sidecar_path.write_text(
+            json.dumps({"release": "v0.40.6", "sha256": "sha256:previous"}),
+            encoding="utf-8",
+        )
 
         with patch.object(Path, "write_text", side_effect=OSError("disk full")):
-            AgentAssetManager._write_sidecar(sidecar_path, "sha256:new-version")
+            AgentAssetManager._write_sidecar(
+                sidecar_path, "v0.40.7", "sha256:new-version"
+            )
 
         assert not sidecar_path.exists()
 
     def test_unlink_failure_is_tolerated(self, tmp_path: Path) -> None:
         """A read-only filesystem blocks the cleanup without raising."""
         sidecar_path = tmp_path / "agent.zip.sha256"
-        sidecar_path.write_text("sha256:previous-version", encoding="utf-8")
+        sidecar_path.write_text(
+            json.dumps({"release": "v0.40.6", "sha256": "sha256:previous"}),
+            encoding="utf-8",
+        )
 
         with (
             patch.object(Path, "write_text", side_effect=OSError("read-only")),
             patch.object(Path, "unlink", side_effect=OSError("read-only")),
         ):
-            AgentAssetManager._write_sidecar(sidecar_path, "sha256:new-version")
+            AgentAssetManager._write_sidecar(
+                sidecar_path, "v0.40.7", "sha256:new-version"
+            )
 
         assert sidecar_path.exists()
+
+
+class TestFallbackRejectsWrongRelease:
+    """Tests that the offline fallback refuses an asset from another release."""
+
+    def _make_asset(self, tmp_path: Path, sidecar: object) -> Path:
+        asset_path = tmp_path / "agent.zip"
+        asset_path.write_bytes(b"cached zip")
+        sidecar_path = tmp_path / "agent.zip.sha256"
+        if isinstance(sidecar, str):
+            sidecar_path.write_text(sidecar, encoding="utf-8")
+        else:
+            sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+        return asset_path
+
+    def _error(self) -> requests.HTTPError:
+        response = MagicMock()
+        response.status_code = 403
+        return requests.HTTPError("403 rate limited", response=response)
+
+    def test_stale_release_is_refused(self, tmp_path: Path) -> None:
+        """A cached asset from the previous release must not be deployed."""
+        asset_path = self._make_asset(
+            tmp_path, {"release": "v0.40.7", "sha256": "ignored"}
+        )
+        original = self._error()
+
+        with pytest.raises(requests.HTTPError) as exc_info:
+            AgentAssetManager._asset_offline_fallback(asset_path, original, "v0.41.0")
+
+        assert exc_info.value is original
+
+    def test_matching_release_is_accepted(self, tmp_path: Path) -> None:
+        """A cached asset for the configured release still serves the fallback."""
+        asset_path = tmp_path / "agent.zip"
+        asset_path.write_bytes(b"cached zip")
+        real_hash = AgentAssetManager.get_local_file_sha256(asset_path)
+        (tmp_path / "agent.zip.sha256").write_text(
+            json.dumps({"release": "v0.41.0", "sha256": real_hash}), encoding="utf-8"
+        )
+
+        result = AgentAssetManager._asset_offline_fallback(
+            asset_path, self._error(), "v0.41.0"
+        )
+
+        assert result == str(asset_path)
+
+    def test_legacy_untagged_sidecar_is_refused(self, tmp_path: Path) -> None:
+        """A pre-tag sidecar cannot prove the release, so it is not trusted."""
+        asset_path = self._make_asset(tmp_path, "sha256:abc123")
+        original = self._error()
+
+        with pytest.raises(requests.HTTPError) as exc_info:
+            AgentAssetManager._asset_offline_fallback(asset_path, original, "v0.40.7")
+
+        assert exc_info.value is original
+
+    def test_sidecar_missing_release_key_is_refused(self, tmp_path: Path) -> None:
+        """Valid JSON without a release tag is treated the same as a legacy file."""
+        asset_path = self._make_asset(tmp_path, {"sha256": "sha256:abc123"})
+        original = self._error()
+
+        with pytest.raises(requests.HTTPError) as exc_info:
+            AgentAssetManager._asset_offline_fallback(asset_path, original, "v0.40.7")
+
+        assert exc_info.value is original
+
+
+class TestCacheEviction:
+    """Tests that expired cache entries are dropped rather than left behind."""
+
+    @patch("operate.services.agent_assets.requests.get")
+    def test_expired_entry_is_evicted_on_refetch(self, mock_get: MagicMock) -> None:
+        """An expired entry is removed before the refetch replaces it."""
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = VALID_RELEASE_DATA
+        response.raise_for_status.return_value = None
+        response.text = json.dumps(VALID_RELEASE_DATA)
+        mock_get.return_value = response
+
+        release = AgentRelease(
+            owner="valory-xyz", repo="trader", release="v0.40.7", is_aea=True
+        )
+        with patch("operate.services.agent_assets.time.monotonic", return_value=0.0):
+            release.get_url_and_hash("agent.zip")
+        with patch("operate.services.agent_assets.time.monotonic", return_value=1e9):
+            release.get_url_and_hash("agent.zip")
+
+        assert mock_get.call_count == 2
