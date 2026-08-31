@@ -765,7 +765,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"success": True}, status_code=HTTPStatus.OK)
 
     @app.get("/api/account")
-    async def _get_account(request: Request) -> t.Dict:
+    async def _get_account(request: Request) -> JSONResponse:
         """Get account information."""
 
         def _fn() -> JSONResponse:
@@ -1510,15 +1510,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         def _fn() -> JSONResponse:
-            return JSONResponse(
-                content=(
-                    operate.service_manager()
-                    .load(
-                        service_config_id=service_config_id,
-                    )
-                    .json
-                )
+            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
+            service = operate.service_manager().load(
+                service_config_id=service_config_id,
             )
+            return JSONResponse(content=service.json)
 
         return await run_in_executor(_fn)
 
@@ -1531,6 +1527,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         def _fn() -> JSONResponse:
+            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
             service = operate.service_manager().load(
                 service_config_id=service_config_id
             )
@@ -1550,6 +1547,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         def _fn() -> JSONResponse:
+            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
             service = operate.service_manager().load(
                 service_config_id=service_config_id
             )
@@ -1613,11 +1611,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         def _fn() -> JSONResponse:
-            return JSONResponse(
-                content=operate.service_manager()
-                .load(service_config_id=service_config_id)
-                .get_agent_performance()
+            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
+            service = operate.service_manager().load(
+                service_config_id=service_config_id
             )
+            return JSONResponse(content=service.get_agent_performance())
 
         return await run_in_executor(_fn)
 
@@ -1630,11 +1628,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         def _fn() -> JSONResponse:
-            return JSONResponse(
-                content=operate.service_manager().funding_requirements(
-                    service_config_id=service_config_id
-                )
+            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
+            content = operate.service_manager().funding_requirements(
+                service_config_id=service_config_id
             )
+            return JSONResponse(content=content)
 
         return await run_in_executor(_fn)
 
