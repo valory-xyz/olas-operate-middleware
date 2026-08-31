@@ -1330,8 +1330,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        result = wallet.sync_backup_owner()
-        return JSONResponse(content=result)
+        def _fn() -> JSONResponse:
+            result = wallet.sync_backup_owner()
+            return JSONResponse(content=result)
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/wallet/safe/backup_owner/status")
     async def _backup_owner_status(
@@ -1351,9 +1354,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
-        result = wallet.backup_owner_status()
-        return JSONResponse(content=result)
+        def _fn() -> JSONResponse:
+            wallet = manager.load(ledger_type=LedgerType.ETHEREUM)
+            result = wallet.backup_owner_status()
+            return JSONResponse(content=result)
+
+        return await run_in_executor(_fn)
 
     @app.post("/api/wallet/withdraw")
     async def _wallet_withdraw(request: Request) -> JSONResponse:
@@ -1433,28 +1439,36 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/v2/services/validate")
     async def _validate_services(request: Request) -> JSONResponse:
         """Validate all services."""
-        service_manager = operate.service_manager()
-        service_ids = service_manager.get_all_service_ids()
-        _services = [
-            service.service_config_id
-            for service in service_manager.get_all_services()[0]
-        ]
 
-        return JSONResponse(
-            content={service_id: service_id in _services for service_id in service_ids}
-        )
+        def _fn() -> JSONResponse:
+            service_manager = operate.service_manager()
+            service_ids = service_manager.get_all_service_ids()
+            _services = [
+                service.service_config_id
+                for service in service_manager.get_all_services()[0]
+            ]
+            return JSONResponse(
+                content={
+                    service_id: service_id in _services for service_id in service_ids
+                }
+            )
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/v2/services/deployment")
     async def _get_services_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
-        service_manager = operate.service_manager()
-        output = {}
-        for service in service_manager.get_all_services()[0]:
-            deployment_json = service.deployment.json
-            deployment_json["healthcheck"] = service.get_latest_healthcheck()
-            output[service.service_config_id] = deployment_json
 
-        return JSONResponse(content=output)
+        def _fn() -> JSONResponse:
+            service_manager = operate.service_manager()
+            output = {}
+            for service in service_manager.get_all_services()[0]:
+                deployment_json = service.deployment.json
+                deployment_json["healthcheck"] = service.get_latest_healthcheck()
+                output[service.service_config_id] = deployment_json
+            return JSONResponse(content=output)
+
+        return await run_in_executor(_fn)
 
     @service_router.get("/api/v2/service/{service_config_id}")
     async def _get_service(
@@ -1555,11 +1569,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        return JSONResponse(
-            content=operate.service_manager()
-            .load(service_config_id=service_config_id)
-            .get_agent_performance()
-        )
+        def _fn() -> JSONResponse:
+            return JSONResponse(
+                content=operate.service_manager()
+                .load(service_config_id=service_config_id)
+                .get_agent_performance()
+            )
+
+        return await run_in_executor(_fn)
 
     @service_router.get("/api/v2/service/{service_config_id}/funding_requirements")
     async def _get_funding_requirements(
@@ -1569,11 +1586,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        return JSONResponse(
-            content=operate.service_manager().funding_requirements(
-                service_config_id=service_config_id
+        def _fn() -> JSONResponse:
+            return JSONResponse(
+                content=operate.service_manager().funding_requirements(
+                    service_config_id=service_config_id
+                )
             )
-        )
+
+        return await run_in_executor(_fn)
 
     # TODO deprecate
     @service_router.get("/api/v2/service/{service_config_id}/refill_requirements")
@@ -1584,11 +1604,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        return JSONResponse(
-            content=operate.service_manager().refill_requirements(
-                service_config_id=service_config_id
+        def _fn() -> JSONResponse:
+            return JSONResponse(
+                content=operate.service_manager().refill_requirements(
+                    service_config_id=service_config_id
+                )
             )
-        )
+
+        return await run_in_executor(_fn)
 
     @app.post("/api/v2/service")
     async def _create_services_v2(request: Request) -> JSONResponse:
@@ -1610,13 +1633,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        pause_all_services()
         manager = operate.service_manager()
 
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
         def _fn() -> None:
+            pause_all_services()
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             logger.info("Deploy onchain")
             manager.deploy_service_onchain_from_safe(
