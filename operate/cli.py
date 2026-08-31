@@ -708,12 +708,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api")
     async def _get_api(request: Request) -> JSONResponse:
         """Get API info."""
-        return JSONResponse(content=operate.json)
+
+        def _fn() -> JSONResponse:
+            return JSONResponse(content=operate.json)
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/settings")
     async def _get_settings(request: Request) -> JSONResponse:
         """Get settings."""
-        return JSONResponse(content=operate.settings.json)
+
+        def _fn() -> JSONResponse:
+            return JSONResponse(content=operate.settings.json)
+
+        return await run_in_executor(_fn)
 
     # --- Pearl Store API ---
     # Backed by .operate/pearl_store.json so it migrates with the .operate folder.
@@ -759,7 +767,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/account")
     async def _get_account(request: Request) -> t.Dict:
         """Get account information."""
-        return {"is_setup": operate.user_account is not None}
+
+        def _fn() -> JSONResponse:
+            return JSONResponse(content={"is_setup": operate.user_account is not None})
+
+        return await run_in_executor(_fn)
 
     @app.post("/api/account")
     async def _setup_account(request: Request) -> t.Dict:
@@ -875,10 +887,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/wallet")
     async def _get_wallets(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
-        wallets = []
-        for wallet in operate.wallet_manager:
-            wallets.append(wallet.json)
-        return JSONResponse(content=wallets)
+
+        def _fn() -> JSONResponse:
+            wallets = []
+            for wallet in operate.wallet_manager:
+                wallets.append(wallet.json)
+            return JSONResponse(content=wallets)
+
+        return await run_in_executor(_fn)
 
     @app.post("/api/wallet")
     async def _create_wallet(request: Request) -> t.List[t.Dict]:
@@ -961,45 +977,56 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/wallet/extended")
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
-        wallets = []
-        for wallet in operate.wallet_manager:
-            wallets.append(wallet.extended_json)
-        return JSONResponse(content=wallets)
+
+        def _fn() -> JSONResponse:
+            wallets = []
+            for wallet in operate.wallet_manager:
+                wallets.append(wallet.extended_json)
+            return JSONResponse(content=wallets)
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/wallet/safe")
     async def _get_safes(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        all_safes = []
-        for wallet in operate.wallet_manager:
-            safes = []
-            if wallet.safes is not None:
-                safes = list(wallet.safes.values())
-            all_safes.append({wallet.ledger_type: safes})
-        return JSONResponse(content=all_safes)
+
+        def _fn() -> JSONResponse:
+            all_safes = []
+            for wallet in operate.wallet_manager:
+                safes = []
+                if wallet.safes is not None:
+                    safes = list(wallet.safes.values())
+                all_safes.append({wallet.ledger_type: safes})
+            return JSONResponse(content=all_safes)
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/wallet/safe/{chain}")
     async def _get_safe(request: Request) -> t.List[t.Dict]:
         """Get safe address"""
-        chain = Chain.from_string(request.path_params["chain"])
-        ledger_type = chain.ledger_type
-        manager = operate.wallet_manager
-        if not manager.exists(ledger_type=ledger_type):
+
+        def _fn() -> JSONResponse:
+            chain = Chain.from_string(request.path_params["chain"])
+            ledger_type = chain.ledger_type
+            manager = operate.wallet_manager
+            if not manager.exists(ledger_type=ledger_type):
+                return JSONResponse(
+                    content={"error": "No Master EOA found for this chain."},
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
+            safes = manager.load(ledger_type=ledger_type).safes
+            if safes is None or safes.get(chain) is None:
+                return JSONResponse(
+                    content={"error": "No Master Safe found for this chain."},
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
             return JSONResponse(
-                content={"error": "No Master EOA found for this chain."},
-                status_code=HTTPStatus.NOT_FOUND,
-            )
-        safes = manager.load(ledger_type=ledger_type).safes
-        if safes is None or safes.get(chain) is None:
-            return JSONResponse(
-                content={"error": "No Master Safe found for this chain."},
-                status_code=HTTPStatus.NOT_FOUND,
+                content={
+                    "safe": safes[chain],
+                },
             )
 
-        return JSONResponse(
-            content={
-                "safe": safes[chain],
-            },
-        )
+        return await run_in_executor(_fn)
 
     @app.post("/api/wallet/safe")
     async def _create_safe(  # pylint: disable=too-many-return-statements
@@ -1434,7 +1461,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/v2/services")
     async def _get_services(request: Request) -> JSONResponse:
         """Get all services."""
-        return JSONResponse(content=operate.service_manager().json)
+
+        def _fn() -> JSONResponse:
+            return JSONResponse(content=operate.service_manager().json)
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/v2/services/validate")
     async def _validate_services(request: Request) -> JSONResponse:
@@ -1477,15 +1508,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get a service."""
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
-        return JSONResponse(
-            content=(
-                operate.service_manager()
-                .load(
-                    service_config_id=service_config_id,
+
+        def _fn() -> JSONResponse:
+            return JSONResponse(
+                content=(
+                    operate.service_manager()
+                    .load(
+                        service_config_id=service_config_id,
+                    )
+                    .json
                 )
-                .json
             )
-        )
+
+        return await run_in_executor(_fn)
 
     @service_router.get("/api/v2/service/{service_config_id}/deployment")
     async def _get_service_deployment(
@@ -1495,10 +1530,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        service = operate.service_manager().load(service_config_id=service_config_id)
-        deployment_json = service.deployment.json
-        deployment_json["healthcheck"] = service.get_latest_healthcheck()
-        return JSONResponse(content=deployment_json)
+        def _fn() -> JSONResponse:
+            service = operate.service_manager().load(
+                service_config_id=service_config_id
+            )
+            deployment_json = service.deployment.json
+            deployment_json["healthcheck"] = service.get_latest_healthcheck()
+            return JSONResponse(content=deployment_json)
+
+        return await run_in_executor(_fn)
 
     @service_router.get("/api/v2/service/{service_config_id}/achievements")
     async def _get_service_achievements(
@@ -1509,13 +1549,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        service = operate.service_manager().load(service_config_id=service_config_id)
+        def _fn() -> JSONResponse:
+            service = operate.service_manager().load(
+                service_config_id=service_config_id
+            )
+            achievements_json = service.get_achievements_notifications(
+                include_acknowledged=include_acknowledged,
+            )
+            return JSONResponse(content=achievements_json)
 
-        achievements_json = service.get_achievements_notifications(
-            include_acknowledged=include_acknowledged,
-        )
-
-        return JSONResponse(content=achievements_json)
+        return await run_in_executor(_fn)
 
     @service_router.post(
         "/api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge"
@@ -1838,7 +1881,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        try:
+        def _fn() -> None:
             pause_all_services()
             service = service_manager.load(service_config_id=service_config_id)
             for chain in service.chain_configs:
@@ -1854,6 +1897,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     withdrawal_address=master_safe,
                 )
 
+        try:
+            await run_in_executor(_fn)
         except InsufficientFundsException as e:
             logger.error(
                 f"Failed to terminate service and withdraw funds. Insufficient funds: {e}\n{traceback.format_exc()}"
@@ -2178,8 +2223,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/bridge/last_executed_bundle_id")
     async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
         """Get last executed bundle id."""
-        content = {"id": operate.bridge_manager.last_executed_bundle_id()}
-        return JSONResponse(content=content, status_code=HTTPStatus.OK)
+
+        def _fn() -> JSONResponse:
+            content = {"id": operate.bridge_manager.last_executed_bundle_id()}
+            return JSONResponse(content=content, status_code=HTTPStatus.OK)
+
+        return await run_in_executor(_fn)
 
     @app.get("/api/bridge/status/{id}")
     async def _bridge_status(request: Request) -> JSONResponse:
@@ -2187,13 +2236,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         quote_bundle_id = request.path_params["id"]
 
-        try:
+        def _fn() -> JSONResponse:
             output = operate.bridge_manager.get_status_json(bundle_id=quote_bundle_id)
-
             return JSONResponse(
                 content=output,
                 status_code=HTTPStatus.OK,
             )
+
+        try:
+            return await run_in_executor(_fn)
         except ValueError as e:
             logger.error(f"Bridge status error: {e}")
             return JSONResponse(
@@ -2254,12 +2305,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _get_recovery_funding_requirements(request: Request) -> JSONResponse:
         """Get recovery funding requirements."""
 
-        try:
+        def _fn() -> JSONResponse:
             output = operate.wallet_recovery_manager.recovery_requirements()
             return JSONResponse(
                 content=output,
                 status_code=HTTPStatus.OK,
             )
+
+        try:
+            return await run_in_executor(_fn)
         except Exception as e:  # pylint: disable=broad-except
             logger.error(
                 f"_recovery_funding_requirements error: {e}\n{traceback.format_exc()}"
@@ -2275,12 +2329,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _get_recovery_status(request: Request) -> JSONResponse:
         """Get recovery status."""
 
-        try:
+        def _fn() -> JSONResponse:
             output = operate.wallet_recovery_manager.status()
             return JSONResponse(
                 content=output,
                 status_code=HTTPStatus.OK,
             )
+
+        try:
+            return await run_in_executor(_fn)
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"_recovery_status error: {e}\n{traceback.format_exc()}")
             return JSONResponse(
