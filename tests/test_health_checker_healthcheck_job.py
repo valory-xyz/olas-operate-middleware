@@ -557,7 +557,7 @@ class TestHealthCheckerNestedAsyncFunctions:
     async def test_restart_failfast_calls_stop_and_reraises(
         self, health_checker: HealthChecker
     ) -> None:
-        """Test failfast triggers _stop and re-raises the restart exception (lines 269-280, 312-317)."""
+        """Test failfast triggers _stop and raises a RuntimeError (lines 269-280, 312-317)."""
         health_checker.number_of_fails = 1
         call_count = [0]
 
@@ -576,7 +576,7 @@ class TestHealthCheckerNestedAsyncFunctions:
             patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
             patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
-            with pytest.raises(RuntimeError, match="deploy failed"):
+            with pytest.raises(RuntimeError, match="stopped by failfast"):
                 await health_checker.healthcheck_job("test-service")
 
         # stop_service_locally called at least once (inside _restart + inside _stop)
