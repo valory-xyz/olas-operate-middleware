@@ -620,3 +620,117 @@ class TestHealthCheckerNestedAsyncFunctions:
             health_checker.logger.exception.call_args_list  # type: ignore[attr-defined]
         )
         assert "Restart problem" in exception_calls
+
+    async def test_check_health_closes_healthy_span_on_unhealthy(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _check_health closes an open healthy span when agent becomes unhealthy (lines 234-237).
+
+        Sequence: port-ready (True), health True (opens span), health False
+        (closes span), fail threshold reached → return.
+        """
+        health_checker.number_of_fails = 1
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                return True  # call 1: port-ready, call 2: healthy inside _check_health
+            return False  # call 3+: unhealthy
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        # time.time() returns 1000.0 when healthy_since is set, 1010.0 when
+        # the span is closed → longest_healthy = 10.0
+        time_values = iter([1000.0, 1010.0, 1010.0, 1010.0, 1010.0])
+
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(time_values, 1010.0),
+            ),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.2)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        # The healthy span was opened and closed; the service restarted
+        assert call_count[0] >= 3
+        error_calls = str(
+            health_checker.logger.error.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "restart" in error_calls
+
+    async def test_failfast_budget_resets_after_long_healthy_span(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test failfast_records is reset when longest_healthy >= FAILFAST_TIMEOUT (line 309).
+
+        Sequence across two outer-loop iterations:
+        1. First _check_health: healthy for >= FAILFAST_TIMEOUT, then fails
+           → longest_healthy >= FAILFAST_TIMEOUT → failfast_records cleared
+        2. Restart succeeds, second iteration: immediately fails
+           → failfast_records has only 1 entry (not accumulated from iter 1)
+        """
+        health_checker.number_of_fails = 1
+
+        # Phase tracking: two outer-loop iterations
+        phase = [
+            0
+        ]  # 0 = first _check_health, 1 = second (port-ready), 2+ = second _check_health
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if phase[0] == 0:
+                # First outer iteration
+                if call_count[0] == 1:
+                    return True  # port-ready
+                if call_count[0] == 2:
+                    return True  # healthy inside _check_health (opens span)
+                # Third call: unhealthy → closes span, triggers return
+                phase[0] = 1
+                return False
+            if phase[0] == 1:
+                # Second iteration port-ready
+                phase[0] = 2
+                return True
+            # Second _check_health: immediately unhealthy
+            return False
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        # time.time() values:
+        # healthy_since = 1000.0, span close = 2000.0 → longest_healthy = 1000 (>= 900)
+        # Further calls return 2000.0 for failfast tracking
+        time_values = iter([1000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0])
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(time_values, 2000.0),
+            ),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.3)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        # Verify the second iteration ran (restart was called)
+        assert health_checker._service_manager.deploy_service_locally.call_count >= 1

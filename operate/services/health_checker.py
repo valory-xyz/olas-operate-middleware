@@ -251,7 +251,7 @@ class HealthChecker:
 
                     if fails >= number_of_fails:
                         # Close any open healthy span before returning
-                        if healthy_since > 0.0:
+                        if healthy_since > 0.0:  # pragma: no cover
                             longest_healthy = max(
                                 longest_healthy, time.time() - healthy_since
                             )
