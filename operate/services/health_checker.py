@@ -205,8 +205,11 @@ class HealthChecker:
 
             async def _check_health(
                 number_of_fails: int = 5, sleep_period: int = self.sleep_period
-            ) -> None:
+            ) -> float:
+                """Check health in a loop; return the longest continuous healthy span (seconds)."""
                 fails = 0
+                longest_healthy: float = 0.0
+                healthy_since: float = 0.0
                 while True:
                     try:
                         # Check the service health
@@ -226,6 +229,12 @@ class HealthChecker:
                         healthy = False
 
                     if not healthy:
+                        # Close any open healthy span
+                        if healthy_since > 0.0:
+                            longest_healthy = max(
+                                longest_healthy, time.time() - healthy_since
+                            )
+                            healthy_since = 0.0
                         fails += 1
                         if fails == 1 or fails % 10 == 0 or fails >= number_of_fails:
                             self.logger.warning(
@@ -235,15 +244,21 @@ class HealthChecker:
                         self.logger.debug(
                             f"[HEALTH_CHECKER] {service_config_id} is HEALTHY"
                         )
-                        # reset fails if comes healty
+                        if healthy_since == 0.0:
+                            healthy_since = time.time()
+                        # reset fails if comes healthy
                         fails = 0
 
                     if fails >= number_of_fails:
-                        # too much fails, exit
+                        # Close any open healthy span before returning
+                        if healthy_since > 0.0:
+                            longest_healthy = max(
+                                longest_healthy, time.time() - healthy_since
+                            )
                         self.logger.error(
                             f"[HEALTH_CHECKER]  {service_config_id} failed {fails} times in a row. restart"
                         )
-                        return
+                        return longest_healthy
 
                     await asyncio.sleep(sleep_period)
 
@@ -281,11 +296,17 @@ class HealthChecker:
                     self.logger.info(
                         f"[HEALTH_CHECKER]  {service_config_id} port is ready, checking health every {self.sleep_period}"
                     )
-                    failfast_records = []
-                    await _check_health(
+                    longest_healthy = await _check_health(
                         number_of_fails=self.number_of_fails,
                         sleep_period=self.sleep_period,
                     )
+                    # Only reset the failfast budget when the agent was
+                    # genuinely healthy for at least FAILFAST_TIMEOUT.
+                    # A short healthy span (e.g. 10 min in the restart-loop
+                    # incident) keeps the budget accumulating so the
+                    # escalation eventually fires.
+                    if longest_healthy >= self.FAILFAST_TIMEOUT:
+                        failfast_records = []
 
                 else:
                     self.logger.info(
@@ -293,22 +314,36 @@ class HealthChecker:
                     )
 
                 # perform restart
-                # TODO: blocking!!!!!!!
                 while True:
-                    # we count every restart till success (port is up and healtcheck started)
                     failfast_records.append(time.time())
+                    restart_failed = False
                     try:
                         await _restart(self._service_manager, service_config_id)
-                        break
                     except Exception:  # pylint: disable=broad-except
-                        if (len(failfast_records) >= self.FAILFAST_NUM) or (
-                            time.time() - failfast_records[0]
-                        ) > self.FAILFAST_TIMEOUT:
-                            await _stop(self._service_manager, service_config_id)
-                            raise
-
+                        restart_failed = True
                         self.logger.exception(f"Restart problem: {service_config_id}")
-                        await asyncio.sleep(30)
+
+                    # Check failfast unconditionally — whether the restart
+                    # succeeded or failed.  A restart that succeeds
+                    # mechanically but leaves the agent unhealthy must still
+                    # count toward the escalation budget.
+                    if (len(failfast_records) >= self.FAILFAST_NUM) or (
+                        time.time() - failfast_records[0]
+                    ) > self.FAILFAST_TIMEOUT:
+                        self.logger.error(
+                            f"[HEALTH_CHECKER] {service_config_id} failfast triggered "
+                            f"({len(failfast_records)} restarts). Stopping service."
+                        )
+                        await _stop(self._service_manager, service_config_id)
+                        raise RuntimeError(
+                            f"Service {service_config_id} stopped by failfast after "
+                            f"{len(failfast_records)} restarts"
+                        )
+
+                    if not restart_failed:
+                        break
+
+                    await asyncio.sleep(30)
 
         except Exception:
             self.logger.exception(
