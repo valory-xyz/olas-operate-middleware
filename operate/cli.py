@@ -121,6 +121,8 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryManager,
 )
 
+T = t.TypeVar("T")
+
 # TODO Backport to Open Autonomy
 autonomy.chain.tx.ERRORS_TO_RETRY |= {"replacement transaction underpriced"}
 
@@ -519,7 +521,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     )
     thread_pool_executor = ThreadPoolExecutor(max_workers=12)
 
-    async def run_in_executor(fn: t.Callable, *args: t.Any) -> t.Any:
+    async def run_in_executor(fn: t.Callable[..., T], *args: t.Any) -> T:
         loop = asyncio.get_event_loop()
         future = loop.run_in_executor(thread_pool_executor, fn, *args)
         res = await future
@@ -1574,33 +1576,38 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        service = operate.service_manager().load(service_config_id=service_config_id)
+        safe_id = validated_safe_id(service_config_id)
+        safe_achievement_id = validated_safe_id(achievement_id)
 
-        try:
-            service.acknowledge_achievement(
-                achievement_id=achievement_id,
-            )
-        except KeyError:
+        def _fn() -> JSONResponse:
+            service = operate.service_manager().load(service_config_id=safe_id)
+            try:
+                service.acknowledge_achievement(
+                    achievement_id=safe_achievement_id,
+                )
+            except KeyError:
+                return JSONResponse(
+                    content={
+                        "error": f"Achievement {safe_achievement_id} does not exist for service {safe_id}."
+                    },
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
+            except ValueError:
+                return JSONResponse(
+                    content={
+                        "error": f"Achievement {safe_achievement_id} was already acknowledged for service {safe_id}."
+                    },
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
+
             return JSONResponse(
                 content={
-                    "error": f"Achievement {achievement_id} does not exist for service {service_config_id}."
-                },
-                status_code=HTTPStatus.NOT_FOUND,
-            )
-        except ValueError:
-            return JSONResponse(
-                content={
-                    "error": f"Achievement {achievement_id} was already acknowledged for service {service_config_id}."
-                },
-                status_code=HTTPStatus.BAD_REQUEST,
+                    "error": None,
+                    "message": f"Acknowledged achievement_id {safe_achievement_id} for service {safe_id} successfully.",
+                }
             )
 
-        return JSONResponse(
-            content={
-                "error": None,
-                "message": f"Acknowledged achievement_id {achievement_id} for service {service_config_id} successfully.",
-            }
-        )
+        return await run_in_executor(_fn)
 
     @service_router.get("/api/v2/service/{service_config_id}/agent_performance")
     async def _get_agent_performance(
@@ -1645,10 +1652,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> JSONResponse:
             return JSONResponse(
                 content=operate.service_manager().refill_requirements(
-                    service_config_id=service_config_id
+                    service_config_id=safe_id
                 )
             )
 
@@ -1679,15 +1688,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> None:
             pause_all_services()
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             logger.info("Deploy onchain")
-            manager.deploy_service_onchain_from_safe(
-                service_config_id=service_config_id
-            )
+            manager.deploy_service_onchain_from_safe(service_config_id=safe_id)
             logger.info("Deploy locally")
-            manager.deploy_service_locally(service_config_id=service_config_id)
+            manager.deploy_service_locally(service_config_id=safe_id)
             logger.info("Deployed")
 
         try:
@@ -1710,7 +1719,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={"error": "Failed to deploy service. Please check the logs."},
             )
 
-        schedule_healthcheck_job(service_config_id=service_config_id)
+        schedule_healthcheck_job(service_config_id=safe_id)
 
         return JSONResponse(
             content=(
@@ -1769,10 +1778,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        service = operate.service_manager().load(service_config_id=service_config_id)
+        safe_id = validated_safe_id(service_config_id)
+
+        service = operate.service_manager().load(service_config_id=safe_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        health_checker.stop_for_service(service_config_id=service_config_id)
+        health_checker.stop_for_service(service_config_id=safe_id)
 
         await run_in_executor(deployment.stop)
         logger.info(f"Cancelling funding job for {service_config_id}")
@@ -1879,18 +1890,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> None:
             pause_all_services()
-            service = service_manager.load(service_config_id=service_config_id)
+            service = service_manager.load(service_config_id=safe_id)
             for chain in service.chain_configs:
                 wallet = wallet_manager.load(Chain(chain).ledger_type)
                 master_safe = wallet.safes[Chain(chain)]
                 service_manager.terminate_service_on_chain_from_safe(
-                    service_config_id=service_config_id,
+                    service_config_id=safe_id,
                     chain=chain,
                 )
                 service_manager.drain(
-                    service_config_id=service_config_id,
+                    service_config_id=safe_id,
                     chain_str=chain,
                     withdrawal_address=master_safe,
                 )

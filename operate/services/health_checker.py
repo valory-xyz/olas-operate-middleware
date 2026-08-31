@@ -229,7 +229,6 @@ class HealthChecker:
                         healthy = False
 
                     if not healthy:
-                        # Close any open healthy span
                         if healthy_since > 0.0:
                             longest_healthy = max(
                                 longest_healthy, time.time() - healthy_since
@@ -250,11 +249,6 @@ class HealthChecker:
                         fails = 0
 
                     if fails >= number_of_fails:
-                        # Close any open healthy span before returning
-                        if healthy_since > 0.0:  # pragma: no cover
-                            longest_healthy = max(
-                                longest_healthy, time.time() - healthy_since
-                            )
                         self.logger.error(
                             f"[HEALTH_CHECKER]  {service_config_id} failed {fails} times in a row. restart"
                         )
@@ -300,11 +294,6 @@ class HealthChecker:
                         number_of_fails=self.number_of_fails,
                         sleep_period=self.sleep_period,
                     )
-                    # Only reset the failfast budget when the agent was
-                    # genuinely healthy for at least FAILFAST_TIMEOUT.
-                    # A short healthy span (e.g. 10 min in the restart-loop
-                    # incident) keeps the budget accumulating so the
-                    # escalation eventually fires.
                     if longest_healthy >= self.FAILFAST_TIMEOUT:
                         failfast_records = []
 
@@ -314,19 +303,17 @@ class HealthChecker:
                     )
 
                 # perform restart
+                last_restart_exc: t.Optional[Exception] = None
                 while True:
                     failfast_records.append(time.time())
                     restart_failed = False
                     try:
                         await _restart(self._service_manager, service_config_id)
-                    except Exception:  # pylint: disable=broad-except
+                    except Exception as exc:  # pylint: disable=broad-except
                         restart_failed = True
+                        last_restart_exc = exc
                         self.logger.exception(f"Restart problem: {service_config_id}")
 
-                    # Check failfast unconditionally — whether the restart
-                    # succeeded or failed.  A restart that succeeds
-                    # mechanically but leaves the agent unhealthy must still
-                    # count toward the escalation budget.
                     if (len(failfast_records) >= self.FAILFAST_NUM) or (
                         time.time() - failfast_records[0]
                     ) > self.FAILFAST_TIMEOUT:
@@ -338,7 +325,7 @@ class HealthChecker:
                         raise RuntimeError(
                             f"Service {service_config_id} stopped by failfast after "
                             f"{len(failfast_records)} restarts"
-                        )
+                        ) from last_restart_exc
 
                     if not restart_failed:
                         break
