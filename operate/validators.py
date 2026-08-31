@@ -68,3 +68,17 @@ def safe_resolved_path(value: str) -> Path:
     if not isinstance(value, str) or not SAFE_FS_PATH_RE.fullmatch(value):
         raise UnsafePathError(f"Unsafe filesystem path: {value!r}")
     return Path(value).resolve()
+
+
+def validated_safe_id(value: str) -> str:
+    """Return *value* unchanged after asserting it matches :data:`SAFE_ID_RE`.
+
+    This function exists as an explicit taint-sanitisation boundary for static
+    analysis tools (SnykCode) that do not recognise FastAPI path-parameter
+    validators or middleware-level checks (``ValidatedServiceRoute``) as
+    sanitisation.  It is intentionally redundant with those layers; do **not**
+    remove it without verifying that the SnykCode CI check still passes.
+    """
+    if not SAFE_ID_RE.fullmatch(value):
+        raise ValueError(f"Unsafe identifier: {value!r}")
+    return value

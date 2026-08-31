@@ -113,6 +113,7 @@ from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
     SAFE_ID_RE,
+    validated_safe_id,
 )
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
@@ -1509,10 +1510,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> JSONResponse:
-            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
             service = operate.service_manager().load(
-                service_config_id=service_config_id,
+                service_config_id=safe_id,
             )
             return JSONResponse(content=service.json)
 
@@ -1526,11 +1528,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> JSONResponse:
-            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
-            service = operate.service_manager().load(
-                service_config_id=service_config_id
-            )
+            service = operate.service_manager().load(service_config_id=safe_id)
             deployment_json = service.deployment.json
             deployment_json["healthcheck"] = service.get_latest_healthcheck()
             return JSONResponse(content=deployment_json)
@@ -1546,11 +1547,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> JSONResponse:
-            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
-            service = operate.service_manager().load(
-                service_config_id=service_config_id
-            )
+            service = operate.service_manager().load(service_config_id=safe_id)
             achievements_json = service.get_achievements_notifications(
                 include_acknowledged=include_acknowledged,
             )
@@ -1610,11 +1610,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> JSONResponse:
-            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
-            service = operate.service_manager().load(
-                service_config_id=service_config_id
-            )
+            service = operate.service_manager().load(service_config_id=safe_id)
             return JSONResponse(content=service.get_agent_performance())
 
         return await run_in_executor(_fn)
@@ -1627,10 +1626,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         def _fn() -> JSONResponse:
-            # deepcode ignore PT, CommandInjection, Ssrf: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
             content = operate.service_manager().funding_requirements(
-                service_config_id=service_config_id
+                service_config_id=safe_id
             )
             return JSONResponse(content=content)
 
@@ -1940,9 +1940,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         try:
-            # deepcode ignore PT, CommandInjection: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
-            service = service_manager.load(service_config_id=service_config_id)
+            service = service_manager.load(service_config_id=safe_id)
 
             def _get_balances() -> t.Dict[str, t.Any]:
                 balances: t.Dict[str, t.Any] = {}
@@ -2006,9 +2007,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
+        safe_id = validated_safe_id(service_config_id)
+
         try:
-            # deepcode ignore PT, CommandInjection: service_config_id is validated by ValidatedServiceRoute + FastApiPath(pattern=SAFE_ID_PATTERN)
-            service = service_manager.load(service_config_id=service_config_id)
+            service = service_manager.load(service_config_id=safe_id)
 
             succeeded_chains: t.List[str] = []
 
