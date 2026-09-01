@@ -888,7 +888,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/wallet")
-    async def _get_wallets(request: Request) -> t.List[t.Dict]:
+    async def _get_wallets(request: Request) -> JSONResponse:
         """Get wallets."""
 
         def _fn() -> JSONResponse:
@@ -978,7 +978,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.get("/api/wallet/extended")
-    async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
+    async def _get_wallet_safe(request: Request) -> JSONResponse:
         """Get wallets."""
 
         def _fn() -> JSONResponse:
@@ -990,7 +990,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return await run_in_executor(_fn)
 
     @app.get("/api/wallet/safe")
-    async def _get_safes(request: Request) -> t.List[t.Dict]:
+    async def _get_safes(request: Request) -> JSONResponse:
         """Create wallet safe"""
 
         def _fn() -> JSONResponse:
@@ -1005,7 +1005,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return await run_in_executor(_fn)
 
     @app.get("/api/wallet/safe/{chain}")
-    async def _get_safe(request: Request) -> t.List[t.Dict]:
+    async def _get_safe(request: Request) -> JSONResponse:
         """Get safe address"""
 
         def _fn() -> JSONResponse:
@@ -2234,7 +2234,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.get("/api/bridge/last_executed_bundle_id")
-    async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
+    async def _bridge_last_executed_bundle_id(request: Request) -> JSONResponse:
         """Get last executed bundle id."""
 
         def _fn() -> JSONResponse:

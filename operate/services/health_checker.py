@@ -55,6 +55,7 @@ class HealthChecker:
         """Init the healtch checker."""
         self._jobs: t.Dict[str, asyncio.Task] = {}
         self._jobs_lock = threading.Lock()  # Protect _jobs dict operations
+        self._loop: t.Optional[asyncio.AbstractEventLoop] = None
         self._service_manager = service_manager
         self.logger = logger
         self.port_up_timeout = port_up_timeout or self.PORT_UP_TIMEOUT_DEFAULT
@@ -81,6 +82,7 @@ class HealthChecker:
 
             # Create new job
             loop = asyncio.get_running_loop()
+            self._loop = loop
             self._jobs[service_config_id] = loop.create_task(
                 self.healthcheck_job(
                     service_config_id=service_config_id,
@@ -98,11 +100,16 @@ class HealthChecker:
                 f"[HEALTH_CHECKER]: Cancelling existing healthcheck_jobs job for {service_config_id}"
             )
             task = self._jobs[service_config_id]
-            status = task.cancel()
-            if not status:
-                self.logger.info(
-                    f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
-                )
+            # Use call_soon_threadsafe so cancellation is safe from any thread
+            # (pool workers call this via pause_all_services)
+            if self._loop is not None and self._loop.is_running():
+                self._loop.call_soon_threadsafe(task.cancel)
+            else:
+                status = task.cancel()
+                if not status:
+                    self.logger.info(
+                        f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
+                    )
             # Remove from dict - task will handle cancellation
             del self._jobs[service_config_id]
 
