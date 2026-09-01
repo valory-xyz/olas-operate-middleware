@@ -984,7 +984,7 @@ class ServiceManager:
             # --- Settle ---
             try:
                 mega_tx.settle()
-            except Exception:
+            except Exception as settle_error:
                 self.logger.error("Mega-batch reverted, running revert attribution")
                 errors: t.List[str] = []
                 try:
@@ -1011,7 +1011,7 @@ class ServiceManager:
                         "Service deployment failed: the multisig creator "
                         "contract is not whitelisted on-chain. "
                         "Contact support."
-                    )
+                    ) from settle_error
                 raise
 
             mega_batch_done = True
