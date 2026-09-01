@@ -99,4 +99,4 @@ MSG_SAFE_EXISTS_TRANSFER_FAILED = (
 )
 MSG_SAFE_EXISTS_AND_FUNDED = "Safe already exists and is sufficiently funded."
 
-POLY_SAFE_SERVICE_NAMES = frozenset(("polymarket_trader",))
+POLY_SAFE_SERVICE_NAMES = frozenset()
