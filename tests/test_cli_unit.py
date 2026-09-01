@@ -43,6 +43,7 @@ from operate.cli import (
     service_not_found_error,
 )
 from operate.constants import OPERATE, SERVICES_DIR, ZERO_ADDRESS
+from operate.exceptions import UnauthorizedMultisigException
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus
@@ -1926,6 +1927,25 @@ class TestServiceRoutes:
             assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
             assert body["chain"] == "gnosis"
             assert "prefill_amount_wei" in body
+
+    def test_deploy_service_unauthorized_multisig(self) -> None:
+        """Deploy returns structured 400 with error_code on UnauthorizedMultisigException."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            UnauthorizedMultisigException(
+                "Service deployment failed: the multisig creator "
+                "contract is not whitelisted on-chain. Contact support."
+            )
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.BAD_REQUEST
+            body = resp.json()
+            assert body["error_code"] == "UNAUTHORIZED_MULTISIG"
+            assert "not whitelisted" in body["error"]
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""

@@ -25,8 +25,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from operate.constants import ZERO_ADDRESS
-from operate.exceptions import InsufficientFundsException
+from operate.constants import POLY_SAFE_SERVICE_NAMES, ZERO_ADDRESS
+from operate.exceptions import InsufficientFundsException, UnauthorizedMultisigException
 from operate.operate_types import (
     Chain,
     DeploymentStatus,
@@ -1611,3 +1611,26 @@ class TestStakeBatching:
         tx = sftxb.new_tx.return_value
         assert tx.add.call_count == 3
         tx.settle.assert_called_once()
+
+
+class TestPolySafeServiceNames:
+    """Tests for POLY_SAFE_SERVICE_NAMES constant."""
+
+    def test_poly_safe_service_names_is_empty(self) -> None:
+        """POLY_SAFE_SERVICE_NAMES must be empty after PolySafe de-whitelisting."""
+        assert POLY_SAFE_SERVICE_NAMES == frozenset()
+
+
+class TestUnauthorizedMultisigException:
+    """Tests for UnauthorizedMultisigException."""
+
+    def test_str_returns_message(self) -> None:
+        """__str__ returns only the human-readable message."""
+        exc = UnauthorizedMultisigException("deployment failed")
+        assert str(exc) == "deployment failed"
+
+    def test_to_error_fields(self) -> None:
+        """to_error_fields returns the expected error_code."""
+        exc = UnauthorizedMultisigException("deployment failed")
+        fields = exc.to_error_fields()
+        assert fields == {"error_code": "UNAUTHORIZED_MULTISIG"}
