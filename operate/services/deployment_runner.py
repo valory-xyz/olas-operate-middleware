@@ -63,6 +63,16 @@ from .agent_assets import AgentAssetManager, get_agent_code_path, get_agent_runn
 PASSWORD_STDIN_ARG = "--password-stdin"  # nosec B105
 
 
+def is_github_rate_limited(exc: BaseException) -> bool:
+    """Check whether an exception is a GitHub rate-limit response.
+
+    Primary limits answer 403, secondary limits 429.
+    """
+    return isinstance(exc, requests.HTTPError) and getattr(
+        exc.response, "status_code", None
+    ) in (403, 429)
+
+
 class AbstractDeploymentRunner(ABC):
     """Abstract deployment runner."""
 
@@ -304,14 +314,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     working_dir / "agent" / "ethereum_private_key.txt"
                 )
 
-                # Clear agent directory before each attempt to avoid partial state
                 agent_alias_name = "agent"
                 agent_dir_full_path = Path(working_dir) / agent_alias_name
-                if agent_dir_full_path.exists():
-                    with suppress(Exception):
-                        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
 
                 if not self._is_aea:  # pragma: no cover
+                    # Clear agent directory for a clean start (matches AEA branch)
+                    self._clear_agent_dir(agent_dir_full_path)
                     # copy key here
                     # Add keys securely
                     secure_copy_private_key(
@@ -382,6 +390,14 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 self.logger.warning(
                     f"Agent setup attempt {attempt}/{max_attempts} failed: {e}"
                 )
+                # Retrying a rate limit only burns more quota.
+                if is_github_rate_limited(e):
+                    self.logger.error(
+                        "GitHub API rate limit (HTTP %s); "
+                        "aborting retries to preserve quota",
+                        getattr(e.response, "status_code", None),  # type: ignore[attr-defined]
+                    )
+                    raise
                 if attempt < max_attempts:
                     sleep_time = attempt * 5
                     self.logger.info(f"Retrying agent setup in {sleep_time} seconds...")
@@ -389,6 +405,17 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 else:
                     self.logger.error(f"All {max_attempts} agent setup attempts failed")
                     raise
+
+    def _clear_agent_dir(self, agent_dir_full_path: Path) -> None:
+        """Clear the agent directory; a partial clear must be visible in the logs."""
+        if not agent_dir_full_path.exists():
+            return
+        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+        if agent_dir_full_path.exists():
+            self.logger.warning(
+                f"Agent directory {agent_dir_full_path} was not fully cleared; "
+                "it may still hold files from a previous agent version"
+            )
 
     def prepare_agent_sources(
         self, working_dir: Path, private_key_in_agent: Path, agent_dir_full_path: Path
@@ -408,6 +435,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self.logger.info("Checking and downloading agent zip!")
         agent_zip_path = Path(get_agent_code_path(service_dir))
         self.logger.info(f"Agentsource zip file is {agent_zip_path}")
+        # Clear agent directory before extraction so each attempt starts clean.
+        self._clear_agent_dir(agent_dir_full_path)
         AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
 
         # Ensure parent directory exists before trying to delete file
@@ -437,15 +466,24 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def start(self, password: str) -> None:
         """Start the deployment with retries."""
+        last_error: t.Optional[BaseException] = None
         for _ in range(self.START_TRIES):
             try:
                 self._start(password=password)
                 return
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.exception(f"Error on starting deployment: {e}")
+                last_error = e
+                if is_github_rate_limited(e):
+                    self.logger.error(
+                        "GitHub API rate limit (HTTP %s); "
+                        "aborting deployment start to preserve quota",
+                        getattr(e.response, "status_code", None),  # type: ignore[attr-defined]
+                    )
+                    raise
         raise RuntimeError(
             f"Failed to start the deployment after {self.START_TRIES} attempts! Check logs"
-        )
+        ) from last_error
 
     def _start(self, password: str) -> None:
         """Start the deployment."""

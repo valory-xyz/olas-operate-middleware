@@ -27,17 +27,32 @@ import shutil
 import stat
 import sys
 import sysconfig
+import time
 import zipfile
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Tuple
+from typing import Dict, Tuple
 
 import requests
 from aea.configurations.data_types import PublicId
 from aea.helpers.logging import setup_logger
 
 from operate.constants import AGENT_RUNNER_PREFIX, CONFIG_JSON, DEFAULT_TIMEOUT
+
+# In-process cache for release metadata keyed by (owner, repo, release).
+# Each entry stores the response dict and a monotonic timestamp so the cache
+# can be invalidated after ``_CACHE_TTL_SECONDS``.  Release assets *can* be
+# replaced under the same tag, so a TTL prevents serving stale URLs/hashes
+# indefinitely in a long-running daemon.
+_CACHE_TTL_SECONDS = 300  # 5 minutes
+_release_metadata_cache: Dict[Tuple[str, str, str], Tuple[dict, float]] = {}
+
+
+def clear_release_metadata_cache() -> None:
+    """Clear the release metadata cache, rather than reaching into the private dict."""
+    _release_metadata_cache.clear()
 
 
 @dataclass
@@ -54,9 +69,30 @@ class AgentRelease:
         """Get release  api url."""
         return f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/tags/{self.release}"
 
+    def invalidate_cache(self) -> None:
+        """Drop this release's cached metadata so the next lookup refetches."""
+        _release_metadata_cache.pop((self.owner, self.repo, self.release), None)
+
     def get_url_and_hash(self, asset_name: str) -> tuple[str, str]:
         """Get download url and asset sha256 hash."""
-        release_data = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT).json()
+        cache_key = (self.owner, self.repo, self.release)
+        cached = _release_metadata_cache.get(cache_key)
+        now = time.monotonic()
+        if cached is not None and (now - cached[1]) < _CACHE_TTL_SECONDS:
+            release_data = cached[0]
+        else:
+            _release_metadata_cache.pop(cache_key, None)
+            response = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            release_data = response.json()
+            if "assets" not in release_data:
+                body_preview = response.text[:200]
+                raise ValueError(
+                    f"GitHub release response for {self.release_url} "
+                    f"(status {response.status_code}) missing 'assets' key. "
+                    f"Body: {body_preview}"
+                )
+            _release_metadata_cache[cache_key] = (release_data, now)
 
         assets_filtered = [i for i in release_data["assets"] if i["name"] == asset_name]
         if not assets_filtered:
@@ -182,6 +218,34 @@ class AgentAssetManager:
                 sha256_hash.update(byte_block)
         return "sha256:" + sha256_hash.hexdigest()
 
+    @staticmethod
+    def _sidecar_path(asset_path: Path) -> Path:
+        """Get the path of the .sha256 sidecar recording an asset's verified hash."""
+        return asset_path.parent / (asset_path.name + ".sha256")
+
+    @classmethod
+    def _write_sidecar(cls, sidecar_path: Path, release: str, file_hash: str) -> None:
+        """Record a verified hash; an I/O failure here must not fail the deployment.
+
+        The release tag is stored alongside the hash: while the API is down the
+        expected content hash is unknowable, but the expected tag is not, so it
+        is what lets the fallback tell a current asset from a stale one.
+        """
+        try:
+            sidecar_path.write_text(
+                json.dumps({"release": release, "sha256": file_hash}),
+                encoding="utf-8",
+            )
+        except OSError:
+            cls.logger.warning(
+                "Failed to write sidecar %s; offline fallback may not work",
+                sidecar_path,
+            )
+            # A leftover sidecar would claim the previous version's hash, so the
+            # fallback would report a mismatch rather than a missing sidecar.
+            with suppress(OSError):
+                sidecar_path.unlink(missing_ok=True)
+
     @classmethod
     def update_agent_release_asset(
         cls,
@@ -195,12 +259,19 @@ class AgentAssetManager:
             agent_release_asset_name
         )
 
+        sidecar_path = cls._sidecar_path(target_path)
+
         if target_path.exists():
             # check sha
             current_file_hash = cls.get_local_file_sha256(target_path)
             if remote_file_hash == current_file_hash:
                 cls.logger.info(
                     "local and remote files hashes are match, nothing to download"
+                )
+                # Write sidecar so the offline fallback can validate even
+                # for zips downloaded before this feature shipped.
+                cls._write_sidecar(
+                    sidecar_path, agent_release.release, remote_file_hash
                 )
                 return
             cls.logger.info(
@@ -209,62 +280,172 @@ class AgentAssetManager:
         else:
             cls.logger.info("local file not found, go to download")
 
-        try:
-            with TemporaryDirectory() as tmp_dir:
-                tmp_file = Path(tmp_dir) / target_filename
-                cls.download_file(download_url, tmp_file)
-                # Verify hash of downloaded file
-                downloaded_hash = cls.get_local_file_sha256(tmp_file)
-                if downloaded_hash != remote_file_hash:
-                    raise ValueError(
-                        f"Hash verification failed for {target_filename}!\n"
-                        f"Expected: {remote_file_hash}\n"
-                        f"Got:      {downloaded_hash}\n"
-                        f"Downloaded file may be corrupted or tampered."
-                    )
-                cls.logger.info(f"Hash verification passed: {downloaded_hash}")
+        with TemporaryDirectory() as tmp_dir:
+            tmp_file = Path(tmp_dir) / target_filename
+            cls.download_file(download_url, tmp_file)
+            # Verify hash of downloaded file
+            downloaded_hash = cls.get_local_file_sha256(tmp_file)
+            if downloaded_hash != remote_file_hash:
+                # The cached digest may predate an asset re-upload under the
+                # same tag; drop it so a retry refetches instead of failing
+                # identically for the rest of the TTL window.
+                agent_release.invalidate_cache()
+                raise ValueError(
+                    f"Hash verification failed for {target_filename}!\n"
+                    f"Expected: {remote_file_hash}\n"
+                    f"Got:      {downloaded_hash}\n"
+                    f"Downloaded file may be corrupted or tampered."
+                )
+            cls.logger.info(f"Hash verification passed: {downloaded_hash}")
+            # copy2 writes to target_path; clean up only if it started
+            # writing (a partial copy leaves a corrupt file).  Errors
+            # before this point (download, hash verify) leave target_path
+            # untouched so the offline fallback can still use it.
+            try:
                 shutil.copy2(tmp_file, target_path)
-                # Make executable only for agent runner (detect by filename pattern)
+                # Inside the guard: a chmod failure would otherwise leave a
+                # correct-but-unexecutable binary that the next run's hash-match
+                # fast path would accept.
                 if (
                     os.name == "posix" and "agent_runner" in target_filename
                 ):  # pragma: no cover
                     target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
-        except Exception:
-            # remove in case of errors
-            if target_path.exists():
+            except Exception:
                 target_path.unlink(missing_ok=True)
-            raise
+                raise
+
+        # Written outside the download block so a sidecar I/O failure does not
+        # destroy the freshly verified asset.
+        cls._write_sidecar(sidecar_path, agent_release.release, remote_file_hash)
+
+    @classmethod
+    def _asset_offline_fallback(
+        cls, asset_path: Path, exc: requests.RequestException, expected_release: str
+    ) -> str:
+        """Validate a cached asset via its .sha256 sidecar when the API is down.
+
+        Re-raises the original ``exc`` (preserving its type and ``.response``
+        attribute for callers that need 403 detection) when the fallback
+        cannot be used, including when the cached asset belongs to a different
+        release than ``expected_release``.
+        """
+        sidecar_path = cls._sidecar_path(asset_path)
+        if not asset_path.exists():
+            cls.logger.error(
+                "GitHub API unavailable (%s) and no cached %s found",
+                exc,
+                asset_path.name,
+            )
+            raise exc
+        if not sidecar_path.exists():
+            cls.logger.error(
+                "GitHub API unavailable (%s) and no .sha256 sidecar "
+                "found for cached %s — cannot verify integrity",
+                exc,
+                asset_path.name,
+            )
+            raise exc
+        try:
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            stored_release = sidecar["release"]
+            stored_hash = sidecar["sha256"]
+        except OSError as read_exc:
+            cls.logger.error(
+                "GitHub API unavailable (%s) and sidecar %s unreadable (%s)",
+                exc,
+                sidecar_path.name,
+                read_exc,
+            )
+            raise exc from read_exc
+        except (ValueError, KeyError, TypeError) as parse_exc:
+            # Pre-dates the tagged sidecar, so it cannot prove which release the
+            # cached asset belongs to. Refuse rather than risk a stale agent.
+            cls.logger.error(
+                "GitHub API unavailable (%s) and sidecar %s does not record a "
+                "release tag (%s) — cannot confirm the cached %s is current",
+                exc,
+                sidecar_path.name,
+                parse_exc,
+                asset_path.name,
+            )
+            raise exc from parse_exc
+        if stored_release != expected_release:
+            cls.logger.error(
+                "GitHub API unavailable (%s) and cached %s is release %s, but %s "
+                "is configured — refusing to deploy a stale agent",
+                exc,
+                asset_path.name,
+                stored_release,
+                expected_release,
+            )
+            raise exc
+        local_hash = cls.get_local_file_sha256(asset_path)
+        if stored_hash != local_hash:
+            cls.logger.error(
+                "GitHub API unavailable (%s) and cached %s hash mismatch "
+                "(expected %s, got %s)",
+                exc,
+                asset_path.name,
+                stored_hash,
+                local_hash,
+            )
+            raise exc
+        cls.logger.warning(
+            "GitHub API unavailable; using cached %s, last-known-good hash verified",
+            asset_path.name,
+        )
+        return str(asset_path)
 
     @classmethod
     def get_agent_runner_path(cls, service_dir: Path) -> str:
-        """Get path to the agent runner bin placed."""
+        """Get path to the agent runner bin placed.
+
+        Falls back to a cached binary validated via its .sha256 sidecar
+        when the GitHub API is unreachable (network error, 403 rate limit, etc.).
+        """
         cls.log_runner_environment_details()
         agent_runner_name = cls.get_agent_runner_executable_name()
         agent_runner_path: Path = service_dir / agent_runner_name
         agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
 
-        cls.update_agent_release_asset(
-            target_path=agent_runner_path,
-            agent_release_asset_name=agent_runner_name,
-            target_filename=agent_runner_name,
-            agent_release=agent_release,
-        )
+        try:
+            cls.update_agent_release_asset(
+                target_path=agent_runner_path,
+                agent_release_asset_name=agent_runner_name,
+                target_filename=agent_runner_name,
+                agent_release=agent_release,
+            )
+        except requests.RequestException as exc:
+            return cls._asset_offline_fallback(
+                agent_runner_path, exc, agent_release.release
+            )
+
         return str(agent_runner_path)
 
     @classmethod
     def get_agent_code_path(cls, service_dir: Path) -> str:
-        """Get path to the agent code zip archive."""
+        """Get path to the agent code zip archive.
+
+        Falls back to a cached agent.zip validated via its .sha256 sidecar
+        when the GitHub API is unreachable (network error, 403 rate limit, etc.).
+        """
         agent_cache_dir = service_dir / "agent_cache"
         agent_cache_dir.mkdir(exist_ok=True)
         agent_zip_path: Path = agent_cache_dir / "agent.zip"
         agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
 
-        cls.update_agent_release_asset(
-            target_path=agent_zip_path,
-            agent_release_asset_name="agent.zip",
-            target_filename="agent.zip",
-            agent_release=agent_release,
-        )
+        try:
+            cls.update_agent_release_asset(
+                target_path=agent_zip_path,
+                agent_release_asset_name="agent.zip",
+                target_filename="agent.zip",
+                agent_release=agent_release,
+            )
+        except requests.RequestException as exc:
+            return cls._asset_offline_fallback(
+                agent_zip_path, exc, agent_release.release
+            )
+
         return str(agent_zip_path)
 
     @staticmethod

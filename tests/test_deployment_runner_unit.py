@@ -33,6 +33,7 @@ from operate.services.deployment_runner import (
     PyInstallerHostDeploymentRunnerMac,
     PyInstallerHostDeploymentRunnerWindows,
     States,
+    is_github_rate_limited,
     run_host_deployment,
     stop_deployment_manager,
     stop_host_deployment,
@@ -430,3 +431,201 @@ class TestModuleLevelFunctions:
         with patch.object(dr.deployment_manager, "stop") as mock_stop:
             stop_deployment_manager()
         mock_stop.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 403-aware early exit in _setup_agent
+# ---------------------------------------------------------------------------
+
+
+class TestSetupAgent403EarlyExit:
+    """Tests for 403 early exit in BaseDeploymentRunner._setup_agent."""
+
+    def test_403_aborts_without_sleep(self, tmp_path: Path) -> None:
+        """HTTP 403 propagates through get_agent_code_path and aborts the retry loop."""
+        import requests as req
+
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+
+        mock_403_response = MagicMock()
+        mock_403_response.status_code = 403
+        http_error = req.HTTPError("403 rate limited", response=mock_403_response)
+
+        with (
+            patch.object(
+                runner,
+                "_prepare_agent_env",
+                return_value={},
+            ),
+            # Mock get_agent_code_path (not prepare_agent_sources) so the
+            # test exercises the real exception-handling chain.
+            patch(
+                "operate.services.deployment_runner.get_agent_code_path",
+                side_effect=http_error,
+            ),
+            patch("operate.services.deployment_runner.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(req.HTTPError):
+                runner._setup_agent(password="pass")  # nosec B106
+
+        mock_sleep.assert_not_called()
+
+    def test_403_with_valid_cache_completes_setup(self, tmp_path: Path) -> None:
+        """HTTP 403 with a valid cached zip + sidecar completes agent setup."""
+        import json
+
+        import requests as req
+
+        from operate.services.agent_assets import AgentAssetManager
+
+        # Build a minimal service dir with config.json, agent_cache, and cached zip
+        service_dir = tmp_path / "service"
+        build_dir = service_dir / "build"
+        build_dir.mkdir(parents=True)
+        (build_dir / "agent.json").write_text("{}", encoding="utf-8")
+        (build_dir / "ethereum_private_key.txt").write_text("dummy", encoding="utf-8")
+
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.40.7",
+                },
+            }
+        }
+        (service_dir / "config.json").write_text(json.dumps(config))
+
+        agent_cache = service_dir / "agent_cache"
+        agent_cache.mkdir()
+        zip_path = agent_cache / "agent.zip"
+        zip_path.write_bytes(b"valid cached zip")
+        real_hash = AgentAssetManager.get_local_file_sha256(zip_path)
+        (agent_cache / "agent.zip.sha256").write_text(
+            json.dumps({"release": "v0.40.7", "sha256": real_hash}), encoding="utf-8"
+        )
+
+        mock_403_response = MagicMock()
+        mock_403_response.status_code = 403
+        http_error = req.HTTPError("403 rate limited", response=mock_403_response)
+
+        runner = PyInstallerHostDeploymentRunnerMac(build_dir, is_aea=True)
+
+        with (
+            patch.object(runner, "_prepare_agent_env", return_value={}),
+            patch.object(
+                AgentAssetManager, "update_agent_release_asset", side_effect=http_error
+            ),
+            patch.object(AgentAssetManager, "extract_agent_zip"),
+            patch.object(runner, "_run_aea_command"),
+            patch("operate.services.deployment_runner.secure_copy_private_key"),
+            patch("operate.services.deployment_runner.time.sleep") as mock_sleep,
+        ):
+            runner._setup_agent(password="pass")  # nosec B106
+
+        mock_sleep.assert_not_called()
+
+
+class TestClearAgentDir:
+    """Tests for BaseDeploymentRunner._clear_agent_dir."""
+
+    def _runner(self, tmp_path: Path) -> PyInstallerHostDeploymentRunnerMac:
+        return PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+
+    def test_missing_dir_is_a_noop(self, tmp_path: Path) -> None:
+        """A directory that does not exist needs no removal."""
+        runner = self._runner(tmp_path)
+        with patch("operate.services.deployment_runner.shutil.rmtree") as mock_rmtree:
+            runner._clear_agent_dir(tmp_path / "absent")
+        mock_rmtree.assert_not_called()
+
+    def test_existing_dir_is_removed(self, tmp_path: Path) -> None:
+        """An existing directory is removed and nothing is logged."""
+        runner = self._runner(tmp_path)
+        agent_dir = tmp_path / "agent"
+        agent_dir.mkdir()
+        (agent_dir / "stale.txt").write_text("stale", encoding="utf-8")
+
+        with patch.object(runner, "logger") as mock_logger:
+            runner._clear_agent_dir(agent_dir)
+
+        assert not agent_dir.exists()
+        mock_logger.warning.assert_not_called()
+
+    def test_partial_clear_is_logged(self, tmp_path: Path) -> None:
+        """A directory that survives removal must produce a warning."""
+        runner = self._runner(tmp_path)
+        agent_dir = tmp_path / "agent"
+        agent_dir.mkdir()
+
+        with (
+            patch("operate.services.deployment_runner.shutil.rmtree") as mock_rmtree,
+            patch.object(runner, "logger") as mock_logger,
+        ):
+            runner._clear_agent_dir(agent_dir)
+
+        mock_rmtree.assert_called_once()
+        mock_logger.warning.assert_called_once()
+        assert "not fully cleared" in mock_logger.warning.call_args[0][0]
+
+
+class TestStart403Awareness:
+    """Tests for 403 handling in BaseDeploymentRunner.start."""
+
+    def test_403_aborts_start_without_further_tries(self, tmp_path: Path) -> None:
+        """A rate-limited start must not spend the remaining START_TRIES."""
+        import requests as req
+
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+        response = MagicMock()
+        response.status_code = 403
+        http_error = req.HTTPError("403 rate limited", response=response)
+
+        with patch.object(runner, "_start", side_effect=http_error) as mock_start:
+            with pytest.raises(req.HTTPError):
+                runner.start(password="pass")  # nosec B106
+
+        assert mock_start.call_count == 1
+
+    def test_other_errors_still_retry_and_chain_the_cause(self, tmp_path: Path) -> None:
+        """Non-403 failures exhaust the retries and keep the last error as cause."""
+        runner = PyInstallerHostDeploymentRunnerMac(tmp_path, is_aea=True)
+        boom = ValueError("boom")
+
+        with patch.object(runner, "_start", side_effect=boom) as mock_start:
+            with pytest.raises(RuntimeError) as exc_info:
+                runner.start(password="pass")  # nosec B106
+
+        assert mock_start.call_count == runner.START_TRIES
+        assert exc_info.value.__cause__ is boom
+
+
+class TestIsGithubRateLimited:
+    """Tests for the shared 403 predicate."""
+
+    def test_detects_403_http_error(self) -> None:
+        """An HTTPError carrying a 403 response is a rate limit."""
+        import requests as req
+
+        response = MagicMock()
+        response.status_code = 403
+        assert is_github_rate_limited(req.HTTPError("nope", response=response))
+
+    def test_detects_429_secondary_limit(self) -> None:
+        """Secondary rate limits answer 429, which also counts."""
+        import requests as req
+
+        response = MagicMock()
+        response.status_code = 429
+        assert is_github_rate_limited(req.HTTPError("slow down", response=response))
+
+    def test_rejects_other_status_and_types(self) -> None:
+        """Other statuses and unrelated exceptions are not rate limits."""
+        import requests as req
+
+        response = MagicMock()
+        response.status_code = 500
+        assert not is_github_rate_limited(req.HTTPError("nope", response=response))
+        assert not is_github_rate_limited(req.HTTPError("no response", response=None))
+        assert not is_github_rate_limited(ValueError("unrelated"))
