@@ -77,6 +77,7 @@ from operate.constants import (
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
+from operate.exceptions import UnauthorizedMultisigException
 from operate.keys import KeysManager
 from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
@@ -1637,6 +1638,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     "error": "Failed to deploy service due to insufficient funds.",
                     **e.to_error_fields(),
                 },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except UnauthorizedMultisigException as e:
+            logger.error(
+                f"Deploy failed. Unauthorized multisig: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e), **e.to_error_fields()},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
