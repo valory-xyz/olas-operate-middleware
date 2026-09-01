@@ -52,7 +52,6 @@ from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
-from operate.exceptions import UnauthorizedMultisigException
 from operate.keys import KeysManager
 from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
@@ -984,9 +983,8 @@ class ServiceManager:
             # --- Settle ---
             try:
                 mega_tx.settle()
-            except Exception as settle_error:
+            except Exception:
                 self.logger.error("Mega-batch reverted, running revert attribution")
-                errors: t.List[str] = []
                 try:
                     for label, sub_tx in mega_tx.labeled_txs:
                         error = simulate_safe_sub_tx(
@@ -998,20 +996,12 @@ class ServiceManager:
                             self.logger.error(
                                 f"Mega-batch sub-tx '{label}' would revert: " f"{error}"
                             )
-                            errors.append(error)
                 except Exception as attribution_error:  # pylint: disable=broad-except
                     # Diagnostics-only; never mask the original settle failure.
                     self.logger.warning(
                         "Revert attribution failed "
                         f"({type(attribution_error).__name__}: {attribution_error})"
                     )
-
-                if any("UnauthorizedMultisig" in e for e in errors):
-                    raise UnauthorizedMultisigException(
-                        "Service deployment failed: the multisig creator "
-                        "contract is not whitelisted on-chain. "
-                        "Contact support."
-                    ) from settle_error
                 raise
 
             mega_batch_done = True

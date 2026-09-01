@@ -99,4 +99,4 @@ MSG_SAFE_EXISTS_TRANSFER_FAILED = (
 )
 MSG_SAFE_EXISTS_AND_FUNDED = "Safe already exists and is sufficiently funded."
 
-POLY_SAFE_SERVICE_NAMES: frozenset = frozenset()
+POLY_SAFE_SERVICE_NAMES: frozenset[str] = frozenset()

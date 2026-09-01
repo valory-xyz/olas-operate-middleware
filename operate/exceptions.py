@@ -47,23 +47,3 @@ class InsufficientFundsException(Exception):
                 DEFAULT_EOA_TOPUPS[Chain(self.chain)][ZERO_ADDRESS]
             ),
         }
-
-
-class UnauthorizedMultisigException(Exception):
-    """Raised when a deploy reverts with UnauthorizedMultisig.
-
-    This happens when the multisig creator contract used by the service
-    has been de-whitelisted on-chain.
-    """
-
-    def __init__(self, msg: str) -> None:
-        """Initialise with a user-facing message."""
-        super().__init__(msg)
-
-    def __str__(self) -> str:
-        """Return only the human-readable message, not the full args tuple."""
-        return self.args[0]
-
-    def to_error_fields(self) -> t.Dict:
-        """Return structured error fields for merging into a JSONResponse body."""
-        return {"error_code": "UNAUTHORIZED_MULTISIG"}
