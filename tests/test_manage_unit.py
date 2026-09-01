@@ -1685,9 +1685,7 @@ class TestRevertAttributionUnauthorizedMultisig:
             "staking_token": ZERO_ADDRESS,
             "agent_ids": [1],
             "service_registry": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
-            "service_registry_token_utility": (
-                "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8"
-            ),
+            "service_registry_token_utility": "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
             "min_staking_deposit": 20000000000000000000,
             "activity_checker": ZERO_ADDRESS,
             "additional_staking_tokens": {},
