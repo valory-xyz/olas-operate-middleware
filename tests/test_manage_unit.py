@@ -1634,3 +1634,96 @@ class TestUnauthorizedMultisigException:
         exc = UnauthorizedMultisigException("deployment failed")
         fields = exc.to_error_fields()
         assert fields == {"error_code": "UNAUTHORIZED_MULTISIG"}
+
+
+class TestRevertAttributionUnauthorizedMultisig:
+    """Tests for UnauthorizedMultisig detection in the mega-batch revert attribution."""
+
+    def test_raises_unauthorized_multisig_on_revert(self, tmp_path: Path) -> None:
+        """Raise UnauthorizedMultisigException when simulate_safe_sub_tx returns the marker.
+
+        When the mega-batch reverts and revert attribution finds
+        'UnauthorizedMultisig', the method must raise
+        UnauthorizedMultisigException with the expected message.
+        """
+        manager = _make_manager(tmp_path)
+
+        # --- Service mock ---
+        service = MagicMock()
+        service.home_chain = "ethereum"
+        service.description = None
+        service.agent_addresses = ["0xaaaa"]
+        service.service_public_id.return_value = "valory/test_service:0.1.0"
+
+        chain_data = MagicMock()
+        chain_data.token = 42
+        chain_data.user_params.use_staking = False
+        chain_data.user_params.cost_of_bond = 1
+        chain_data.user_params.nft = "bafybei"
+        chain_data.user_params.agent_id = 1
+        chain_data.user_params.staking_program_id = None
+
+        chain_config = MagicMock()
+        chain_config.chain_data = chain_data
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+
+        # --- Wallet ---
+        wallet = MagicMock()
+        wallet.safes = {Chain.GNOSIS: "0xMasterSafe"}
+        manager.wallet_manager.load.return_value = wallet
+
+        # --- EthSafeTxBuilder mock ---
+        sftxb = MagicMock()
+        sftxb.info.return_value = {
+            "service_state": OnChainState.PRE_REGISTRATION,
+            "instances": ["0xaaaa"],
+            "multisig": ZERO_ADDRESS,
+            "canonical_agents": [1],
+        }
+        staking_params = {
+            "staking_token": ZERO_ADDRESS,
+            "agent_ids": [1],
+            "service_registry": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
+            "service_registry_token_utility": (
+                "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8"
+            ),
+            "min_staking_deposit": 20000000000000000000,
+            "activity_checker": ZERO_ADDRESS,
+            "additional_staking_tokens": {},
+            "staking_contract": ZERO_ADDRESS,
+        }
+        sftxb.get_staking_params.return_value = staking_params
+        sftxb.get_deploy_data_from_safe.return_value = [{"to": "0x1", "data": "0x"}]
+
+        # Mega-tx mock: settle() raises, labeled_txs yields one deploy sub-tx
+        tx_mock = sftxb.new_tx.return_value
+        tx_mock.add.return_value = tx_mock
+        tx_mock.settle.side_effect = RuntimeError("mega-batch reverted")
+        deploy_sub_tx = {"to": "0x1", "data": "0x", "value": 0}
+        tx_mock.labeled_txs = [("deploy", deploy_sub_tx)]
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager,
+                "_get_on_chain_state",
+                return_value=OnChainState.PRE_REGISTRATION,
+            ),
+            patch.object(manager, "_get_current_staking_program", return_value=None),
+            patch.object(manager, "_get_on_chain_metadata", return_value={}),
+            patch.object(manager, "_enable_recovery_module"),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value=ZERO_ADDRESS,
+            ),
+            patch(
+                "operate.services.manage.simulate_safe_sub_tx",
+                return_value="UnauthorizedMultisig(0xABC)",
+            ),
+        ):
+            with pytest.raises(UnauthorizedMultisigException, match="not whitelisted"):
+                manager._deploy_service_onchain_from_safe(
+                    service_config_id="sc-test", chain=_CHAIN
+                )

@@ -1645,7 +1645,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 f"Deploy failed. Unauthorized multisig: {e}\n{traceback.format_exc()}"
             )
             return JSONResponse(
-                content={"error": str(e), **e.to_error_fields()},
+                content={
+                    "error": "Service deployment failed: multisig creator contract is not whitelisted on-chain.",
+                    **e.to_error_fields(),
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
