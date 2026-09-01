@@ -283,6 +283,29 @@ class TestHealthCheckerJobManagement:
         # Task should be removed from _jobs
         assert service_config_id not in health_checker._jobs
 
+    def test_stop_for_service_uses_call_soon_threadsafe_when_loop_running(
+        self,
+    ) -> None:
+        """Test that stop_for_service uses call_soon_threadsafe when event loop is running."""
+        health_checker = HealthChecker(
+            service_manager=MagicMock(),
+            logger=MagicMock(),
+        )
+        service_config_id = "test-service"
+
+        mock_task = MagicMock()
+        health_checker._jobs[service_config_id] = mock_task
+
+        mock_loop = MagicMock()
+        mock_loop.is_running.return_value = True
+        health_checker._loop = mock_loop
+
+        health_checker.stop_for_service(service_config_id)
+
+        mock_loop.call_soon_threadsafe.assert_called_once_with(mock_task.cancel)
+        mock_task.cancel.assert_not_called()
+        assert service_config_id not in health_checker._jobs
+
     @pytest.mark.asyncio
     async def test_healthcheck_job_runs_when_service_always_healthy(self) -> None:
         """Test that healthcheck_job starts and runs without error when the service is always healthy."""
