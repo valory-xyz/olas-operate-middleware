@@ -68,3 +68,10 @@ def safe_resolved_path(value: str) -> Path:
     if not isinstance(value, str) or not SAFE_FS_PATH_RE.fullmatch(value):
         raise UnsafePathError(f"Unsafe filesystem path: {value!r}")
     return Path(value).resolve()
+
+
+def validated_safe_id(value: str) -> str:
+    """Taint-sanitisation boundary for SnykCode (redundant with FastAPI validators; do not remove)."""
+    if not SAFE_ID_RE.fullmatch(value):
+        raise ValueError(f"Unsafe identifier: {value!r}")
+    return value

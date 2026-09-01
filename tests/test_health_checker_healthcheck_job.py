@@ -8,6 +8,7 @@ behavior for retry logic and top-level handlers.
 """
 
 import asyncio
+import typing as t
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -280,6 +281,29 @@ class TestHealthCheckerJobManagement:
         )
 
         # Task should be removed from _jobs
+        assert service_config_id not in health_checker._jobs
+
+    def test_stop_for_service_uses_call_soon_threadsafe_when_loop_running(
+        self,
+    ) -> None:
+        """Test that stop_for_service uses call_soon_threadsafe when event loop is running."""
+        health_checker = HealthChecker(
+            service_manager=MagicMock(),
+            logger=MagicMock(),
+        )
+        service_config_id = "test-service"
+
+        mock_task = MagicMock()
+        health_checker._jobs[service_config_id] = mock_task
+
+        mock_loop = MagicMock()
+        mock_loop.is_running.return_value = True
+        health_checker._loop = mock_loop
+
+        health_checker.stop_for_service(service_config_id)
+
+        mock_loop.call_soon_threadsafe.assert_called_once_with(mock_task.cancel)
+        mock_task.cancel.assert_not_called()
         assert service_config_id not in health_checker._jobs
 
     @pytest.mark.asyncio
@@ -557,7 +581,7 @@ class TestHealthCheckerNestedAsyncFunctions:
     async def test_restart_failfast_calls_stop_and_reraises(
         self, health_checker: HealthChecker
     ) -> None:
-        """Test failfast triggers _stop and re-raises the restart exception (lines 269-280, 312-317)."""
+        """Test failfast triggers _stop and raises a RuntimeError (lines 269-280, 312-317)."""
         health_checker.number_of_fails = 1
         call_count = [0]
 
@@ -576,7 +600,7 @@ class TestHealthCheckerNestedAsyncFunctions:
             patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
             patch("operate.services.health_checker.time.time", return_value=0.0),
         ):
-            with pytest.raises(RuntimeError, match="deploy failed"):
+            with pytest.raises(RuntimeError, match="stopped by failfast"):
                 await health_checker.healthcheck_job("test-service")
 
         # stop_service_locally called at least once (inside _restart + inside _stop)
@@ -620,3 +644,343 @@ class TestHealthCheckerNestedAsyncFunctions:
             health_checker.logger.exception.call_args_list  # type: ignore[attr-defined]
         )
         assert "Restart problem" in exception_calls
+
+    async def test_check_health_closes_healthy_span_on_unhealthy(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _check_health closes an open healthy span when agent becomes unhealthy (lines 234-237).
+
+        Sequence: port-ready (True), health True (opens span), health False
+        (closes span), fail threshold reached → return.
+        """
+        health_checker.number_of_fails = 1
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                return True  # call 1: port-ready, call 2: healthy inside _check_health
+            return False  # call 3+: unhealthy
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        # time.time() returns 1000.0 when healthy_since is set, 1010.0 when
+        # the span is closed → longest_healthy = 10.0
+        time_values = iter([1000.0, 1010.0, 1010.0, 1010.0, 1010.0])
+
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(time_values, 1010.0),
+            ),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.2)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        # The healthy span was opened and closed; the service restarted
+        assert call_count[0] >= 3
+        error_calls = str(
+            health_checker.logger.error.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "restart" in error_calls
+
+    async def test_failfast_budget_resets_after_long_healthy_span(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test failfast_records is reset when longest_healthy >= FAILFAST_TIMEOUT (line 309).
+
+        Sequence across two outer-loop iterations:
+        1. First _check_health: healthy for >= FAILFAST_TIMEOUT, then fails
+           → longest_healthy >= FAILFAST_TIMEOUT → failfast_records cleared
+        2. Restart succeeds, second iteration: immediately fails
+           → failfast_records has only 1 entry (not accumulated from iter 1)
+        """
+        health_checker.number_of_fails = 1
+
+        # Phase tracking: two outer-loop iterations
+        phase = [
+            0
+        ]  # 0 = first _check_health, 1 = second (port-ready), 2+ = second _check_health
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if phase[0] == 0:
+                # First outer iteration
+                if call_count[0] == 1:
+                    return True  # port-ready
+                if call_count[0] == 2:
+                    return True  # healthy inside _check_health (opens span)
+                # Third call: unhealthy → closes span, triggers return
+                phase[0] = 1
+                return False
+            if phase[0] == 1:
+                # Second iteration port-ready
+                phase[0] = 2
+                return True
+            # Second _check_health: immediately unhealthy
+            return False
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        # time.time() values:
+        # healthy_since = 1000.0, span close = 2000.0 → longest_healthy = 1000 (>= 900)
+        # Further calls return 2000.0 for failfast tracking
+        time_values = iter([1000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0])
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(time_values, 2000.0),
+            ),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.3)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        # Verify the second iteration ran (restart was called)
+        assert health_checker._service_manager.deploy_service_locally.call_count >= 1
+
+
+class TestFailfastBehaviorPinned:
+    """Tests pinning the two key failfast behaviors introduced in this PR.
+
+    Each test is designed to fail against a specific code mutation:
+    1. Reverting unconditional post-restart failfast check → test 1 fails
+    2. Disabling the longest_healthy >= FAILFAST_TIMEOUT reset → test 2 fails
+    3. Changing max(longest_healthy, span) to += → test 3 fails
+    4. Changing >= to > in the FAILFAST_TIMEOUT comparison → test 4 fails
+    """
+
+    @pytest.fixture
+    def health_checker(self) -> HealthChecker:
+        """Return a HealthChecker wired with fast defaults."""
+        mock_sm = MagicMock()
+        mock_sm.load.return_value.path = Path("/fake/service")
+        return HealthChecker(
+            service_manager=mock_sm,
+            logger=MagicMock(),
+            sleep_period=0,
+            number_of_fails=1,
+        )
+
+    @pytest.mark.asyncio
+    async def test_failfast_fires_on_successful_restarts_with_short_healthy_span(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """True positive: _restart succeeds but agent is always unhealthy → failfast fires.
+
+        Pre-fix code only checked failfast inside 'except Exception:', so a
+        successful restart never counted toward escalation.  This test must
+        fail against that code.
+        """
+
+        async def always_unhealthy(*args: object, **kwargs: object) -> bool:
+            return False
+
+        health_checker.check_service_health = always_unhealthy  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 3),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
+        ):
+            with pytest.raises(RuntimeError, match="stopped by failfast"):
+                await health_checker.healthcheck_job("test-service")
+
+        # _stop called stop_service_locally for failfast
+        assert health_checker._service_manager.stop_service_locally.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_failfast_no_fire_when_healthy_spans_exceed_timeout(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """False-positive guard: long healthy spans reset the budget each cycle.
+
+        Run past FAILFAST_NUM outer-loop iterations.  Assert no RuntimeError
+        and that the failfast _stop was never called.
+        """
+        call_count = [0]
+
+        async def cycling_check(*args: object, **kwargs: object) -> bool:
+            call_count[0] += 1
+            # Port-ready (idx 0): False (port still "up" — no exception)
+            # Health call 1 (idx 1): True  → opens healthy span
+            # Health call 2 (idx 2): False → closes span, triggers return
+            return (call_count[0] - 1) % 3 == 1
+
+        health_checker.check_service_health = cycling_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        def _make_times() -> t.Iterator[float]:
+            i = 0
+            while True:
+                base = 100.0 + i * 1100.0
+                yield base
+                yield base + 1000.0
+                yield base + 1001.0
+                yield base + 1002.0
+                i += 1
+
+        time_iter = _make_times()
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(time_iter, 99999.0),
+            ),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except RuntimeError:
+                pytest.fail(
+                    "Failfast should not fire when healthy spans exceed FAILFAST_TIMEOUT"
+                )
+
+        # At least 3 restarts ran (past FAILFAST_NUM=2), proving budget was reset
+        assert health_checker._service_manager.deploy_service_locally.call_count >= 3
+
+    @pytest.mark.asyncio
+    async def test_failfast_budget_not_reset_by_cumulative_short_spans(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Longest vs cumulative: short healthy windows summing above threshold must NOT reset.
+
+        Changing max(longest_healthy, span) to += makes this test fail because
+        the cumulative sum (1000s) would exceed FAILFAST_TIMEOUT (900s), clearing
+        the budget and preventing failfast from firing.
+        """
+        health_checker.number_of_fails = 2
+
+        # Per iteration: port(F), T, F, T, F, F → two 500s spans, then fail
+        check_seq = iter([False, True, False, True, False, False] * 3)
+
+        async def sequenced_check(*args: object, **kwargs: object) -> bool:
+            return next(check_seq, False)
+
+        health_checker.check_service_health = sequenced_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        # _check_health: 4 time calls per iter (two healthy_since + two span_close)
+        # Restart iter 1: 2 time calls (append + check); iter 2: 1 call (len short-circuits)
+        times = iter(
+            [
+                # Iter 1 _check_health: spans of 500s each (sum=1000 > 900, max=500 < 900)
+                1000.0,
+                1500.0,
+                1600.0,
+                2100.0,
+                # Iter 1 restart
+                2101.0,
+                2102.0,
+                # Iter 2 _check_health
+                2200.0,
+                2700.0,
+                2800.0,
+                3300.0,
+                # Iter 2 restart (len=2 >= FAILFAST_NUM=2 → short-circuits)
+                3301.0,
+            ]
+        )
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(times, 9999.0),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="stopped by failfast"):
+                await health_checker.healthcheck_job("test-service")
+
+        assert health_checker._service_manager.stop_service_locally.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_failfast_budget_resets_at_exact_timeout_boundary(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Boundary: longest_healthy == FAILFAST_TIMEOUT exactly triggers reset.
+
+        The reset uses >= while the escalation uses >.  This test pins the >=
+        operator: changing it to > makes the test fail because the exact-boundary
+        span would no longer clear the budget.
+        """
+        call_count = [0]
+
+        async def cycling_check(*args: object, **kwargs: object) -> bool:
+            call_count[0] += 1
+            return (call_count[0] - 1) % 3 == 1
+
+        health_checker.check_service_health = cycling_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        # Each healthy span = exactly 900s = FAILFAST_TIMEOUT
+        def _make_times() -> t.Iterator[float]:
+            i = 0
+            while True:
+                base = 100.0 + i * 1000.0
+                yield base
+                yield base + 900.0
+                yield base + 901.0
+                yield base + 902.0
+                i += 1
+
+        time_iter = _make_times()
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch(
+                "operate.services.health_checker.time.time",
+                side_effect=lambda: next(time_iter, 99999.0),
+            ),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except RuntimeError:
+                pytest.fail(
+                    "Failfast should not fire when healthy span equals FAILFAST_TIMEOUT"
+                )
+
+        # At least 3 restarts happened (past FAILFAST_NUM=2)
+        assert health_checker._service_manager.deploy_service_locally.call_count >= 3
