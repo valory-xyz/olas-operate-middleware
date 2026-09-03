@@ -318,6 +318,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"binary content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -343,6 +344,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -372,6 +374,7 @@ class TestAgentAssetManagerMethods:
         """Test that a missing target file triggers a download."""
         target = tmp_path / "runner"  # does not exist
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -408,6 +411,7 @@ class TestAgentAssetManagerMethods:
         """Test that a hash mismatch after download raises ValueError."""
         target = tmp_path / "runner"
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:EXPECTED",
@@ -436,6 +440,7 @@ class TestAgentAssetManagerMethods:
         """Test that on posix the downloaded file gets executable permission."""
         target = tmp_path / "runner"
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -464,13 +469,14 @@ class TestAgentAssetManagerMethods:
             )
         assert target.exists()
 
-    def test_update_agent_release_asset_download_error_removes_target(
+    def test_update_agent_release_asset_download_error_preserves_target(
         self, tmp_path: Path
     ) -> None:
-        """Test that a download error causes the target file to be removed."""
+        """A download error preserves the existing cached file for offline fallback."""
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -492,7 +498,9 @@ class TestAgentAssetManagerMethods:
                     target_filename="runner",
                     agent_release=mock_release,
                 )
-        assert not target.exists()
+        # Target should still exist — download wrote to a temp file, not target
+        assert target.exists()
+        assert target.read_bytes() == b"old content"
 
     def test_get_agent_runner_path_class_method(self, tmp_path: Path) -> None:
         """Test AgentAssetManager.get_agent_runner_path returns the correct path."""
@@ -596,6 +604,7 @@ class TestAgentAssetManagerMethods:
         target = tmp_path / "runner"
         target.write_bytes(b"existing content")
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:NEW",
@@ -637,6 +646,7 @@ class TestAgentAssetManagerMethods:
         """Test that missing_ok=True handles case when target doesn't exist on exception."""
         target = tmp_path / "runner"  # Does not exist
         mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
         mock_release.get_url_and_hash.return_value = (
             "http://example.com/runner",
             "sha256:HASH",
@@ -719,6 +729,88 @@ class TestAgentAssetManagerMethods:
         # Verify agent_cache directory was created
         assert agent_cache_dir.exists()
         assert agent_cache_dir.is_dir()
+
+    def test_update_agent_release_asset_sidecar_oserror_logs_warning(
+        self, tmp_path: Path
+    ) -> None:
+        """Sidecar write failure logs a warning but does not raise."""
+        target = tmp_path / "runner"
+        target.write_bytes(b"old content")
+        mock_release = MagicMock()
+        mock_release.release = "v0.40.7"
+        mock_release.get_url_and_hash.return_value = (
+            "http://example.com/runner",
+            "sha256:NEW",
+        )
+
+        def _create_target(src: Path, dst: Path) -> None:
+            dst.write_bytes(b"downloaded")
+
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_local_file_sha256",
+                side_effect=["sha256:OLD", "sha256:NEW"],
+            ),
+            patch.object(AgentAssetManager, "download_file"),
+            patch(
+                "operate.services.agent_assets.shutil.copy2",
+                side_effect=_create_target,
+            ),
+            patch.object(Path, "write_text", side_effect=OSError("disk full")),
+            patch.object(AgentAssetManager.logger, "warning") as mock_warn,
+        ):
+            # Should not raise despite sidecar write failure
+            AgentAssetManager.update_agent_release_asset(
+                target_path=target,
+                agent_release_asset_name="runner",
+                target_filename="runner",
+                agent_release=mock_release,
+            )
+
+        mock_warn.assert_called_once()
+        assert "Failed to write sidecar" in mock_warn.call_args[0][0]
+
+    def test_get_agent_runner_path_request_exception_falls_back(
+        self, tmp_path: Path
+    ) -> None:
+        """Test get_agent_runner_path delegates to offline fallback on RequestException."""
+        config = {
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory",
+                    "name": "repo",
+                    "version": "v1.0.0",
+                },
+            }
+        }
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        http_error = requests.ConnectionError("API unreachable")
+
+        with (
+            patch.object(
+                AgentAssetManager,
+                "get_agent_runner_executable_name",
+                return_value="runner_linux_x64",
+            ),
+            patch.object(
+                AgentAssetManager,
+                "update_agent_release_asset",
+                side_effect=http_error,
+            ),
+            patch.object(
+                AgentAssetManager,
+                "_asset_offline_fallback",
+                return_value="/cached/runner_linux_x64",
+            ) as mock_fallback,
+        ):
+            result = AgentAssetManager.get_agent_runner_path(tmp_path)
+
+        assert result == "/cached/runner_linux_x64"
+        mock_fallback.assert_called_once_with(
+            tmp_path / "runner_linux_x64", http_error, "v1.0.0"
+        )
 
     def test_get_agent_code_path_module_function(self, tmp_path: Path) -> None:
         """Test module-level get_agent_code_path delegates correctly."""
