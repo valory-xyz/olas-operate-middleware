@@ -201,6 +201,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "polystrat_i": "0x35C9C87a8caD9B7fd9d367Eb4Fd287365688E000",
         "polystrat_ii": "0xD7F69649691039E86F15153c7BD567aA0049d122",
         "polystrat_iii": "0x7dbF10769CA7528ec9aA440b668C716Caf08e7EA",
+        "polystrat_iv": "0xb7D3Bad3a08889838096b4B583fA6785c614d0a5",
+        "polystrat_v": "0x4c367f1Df1e16263d55A896c0909cCa7333D835F",
+        "polystrat_vi": "0xf7F371f2E72E326d42323562a14ED01fF5a53D12",
     },
 }
 

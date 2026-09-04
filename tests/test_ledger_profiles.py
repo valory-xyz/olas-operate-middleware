@@ -381,7 +381,14 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
     },
     Chain.BASE: {"basius_i", "basius_ii", "basius_iii"},
     Chain.OPTIMISM: {"optimus_i", "optimus_ii", "optimus_iii"},
-    Chain.POLYGON: {"polystrat_i", "polystrat_ii", "polystrat_iii"},
+    Chain.POLYGON: {
+        "polystrat_i",
+        "polystrat_ii",
+        "polystrat_iii",
+        "polystrat_iv",
+        "polystrat_v",
+        "polystrat_vi",
+    },
 }
 
 _DECOUPLED_ENTRIES = [
