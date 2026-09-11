@@ -109,6 +109,24 @@ RELAY_DEFAULT_GAS = {
         "swap": 400_000,
         "send": 1,
     },
+    Chain.POLYGON: {
+        "deposit": 950_000,
+        "approve": 150_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 700_000,
+        "send": 1,
+    },
+    Chain.ROBINHOOD: {
+        "deposit": 450_000,
+        "approve": 100_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 450_000,
+        "send": 1,
+    },
 }
 
 

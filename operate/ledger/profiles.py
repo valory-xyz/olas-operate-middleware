@@ -205,6 +205,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "polystrat_v": "0x4c367f1Df1e16263d55A896c0909cCa7333D835F",
         "polystrat_vi": "0xf7F371f2E72E326d42323562a14ED01fF5a53D12",
     },
+    Chain.ROBINHOOD: {},
 }
 
 
@@ -254,6 +255,7 @@ OLAS: t.Dict[Chain, str] = {
     Chain.MODE: "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
     Chain.OPTIMISM: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
     Chain.POLYGON: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
+    Chain.ROBINHOOD: "0x092963938deBD8013a2e545b3549f8A5ec0D2286",
 }
 
 USDC: t.Dict[Chain, str] = {
@@ -277,6 +279,11 @@ PUSD: t.Dict[Chain, str] = {
     Chain.POLYGON: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
 }
 
+USDG: t.Dict[Chain, str] = {
+    Chain.ETHEREUM: "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+    Chain.ROBINHOOD: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+}
+
 WRAPPED_NATIVE_ASSET = {
     Chain.ARBITRUM_ONE: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     Chain.BASE: "0x4200000000000000000000000000000000000006",
@@ -286,12 +293,14 @@ WRAPPED_NATIVE_ASSET = {
     Chain.MODE: "0x4200000000000000000000000000000000000006",
     Chain.OPTIMISM: "0x4200000000000000000000000000000000000006",
     Chain.POLYGON: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+    Chain.ROBINHOOD: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
 }
 
 ERC20_TOKENS = {
     "OLAS": OLAS,
     "USDC": USDC,
     "USDC.e": USDC_E,
+    "USDG": USDG,
     "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
     "pUSD": PUSD,
 }
@@ -316,6 +325,7 @@ DUST = {
     Chain.MODE: int(1e14),
     Chain.OPTIMISM: int(1e14),
     Chain.POLYGON: int(1e14),
+    Chain.ROBINHOOD: int(1e14),
 }
 
 DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
@@ -343,6 +353,9 @@ DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.POLYGON: {
         ZERO_ADDRESS: int(1e18),
     },
+    Chain.ROBINHOOD: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
 }
 
 DEFAULT_EOA_TOPUPS = {
@@ -354,6 +367,7 @@ DEFAULT_EOA_TOPUPS = {
     Chain.MODE: {ZERO_ADDRESS: BigInt(250_000_000_000_000)},
     Chain.OPTIMISM: {ZERO_ADDRESS: BigInt(2_500_000_000_000_000)},
     Chain.POLYGON: {ZERO_ADDRESS: BigInt(8_000_000_000_000_000_000)},
+    Chain.ROBINHOOD: {ZERO_ADDRESS: BigInt(2_500_000_000_000_000)},
 }
 
 DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
@@ -370,6 +384,7 @@ DEFAULT_RECOVERY_TOPUPS = {
     Chain.MODE: {ZERO_ADDRESS: BigInt(62_500_000_000_000)},
     Chain.OPTIMISM: {ZERO_ADDRESS: BigInt(625_000_000_000_000)},
     Chain.POLYGON: {ZERO_ADDRESS: BigInt(2_000_000_000_000_000_000)},
+    Chain.ROBINHOOD: {ZERO_ADDRESS: BigInt(625_000_000_000_000)},
 }
 
 DEFAULT_EOA_THRESHOLD = 0.5
@@ -406,6 +421,10 @@ EXPLORER_URL = {
     Chain.POLYGON: {
         "tx": "https://polygonscan.com/tx/{tx_hash}",
         "address": "https://polygonscan.com/address/{address}",
+    },
+    Chain.ROBINHOOD: {
+        "tx": "https://robinhoodchain.blockscout.com/tx/{tx_hash}",
+        "address": "https://robinhoodchain.blockscout.com/address/{address}",
     },
 }
 

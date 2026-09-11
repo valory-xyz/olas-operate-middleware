@@ -39,6 +39,7 @@ CHAINS = [
     Chain.MODE,
     Chain.OPTIMISM,
     Chain.POLYGON,
+    Chain.ROBINHOOD,
     Chain.SOLANA,
 ]
 
@@ -50,6 +51,9 @@ GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://gnosis-rpc.publicnode.com")
 MODE_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network")
 OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
 POLYGON_RPC = os.environ.get("POLYGON_RPC", "https://polygon-rpc.com")
+ROBINHOOD_RPC = os.environ.get(
+    "ROBINHOOD_RPC", "https://rpc.mainnet.chain.robinhood.com"
+)
 SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 
 
@@ -62,6 +66,7 @@ DEFAULT_RPCS = {
     Chain.MODE: MODE_RPC,
     Chain.OPTIMISM: OPTIMISM_RPC,
     Chain.POLYGON: POLYGON_RPC,
+    Chain.ROBINHOOD: ROBINHOOD_RPC,
     Chain.SOLANA: SOLANA_RPC,
 }
 
@@ -75,6 +80,7 @@ CURRENCY_DENOMS = {
     Chain.MODE: "ETH",
     Chain.OPTIMISM: "ETH",
     Chain.POLYGON: "POL",
+    Chain.ROBINHOOD: "ETH",
     Chain.SOLANA: "SOL",
 }
 
@@ -88,6 +94,7 @@ CURRENCY_SMALLEST_UNITS = {
     Chain.MODE: "Wei",
     Chain.OPTIMISM: "Wei",
     Chain.POLYGON: "Wei",
+    Chain.ROBINHOOD: "Wei",
     Chain.SOLANA: "Lamport",
 }
 
@@ -121,7 +128,7 @@ def make_chain_ledger_api(
         raise NotImplementedError("Solana not yet supported.")
 
     gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-    if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
+    if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.ROBINHOOD):
         gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
             5, GWEI
         )
@@ -168,6 +175,8 @@ def is_gas_spike_error(err: str) -> bool:
     variant ``max fee per gas less than block base fee``.
     """
     lower = err.lower()
+    if "rejected by chain policy" in lower:
+        return False
     return (
         "-32000" in err
         or "insufficient maxfeepergas" in lower

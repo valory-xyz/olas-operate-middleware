@@ -544,6 +544,7 @@ class ServiceManager:
                     "MODE_LEDGER_RPC": get_default_rpc(Chain.MODE),
                     "OPTIMISM_LEDGER_RPC": get_default_rpc(Chain.OPTIMISM),
                     "POLYGON_LEDGER_RPC": get_default_rpc(Chain.POLYGON),
+                    "ROBINHOOD_LEDGER_RPC": get_default_rpc(Chain.ROBINHOOD),
                     "SOLANA_LEDGER_RPC": get_default_rpc(Chain.SOLANA),
                     f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
                     "STAKING_CONTRACT_ADDRESS": target_staking_params.get(

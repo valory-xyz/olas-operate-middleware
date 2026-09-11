@@ -226,7 +226,7 @@ operate daemon
 
 **Ledger Integration (`operate/ledger/`)**
 - `profiles.py`: Chain configs, RPC endpoints, and token addresses
-- Supported chains include Ethereum, Gnosis, Base, Optimism, Mode
+- Supported chains include Arbitrum One, Base, Celo, Ethereum, Gnosis, Mode, Optimism, Polygon, Robinhood
 
 **Account Management (`operate/account/`)**
 - `user.py`: Password-based authentication via Argon2

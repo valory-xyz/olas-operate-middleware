@@ -53,8 +53,11 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
     }
     SERVICE_SAFE_FUNDING_ASSETS[_chain] = {
         ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),  # nosec B311
-        OLAS[_chain]: random.randint(int(100e6), int(200e6)),  # nosec B311
-        USDC[_chain]: random.randint(int(100e6), int(200e6)),  # nosec B311
+        **{
+            token[_chain]: random.randint(int(100e6), int(200e6))  # nosec B311
+            for token in (OLAS, USDC)
+            if _chain in token
+        },
     }
 
 

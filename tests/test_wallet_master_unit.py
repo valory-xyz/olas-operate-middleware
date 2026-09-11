@@ -2269,8 +2269,19 @@ class TestTransferFromEoaDrainModeRetry:
         # Verify exception chaining preserves the original gas error
         assert exc_info.value.__cause__ is rpc_error
 
-    def test_drain_mode_reraises_unrelated_exception(self, tmp_path: Path) -> None:
-        """A non-gas ValueError propagates immediately without retrying."""
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ValueError("unexpected network timeout"),
+            ChainInteractionError(
+                "{'code': -32000, 'message': 'Transaction rejected by chain policy'}"
+            ),
+        ],
+    )
+    def test_drain_mode_reraises_unrelated_exception(
+        self, tmp_path: Path, error: Exception
+    ) -> None:
+        """A non-gas error propagates immediately without retrying."""
         wallet = _make_wallet(tmp_path)
         crypto_mock = MagicMock()
         crypto_mock.address = EOA_ADDR
@@ -2278,11 +2289,8 @@ class TestTransferFromEoaDrainModeRetry:
 
         mock_api = MagicMock()
 
-        # Use ValueError (caught by the except block) with a non-gas message
-        # so the is_gas_error check is False and line 400 (raise) is hit.
-        unrelated_error = ValueError("unexpected network timeout")
         fail_settler = MagicMock()
-        fail_settler.transact.side_effect = unrelated_error
+        fail_settler.transact.side_effect = error
 
         call_count = {"n": 0}
 
@@ -2298,11 +2306,12 @@ class TestTransferFromEoaDrainModeRetry:
             patch.object(wallet, "ledger_api", return_value=mock_api),
             patch("operate.wallet.master.TxSettler", side_effect=counting_factory),
         ):
-            with pytest.raises(ValueError, match="unexpected network timeout"):
+            with pytest.raises(type(error)) as exc_info:
                 wallet._transfer_from_eoa(  # pylint: disable=protected-access
                     SAFE_ADDR, 1_000_000, Chain.GNOSIS
                 )
 
+        assert exc_info.value is error
         # Must not have retried — only one attempt before re-raise
         assert call_count["n"] == 1
 

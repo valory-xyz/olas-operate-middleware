@@ -1412,24 +1412,30 @@ class TestDrainEoa:
         # before the closure is built.
         mock_txsettler_cls.assert_not_called()
 
-    def test_other_chain_interaction_error_reraises(self) -> None:
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "Network error",
+            "{'code': -32000, 'message': 'Transaction rejected by chain policy'}",
+        ],
+    )
+    def test_other_chain_interaction_error_reraises(self, message: str) -> None:
         """Test that drain_eoa re-raises ChainInteractionError for non-balance errors."""
         mock_ledger = MagicMock()
         mock_ledger.get_balance.return_value = 10_000
         mock_crypto = MagicMock()
         mock_crypto.address = "0xWalletAddr"
 
+        error = ChainInteractionError(message)
         mock_txsettler_cls = MagicMock()
-        mock_txsettler_cls.return_value.transact.side_effect = ChainInteractionError(
-            "Network error"
-        )
+        mock_txsettler_cls.return_value.transact.side_effect = error
 
         with (
             patch("operate.utils.gnosis.TxSettler", mock_txsettler_cls),
             patch("operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS),
             patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100),
         ):
-            with pytest.raises(ChainInteractionError, match="Network error"):
+            with pytest.raises(ChainInteractionError) as exc_info:
                 drain_eoa(
                     ledger_api=mock_ledger,
                     crypto=mock_crypto,
@@ -1437,6 +1443,7 @@ class TestDrainEoa:
                     chain_id=100,
                 )
 
+        assert exc_info.value is error
         # Must not have retried — only one attempt before re-raise
         assert mock_txsettler_cls.return_value.transact.call_count == 1
 
