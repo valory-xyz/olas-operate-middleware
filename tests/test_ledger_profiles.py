@@ -48,6 +48,7 @@ from operate.ledger.profiles import (
     DUST,
     ERC20_TOKENS,
     ERC20_TOKENS_BY_CHAIN_ID,
+    EXPLORER_URL,
     OLAS,
     PUSD,
     STAKING,
@@ -83,6 +84,7 @@ class TestEvmChainTables:
             "DEFAULT_NEW_SAFE_FUNDS": DEFAULT_NEW_SAFE_FUNDS,
             "DEFAULT_EOA_TOPUPS": DEFAULT_EOA_TOPUPS,
             "DEFAULT_RECOVERY_TOPUPS": DEFAULT_RECOVERY_TOPUPS,
+            "EXPLORER_URL": EXPLORER_URL,
         }
         missing = [name for name, table in tables.items() if chain not in table]
         assert not missing
