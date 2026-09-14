@@ -175,6 +175,7 @@ def is_gas_spike_error(err: str) -> bool:
     variant ``max fee per gas less than block base fee``.
     """
     lower = err.lower()
+    # Wording observed on testnet 46630 (OPE-1925); undocumented by Robinhood.
     if "rejected by chain policy" in lower:
         return False
     return (

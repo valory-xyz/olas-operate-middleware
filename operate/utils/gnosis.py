@@ -925,6 +925,8 @@ def estimate_transfer_tx_fee(
         raise_on_try=False,
     )
     chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    # Robinhood (Nitro) is absent by design: eth_estimateGas already includes
+    # its L1 component, so adding get_l1_data_fee would count it twice.
     if chain in (
         Chain.ARBITRUM_ONE,
         Chain.BASE,
