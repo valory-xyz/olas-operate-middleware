@@ -925,6 +925,9 @@ def estimate_transfer_tx_fee(
         raise_on_try=False,
     )
     chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    # Nitro folds the L1 component into eth_estimateGas, so adding
+    # get_l1_data_fee double counts: that is why Robinhood is left out.
+    # Arbitrum One stays for now — it over-reserves ~3%, to be changed separately.
     if chain in (
         Chain.ARBITRUM_ONE,
         Chain.BASE,

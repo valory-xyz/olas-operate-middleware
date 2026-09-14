@@ -378,7 +378,7 @@ class Provider(ABC):
 
         if provider_request.status in (ProviderRequestStatus.QUOTE_FAILED,):
             self.logger.info(f"[PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}.")
-            execution_data = ExecutionData(
+            provider_request.execution_data = ExecutionData(
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}",
                 timestamp=int(time.time()),
@@ -386,7 +386,6 @@ class Provider(ABC):
                 to_tx_hash=None,
                 provider_data=None,
             )
-            provider_request.execution_data = execution_data
             provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
@@ -409,7 +408,7 @@ class Provider(ABC):
             self.logger.info(
                 f"[PROVIDER] {MESSAGE_EXECUTION_SKIPPED} ({provider_request.status=})"
             )
-            execution_data = ExecutionData(
+            provider_request.execution_data = ExecutionData(
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_SKIPPED} ({provider_request.status=})",
                 timestamp=int(time.time()),
@@ -417,10 +416,10 @@ class Provider(ABC):
                 to_tx_hash=None,
                 provider_data=None,
             )
-            provider_request.execution_data = execution_data
             provider_request.status = ProviderRequestStatus.EXECUTION_DONE
             return
 
+        unsettled_tx_hash: t.Optional[str] = None
         try:
             self.logger.info(
                 f"[PROVIDER] Executing transactions in request {provider_request.id}."
@@ -431,7 +430,7 @@ class Provider(ABC):
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(provider_request)
 
-            for tx_label, tx in txs:
+            for index, (tx_label, tx) in enumerate(txs):
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
                 with wrap_gas_spike_as_insufficient_funds(
                     chain.value,
@@ -459,11 +458,14 @@ class Provider(ABC):
                         tx_settler.settle()
                         self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
                     except TimeExhausted as e:
+                        if index < len(txs) - 1:
+                            unsettled_tx_hash = tx_settler.tx_hash
+                            raise
                         self.logger.warning(
                             f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
                         )
 
-            execution_data = ExecutionData(
+            provider_request.execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=None,
                 timestamp=int(timestamp),
@@ -471,7 +473,6 @@ class Provider(ABC):
                 to_tx_hash=None,
                 provider_data=None,
             )
-            provider_request.execution_data = execution_data
             provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
             self.logger.info(
                 f"[PROVIDER] Finished executing request {provider_request.id}."
@@ -492,15 +493,14 @@ class Provider(ABC):
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[PROVIDER] Error executing request: {e}")
-            execution_data = ExecutionData(
+            provider_request.execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",
                 timestamp=int(time.time()),
-                from_tx_hash=None,
+                from_tx_hash=unsettled_tx_hash,
                 to_tx_hash=None,
                 provider_data=None,
             )
-            provider_request.execution_data = execution_data
             provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
     @abstractmethod

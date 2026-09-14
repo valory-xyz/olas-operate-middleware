@@ -104,6 +104,19 @@ class TestWrapGasSpikeAsInsufficientFunds:
         ):
             raise original
 
+    def test_chain_policy_rejection_reraises_unchanged(self) -> None:
+        """Verify a -32000 chain-policy rejection propagates unchanged."""
+        original = ChainInteractionError(
+            repr({"code": -32000, "message": "Transaction rejected by chain policy"})
+        )
+        with (
+            pytest.raises(ChainInteractionError, match="rejected by chain policy"),
+            wrap_gas_spike_as_insufficient_funds(
+                CHAIN, "test action", _healthy_ledger(), SIGNER
+            ),
+        ):
+            raise original
+
     def test_chain_field_is_set_correctly(self) -> None:
         """Verify the chain field on InsufficientFundsException is set from the argument."""
         with (

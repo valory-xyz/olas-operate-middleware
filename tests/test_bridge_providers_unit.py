@@ -449,7 +449,7 @@ class TestProviderBase:
         assert req.execution_data.from_tx_hash == mock_settler.tx_hash
 
     def test_execute_txsettler_time_exhausted(self) -> None:
-        """execute() handles TimeExhausted from settle() gracefully (lines 419-422)."""
+        """execute() tolerates TimeExhausted on the final tx."""
         tx: t.Dict[str, t.Any] = {
             "to": "0x" + "a" * 40,
             "gas": 21_000,
@@ -476,7 +476,6 @@ class TestProviderBase:
             mock_ledger = MagicMock()
             mock_ledger.api.eth.get_transaction_count.return_value = 0
             mock_api.return_value = mock_ledger
-            # Should NOT raise; TimeExhausted is caught with a warning
             provider.execute(req)
 
         assert req.status == ProviderRequestStatus.EXECUTION_PENDING
@@ -484,8 +483,83 @@ class TestProviderBase:
         assert req.execution_data.from_tx_hash == mock_settler.tx_hash
         provider.logger.warning.assert_called()  # type: ignore[attr-defined]
 
+    def test_execute_non_final_tx_time_exhausted_stops_execution(self) -> None:
+        """execute() fails without sending later txs when an earlier tx does not settle."""
+        tx: t.Dict[str, t.Any] = {
+            "to": "0x" + "a" * 40,
+            "gas": 21_000,
+            "value": 0,
+            "data": "0x",
+        }
+        provider = _ConcreteProvider(
+            txs_to_return=[("approve_tx", tx), ("bridge_tx", tx)]
+        )
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        mock_settler = MagicMock()
+        mock_settler.transact.return_value = mock_settler
+        mock_settler.settle.side_effect = TimeExhausted("timed out")
+        mock_settler.tx_hash = "0x" + "f" * 64
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler", return_value=mock_settler
+            ) as mock_settler_cls,
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
+            mock_ledger = MagicMock()
+            mock_ledger.api.eth.get_transaction_count.return_value = 0
+            mock_api.return_value = mock_ledger
+            provider.execute(req)
+
+        assert mock_settler_cls.call_count == 1
+        assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+        assert req.execution_data is not None
+        assert req.execution_data.from_tx_hash == mock_settler.tx_hash
+        assert "timed out" in str(req.execution_data.message)
+
+    def test_execute_final_tx_time_exhausted_after_earlier_tx_settles(self) -> None:
+        """execute() stays pending when only the final tx of several does not settle."""
+        tx: t.Dict[str, t.Any] = {
+            "to": "0x" + "a" * 40,
+            "gas": 21_000,
+            "value": 0,
+            "data": "0x",
+        }
+        provider = _ConcreteProvider(
+            txs_to_return=[("approve_tx", tx), ("bridge_tx", tx)]
+        )
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        settled = MagicMock()
+        settled.transact.return_value = settled
+        settled.tx_hash = "0x" + "e" * 64
+        unsettled = MagicMock()
+        unsettled.transact.return_value = unsettled
+        unsettled.settle.side_effect = TimeExhausted("timed out")
+        unsettled.tx_hash = "0x" + "f" * 64
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.TxSettler",
+                side_effect=[settled, unsettled],
+            ) as mock_settler_cls,
+            patch("operate.bridge.providers.provider.get_default_ledger_api"),
+        ):
+            provider.execute(req)
+
+        assert mock_settler_cls.call_count == 2
+        assert req.status == ProviderRequestStatus.EXECUTION_PENDING
+        assert req.execution_data is not None
+        assert req.execution_data.from_tx_hash == unsettled.tx_hash
+        provider.logger.warning.assert_called()  # type: ignore[attr-defined]
+
     def test_execute_exception_sets_execution_failed(self) -> None:
-        """execute() catches generic exceptions and sets EXECUTION_FAILED (lines 438-449)."""
+        """execute() catches generic exceptions and sets EXECUTION_FAILED."""
         tx: t.Dict[str, t.Any] = {
             "to": "0x" + "a" * 40,
             "gas": 21_000,

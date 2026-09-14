@@ -31,15 +31,28 @@ import requests
 from autonomy.chain.base import registry_contracts
 from web3 import Web3
 
+from operate.bridge.providers.relay_provider import RELAY_DEFAULT_GAS
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger import NATIVE_CURRENCY_DECIMALS, get_default_rpc
+from operate.ledger import (
+    CHAINS,
+    DEFAULT_RPCS,
+    NATIVE_CURRENCY_DECIMALS,
+    get_default_rpc,
+)
 from operate.ledger.profiles import (
+    CONTRACTS,
     DECOUPLED_ACTIVITY_CHECKERS,
+    DEFAULT_EOA_TOPUPS,
+    DEFAULT_NEW_SAFE_FUNDS,
+    DEFAULT_RECOVERY_TOPUPS,
+    DUST,
     ERC20_TOKENS,
     ERC20_TOKENS_BY_CHAIN_ID,
+    EXPLORER_URL,
     OLAS,
     PUSD,
     STAKING,
+    USDG,
     WRAPPED_NATIVE_ASSET,
     format_asset_amount,
     get_asset_decimals,
@@ -50,43 +63,70 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain
 
 
+class TestEvmChainTables:
+    """Tests for per-chain tables that are indexed without a default."""
+
+    @pytest.mark.parametrize(
+        "chain",
+        [chain for chain in CHAINS if chain != Chain.SOLANA],
+        ids=lambda chain: chain.value,
+    )
+    def test_chain_present_in_mandatory_tables(self, chain: Chain) -> None:
+        """Test every EVM chain in CHAINS has an entry in each mandatory table."""
+        tables = {
+            "CONTRACTS": CONTRACTS,
+            "DEFAULT_RPCS": DEFAULT_RPCS,
+            "OLAS": OLAS,
+            "RELAY_DEFAULT_GAS": RELAY_DEFAULT_GAS,
+            "STAKING": STAKING,
+            "WRAPPED_NATIVE_ASSET": WRAPPED_NATIVE_ASSET,
+            "DUST": DUST,
+            "DEFAULT_NEW_SAFE_FUNDS": DEFAULT_NEW_SAFE_FUNDS,
+            "DEFAULT_EOA_TOPUPS": DEFAULT_EOA_TOPUPS,
+            "DEFAULT_RECOVERY_TOPUPS": DEFAULT_RECOVERY_TOPUPS,
+            "EXPLORER_URL": EXPLORER_URL,
+        }
+        missing = [name for name, table in tables.items() if chain not in table]
+        assert not missing
+
+
 class TestGetAssetName:
-    """Tests for get_asset_name function (lines 338-348)."""
+    """Tests for get_asset_name function."""
 
     def test_zero_address_returns_native_denom(self) -> None:
-        """Test ZERO_ADDRESS returns the chain's native currency denom (line 339)."""
+        """Test ZERO_ADDRESS returns the chain's native currency denom."""
         result = get_asset_name(Chain.GNOSIS, ZERO_ADDRESS)
         assert result == "xDAI"
 
     def test_wrapped_native_asset_returns_w_prefixed(self) -> None:
-        """Test wrapped native asset address returns 'W{denom}' (line 342)."""
+        """Test wrapped native asset address returns 'W{denom}'."""
         wrapped_address = WRAPPED_NATIVE_ASSET[Chain.GNOSIS]
         result = get_asset_name(Chain.GNOSIS, wrapped_address)
         assert result == "WxDAI"
 
     def test_known_erc20_returns_symbol(self) -> None:
-        """Test a known ERC20 token address returns its symbol (lines 344-346)."""
+        """Test a known ERC20 token address returns its symbol."""
         olas_address = OLAS[Chain.ETHEREUM]
         result = get_asset_name(Chain.ETHEREUM, olas_address)
         assert result == "OLAS"
 
     def test_unknown_address_returns_address_itself(self) -> None:
-        """Test an unknown address is returned unchanged (line 348)."""
+        """Test an unknown address is returned unchanged."""
         unknown = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
         result = get_asset_name(Chain.GNOSIS, unknown)
         assert result == unknown
 
 
 class TestGetAssetDecimals:
-    """Tests for get_asset_decimals function (lines 354-360)."""
+    """Tests for get_asset_decimals function."""
 
     def test_zero_address_returns_native_decimals(self) -> None:
-        """Test ZERO_ADDRESS returns NATIVE_CURRENCY_DECIMALS without RPC call (line 355)."""
+        """Test ZERO_ADDRESS returns NATIVE_CURRENCY_DECIMALS without RPC call."""
         result = get_asset_decimals(Chain.BASE, ZERO_ADDRESS)
         assert result == NATIVE_CURRENCY_DECIMALS
 
     def test_erc20_address_calls_contract_decimals(self) -> None:
-        """Test ERC20 address triggers on-chain decimals() call (lines 356-360)."""
+        """Test ERC20 address triggers on-chain decimals() call."""
         mock_instance = MagicMock()
         mock_instance.functions.decimals.return_value.call.return_value = 6
 
@@ -104,7 +144,7 @@ class TestGetAssetDecimals:
 
 
 class TestFormatAssetAmount:
-    """Tests for format_asset_amount function (lines 367-370)."""
+    """Tests for format_asset_amount function."""
 
     def test_format_native_amount_gnosis(self) -> None:
         """Test format_asset_amount returns human-readable string for native token."""
@@ -116,25 +156,25 @@ class TestFormatAssetAmount:
 
 
 class TestGetStakingContract:
-    """Tests for get_staking_contract function (lines 378-384)."""
+    """Tests for get_staking_contract function."""
 
     def test_none_staking_program_id_returns_none(self) -> None:
-        """Test None staking_program_id returns None (line 379)."""
+        """Test None staking_program_id returns None."""
         result = get_staking_contract("gnosis", None)
         assert result is None
 
     def test_no_staking_program_id_returns_none(self) -> None:
-        """Test NO_STAKING_PROGRAM_ID returns None (line 379)."""
+        """Test NO_STAKING_PROGRAM_ID returns None."""
         result = get_staking_contract("gnosis", NO_STAKING_PROGRAM_ID)
         assert result is None
 
     def test_known_staking_program_returns_contract_address(self) -> None:
-        """Test a known staking program ID returns its contract address (lines 381-383)."""
+        """Test a known staking program ID returns its contract address."""
         result = get_staking_contract("gnosis", "pearl_alpha")
         assert result == "0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A"
 
     def test_unknown_staking_program_returns_program_id(self) -> None:
-        """Test an unknown staking program ID is returned unchanged (line 383)."""
+        """Test an unknown staking program ID is returned unchanged."""
         result = get_staking_contract("gnosis", "not_a_real_program_xyz")
         assert result == "not_a_real_program_xyz"
 
@@ -215,6 +255,29 @@ class TestPUSDRegistration:
         """The pUSD address must appear in ERC20_TOKENS_BY_CHAIN_ID for the Polygon chain ID."""
         polygon_id = Chain.POLYGON.id
         assert PUSD_ADDRESS in ERC20_TOKENS_BY_CHAIN_ID[polygon_id]
+
+
+USDG_ADDRESSES = {
+    Chain.ETHEREUM: "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+    Chain.ROBINHOOD: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+}
+
+
+class TestUSDGRegistration:
+    """Tests for USDG token registration in profiles."""
+
+    def test_usdg_registered_in_erc20_tokens(self) -> None:
+        """ERC20_TOKENS['USDG'] must be the USDG constant with the expected chains."""
+        assert ERC20_TOKENS["USDG"] is USDG
+        assert USDG == USDG_ADDRESSES
+
+    @pytest.mark.parametrize(
+        "chain", list(USDG_ADDRESSES), ids=lambda chain: chain.value
+    )
+    def test_usdg_resolves_on_chain(self, chain: Chain) -> None:
+        """get_asset_name and ERC20_TOKENS_BY_CHAIN_ID must both know the USDG address."""
+        assert get_asset_name(chain, USDG_ADDRESSES[chain]) == "USDG"
+        assert USDG_ADDRESSES[chain] in ERC20_TOKENS_BY_CHAIN_ID[chain.id]
 
 
 # --- staking_program_id convention (see the STAKING docstring in profiles.py) ---
