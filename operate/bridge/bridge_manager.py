@@ -31,7 +31,7 @@ from typing import cast
 from deepdiff import DeepDiff
 from web3 import Web3
 
-from operate.bridge.providers.mayan_provider import MayanProvider
+from operate.bridge.providers.mayan_provider import MAYAN_CHAIN_NAMES, MayanProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
@@ -57,8 +57,10 @@ BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 RELAY_PROVIDER_ID = "relay-provider"
 MAYAN_PROVIDER_ID = "mayan-provider"
 
-# Chains excluded from Mayan fallback (Mayan does not support these destinations)
-MAYAN_EXCLUDED_CHAINS: t.Set[str] = {Chain.GNOSIS.value, Chain.ROBINHOOD.value}
+# Chains Mayan cannot route to or from
+MAYAN_EXCLUDED_CHAINS: t.Set[str] = {
+    chain.value for chain in Chain if chain.value not in MAYAN_CHAIN_NAMES
+}
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {
@@ -266,7 +268,7 @@ class BridgeManager:
         1. PREFERRED_ROUTES overrides — single provider, no auto-Mayan
         2. Native bridge primary → [native_bridge, relay]
         3. Default → [relay]
-        4. If relay is in the chain and destination is not in
+        4. If relay is in the chain and neither source nor destination is in
            MAYAN_EXCLUDED_CHAINS → append mayan as last resort
         """
         route = (
@@ -289,8 +291,13 @@ class BridgeManager:
         if RELAY_PROVIDER_ID not in chain:
             chain.append(RELAY_PROVIDER_ID)
 
+        from_chain = params["from"]["chain"]
         to_chain = params["to"]["chain"]
-        if RELAY_PROVIDER_ID in chain and to_chain not in MAYAN_EXCLUDED_CHAINS:
+        if (
+            RELAY_PROVIDER_ID in chain
+            and from_chain not in MAYAN_EXCLUDED_CHAINS
+            and to_chain not in MAYAN_EXCLUDED_CHAINS
+        ):
             chain.append(MAYAN_PROVIDER_ID)
 
         return chain

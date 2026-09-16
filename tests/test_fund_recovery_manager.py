@@ -1905,12 +1905,15 @@ class TestFetchServicesFromSubgraph:
             _fetch_services_from_subgraph,
         )
 
-        mock_post.return_value.json.return_value = {"data": {"services": []}}
+        mock_post.return_value.json.return_value = {
+            "data": {"services": [{"id": "7"}, {"id": "12"}]}
+        }
 
-        _fetch_services_from_subgraph(SUBGRAPH_URLS[chain], "0xABC")
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[chain], "0xABC")
 
         query = mock_post.call_args.kwargs["json"]["query"]
         assert query == f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"
+        assert result == [7, 12]
 
 
 def test_inject_safe_into_wallet(tmp_path: Path) -> None:

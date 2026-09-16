@@ -2045,5 +2045,4 @@ class TestRobinhoodChainMetadata:
         from operate.operate_types import Chain
 
         result = wei_to_token(1_000_000, "robinhood", USDG[Chain.ROBINHOOD])
-        assert result.startswith("1")
-        assert result.endswith(" USDG")
+        assert result == "1.000000 USDG"

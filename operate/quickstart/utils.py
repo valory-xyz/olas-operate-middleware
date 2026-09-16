@@ -196,7 +196,7 @@ CHAIN_TO_METADATA = {
     },
     "robinhood": {
         "name": "Robinhood",
-        "gasFundReq": unit_to_wei(0.005),
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.ROBINHOOD],
         "token_data": {
             ZERO_ADDRESS: {
