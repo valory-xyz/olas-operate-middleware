@@ -260,4 +260,4 @@ operate daemon
 
 ## Version Management
 
-Version stored in `operate/__init__.py` as `__version__`. Release process handled via GitHub Actions (`.github/workflows/release.yml`).
+Version lives in `[project].version` in `pyproject.toml`, mirrored in `uv.lock`; bump both together. `operate/__init__.py` reads it at runtime into `__version__` from the installed package metadata. Release process handled via GitHub Actions (`.github/workflows/release.yml`).
