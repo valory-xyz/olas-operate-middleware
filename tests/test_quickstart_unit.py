@@ -2020,3 +2020,30 @@ class TestResetStaking:
         # Config should be reset and stored
         mock_cfg_conf.store.assert_called()
         assert mock_cfg_conf.staking_program_id is None
+
+
+class TestRobinhoodChainMetadata:
+    """Tests for the Robinhood entry in CHAIN_TO_METADATA."""
+
+    def test_token_data_covers_native_olas_and_usdg(self) -> None:
+        """Robinhood lists ETH, OLAS and 6-decimal USDG."""
+        from operate.constants import ZERO_ADDRESS
+        from operate.ledger.profiles import OLAS, USDG
+        from operate.operate_types import Chain
+        from operate.quickstart.utils import CHAIN_TO_METADATA
+
+        token_data = CHAIN_TO_METADATA["robinhood"]["token_data"]
+        olas = OLAS[Chain.ROBINHOOD]
+        usdg = USDG[Chain.ROBINHOOD]
+        assert token_data[ZERO_ADDRESS] == {"symbol": "ETH", "decimals": 18}
+        assert token_data[olas] == {"symbol": "OLAS", "decimals": 18}
+        assert token_data[usdg] == {"symbol": "USDG", "decimals": 6}
+
+    def test_wei_to_token_formats_usdg(self) -> None:
+        """wei_to_token renders 1 USDG on Robinhood."""
+        from operate.ledger.profiles import USDG
+        from operate.operate_types import Chain
+
+        result = wei_to_token(1_000_000, "robinhood", USDG[Chain.ROBINHOOD])
+        assert result.startswith("1")
+        assert result.endswith(" USDG")

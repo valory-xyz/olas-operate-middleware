@@ -58,7 +58,7 @@ RELAY_PROVIDER_ID = "relay-provider"
 MAYAN_PROVIDER_ID = "mayan-provider"
 
 # Chains excluded from Mayan fallback (Mayan does not support these destinations)
-MAYAN_EXCLUDED_CHAINS: t.Set[str] = {Chain.GNOSIS.value}
+MAYAN_EXCLUDED_CHAINS: t.Set[str] = {Chain.GNOSIS.value, Chain.ROBINHOOD.value}
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {

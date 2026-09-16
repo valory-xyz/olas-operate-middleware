@@ -941,9 +941,15 @@ class TestBuildProviderChain:
         chain = mgr._build_provider_chain(params)
         assert chain == [RELAY_PROVIDER_ID]
 
-    def test_mayan_excluded_chains_is_gnosis(self) -> None:
-        """Verify MAYAN_EXCLUDED_CHAINS contains exactly Gnosis."""
-        assert MAYAN_EXCLUDED_CHAINS == {Chain.GNOSIS.value}
+    def test_mayan_excluded_chains(self) -> None:
+        """Verify MAYAN_EXCLUDED_CHAINS contains exactly Gnosis and Robinhood."""
+        assert MAYAN_EXCLUDED_CHAINS == {Chain.GNOSIS.value, Chain.ROBINHOOD.value}
+
+    def test_robinhood_destination_has_no_mayan_fallback(self) -> None:
+        """A Robinhood destination routes through Relay only."""
+        mgr = _make_bare_manager()
+        chain = mgr._build_provider_chain(_route_params(to_chain="robinhood"))
+        assert chain == [RELAY_PROVIDER_ID]
 
 
 class TestQuoteBundleFallback:

@@ -94,6 +94,7 @@ RECOVERY_CHAINS: t.List[Chain] = [
     Chain.GNOSIS,
     Chain.BASE,
     Chain.OPTIMISM,
+    Chain.ROBINHOOD,
 ]
 
 #: Minimum native balance (in wei) to warn the user about insufficient gas.
@@ -111,7 +112,10 @@ SUBGRAPH_URLS: t.Dict[Chain, str] = {
     Chain.OPTIMISM: "https://registry-optimism.subgraph.autonolas.tech/graphql",
     Chain.POLYGON: "https://registry-polygon.subgraph.autonolas.tech/graphql",
     Chain.BASE: "https://registry-base.subgraph.autonolas.tech/graphql",
+    Chain.ROBINHOOD: "https://subgraph.autonolas.tech/squid/service-registry-robinhood/graphql",
 }
+
+SQUID_URLS: t.FrozenSet[str] = frozenset({SUBGRAPH_URLS[Chain.ROBINHOOD]})
 
 #: A real IPFS CID used when constructing a synthetic service via
 #: ``ServiceManager.create()``.  The downloaded package contents are never
@@ -315,9 +319,13 @@ def _get_service_state(
 
 def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
     """Fetch service IDs created by the Master EOA from the given subgraph URL."""
-    payload = {
-        "query": f'{{ services(where: {{creator_: {{id: "{eoa_address.lower()}"}}}}) {{ id }} }}'
-    }
+    eoa = eoa_address.lower()
+    creator_filter = (
+        f'creator: {{id_eq: "{eoa}"}}'
+        if url in SQUID_URLS
+        else f'creator_: {{id: "{eoa}"}}'
+    )
+    payload = {"query": f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"}
     try:
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
