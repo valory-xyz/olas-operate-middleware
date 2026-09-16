@@ -27,6 +27,7 @@ import pytest
 
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import (
+    Chain,
     FundRecoveryExecuteResponse,
     FundRecoveryScanResponse,
     GasWarningEntry,
@@ -1886,6 +1887,33 @@ class TestFetchServicesFromSubgraph:
 
         result = _fetch_services_from_subgraph("http://url", "0xabc")
         assert result == [1, 2]
+
+    @pytest.mark.parametrize(
+        ("chain", "creator_filter"),
+        [
+            (Chain.GNOSIS, 'creator_: {id: "0xabc"}'),
+            (Chain.ROBINHOOD, 'creator: {id_eq: "0xabc"}'),
+        ],
+    )
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_query_matches_endpoint_dialect(
+        self, mock_post: MagicMock, chain: Chain, creator_filter: str
+    ) -> None:
+        """Graph-node subgraphs and SQD squids each get their own filter syntax."""
+        from operate.services.fund_recovery_manager import (
+            SUBGRAPH_URLS,
+            _fetch_services_from_subgraph,
+        )
+
+        mock_post.return_value.json.return_value = {
+            "data": {"services": [{"id": "7"}, {"id": "12"}]}
+        }
+
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[chain], "0xABC")
+
+        query = mock_post.call_args.kwargs["json"]["query"]
+        assert query == f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"
+        assert result == [7, 12]
 
 
 def test_inject_safe_into_wallet(tmp_path: Path) -> None:

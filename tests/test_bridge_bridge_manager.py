@@ -37,6 +37,7 @@ from operate.bridge.bridge_manager import (
     ProviderRequestBundle,
     RELAY_PROVIDER_ID,
 )
+from operate.bridge.providers.mayan_provider import MAYAN_CHAIN_NAMES, MayanProvider
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -773,7 +774,7 @@ class TestBridgeManager:
 
         for request_status in refill_requirements["bridge_request_status"]:
             if request_status["message"] == "no routes found":
-                continue
+                pytest.skip("Provider has no route for this pair.")
             message = (request_status.get("message") or "").lower()
             if "liquidity" in message:
                 pytest.skip(
@@ -798,6 +799,9 @@ class TestBridgeManager:
         assert len(bundle.provider_requests) == 1, "Wrong bundle."
         request = bundle.provider_requests[0]
         bridge = bridge_manager._providers[request.provider_id]
+
+        if expected_provider_cls is RelayProvider and isinstance(bridge, MayanProvider):
+            pytest.skip("Relay had no route, so the Mayan fallback answered.")
 
         assert isinstance(
             bridge, expected_provider_cls
@@ -941,9 +945,26 @@ class TestBuildProviderChain:
         chain = mgr._build_provider_chain(params)
         assert chain == [RELAY_PROVIDER_ID]
 
-    def test_mayan_excluded_chains_is_gnosis(self) -> None:
-        """Verify MAYAN_EXCLUDED_CHAINS contains exactly Gnosis."""
-        assert MAYAN_EXCLUDED_CHAINS == {Chain.GNOSIS.value}
+    def test_mayan_excluded_chains(self) -> None:
+        """MAYAN_EXCLUDED_CHAINS is every chain missing from Mayan's chain map."""
+        assert MAYAN_EXCLUDED_CHAINS == {
+            chain.value for chain in Chain if chain.value not in MAYAN_CHAIN_NAMES
+        }
+        for name in ("gnosis", "celo", "mode", "robinhood"):
+            assert name in MAYAN_EXCLUDED_CHAINS
+        assert MAYAN_EXCLUDED_CHAINS.isdisjoint(MAYAN_CHAIN_NAMES)
+
+    def test_robinhood_destination_has_no_mayan_fallback(self) -> None:
+        """A Robinhood destination routes through Relay only."""
+        mgr = _make_bare_manager()
+        chain = mgr._build_provider_chain(_route_params(to_chain="robinhood"))
+        assert chain == [RELAY_PROVIDER_ID]
+
+    def test_robinhood_origin_has_no_mayan_fallback(self) -> None:
+        """A Robinhood source routes through Relay only."""
+        mgr = _make_bare_manager()
+        params = _route_params(from_chain="robinhood", to_chain="base")
+        assert mgr._build_provider_chain(params) == [RELAY_PROVIDER_ID]
 
 
 class TestQuoteBundleFallback:

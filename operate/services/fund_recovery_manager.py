@@ -94,6 +94,7 @@ RECOVERY_CHAINS: t.List[Chain] = [
     Chain.GNOSIS,
     Chain.BASE,
     Chain.OPTIMISM,
+    Chain.ROBINHOOD,
 ]
 
 #: Minimum native balance (in wei) to warn the user about insufficient gas.
@@ -105,13 +106,39 @@ GAS_WARN_THRESHOLDS: t.Dict[int, int] = {
     if hasattr(chain, "id") and ZERO_ADDRESS in amounts
 }
 
-#: Subgraph URLs for fast service enumeration
-SUBGRAPH_URLS: t.Dict[Chain, str] = {
-    Chain.GNOSIS: "https://api.subgraph.autonolas.tech/api/proxy/service-registry-gnosis",
-    Chain.OPTIMISM: "https://registry-optimism.subgraph.autonolas.tech/graphql",
-    Chain.POLYGON: "https://registry-polygon.subgraph.autonolas.tech/graphql",
-    Chain.BASE: "https://registry-base.subgraph.autonolas.tech/graphql",
+SubgraphDialect = t.Literal["graph", "squid"]
+
+#: Service-registry indexer per chain, tagged with its GraphQL dialect
+SUBGRAPH_ENDPOINTS: t.Dict[Chain, t.Tuple[SubgraphDialect, str]] = {
+    Chain.GNOSIS: (
+        "graph",
+        "https://api.subgraph.autonolas.tech/api/proxy/service-registry-gnosis",
+    ),
+    Chain.OPTIMISM: (
+        "graph",
+        "https://registry-optimism.subgraph.autonolas.tech/graphql",
+    ),
+    Chain.POLYGON: (
+        "graph",
+        "https://registry-polygon.subgraph.autonolas.tech/graphql",
+    ),
+    Chain.BASE: (
+        "graph",
+        "https://registry-base.subgraph.autonolas.tech/graphql",
+    ),
+    Chain.ROBINHOOD: (
+        "squid",
+        "https://subgraph.autonolas.tech/squid/service-registry-robinhood/graphql",
+    ),
 }
+
+SUBGRAPH_URLS: t.Dict[Chain, str] = {
+    chain: url for chain, (_, url) in SUBGRAPH_ENDPOINTS.items()
+}
+
+SQUID_URLS: t.FrozenSet[str] = frozenset(
+    url for dialect, url in SUBGRAPH_ENDPOINTS.values() if dialect == "squid"
+)
 
 #: A real IPFS CID used when constructing a synthetic service via
 #: ``ServiceManager.create()``.  The downloaded package contents are never
@@ -314,10 +341,15 @@ def _get_service_state(
 
 
 def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
-    """Fetch service IDs created by the Master EOA from the given subgraph URL."""
-    payload = {
-        "query": f'{{ services(where: {{creator_: {{id: "{eoa_address.lower()}"}}}}) {{ id }} }}'
-    }
+    """Fetch service IDs created by the Master EOA, in the endpoint's GraphQL dialect."""
+    eoa = eoa_address.lower()
+    # graph-node and SQD squids use different relation-filter syntax
+    creator_filter = (
+        f'creator: {{id_eq: "{eoa}"}}'
+        if url in SQUID_URLS
+        else f'creator_: {{id: "{eoa}"}}'
+    )
+    payload = {"query": f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"}
     try:
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()

@@ -30,7 +30,7 @@ from halo import Halo
 from web3.exceptions import Web3RPCError
 
 from operate.constants import DEFAULT_TIMEOUT, ZERO_ADDRESS
-from operate.ledger.profiles import OLAS, PUSD, USDC
+from operate.ledger.profiles import OLAS, PUSD, USDC, USDG
 from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
@@ -190,6 +190,29 @@ CHAIN_TO_METADATA = {
         },
         "gasParams": {
             # this means default values will be used
+            "MAX_PRIORITY_FEE_PER_GAS": "",
+            "MAX_FEE_PER_GAS": "",
+        },
+    },
+    "robinhood": {
+        "name": "Robinhood",
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
+        "staking_bonding_token": OLAS[Chain.ROBINHOOD],
+        "token_data": {
+            ZERO_ADDRESS: {
+                "symbol": "ETH",
+                "decimals": 18,
+            },
+            OLAS[Chain.ROBINHOOD]: {
+                "symbol": "OLAS",
+                "decimals": 18,
+            },
+            USDG[Chain.ROBINHOOD]: {
+                "symbol": "USDG",
+                "decimals": 6,
+            },
+        },
+        "gasParams": {
             "MAX_PRIORITY_FEE_PER_GAS": "",
             "MAX_FEE_PER_GAS": "",
         },
