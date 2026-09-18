@@ -99,6 +99,9 @@ def _send_checkpoint(service_manager: t.Any, staking_contract: str) -> None:
             "value": 0,
             "chainId": SERVICE_CHAIN.id,
             "nonce": ledger_api.api.eth.get_transaction_count(wallet.crypto.address),
+            # `update_with_gas_estimate` drops this key before estimating and
+            # raises `KeyError` if it is absent, so it has to be seeded.
+            "gas": 0,
         }
         return ledger_api.update_with_gas_estimate(transaction=tx, raise_on_try=True)
 
