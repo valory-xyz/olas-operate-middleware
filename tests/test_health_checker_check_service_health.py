@@ -377,7 +377,10 @@ class TestCheckServiceHealthLivenessRecording:
         self, health_checker: HealthChecker, tmp_path: Path
     ) -> None:
         """A 200 with is_healthy advances last_healthy_at and clears the failures."""
-        health_checker.record_probe(service_config_id="svc", healthy=False)
+        health_checker.record_failed_probe(
+            service_config_id="svc",
+            reason=AgentLivenessReason.AGENT_PROCESS_EXITED,
+        )
         health_checker.record_restart(service_config_id="svc")
 
         mock_resp = AsyncMock()
@@ -461,11 +464,14 @@ class TestCheckServiceHealthLivenessRecording:
     ) -> None:
         """Failures count up until a healthy probe resets them."""
         for _ in range(3):
-            health_checker.record_probe(service_config_id="svc", healthy=False)
+            health_checker.record_failed_probe(
+                service_config_id="svc",
+                reason=AgentLivenessReason.AGENT_PROCESS_EXITED,
+            )
 
         assert health_checker.get_liveness("svc")["consecutive_failures"] == 3
 
-        health_checker.record_probe(service_config_id="svc", healthy=True)
+        health_checker.record_healthy_probe(service_config_id="svc")
         assert health_checker.get_liveness("svc")["consecutive_failures"] == 0
 
 
@@ -516,7 +522,7 @@ class TestGetLiveness:
 
     def test_returned_record_is_a_copy(self, health_checker: HealthChecker) -> None:
         """Callers must not be able to mutate the health checker's state."""
-        health_checker.record_probe(service_config_id="svc", healthy=True)
+        health_checker.record_healthy_probe(service_config_id="svc")
 
         health_checker.get_liveness("svc")["is_alive"] = False
 
@@ -526,7 +532,7 @@ class TestGetLiveness:
         self, health_checker: HealthChecker
     ) -> None:
         """An eviction that cannot be cleared is reported without a probe."""
-        health_checker.record_probe(service_config_id="svc", healthy=True)
+        health_checker.record_healthy_probe(service_config_id="svc")
 
         health_checker.record_reason(
             service_config_id="svc",
@@ -537,12 +543,12 @@ class TestGetLiveness:
         assert liveness["is_alive"] is False
         assert liveness["reason"] == "evicted_cannot_restake"
 
-    def test_stop_for_service_keeps_the_record(
+    def test_stop_for_service_keeps_an_eviction_reason(
         self, health_checker: HealthChecker
     ) -> None:
         """`pause_all_services` stops the job of every service, not just one.
 
-        Dropping the record here would erase one service's
+        Dropping the reason here would erase one service's
         `evicted_cannot_restake` because the user started a different one.
         """
         health_checker.record_reason(
@@ -553,6 +559,31 @@ class TestGetLiveness:
         health_checker.stop_for_service(service_config_id="svc")
 
         assert health_checker.get_liveness("svc")["reason"] == "evicted_cannot_restake"
+
+    def test_stop_for_service_drops_a_healthy_record(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A stopped service must not keep reporting the agent as running."""
+        health_checker.record_healthy_probe(service_config_id="svc")
+
+        health_checker.stop_for_service(service_config_id="svc")
+
+        liveness = health_checker.get_liveness("svc", tmp_path)
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "not_monitored"
+
+    def test_stop_for_service_drops_a_record_of_a_dead_agent(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """Only an eviction outlives the stop; an ordinary failure does not."""
+        health_checker.record_failed_probe(
+            service_config_id="svc",
+            reason=AgentLivenessReason.AGENT_PROCESS_EXITED,
+        )
+
+        health_checker.stop_for_service(service_config_id="svc")
+
+        assert health_checker.get_liveness("svc", tmp_path)["reason"] == "not_monitored"
 
     def test_start_for_service_forgets_the_previous_record(
         self, health_checker: HealthChecker

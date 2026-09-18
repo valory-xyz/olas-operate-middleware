@@ -1110,6 +1110,21 @@ class TestRestartStakingReconciliation:
         assert exc is None
 
     @pytest.mark.asyncio
+    async def test_skipped_reconciliation_does_not_count_as_a_restart(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """No restart was attempted, so the count the API reports must not move."""
+        sm = health_checker._service_manager
+        sm.reconcile_staking_for_restart.return_value = StakingReconcileOutcome.SKIPPED
+
+        await self._run_until_restart(health_checker)
+
+        assert (
+            health_checker.get_liveness("test-service")["restarts_since_last_healthy"]
+            == 0
+        )
+
+    @pytest.mark.asyncio
     async def test_locked_eviction_stops_the_service_with_a_reason(
         self, health_checker: HealthChecker
     ) -> None:

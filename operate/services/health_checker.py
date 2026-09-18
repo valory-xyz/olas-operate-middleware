@@ -26,6 +26,7 @@ import logging
 import threading
 import time
 import typing as t
+from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from pathlib import Path
 
@@ -52,6 +53,52 @@ class AgentLivenessReason(str, enum.Enum):
     NOT_MONITORED = "not_monitored"
 
 
+@dataclass
+class AgentLiveness:
+    """Liveness of a service's agent, as reported on the deployment payload."""
+
+    is_alive: bool = False
+    reason: t.Optional[AgentLivenessReason] = AgentLivenessReason.NOT_MONITORED
+    last_checked_at: t.Optional[float] = None
+    last_healthy_at: t.Optional[float] = None
+    consecutive_failures: int = 0
+    restarts_since_last_healthy: int = 0
+
+    def mark_healthy(self, probed_at: t.Optional[float] = None) -> None:
+        """Mark the agent alive, counting a successful probe if one is given."""
+        self.is_alive = True
+        self.reason = None
+        if probed_at is None:
+            return
+
+        self.last_checked_at = probed_at
+        self.last_healthy_at = probed_at
+        self.consecutive_failures = 0
+        self.restarts_since_last_healthy = 0
+
+    def mark_unhealthy(
+        self, reason: AgentLivenessReason, probed_at: t.Optional[float] = None
+    ) -> None:
+        """Mark the agent not alive and why, counting a failed probe if one is given."""
+        self.is_alive = False
+        self.reason = reason
+        if probed_at is None:
+            return
+
+        self.last_checked_at = probed_at
+        self.consecutive_failures += 1
+
+    def mark_restarted(self) -> None:
+        """Count a restart attempted since the agent was last healthy."""
+        self.restarts_since_last_healthy += 1
+
+    def json(self) -> t.Dict[str, t.Any]:
+        """Serialise for the deployment payload."""
+        payload = asdict(self)
+        payload["reason"] = None if self.reason is None else self.reason.value
+        return payload
+
+
 class HealthChecker:  # pylint: disable=too-many-instance-attributes
     """Health checker manager."""
 
@@ -73,7 +120,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         """Init the healtch checker."""
         self._jobs: t.Dict[str, asyncio.Task] = {}
         self._jobs_lock = threading.Lock()  # Protect _jobs dict operations
-        self._liveness: t.Dict[str, t.Dict[str, t.Any]] = {}
+        self._liveness: t.Dict[str, AgentLiveness] = {}
         self._liveness_lock = threading.Lock()  # Protect _liveness dict operations
         self._loop: t.Optional[asyncio.AbstractEventLoop] = None
         self._service_manager = service_manager
@@ -87,9 +134,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         self.logger.info(
             f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}"
         )
-        # A fresh deployment invalidates the previous record: a service stopped
-        # with `evicted_cannot_restake` would otherwise keep reporting that
-        # reason until this job's first probe, minutes after the agent booted.
+        # A fresh deployment invalidates the previous record, `evicted_cannot_restake` included.
         self.forget_service(service_config_id=service_config_id)
 
         # Thread-safe job management: check and stop existing job atomically
@@ -115,11 +160,8 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
     def stop_for_service(self, service_config_id: str) -> None:
         """Stop for a specific service."""
-        # The record is deliberately kept: `pause_all_services` stops the job of
-        # every service, so dropping it here would erase one service's
-        # `evicted_cannot_restake` because the user started another one. The
-        # record only describes a stopped agent, and `start_for_service` clears
-        # it when a fresh deployment makes it obsolete.
+        # A stopped agent is not alive; only the reason it could not be restarted outlives it.
+        self._forget_unless_evicted(service_config_id=service_config_id)
 
         # Thread-safe job cancellation
         with self._jobs_lock:
@@ -146,14 +188,25 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
     async def check_service_health(
         self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
-        """Check the service health and record the outcome on the liveness record."""
+        """Check the service health and record the outcome on its liveness record."""
         healthy = await self._probe_agent(service_path=service_path)
-        self.record_probe(
-            service_config_id=service_config_id,
-            healthy=healthy,
-            service_path=service_path,
+        if healthy:
+            self.record_healthy_probe(service_config_id=service_config_id)
+            return True
+
+        # Reads the PID file and asks psutil, so it stays off the event loop.
+        agent_is_running = await asyncio.to_thread(
+            self._is_agent_process_alive, service_path
         )
-        return healthy
+        self.record_failed_probe(
+            service_config_id=service_config_id,
+            reason=(
+                AgentLivenessReason.AGENT_UNRESPONSIVE
+                if agent_is_running
+                else AgentLivenessReason.AGENT_PROCESS_EXITED
+            ),
+        )
+        return False
 
     async def _probe_agent(  # pylint: disable=too-many-return-statements
         self, service_path: t.Optional[Path] = None
@@ -227,94 +280,73 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
         return validate_pid(pid, expected_process_names=AGENT_PROCESS_NAMES)
 
-    @staticmethod
-    def _new_liveness_record() -> t.Dict[str, t.Any]:
-        """Build an empty liveness record."""
-        return {
-            "is_alive": False,
-            "reason": AgentLivenessReason.NOT_MONITORED.value,
-            "last_checked_at": None,
-            "last_healthy_at": None,
-            "consecutive_failures": 0,
-            "restarts_since_last_healthy": 0,
-        }
-
-    def record_probe(
-        self,
-        service_config_id: str,
-        healthy: bool,
-        service_path: t.Optional[Path] = None,
+    def _update_liveness(
+        self, service_config_id: str, update: t.Callable[[AgentLiveness], None]
     ) -> None:
-        """Record the outcome of a health probe for a service.
-
-        Called on every probe, not only on the HTTP-200 path: the deployment
-        payload has no other way to tell a running agent from one whose process
-        died while the deployment stayed marked as DEPLOYED.
-        """
-        now = time.time()
+        """Apply an update to a service's liveness record, creating it on first use."""
         with self._liveness_lock:
-            record = self._liveness.setdefault(
-                service_config_id, self._new_liveness_record()
-            )
-            record["last_checked_at"] = now
-            record["is_alive"] = healthy
-            if healthy:
-                record["reason"] = None
-                record["last_healthy_at"] = now
-                record["consecutive_failures"] = 0
-                record["restarts_since_last_healthy"] = 0
-            else:
-                record["consecutive_failures"] += 1
-                record["reason"] = (
-                    AgentLivenessReason.AGENT_UNRESPONSIVE.value
-                    if self._is_agent_process_alive(service_path)
-                    else AgentLivenessReason.AGENT_PROCESS_EXITED.value
-                )
+            update(self._liveness.setdefault(service_config_id, AgentLiveness()))
+
+    def record_healthy_probe(self, service_config_id: str) -> None:
+        """Record a probe the agent answered."""
+        probed_at = time.time()
+        self._update_liveness(
+            service_config_id, lambda record: record.mark_healthy(probed_at)
+        )
+
+    def record_failed_probe(
+        self, service_config_id: str, reason: AgentLivenessReason
+    ) -> None:
+        """Record a probe the agent did not answer, and why."""
+        probed_at = time.time()
+        self._update_liveness(
+            service_config_id,
+            lambda record: record.mark_unhealthy(reason, probed_at=probed_at),
+        )
 
     def record_restart(self, service_config_id: str) -> None:
         """Record that a restart was attempted for a service."""
-        with self._liveness_lock:
-            record = self._liveness.setdefault(
-                service_config_id, self._new_liveness_record()
-            )
-            record["restarts_since_last_healthy"] += 1
+        self._update_liveness(service_config_id, AgentLiveness.mark_restarted)
 
     def record_reason(
         self, service_config_id: str, reason: AgentLivenessReason
     ) -> None:
         """Record why a service is not alive, without a probe behind it."""
-        with self._liveness_lock:
-            record = self._liveness.setdefault(
-                service_config_id, self._new_liveness_record()
-            )
-            record["is_alive"] = False
-            record["reason"] = reason.value
+        self._update_liveness(
+            service_config_id, lambda record: record.mark_unhealthy(reason)
+        )
 
     def forget_service(self, service_config_id: str) -> None:
         """Drop the liveness record of a service."""
         with self._liveness_lock:
             self._liveness.pop(service_config_id, None)
 
+    def _forget_unless_evicted(self, service_config_id: str) -> None:
+        """Drop the liveness record of a service unless it reports an eviction."""
+        with self._liveness_lock:
+            record = self._liveness.get(service_config_id)
+            if (
+                record is not None
+                and record.reason != AgentLivenessReason.EVICTED_CANNOT_RESTAKE
+            ):
+                del self._liveness[service_config_id]
+
     def get_liveness(
         self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> t.Dict[str, t.Any]:
-        """Return the liveness of a service's agent for the deployment payload.
-
-        Records are in-memory, so they are empty until the health-check job has
-        probed once — after a middleware restart, or for a service that is not
-        the monitored one. The PID file written by the deployment runner is the
-        fallback there, since it survives this process.
-        """
+        """Return the liveness of a service's agent for the deployment payload."""
         with self._liveness_lock:
             record = self._liveness.get(service_config_id)
-            if record is not None:
-                return dict(record)
 
-        fallback = self._new_liveness_record()
+        if record is not None:
+            return record.json()
+
+        # Records are in-memory, so a middleware restart leaves none; the PID
+        # file the deployment runner wrote outlives this process.
+        fallback = AgentLiveness()
         if self._is_agent_process_alive(service_path):
-            fallback["is_alive"] = True
-            fallback["reason"] = None
-        return fallback
+            fallback.mark_healthy()
+        return fallback.json()
 
     async def healthcheck_job(  # pylint: disable=too-many-statements
         self,
@@ -408,12 +440,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
             async def _restart(
                 service_manager: ServiceManager, service_config_id: str
             ) -> StakingReconcileOutcome:
-                """Restart the service, clearing an on-chain eviction first.
-
-                An evicted agent exits on every boot, so redeploying without
-                reconciling the staking state restarts a process that is
-                structurally incapable of staying up.
-                """
+                """Restart the service, clearing an on-chain eviction first."""
 
                 def _do_restart() -> StakingReconcileOutcome:
                     service_manager.stop_service_locally(
@@ -424,8 +451,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             service_config_id=service_config_id
                         )
                     except Exception:  # pylint: disable=broad-except
-                        # A chain read or a failed transaction must never wedge the
-                        # health checker: fall through to a plain local restart.
+                        # A chain read must never wedge the health checker: restart anyway.
                         self.logger.exception(
                             f"[HEALTH_CHECKER] {service_config_id} staking reconciliation failed"
                         )
@@ -435,10 +461,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE,
                         StakingReconcileOutcome.SKIPPED,
                     ):
-                        # EVICTED_CANNOT_RESTAKE: redeploying cannot clear the
-                        # eviction. SKIPPED: another caller is mid-reconciliation,
-                        # so the service may still be evicted and that caller will
-                        # deploy it itself. Either way, leave it stopped.
+                        # Booting the agent now would put it straight back into an eviction.
                         return outcome
 
                     service_manager.deploy_service_locally(
@@ -485,42 +508,41 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                 last_restart_exc: t.Optional[Exception] = None
                 while True:
                     failfast_records.append(time.time())
-                    self.record_restart(service_config_id=service_config_id)
                     restart_failed = False
-                    retry_restart = False
+                    outcome = StakingReconcileOutcome.FAILED
                     try:
                         outcome = await _restart(
                             self._service_manager, service_config_id
                         )
-                        if outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE:
-                            self.logger.error(
-                                f"[HEALTH_CHECKER] {service_config_id} is evicted on-chain and "
-                                "cannot be re-staked yet. Leaving the service stopped."
-                            )
-                            self.record_reason(
-                                service_config_id=service_config_id,
-                                reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
-                            )
-                            return
                         if outcome == StakingReconcileOutcome.SKIPPED:
-                            # Someone else is reconciling this service right now.
-                            # Come back once they are done instead of booting an
-                            # agent into a service that may still be evicted — and
-                            # do not spend failfast budget on their transaction.
+                            # Another caller is mid-reconciliation; their transaction is not ours to charge for.
                             self.logger.info(
                                 f"[HEALTH_CHECKER] {service_config_id} staking reconciliation "
                                 "is already in progress elsewhere. Retrying shortly."
                             )
                             failfast_records.pop()
-                            retry_restart = True
                         elif outcome == StakingReconcileOutcome.RECONCILED:
-                            # The eviction that caused these restarts is cleared, so
-                            # they no longer count towards the failfast budget.
+                            # The eviction that caused these restarts is cleared, so they were not futile.
                             failfast_records = []
                     except Exception as exc:  # pylint: disable=broad-except
                         restart_failed = True
                         last_restart_exc = exc
                         self.logger.exception(f"Restart problem: {service_config_id}")
+
+                    retry_restart = outcome == StakingReconcileOutcome.SKIPPED
+                    if not retry_restart:
+                        self.record_restart(service_config_id=service_config_id)
+
+                    if outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE:
+                        self.logger.error(
+                            f"[HEALTH_CHECKER] {service_config_id} is evicted on-chain and "
+                            "cannot be re-staked yet. Leaving the service stopped."
+                        )
+                        self.record_reason(
+                            service_config_id=service_config_id,
+                            reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
+                        )
+                        return
 
                     if failfast_records and (
                         (len(failfast_records) >= self.FAILFAST_NUM)
