@@ -30,9 +30,9 @@ from operate.exceptions import InsufficientFundsException
 from operate.operate_types import (
     Chain,
     DeploymentStatus,
-    EvictionState,
     LedgerConfig,
     OnChainState,
+    StakingEvictionState,
     StakingReconcileOutcome,
 )
 from operate.services.manage import ServiceManager
@@ -1692,7 +1692,7 @@ class TestIsServiceEvictedOnChain:
             staking_program=None,
         )
 
-        assert result == {_CHAIN: EvictionState.NOT_EVICTED}
+        assert result == {_CHAIN: StakingEvictionState.NOT_EVICTED}
 
     def test_staked_service_is_not_evicted(self, tmp_path: Path) -> None:
         """A healthy staked service reports not evicted."""
@@ -1702,7 +1702,7 @@ class TestIsServiceEvictedOnChain:
             self._patched_staking(StakingState.STAKED),
         )
 
-        assert result == {_CHAIN: EvictionState.NOT_EVICTED}
+        assert result == {_CHAIN: StakingEvictionState.NOT_EVICTED}
 
     def test_evicted_and_unstakable(self, tmp_path: Path) -> None:
         """Past minStakingDuration, the eviction can be cleared."""
@@ -1712,7 +1712,7 @@ class TestIsServiceEvictedOnChain:
             self._patched_staking(StakingState.EVICTED),
         )
 
-        assert result == {_CHAIN: EvictionState.EVICTED_UNSTAKABLE}
+        assert result == {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
 
     def test_evicted_and_locked(self, tmp_path: Path) -> None:
         """Inside minStakingDuration with rewards outstanding, it cannot."""
@@ -1725,7 +1725,7 @@ class TestIsServiceEvictedOnChain:
             ),
         )
 
-        assert result == {_CHAIN: EvictionState.EVICTED_LOCKED}
+        assert result == {_CHAIN: StakingEvictionState.EVICTED_LOCKED}
 
     def test_reports_every_staking_chain(self, tmp_path: Path) -> None:
         """A multi-chain service is answered per chain."""
@@ -1736,8 +1736,8 @@ class TestIsServiceEvictedOnChain:
         )
 
         assert result == {
-            _CHAIN: EvictionState.EVICTED_UNSTAKABLE,
-            "base": EvictionState.EVICTED_UNSTAKABLE,
+            _CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE,
+            "base": StakingEvictionState.EVICTED_UNSTAKABLE,
         }
 
     def test_loads_no_wallet(self, tmp_path: Path) -> None:
@@ -1775,8 +1775,8 @@ class TestReconcileStakingForRestart:
     @staticmethod
     def _manager(
         tmp_path: Path,
-        eviction_states: t.Dict[str, EvictionState],
-        after_restake: t.Optional[t.Dict[str, EvictionState]] = None,
+        eviction_states: t.Dict[str, StakingEvictionState],
+        after_restake: t.Optional[t.Dict[str, StakingEvictionState]] = None,
     ) -> ServiceManager:
         """Create a manager whose eviction read returns the given states.
 
@@ -1788,7 +1788,7 @@ class TestReconcileStakingForRestart:
         cleared = (
             after_restake
             if after_restake is not None
-            else {chain: EvictionState.NOT_EVICTED for chain in eviction_states}
+            else {chain: StakingEvictionState.NOT_EVICTED for chain in eviction_states}
         )
         first_read = iter([eviction_states])
         manager.is_service_evicted_on_chain = MagicMock(  # type: ignore[method-assign]
@@ -1801,7 +1801,7 @@ class TestReconcileStakingForRestart:
 
     def test_not_evicted_touches_nothing(self, tmp_path: Path) -> None:
         """A healthy service must not reach a wallet at all."""
-        manager = self._manager(tmp_path, {_CHAIN: EvictionState.NOT_EVICTED})
+        manager = self._manager(tmp_path, {_CHAIN: StakingEvictionState.NOT_EVICTED})
 
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
 
@@ -1810,7 +1810,9 @@ class TestReconcileStakingForRestart:
 
     def test_unstakable_eviction_is_delegated(self, tmp_path: Path) -> None:
         """The existing staking flow performs the unstake and the re-stake."""
-        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager = self._manager(
+            tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
+        )
 
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
 
@@ -1829,8 +1831,8 @@ class TestReconcileStakingForRestart:
         """
         manager = self._manager(
             tmp_path,
-            {_CHAIN: EvictionState.EVICTED_UNSTAKABLE},
-            after_restake={_CHAIN: EvictionState.EVICTED_UNSTAKABLE},
+            {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE},
+            after_restake={_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE},
         )
 
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
@@ -1840,7 +1842,7 @@ class TestReconcileStakingForRestart:
 
     def test_locked_eviction_sends_no_transaction(self, tmp_path: Path) -> None:
         """The staking flow is a no-op for a locked eviction; skip the wallet load."""
-        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_LOCKED})
+        manager = self._manager(tmp_path, {_CHAIN: StakingEvictionState.EVICTED_LOCKED})
 
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
 
@@ -1856,8 +1858,8 @@ class TestReconcileStakingForRestart:
         manager = self._manager(
             tmp_path,
             {
-                _CHAIN: EvictionState.EVICTED_UNSTAKABLE,
-                "base": EvictionState.EVICTED_LOCKED,
+                _CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE,
+                "base": StakingEvictionState.EVICTED_LOCKED,
             },
         )
 
@@ -1868,7 +1870,9 @@ class TestReconcileStakingForRestart:
 
     def test_lock_contention_is_reported_as_skipped(self, tmp_path: Path) -> None:
         """A start already reconciling this chain is doing the same work."""
-        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager = self._manager(
+            tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
+        )
         manager.stake_service_on_chain_from_safe.return_value = False  # type: ignore[attr-defined]
 
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
@@ -1890,9 +1894,11 @@ class TestReconcileStakingForRestart:
 
     def test_failing_verification_read_returns_failed(self, tmp_path: Path) -> None:
         """An RPC that dies after the re-stake leaves the outcome unknown, not good."""
-        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager = self._manager(
+            tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
+        )
         manager.is_service_evicted_on_chain.side_effect = [  # type: ignore[attr-defined]
-            {_CHAIN: EvictionState.EVICTED_UNSTAKABLE},
+            {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE},
             RuntimeError("rpc down"),
         ]
 
@@ -1904,7 +1910,9 @@ class TestReconcileStakingForRestart:
         self, tmp_path: Path
     ) -> None:
         """Same for a transaction that reverts."""
-        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager = self._manager(
+            tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
+        )
         manager.stake_service_on_chain_from_safe.side_effect = RuntimeError(  # type: ignore[attr-defined]
             "reverted"
         )
@@ -1918,8 +1926,8 @@ class TestReconcileStakingForRestart:
         manager = self._manager(
             tmp_path,
             {
-                _CHAIN: EvictionState.EVICTED_UNSTAKABLE,
-                "base": EvictionState.EVICTED_UNSTAKABLE,
+                _CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE,
+                "base": StakingEvictionState.EVICTED_UNSTAKABLE,
             },
         )
         manager.stake_service_on_chain_from_safe.side_effect = [  # type: ignore[attr-defined]

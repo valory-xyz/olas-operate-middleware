@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from operate.operate_types import EvictionState, StakingReconcileOutcome
+from operate.operate_types import StakingEvictionState, StakingReconcileOutcome
 from operate.services.health_checker import HealthChecker
 from operate.services.manage import ServiceManager
 
@@ -349,7 +349,7 @@ class TestStakingReconciliationRaceConditions:
         """Contention must never raise, and never block a background thread."""
         manager = self._service_manager(tmp_path)
         manager.is_service_evicted_on_chain = MagicMock(  # type: ignore[method-assign]
-            return_value={"gnosis": EvictionState.EVICTED_UNSTAKABLE}
+            return_value={"gnosis": StakingEvictionState.EVICTED_UNSTAKABLE}
         )
 
         with manager.get_chain_tx_lock("gnosis"):

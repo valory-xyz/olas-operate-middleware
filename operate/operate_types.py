@@ -77,7 +77,7 @@ class OnChainState(enum.IntEnum):
     UNBONDED = 6  # TODO this is not an on-chain state https://github.com/valory-xyz/autonolas-registries/blob/main/contracts/ServiceRegistryL2.sol
 
 
-class EvictionState(str, enum.Enum):
+class StakingEvictionState(str, enum.Enum):
     """Eviction state of a service in the staking program it is staked in."""
 
     NOT_EVICTED = "not_evicted"
