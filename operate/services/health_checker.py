@@ -49,7 +49,7 @@ class AgentLivenessReason(str, enum.Enum):
     NOT_MONITORED = "not_monitored"
 
 
-class HealthChecker:
+class HealthChecker:  # pylint: disable=too-many-instance-attributes
     """Health checker manager."""
 
     SLEEP_PERIOD_DEFAULT = 5  # seconds

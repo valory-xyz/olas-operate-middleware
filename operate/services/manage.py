@@ -95,6 +95,7 @@ from operate.utils.gnosis import (
     simulate_safe_sub_tx,
     transfer_erc20_from_safe,
 )
+from operate.utils.locks import KeyedLocks
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 # pylint: disable=redefined-builtin
@@ -154,8 +155,7 @@ class ServiceManager:
         self.logger = logger
         self.skip_depencency_check = skip_dependency_check
         self._maintenance_lock = threading.Lock()
-        self._staking_locks_mu = threading.Lock()
-        self._staking_locks: t.Dict[str, threading.Lock] = {}
+        self._staking_locks: KeyedLocks[str] = KeyedLocks()
 
     def setup(self) -> None:
         """Setup service manager."""
@@ -1874,8 +1874,11 @@ class ServiceManager:
                     f"Service {service_config_id} is evicted on {locked} and cannot be "
                     "re-staked yet."
                 )
-                return StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
-            return StakingReconcileOutcome.NOTHING_TO_DO
+            return (
+                StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+                if locked
+                else StakingReconcileOutcome.NOTHING_TO_DO
+            )
 
         skipped = False
         for chain in unstakable:
@@ -1900,16 +1903,15 @@ class ServiceManager:
         if locked:
             # Another staking chain is still evicted, so the agent would exit again.
             return StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
-        if skipped:
-            return StakingReconcileOutcome.SKIPPED
-        return StakingReconcileOutcome.RECONCILED
+        return (
+            StakingReconcileOutcome.SKIPPED
+            if skipped
+            else StakingReconcileOutcome.RECONCILED
+        )
 
     def get_staking_lock(self, service_config_id: str) -> threading.Lock:
         """Return the per-service lock serialising on-chain staking operations."""
-        with self._staking_locks_mu:
-            if service_config_id not in self._staking_locks:
-                self._staking_locks[service_config_id] = threading.Lock()
-            return self._staking_locks[service_config_id]
+        return self._staking_locks.get(service_config_id)
 
     def stake_service_on_chain_from_safe(
         self, service_config_id: str, chain: str, blocking: bool = True
