@@ -1438,7 +1438,6 @@ Get all services deployment information.
       "agent": ["service_abci_0"],
       "tendermint": ["service_tm_0"]
     },
-    "path": "/path/to/service",
     "healthcheck": {
       "agent_health": {},
       "is_healthy": true,
@@ -1449,6 +1448,15 @@ Get all services deployment information.
       "rounds": ["round_1", "round_2", "round_3"],
       "rounds_info": {},
       "seconds_since_last_transition": 12.34,
+      "age_seconds": 4.1
+    },
+    "agent_liveness": {
+      "is_alive": true,
+      "reason": null,
+      "last_checked_at": 1788940512.0,
+      "last_healthy_at": 1788940512.0,
+      "consecutive_failures": 0,
+      "restarts_since_last_healthy": 0
     }
   },
   "service_config_id2": {
@@ -1457,7 +1465,15 @@ Get all services deployment information.
       "agent": [],
       "tendermint": []
     },
-    "healthcheck": {}
+    "healthcheck": {},
+    "agent_liveness": {
+      "is_alive": false,
+      "reason": "not_monitored",
+      "last_checked_at": null,
+      "last_healthy_at": null,
+      "consecutive_failures": 0,
+      "restarts_since_last_healthy": 0
+    }
   },
   "service_config_id3": {
     "status": 1,  // BUILT
@@ -1465,10 +1481,37 @@ Get all services deployment information.
       "agent": [],
       "tendermint": []
     },
-    "healthcheck": {}
+    "healthcheck": {},
+    "agent_liveness": {
+      "is_alive": false,
+      "reason": "not_monitored",
+      "last_checked_at": null,
+      "last_healthy_at": null,
+      "consecutive_failures": 0,
+      "restarts_since_last_healthy": 0
+    }
   }
 }
 ```
+
+`healthcheck.age_seconds` is the age of the on-disk healthcheck snapshot in
+seconds. It is absent when no snapshot exists (`healthcheck` is `{}`) or when
+the snapshot could not be read (`healthcheck` carries an `error` key).
+
+`agent_liveness` reports whether the agent process is actually alive, as opposed
+to `status`, which records the last deployment transition the middleware
+performed. `reason` is `null` when `is_alive` is `true`, and otherwise one of:
+
+| `reason` | Meaning |
+|---|---|
+| `agent_process_exited` | The health probe is failing and `agent.pid` is absent or invalid. |
+| `agent_unresponsive` | The health probe is failing but the recorded agent process is live. |
+| `evicted_cannot_restake` | The service is evicted on-chain, the middleware could not clear the eviction, and stopped the service rather than restarting into the same condition. |
+| `not_monitored` | No health-check job is running for this service — it is not the running instance, or `HEALTH_CHECKER_OFF=1`. |
+
+Clients that do not read `agent_liveness` are unaffected. A client that renders
+"agent is not running" must treat a **missing** `agent_liveness` (older
+middleware) as unknown, not as not alive.
 
 ### `GET /api/v2/service/{service_config_id}`
 
@@ -1561,7 +1604,6 @@ Get service deployment information.
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
   },
-  "path": "/path/to/service",
   "healthcheck": {
     "agent_health": {},
     "is_healthy": true,
@@ -1572,9 +1614,21 @@ Get service deployment information.
     "rounds": ["round_1", "round_2", "round_3"],
     "rounds_info": {},
     "seconds_since_last_transition": 12.34,
+    "age_seconds": 4.1
+  },
+  "agent_liveness": {
+    "is_alive": true,
+    "reason": null,
+    "last_checked_at": 1788940512.0,
+    "last_healthy_at": 1788940512.0,
+    "consecutive_failures": 0,
+    "restarts_since_last_healthy": 0
   }
 }
 ```
+
+See `GET /api/v2/services/deployment` above for the `agent_liveness` and
+`healthcheck.age_seconds` fields.
 
 **Response (Success with empty healthcheck - 200):**
 
@@ -1585,8 +1639,15 @@ Get service deployment information.
     "agent": [],
     "tendermint": []
   },
-  "path": "/path/to/service",
-  "healthcheck": {}
+  "healthcheck": {},
+  "agent_liveness": {
+    "is_alive": false,
+    "reason": "not_monitored",
+    "last_checked_at": null,
+    "last_healthy_at": null,
+    "consecutive_failures": 0,
+    "restarts_since_last_healthy": 0
+  }
 }
 ```
 
@@ -1599,9 +1660,16 @@ Get service deployment information.
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
   },
-  "path": "/path/to/service",
   "healthcheck": {
     "error": "Error reading healthcheck.json: [Errno 2] No such file or directory"
+  },
+  "agent_liveness": {
+    "is_alive": false,
+    "reason": "agent_process_exited",
+    "last_checked_at": 1788940512.0,
+    "last_healthy_at": 1788940031.0,
+    "consecutive_failures": 47,
+    "restarts_since_last_healthy": 5
   }
 }
 ```
