@@ -84,6 +84,10 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         self.logger.info(
             f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}"
         )
+        # A fresh deployment invalidates the previous record: a service stopped
+        # with `evicted_cannot_restake` would otherwise keep reporting that
+        # reason until this job's first probe, minutes after the agent booted.
+        self.forget_service(service_config_id=service_config_id)
 
         # Thread-safe job management: check and stop existing job atomically
         with self._jobs_lock:

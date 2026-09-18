@@ -333,6 +333,13 @@ class TestCheckServiceHealthErrorHandling:
         assert "unexpected" in call_str.lower()
 
 
+async def _start_for_service(
+    health_checker: HealthChecker, service_config_id: str
+) -> None:
+    """Call start_for_service from inside a running loop, as the app does."""
+    health_checker.start_for_service(service_config_id)
+
+
 class TestCheckServiceHealthLivenessRecording:
     """Test that every probe outcome lands on the liveness record.
 
@@ -537,5 +544,19 @@ class TestGetLiveness:
         health_checker.record_probe(service_config_id="svc", healthy=True)
 
         health_checker.stop_for_service(service_config_id="svc")
+
+        assert health_checker.get_liveness("svc")["reason"] == "not_monitored"
+
+    def test_start_for_service_forgets_the_previous_record(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """A fresh deployment invalidates the reason the last one stopped with."""
+        health_checker.record_reason(
+            service_config_id="svc",
+            reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
+        )
+
+        with patch.object(health_checker, "healthcheck_job"):
+            asyncio.run(_start_for_service(health_checker, "svc"))
 
         assert health_checker.get_liveness("svc")["reason"] == "not_monitored"
