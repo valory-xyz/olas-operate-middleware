@@ -1010,8 +1010,13 @@ class TestRestartStakingReconciliation:
         )
 
     @staticmethod
-    async def _run_until_restart(health_checker: HealthChecker) -> None:
-        """Drive healthcheck_job through one unhealthy cycle and its restart."""
+    async def _run_until_restart(
+        health_checker: HealthChecker,
+    ) -> t.Optional[BaseException]:
+        """Drive healthcheck_job through one unhealthy cycle and its restart.
+
+        :return: the exception the job ended on, or None if it was still running.
+        """
 
         async def always_unhealthy(*_args: object, **_kwargs: object) -> bool:
             return False
@@ -1028,8 +1033,11 @@ class TestRestartStakingReconciliation:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
-                pass
+            except asyncio.CancelledError:
+                return None
+            except Exception as exc:  # pylint: disable=broad-except
+                return exc
+            return None
 
     @pytest.mark.asyncio
     async def test_reconciliation_runs_between_stop_and_deploy(
@@ -1055,23 +1063,51 @@ class TestRestartStakingReconciliation:
     async def test_reconciled_eviction_redeploys_and_clears_failfast(
         self, health_checker: HealthChecker
     ) -> None:
-        """A cleared eviction makes the restart no longer futile."""
-        health_checker._service_manager.reconcile_staking_for_restart.return_value = (
-            StakingReconcileOutcome.RECONCILED
-        )
+        """A cleared eviction makes the restarts it caused stop counting.
+
+        The budget is reset against a condition the chain has confirmed is
+        gone — `reconcile_staking_for_restart` re-reads before reporting
+        RECONCILED — and it resumes counting on the next restart, which is what
+        keeps the loop bounded.
+        """
+        sm = health_checker._service_manager
+        outcomes = [StakingReconcileOutcome.RECONCILED] * 3
+
+        def _reconcile(**_kwargs: object) -> StakingReconcileOutcome:
+            if outcomes:
+                return outcomes.pop()
+            return StakingReconcileOutcome.NOTHING_TO_DO
+
+        sm.reconcile_staking_for_restart.side_effect = _reconcile
 
         with patch.object(HealthChecker, "FAILFAST_NUM", 2):
-            await self._run_until_restart(health_checker)
+            exc = await self._run_until_restart(health_checker)
 
-        health_checker._service_manager.deploy_service_locally.assert_called_with(
-            service_config_id="test-service"
-        )
-        # Failfast counts restarts caused by a condition that is now gone; had
-        # the budget survived, repeated cycles would stop a recovered service.
-        assert (
-            health_checker._service_manager.deploy_service_locally.call_count
-            > HealthChecker.FAILFAST_NUM
-        )
+        sm.deploy_service_locally.assert_called_with(service_config_id="test-service")
+        # Three reconciled restarts cleared the budget, so the service outlived
+        # FAILFAST_NUM restarts instead of being stopped at the second...
+        assert sm.deploy_service_locally.call_count > 2
+        # ...and once reconciliation stopped clearing evictions, failfast fired.
+        assert isinstance(exc, RuntimeError)
+
+    @pytest.mark.asyncio
+    async def test_skipped_reconciliation_waits_instead_of_redeploying(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Another caller is mid-reconciliation, and will deploy the service itself.
+
+        Booting an agent now would boot it into a service that may still be
+        evicted, and the restart is not this service's fault, so it must not
+        spend failfast budget either.
+        """
+        sm = health_checker._service_manager
+        sm.reconcile_staking_for_restart.return_value = StakingReconcileOutcome.SKIPPED
+
+        with patch.object(HealthChecker, "FAILFAST_NUM", 2):
+            exc = await self._run_until_restart(health_checker)
+
+        sm.deploy_service_locally.assert_not_called()
+        assert exc is None
 
     @pytest.mark.asyncio
     async def test_locked_eviction_stops_the_service_with_a_reason(

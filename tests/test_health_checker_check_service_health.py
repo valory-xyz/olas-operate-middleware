@@ -537,15 +537,22 @@ class TestGetLiveness:
         assert liveness["is_alive"] is False
         assert liveness["reason"] == "evicted_cannot_restake"
 
-    def test_stop_for_service_forgets_the_record(
+    def test_stop_for_service_keeps_the_record(
         self, health_checker: HealthChecker
     ) -> None:
-        """A stopped service has no liveness to report."""
-        health_checker.record_probe(service_config_id="svc", healthy=True)
+        """`pause_all_services` stops the job of every service, not just one.
+
+        Dropping the record here would erase one service's
+        `evicted_cannot_restake` because the user started a different one.
+        """
+        health_checker.record_reason(
+            service_config_id="svc",
+            reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
+        )
 
         health_checker.stop_for_service(service_config_id="svc")
 
-        assert health_checker.get_liveness("svc")["reason"] == "not_monitored"
+        assert health_checker.get_liveness("svc")["reason"] == "evicted_cannot_restake"
 
     def test_start_for_service_forgets_the_previous_record(
         self, health_checker: HealthChecker
