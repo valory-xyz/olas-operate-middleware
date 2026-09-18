@@ -53,7 +53,10 @@ from tests.conftest import OnTestnet, OperateTestEnv, tenderly_increase_time
 from tests.constants import LOGGER
 
 SERVICE_CHAIN = Chain.GNOSIS
-# The Trader template in conftest stakes here on first deploy.
+# The Trader template in conftest stakes here on first deploy. Its parameters on
+# Gnosis — livenessPeriod 86400, maxNumInactivityPeriods 2, minStakingDuration
+# 259200, availableRewards > 0 — put eviction (~2 days) inside the unstaking lock
+# (3 days), which is what makes the locked-eviction case below reachable at all.
 STAKING_PROGRAM = "pearl_beta_2"
 # Eviction needs maxNumInactivityPeriods consecutive misses; allow a couple of
 # spare rounds so a contract that counts differently still converges.
@@ -236,11 +239,17 @@ class TestHealthCheckerRestakeIntegration(OnTestnet):
 
         warped = _evict(service_manager, sftxb, token_id, staking_contract, ledger_api)
         params = _staking_params(ledger_api, staking_contract)
-        if warped >= params["min_staking_duration"] or not params["available_rewards"]:
-            pytest.skip(
-                "this contract cannot be evicted while unstaking is still locked: "
-                f"{params}, evicted after {warped}s"
-            )
+        # Not a skip: if either of these ever holds, the test is not covering what
+        # it claims to, and the contract has to be swapped for one that can
+        # produce the state.
+        assert warped < params["min_staking_duration"], (
+            f"{STAKING_PROGRAM} evicts only past minStakingDuration, so unstaking "
+            f"is never locked: {params}, evicted after {warped}s"
+        )
+        assert params["available_rewards"], (
+            f"{STAKING_PROGRAM} has no rewards outstanding, so unstaking is never "
+            f"locked: {params}"
+        )
 
         # Every write in the staking flow is broadcast by the master EOA, and
         # this test's EOA is created fresh by the fixture, so its transaction
