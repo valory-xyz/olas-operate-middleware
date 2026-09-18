@@ -180,7 +180,8 @@ class TestGetLatestHealthcheck:
         (tmp_path / HEALTHCHECK_JSON).write_text(json.dumps(payload), encoding="utf-8")
         svc = _make_service(tmp_path)
         result = svc.get_latest_healthcheck()
-        assert result == {**payload, "age_seconds": result["age_seconds"]}
+        assert {k: v for k, v in result.items() if k != "age_seconds"} == payload
+        assert "age_seconds" in result
 
     def test_reports_the_age_of_the_snapshot(self, tmp_path: Path) -> None:
         """The agent only refreshes this file while alive, so its age is liveness.
@@ -203,6 +204,13 @@ class TestGetLatestHealthcheck:
         svc = _make_service(tmp_path)
 
         assert svc.get_latest_healthcheck()["age_seconds"] == 0.0
+
+    def test_empty_snapshot_carries_no_age(self, tmp_path: Path) -> None:
+        """An empty snapshot has no round list to age, and the docs say so."""
+        (tmp_path / HEALTHCHECK_JSON).write_text("{}", encoding="utf-8")
+        svc = _make_service(tmp_path)
+
+        assert svc.get_latest_healthcheck() == {}
 
     def test_non_dict_snapshot_is_returned_untouched(self, tmp_path: Path) -> None:
         """A snapshot that is not an object must not raise out of a read endpoint."""

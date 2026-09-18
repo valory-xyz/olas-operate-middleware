@@ -1040,7 +1040,7 @@ class Service(LocalResource):
             with open(healthcheck_json_path, "r", encoding="utf-8") as file:
                 healthcheck = json.load(file)
 
-            if isinstance(healthcheck, dict):
+            if isinstance(healthcheck, dict) and healthcheck:
                 # The agent only ever refreshes this file while it is alive, so
                 # its age is what separates a live round list from one frozen
                 # just before the process died.

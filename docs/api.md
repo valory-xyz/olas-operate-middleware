@@ -1510,8 +1510,18 @@ performed. `reason` is `null` when `is_alive` is `true`, and otherwise one of:
 | `not_monitored` | No health-check job is running for this service — it is not the running instance, or `HEALTH_CHECKER_OFF=1`. |
 
 Clients that do not read `agent_liveness` are unaffected. A client that renders
-"agent is not running" must treat a **missing** `agent_liveness` (older
-middleware) as unknown, not as not alive.
+"agent is not running" must not read `is_alive` on its own. Two values mean
+**unknown**, not "not alive", and a client that treats either as "not alive"
+reports a running agent as down:
+
+- a **missing** `agent_liveness` — an older middleware that does not send the field;
+- `reason: "not_monitored"` — present, and carrying `is_alive: false`, but it only
+  says nothing is probing this service. The middleware falls back to the agent PID
+  file here, and that probe matches on process names, so a healthy agent can land
+  on this value.
+
+The three reasons that do positively establish the agent is down are
+`agent_process_exited`, `agent_unresponsive` and `evicted_cannot_restake`.
 
 ### `GET /api/v2/service/{service_config_id}`
 
