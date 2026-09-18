@@ -242,14 +242,20 @@ class TestHealthCheckerRestakeIntegration(OnTestnet):
                 f"{params}, evicted after {warped}s"
             )
 
-        block_before = ledger_api.api.eth.block_number
+        # Every write in the staking flow is broadcast by the master EOA, and
+        # this test's EOA is created fresh by the fixture, so its transaction
+        # count is a counter only this test advances. The block number is not:
+        # the integration suite runs under xdist against one shared Tenderly
+        # testnet per chain, so other workers' transactions move it too.
+        master_eoa = service_manager.wallet_manager.load(LedgerType.ETHEREUM).address
+        nonce_before = ledger_api.api.eth.get_transaction_count(master_eoa)
         outcome = service_manager.reconcile_staking_for_restart(
             service_config_id=service_config_id
         )
 
         assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
         assert (
-            ledger_api.api.eth.block_number == block_before
+            ledger_api.api.eth.get_transaction_count(master_eoa) == nonce_before
         ), "no transaction should be sent for an eviction that cannot be cleared"
         assert (
             sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
