@@ -1499,6 +1499,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             for service in service_manager.get_all_services()[0]:
                 deployment_json = service.deployment.json
                 deployment_json["healthcheck"] = service.get_latest_healthcheck()
+                deployment_json["agent_liveness"] = health_checker.get_liveness(
+                    service_config_id=service.service_config_id,
+                    service_path=service.path,
+                )
                 output[service.service_config_id] = deployment_json
             return JSONResponse(content=output)
 
@@ -1536,6 +1540,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service = operate.service_manager().load(service_config_id=safe_id)
             deployment_json = service.deployment.json
             deployment_json["healthcheck"] = service.get_latest_healthcheck()
+            deployment_json["agent_liveness"] = health_checker.get_liveness(
+                service_config_id=safe_id,
+                service_path=service.path,
+            )
             return JSONResponse(content=deployment_json)
 
         return await run_in_executor(_fn)

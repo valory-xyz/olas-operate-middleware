@@ -1038,7 +1038,16 @@ class Service(LocalResource):
 
         try:
             with open(healthcheck_json_path, "r", encoding="utf-8") as file:
-                return json.load(file)
+                healthcheck = json.load(file)
+
+            if isinstance(healthcheck, dict):
+                # The agent only ever refreshes this file while it is alive, so
+                # its age is what separates a live round list from one frozen
+                # just before the process died.
+                healthcheck["age_seconds"] = max(
+                    0.0, time.time() - healthcheck_json_path.stat().st_mtime
+                )
+            return healthcheck
         except (IOError, json.JSONDecodeError) as e:
             return {"error": f"Error reading healthcheck.json: {e}"}
 
