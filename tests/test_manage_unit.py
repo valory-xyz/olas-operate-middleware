@@ -1774,12 +1774,25 @@ class TestReconcileStakingForRestart:
 
     @staticmethod
     def _manager(
-        tmp_path: Path, eviction_states: t.Dict[str, EvictionState]
+        tmp_path: Path,
+        eviction_states: t.Dict[str, EvictionState],
+        after_restake: t.Optional[t.Dict[str, EvictionState]] = None,
     ) -> ServiceManager:
-        """Create a manager whose eviction read returns the given states."""
+        """Create a manager whose eviction read returns the given states.
+
+        The reconciliation re-reads the chain after delegating, so the second
+        read reports what the re-stake actually achieved — by default, an
+        eviction that cleared.
+        """
         manager = _make_manager(tmp_path)
+        cleared = (
+            after_restake
+            if after_restake is not None
+            else {chain: EvictionState.NOT_EVICTED for chain in eviction_states}
+        )
+        first_read = iter([eviction_states])
         manager.is_service_evicted_on_chain = MagicMock(  # type: ignore[method-assign]
-            return_value=eviction_states
+            side_effect=lambda **_kwargs: next(first_read, cleared)
         )
         manager.stake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
             return_value=True
@@ -1806,6 +1819,25 @@ class TestReconcileStakingForRestart:
             service_config_id="sc-test-id", chain=_CHAIN, blocking=False
         )
 
+    def test_reconciled_is_verified_against_the_chain(self, tmp_path: Path) -> None:
+        """Having run the staking flow is not proof the eviction cleared.
+
+        It returns without sending anything when the service is not on-chain
+        DEPLOYED, and its stake branch also needs rewards and a free slot.
+        Reporting RECONCILED there would redeploy into the same eviction and
+        clear the failfast budget on every cycle.
+        """
+        manager = self._manager(
+            tmp_path,
+            {_CHAIN: EvictionState.EVICTED_UNSTAKABLE},
+            after_restake={_CHAIN: EvictionState.EVICTED_UNSTAKABLE},
+        )
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+        manager.stake_service_on_chain_from_safe.assert_called_once()  # type: ignore[attr-defined]
+
     def test_locked_eviction_sends_no_transaction(self, tmp_path: Path) -> None:
         """The staking flow is a no-op for a locked eviction; skip the wallet load."""
         manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_LOCKED})
@@ -1815,8 +1847,12 @@ class TestReconcileStakingForRestart:
         assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
         manager.stake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
 
-    def test_one_locked_chain_blocks_the_restart(self, tmp_path: Path) -> None:
-        """The agent exits if any staking chain is still evicted."""
+    def test_one_locked_chain_spends_no_gas_on_the_others(self, tmp_path: Path) -> None:
+        """The agent exits while any staking chain is evicted.
+
+        Re-staking the chains that can be cleared cannot bring it up before the
+        locked window ends, so nothing is sent.
+        """
         manager = self._manager(
             tmp_path,
             {
@@ -1828,9 +1864,10 @@ class TestReconcileStakingForRestart:
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
 
         assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+        manager.stake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
 
     def test_lock_contention_is_reported_as_skipped(self, tmp_path: Path) -> None:
-        """A start already reconciling this service is doing the same work."""
+        """A start already reconciling this chain is doing the same work."""
         manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
         manager.stake_service_on_chain_from_safe.return_value = False  # type: ignore[attr-defined]
 
@@ -1851,6 +1888,18 @@ class TestReconcileStakingForRestart:
 
         assert outcome == StakingReconcileOutcome.FAILED
 
+    def test_failing_verification_read_returns_failed(self, tmp_path: Path) -> None:
+        """An RPC that dies after the re-stake leaves the outcome unknown, not good."""
+        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager.is_service_evicted_on_chain.side_effect = [  # type: ignore[attr-defined]
+            {_CHAIN: EvictionState.EVICTED_UNSTAKABLE},
+            RuntimeError("rpc down"),
+        ]
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.FAILED
+
     def test_failing_restake_returns_an_outcome_not_an_exception(
         self, tmp_path: Path
     ) -> None:
@@ -1864,16 +1913,45 @@ class TestReconcileStakingForRestart:
 
         assert outcome == StakingReconcileOutcome.FAILED
 
+    def test_a_failing_chain_does_not_abandon_the_others(self, tmp_path: Path) -> None:
+        """Chains settle on their own Safes, so one revert must not skip the rest."""
+        manager = self._manager(
+            tmp_path,
+            {
+                _CHAIN: EvictionState.EVICTED_UNSTAKABLE,
+                "base": EvictionState.EVICTED_UNSTAKABLE,
+            },
+        )
+        manager.stake_service_on_chain_from_safe.side_effect = [  # type: ignore[attr-defined]
+            RuntimeError("reverted"),
+            True,
+        ]
 
-class TestStakingLock:
-    """Tests for the per-service lock serialising the staking flow."""
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
 
-    def test_lock_is_per_service_and_stable(self, tmp_path: Path) -> None:
-        """One lock per service, reused across calls."""
+        assert outcome == StakingReconcileOutcome.FAILED
+        assert [
+            call.kwargs["chain"]
+            for call in manager.stake_service_on_chain_from_safe.call_args_list  # type: ignore[attr-defined]
+        ] == [_CHAIN, "base"]
+
+
+class TestChainTransactionLock:
+    """Tests for the per-chain lock serialising master-Safe transactions."""
+
+    def test_lock_is_per_chain_and_stable(self, tmp_path: Path) -> None:
+        """One lock per chain, reused across calls.
+
+        Keyed on the chain because that is what the master Safe is scoped to:
+        two services staking on Gnosis share a Safe and therefore a nonce, and
+        one service staking on Gnosis and Base does not.
+        """
         manager = _make_manager(tmp_path)
 
-        assert manager.get_staking_lock("sc-a") is manager.get_staking_lock("sc-a")
-        assert manager.get_staking_lock("sc-a") is not manager.get_staking_lock("sc-b")
+        assert manager.get_chain_tx_lock(_CHAIN) is manager.get_chain_tx_lock(_CHAIN)
+        assert manager.get_chain_tx_lock(_CHAIN) is not manager.get_chain_tx_lock(
+            "base"
+        )
 
     def test_blocking_caller_runs_the_staking_flow(self, tmp_path: Path) -> None:
         """The deploy path must never silently skip staking."""
@@ -1895,7 +1973,7 @@ class TestStakingLock:
         manager = _make_manager(tmp_path)
         manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
 
-        with manager.get_staking_lock("sc-a"):
+        with manager.get_chain_tx_lock(_CHAIN):
             ran = manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-a", chain=_CHAIN, blocking=False
             )
@@ -1903,14 +1981,26 @@ class TestStakingLock:
         assert ran is False
         manager._stake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]
 
-    def test_other_services_are_not_blocked(self, tmp_path: Path) -> None:
-        """Staking one service must not stall staking another."""
+    def test_another_service_on_the_same_chain_is_blocked(self, tmp_path: Path) -> None:
+        """The Safe is shared, so a different service is still a collision."""
         manager = _make_manager(tmp_path)
         manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
 
-        with manager.get_staking_lock("sc-a"):
+        with manager.get_chain_tx_lock(_CHAIN):
             ran = manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-b", chain=_CHAIN, blocking=False
+            )
+
+        assert ran is False
+
+    def test_another_chain_is_not_blocked(self, tmp_path: Path) -> None:
+        """Different chain, different Safe, different nonce."""
+        manager = _make_manager(tmp_path)
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+
+        with manager.get_chain_tx_lock(_CHAIN):
+            ran = manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-a", chain="base", blocking=False
             )
 
         assert ran is True
@@ -1929,4 +2019,64 @@ class TestStakingLock:
                 service_config_id="sc-a", chain=_CHAIN
             )
 
-        assert manager.get_staking_lock("sc-a").acquire(blocking=False) is True
+        assert manager.get_chain_tx_lock(_CHAIN).acquire(blocking=False) is True
+
+    def test_the_whole_onchain_deploy_sequence_holds_the_lock(
+        self, tmp_path: Path
+    ) -> None:
+        """Registration, bonding and funding send from the same Safe as staking.
+
+        Locking only the staking leaf would leave a reconciliation free to
+        interleave with the rest of the deploy path.
+        """
+        manager = _make_manager(tmp_path)
+        service = MagicMock()
+        service.chain_configs = {_CHAIN: MagicMock()}
+        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
+        held = []
+
+        def _deploy(**_kwargs: object) -> None:
+            held.append(
+                manager.get_chain_tx_lock(_CHAIN).acquire(blocking=False) is False
+            )
+
+        manager._deploy_service_onchain_from_safe = MagicMock(  # type: ignore[method-assign]
+            side_effect=_deploy
+        )
+
+        manager.deploy_service_onchain_from_safe(service_config_id="sc-a")
+
+        assert held == [True]
+        assert manager.get_chain_tx_lock(_CHAIN).acquire(blocking=False) is True
+
+    def test_unstaking_is_serialised_with_staking(self, tmp_path: Path) -> None:
+        """`unstake_service_on_chain_from_safe` is public and reachable on its own.
+
+        `quickstart/reset_staking.py` calls it directly, from the same Safe.
+        """
+        manager = _make_manager(tmp_path)
+        manager._unstake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+
+        def _unstake(**_kwargs: object) -> None:
+            assert (
+                manager.stake_service_on_chain_from_safe(
+                    service_config_id="sc-b", chain=_CHAIN, blocking=False
+                )
+                is False
+            )
+
+        manager._unstake_service_on_chain_from_safe_unlocked.side_effect = (  # type: ignore[attr-defined]
+            _unstake
+        )
+
+        manager.unstake_service_on_chain_from_safe(
+            service_config_id="sc-a", chain=_CHAIN, staking_program_id="staking_v1"
+        )
+
+        manager._unstake_service_on_chain_from_safe_unlocked.assert_called_once_with(  # type: ignore[attr-defined]
+            service_config_id="sc-a",
+            chain=_CHAIN,
+            staking_program_id="staking_v1",
+            force=False,
+        )

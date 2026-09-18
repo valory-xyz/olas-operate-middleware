@@ -249,9 +249,10 @@ class TestHealthCheckerCurrentBehavior:
 class TestStakingReconciliationRaceConditions:
     """Test that the health checker's re-staking cannot collide with a user start.
 
-    Both the deploy endpoint and the health checker now reach the staking flow
-    for the same service, sending from the same master Safe. Two overlapping
-    unstake/stake sequences are a nonce hazard and, worse, a double unstake.
+    Both the deploy endpoint and the health checker reach the staking flow of a
+    chain's master Safe, which every service on that chain shares. Two
+    overlapping unstake/stake sequences are a nonce hazard and, worse, a double
+    unstake.
     """
 
     @staticmethod
@@ -269,8 +270,12 @@ class TestStakingReconciliationRaceConditions:
         )
         return manager
 
-    def test_same_service_calls_serialise(self, tmp_path: Path) -> None:
-        """Two concurrent staking flows for one service must not interleave."""
+    def test_same_chain_calls_serialise(self, tmp_path: Path) -> None:
+        """Two concurrent staking flows on one chain must not interleave.
+
+        Including two *different* services: the Safe they send from is the
+        chain's, not their own.
+        """
         manager = self._service_manager(tmp_path)
         overlaps = []
         in_flight = threading.Event()
@@ -292,7 +297,7 @@ class TestStakingReconciliationRaceConditions:
         )
         second = threading.Thread(
             target=manager.stake_service_on_chain_from_safe,
-            kwargs={"service_config_id": "sc-a", "chain": "gnosis"},
+            kwargs={"service_config_id": "sc-b", "chain": "gnosis"},
         )
         first.start()
         in_flight.wait(timeout=5)
@@ -303,8 +308,12 @@ class TestStakingReconciliationRaceConditions:
 
         assert overlaps == [False, False]
 
-    def test_different_services_do_not_serialise(self, tmp_path: Path) -> None:
-        """One service's staking must not stall another's."""
+    def test_different_chains_do_not_serialise(self, tmp_path: Path) -> None:
+        """Staking on one chain must not stall another — different Safes.
+
+        A multi-chain service reaches both, so serialising them would slow its
+        own recovery for nothing.
+        """
         manager = self._service_manager(tmp_path)
         entered = threading.Event()
         release = threading.Event()
@@ -326,7 +335,7 @@ class TestStakingReconciliationRaceConditions:
         try:
             assert (
                 manager.stake_service_on_chain_from_safe(
-                    service_config_id="sc-b", chain="gnosis", blocking=False
+                    service_config_id="sc-a", chain="base", blocking=False
                 )
                 is True
             )
@@ -343,7 +352,7 @@ class TestStakingReconciliationRaceConditions:
             return_value={"gnosis": EvictionState.EVICTED_UNSTAKABLE}
         )
 
-        with manager.get_staking_lock("sc-a"):
+        with manager.get_chain_tx_lock("gnosis"):
             outcome = manager.reconcile_staking_for_restart(service_config_id="sc-a")
 
         assert outcome == StakingReconcileOutcome.SKIPPED
