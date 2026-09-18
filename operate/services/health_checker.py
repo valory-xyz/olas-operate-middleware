@@ -31,13 +31,16 @@ from pathlib import Path
 
 import aiohttp  # type: ignore
 
-from operate.constants import DEPLOYMENT_DIR, HEALTHCHECK_JSON, HEALTH_CHECK_URL
+from operate.constants import (
+    AGENT_PID_FILE,
+    AGENT_PROCESS_NAMES,
+    DEPLOYMENT_DIR,
+    HEALTHCHECK_JSON,
+    HEALTH_CHECK_URL,
+)
 from operate.operate_types import StakingReconcileOutcome
 from operate.services.manage import ServiceManager  # type: ignore
 from operate.utils.pid_file import read_raw_pid, validate_pid
-
-AGENT_PID_FILE = "agent.pid"
-AGENT_PROCESS_NAMES = ["python", "agent", "aea"]
 
 
 class AgentLivenessReason(str, enum.Enum):
@@ -112,9 +115,11 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
     def stop_for_service(self, service_config_id: str) -> None:
         """Stop for a specific service."""
-        # A service that is no longer monitored has no liveness to report; keeping
-        # the last record would freeze its final reason onto the deployment payload.
-        self.forget_service(service_config_id=service_config_id)
+        # The record is deliberately kept: `pause_all_services` stops the job of
+        # every service, so dropping it here would erase one service's
+        # `evicted_cannot_restake` because the user started another one. The
+        # record only describes a stopped agent, and `start_for_service` clears
+        # it when a fresh deployment makes it obsolete.
 
         # Thread-safe job cancellation
         with self._jobs_lock:
@@ -371,11 +376,6 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             f"[HEALTH_CHECKER] {service_config_id} port read failed. assume not healthy {e}"
                         )
                         healthy = False
-                        self.record_probe(
-                            service_config_id=service_config_id,
-                            healthy=False,
-                            service_path=service_path,
-                        )
 
                     if not healthy:
                         if healthy_since > 0.0:
@@ -431,8 +431,14 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         )
                         outcome = StakingReconcileOutcome.FAILED
 
-                    if outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE:
-                        # Redeploying cannot clear the eviction; leave it stopped.
+                    if outcome in (
+                        StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE,
+                        StakingReconcileOutcome.SKIPPED,
+                    ):
+                        # EVICTED_CANNOT_RESTAKE: redeploying cannot clear the
+                        # eviction. SKIPPED: another caller is mid-reconciliation,
+                        # so the service may still be evicted and that caller will
+                        # deploy it itself. Either way, leave it stopped.
                         return outcome
 
                     service_manager.deploy_service_locally(
@@ -481,6 +487,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                     failfast_records.append(time.time())
                     self.record_restart(service_config_id=service_config_id)
                     restart_failed = False
+                    retry_restart = False
                     try:
                         outcome = await _restart(
                             self._service_manager, service_config_id
@@ -495,7 +502,18 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                                 reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
                             )
                             return
-                        if outcome == StakingReconcileOutcome.RECONCILED:
+                        if outcome == StakingReconcileOutcome.SKIPPED:
+                            # Someone else is reconciling this service right now.
+                            # Come back once they are done instead of booting an
+                            # agent into a service that may still be evicted — and
+                            # do not spend failfast budget on their transaction.
+                            self.logger.info(
+                                f"[HEALTH_CHECKER] {service_config_id} staking reconciliation "
+                                "is already in progress elsewhere. Retrying shortly."
+                            )
+                            failfast_records.pop()
+                            retry_restart = True
+                        elif outcome == StakingReconcileOutcome.RECONCILED:
                             # The eviction that caused these restarts is cleared, so
                             # they no longer count towards the failfast budget.
                             failfast_records = []
@@ -518,7 +536,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             f"{len(failfast_records)} restarts"
                         ) from last_restart_exc
 
-                    if not restart_failed:
+                    if not (restart_failed or retry_restart):
                         break
 
                     await asyncio.sleep(30)
