@@ -6,11 +6,15 @@ issues in health checker job management.
 """
 
 import asyncio
+import threading
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from operate.operate_types import EvictionState, StakingReconcileOutcome
 from operate.services.health_checker import HealthChecker
+from operate.services.manage import ServiceManager
 
 
 class TestHealthCheckerJobRaceConditions:
@@ -240,3 +244,107 @@ class TestHealthCheckerCurrentBehavior:
         # Current methods are not coroutines
         assert not inspect.iscoroutinefunction(health_checker.start_for_service)
         assert not inspect.iscoroutinefunction(health_checker.stop_for_service)
+
+
+class TestStakingReconciliationRaceConditions:
+    """Test that the health checker's re-staking cannot collide with a user start.
+
+    Both the deploy endpoint and the health checker now reach the staking flow
+    for the same service, sending from the same master Safe. Two overlapping
+    unstake/stake sequences are a nonce hazard and, worse, a double unstake.
+    """
+
+    @staticmethod
+    def _service_manager(tmp_path: Path) -> ServiceManager:
+        """Create a ServiceManager whose staking flow is mocked out."""
+        manager = ServiceManager(
+            path=tmp_path / "services",
+            keys_manager=MagicMock(),
+            wallet_manager=MagicMock(),
+            funding_manager=MagicMock(),
+            logger=MagicMock(),
+        )
+        manager._stake_service_on_chain_from_safe_unlocked = (  # type: ignore[method-assign]
+            MagicMock()
+        )
+        return manager
+
+    def test_same_service_calls_serialise(self, tmp_path: Path) -> None:
+        """Two concurrent staking flows for one service must not interleave."""
+        manager = self._service_manager(tmp_path)
+        overlaps = []
+        in_flight = threading.Event()
+        release = threading.Event()
+
+        def _slow_stake(**_kwargs: object) -> None:
+            overlaps.append(in_flight.is_set())
+            in_flight.set()
+            release.wait(timeout=5)
+            in_flight.clear()
+
+        manager._stake_service_on_chain_from_safe_unlocked.side_effect = (  # type: ignore[attr-defined]
+            _slow_stake
+        )
+
+        first = threading.Thread(
+            target=manager.stake_service_on_chain_from_safe,
+            kwargs={"service_config_id": "sc-a", "chain": "gnosis"},
+        )
+        second = threading.Thread(
+            target=manager.stake_service_on_chain_from_safe,
+            kwargs={"service_config_id": "sc-a", "chain": "gnosis"},
+        )
+        first.start()
+        in_flight.wait(timeout=5)
+        second.start()
+        release.set()
+        first.join(timeout=5)
+        second.join(timeout=5)
+
+        assert overlaps == [False, False]
+
+    def test_different_services_do_not_serialise(self, tmp_path: Path) -> None:
+        """One service's staking must not stall another's."""
+        manager = self._service_manager(tmp_path)
+        entered = threading.Event()
+        release = threading.Event()
+
+        def _blocking_stake(**_kwargs: object) -> None:
+            entered.set()
+            release.wait(timeout=5)
+
+        manager._stake_service_on_chain_from_safe_unlocked.side_effect = (  # type: ignore[attr-defined]
+            _blocking_stake
+        )
+
+        blocker = threading.Thread(
+            target=manager.stake_service_on_chain_from_safe,
+            kwargs={"service_config_id": "sc-a", "chain": "gnosis"},
+        )
+        blocker.start()
+        entered.wait(timeout=5)
+        try:
+            assert (
+                manager.stake_service_on_chain_from_safe(
+                    service_config_id="sc-b", chain="gnosis", blocking=False
+                )
+                is True
+            )
+        finally:
+            release.set()
+            blocker.join(timeout=5)
+
+    def test_reconciliation_skips_and_still_restarts_when_a_start_holds_the_lock(
+        self, tmp_path: Path
+    ) -> None:
+        """Contention must never raise, and never block a background thread."""
+        manager = self._service_manager(tmp_path)
+        manager.is_service_evicted_on_chain = MagicMock(  # type: ignore[method-assign]
+            return_value={"gnosis": EvictionState.EVICTED_UNSTAKABLE}
+        )
+
+        with manager.get_staking_lock("sc-a"):
+            outcome = manager.reconcile_staking_for_restart(service_config_id="sc-a")
+
+        assert outcome == StakingReconcileOutcome.SKIPPED
+        manager._stake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]

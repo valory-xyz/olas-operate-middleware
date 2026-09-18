@@ -30,8 +30,10 @@ from operate.exceptions import InsufficientFundsException
 from operate.operate_types import (
     Chain,
     DeploymentStatus,
+    EvictionState,
     LedgerConfig,
     OnChainState,
+    StakingReconcileOutcome,
 )
 from operate.services.manage import ServiceManager
 from operate.services.protocol import StakingState
@@ -1611,3 +1613,320 @@ class TestStakeBatching:
         tx = sftxb.new_tx.return_value
         assert tx.add.call_count == 3
         tx.settle.assert_called_once()
+
+
+def _make_staking_service(
+    use_staking: bool = True, chains: t.Optional[t.List[str]] = None
+) -> MagicMock:
+    """Create a mock service with staking-enabled chain configs."""
+    service = _make_mock_service()
+    service.chain_configs = {
+        chain: MagicMock(
+            **{
+                "ledger_config.rpc": _RPC,
+                "ledger_config.chain": Chain(chain),
+                "chain_data.token": 32,
+                "chain_data.user_params.use_staking": use_staking,
+            }
+        )
+        for chain in (chains or [_CHAIN])
+    }
+    return service
+
+
+class TestIsServiceEvictedOnChain:
+    """Tests for is_service_evicted_on_chain()."""
+
+    @staticmethod
+    def _patched_staking(
+        staking_state: StakingState, unstaking_error: t.Optional[Exception] = None
+    ) -> MagicMock:
+        """Build a StakingManager mock with the given on-chain answers."""
+        staking_manager = MagicMock()
+        staking_manager.staking_state.return_value = staking_state
+        staking_manager.check_if_unstaking_possible.side_effect = unstaking_error
+        return staking_manager
+
+    def _run(
+        self,
+        tmp_path: Path,
+        service: MagicMock,
+        staking_manager: MagicMock,
+        staking_program: t.Optional[str] = "staking_v1",
+    ) -> t.Dict[str, t.Any]:
+        """Run is_service_evicted_on_chain against mocked chain reads."""
+        manager = _make_manager(tmp_path)
+        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
+        with (
+            patch(
+                "operate.services.manage.StakingManager", return_value=staking_manager
+            ),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xstaking",
+            ),
+            patch.object(
+                ServiceManager,
+                "_get_current_staking_program",
+                return_value=staking_program,
+            ),
+        ):
+            return manager.is_service_evicted_on_chain(service_config_id="sc-test-id")
+
+    def test_skips_chains_that_do_not_stake(self, tmp_path: Path) -> None:
+        """A chain with use_staking off cannot be evicted."""
+        result = self._run(
+            tmp_path,
+            _make_staking_service(use_staking=False),
+            self._patched_staking(StakingState.EVICTED),
+        )
+
+        assert result == {}
+
+    def test_unstaked_service_is_not_evicted(self, tmp_path: Path) -> None:
+        """No current staking program means nothing to reconcile."""
+        result = self._run(
+            tmp_path,
+            _make_staking_service(),
+            self._patched_staking(StakingState.EVICTED),
+            staking_program=None,
+        )
+
+        assert result == {_CHAIN: EvictionState.NOT_EVICTED}
+
+    def test_staked_service_is_not_evicted(self, tmp_path: Path) -> None:
+        """A healthy staked service reports not evicted."""
+        result = self._run(
+            tmp_path,
+            _make_staking_service(),
+            self._patched_staking(StakingState.STAKED),
+        )
+
+        assert result == {_CHAIN: EvictionState.NOT_EVICTED}
+
+    def test_evicted_and_unstakable(self, tmp_path: Path) -> None:
+        """Past minStakingDuration, the eviction can be cleared."""
+        result = self._run(
+            tmp_path,
+            _make_staking_service(),
+            self._patched_staking(StakingState.EVICTED),
+        )
+
+        assert result == {_CHAIN: EvictionState.EVICTED_UNSTAKABLE}
+
+    def test_evicted_and_locked(self, tmp_path: Path) -> None:
+        """Inside minStakingDuration with rewards outstanding, it cannot."""
+        result = self._run(
+            tmp_path,
+            _make_staking_service(),
+            self._patched_staking(
+                StakingState.EVICTED,
+                unstaking_error=ValueError("Service cannot be unstaked yet."),
+            ),
+        )
+
+        assert result == {_CHAIN: EvictionState.EVICTED_LOCKED}
+
+    def test_reports_every_staking_chain(self, tmp_path: Path) -> None:
+        """A multi-chain service is answered per chain."""
+        result = self._run(
+            tmp_path,
+            _make_staking_service(chains=[_CHAIN, "base"]),
+            self._patched_staking(StakingState.EVICTED),
+        )
+
+        assert result == {
+            _CHAIN: EvictionState.EVICTED_UNSTAKABLE,
+            "base": EvictionState.EVICTED_UNSTAKABLE,
+        }
+
+    def test_loads_no_wallet(self, tmp_path: Path) -> None:
+        """The read runs on a background thread where no password may be set."""
+        manager = _make_manager(tmp_path)
+        manager.load = MagicMock(  # type: ignore[method-assign]
+            return_value=_make_staking_service()
+        )
+        manager.get_eth_safe_tx_builder = MagicMock()  # type: ignore[method-assign]
+
+        with (
+            patch(
+                "operate.services.manage.StakingManager",
+                return_value=self._patched_staking(StakingState.EVICTED),
+            ),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xstaking",
+            ),
+            patch.object(
+                ServiceManager,
+                "_get_current_staking_program",
+                return_value="staking_v1",
+            ),
+        ):
+            manager.is_service_evicted_on_chain(service_config_id="sc-test-id")
+
+        manager.get_eth_safe_tx_builder.assert_not_called()
+        manager.wallet_manager.load.assert_not_called()
+
+
+class TestReconcileStakingForRestart:
+    """Tests for reconcile_staking_for_restart()."""
+
+    @staticmethod
+    def _manager(
+        tmp_path: Path, eviction_states: t.Dict[str, EvictionState]
+    ) -> ServiceManager:
+        """Create a manager whose eviction read returns the given states."""
+        manager = _make_manager(tmp_path)
+        manager.is_service_evicted_on_chain = MagicMock(  # type: ignore[method-assign]
+            return_value=eviction_states
+        )
+        manager.stake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
+            return_value=True
+        )
+        return manager
+
+    def test_not_evicted_touches_nothing(self, tmp_path: Path) -> None:
+        """A healthy service must not reach a wallet at all."""
+        manager = self._manager(tmp_path, {_CHAIN: EvictionState.NOT_EVICTED})
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.NOTHING_TO_DO
+        manager.stake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_unstakable_eviction_is_delegated(self, tmp_path: Path) -> None:
+        """The existing staking flow performs the unstake and the re-stake."""
+        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.RECONCILED
+        manager.stake_service_on_chain_from_safe.assert_called_once_with(  # type: ignore[attr-defined]
+            service_config_id="sc-test-id", chain=_CHAIN, blocking=False
+        )
+
+    def test_locked_eviction_sends_no_transaction(self, tmp_path: Path) -> None:
+        """The staking flow is a no-op for a locked eviction; skip the wallet load."""
+        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_LOCKED})
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+        manager.stake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_one_locked_chain_blocks_the_restart(self, tmp_path: Path) -> None:
+        """The agent exits if any staking chain is still evicted."""
+        manager = self._manager(
+            tmp_path,
+            {
+                _CHAIN: EvictionState.EVICTED_UNSTAKABLE,
+                "base": EvictionState.EVICTED_LOCKED,
+            },
+        )
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+
+    def test_lock_contention_is_reported_as_skipped(self, tmp_path: Path) -> None:
+        """A start already reconciling this service is doing the same work."""
+        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager.stake_service_on_chain_from_safe.return_value = False  # type: ignore[attr-defined]
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.SKIPPED
+
+    def test_failing_read_returns_an_outcome_not_an_exception(
+        self, tmp_path: Path
+    ) -> None:
+        """A chain read must never wedge the health checker's restart loop."""
+        manager = self._manager(tmp_path, {})
+        manager.is_service_evicted_on_chain.side_effect = RuntimeError(  # type: ignore[attr-defined]
+            "rpc down"
+        )
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.FAILED
+
+    def test_failing_restake_returns_an_outcome_not_an_exception(
+        self, tmp_path: Path
+    ) -> None:
+        """Same for a transaction that reverts."""
+        manager = self._manager(tmp_path, {_CHAIN: EvictionState.EVICTED_UNSTAKABLE})
+        manager.stake_service_on_chain_from_safe.side_effect = RuntimeError(  # type: ignore[attr-defined]
+            "reverted"
+        )
+
+        outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
+
+        assert outcome == StakingReconcileOutcome.FAILED
+
+
+class TestStakingLock:
+    """Tests for the per-service lock serialising the staking flow."""
+
+    def test_lock_is_per_service_and_stable(self, tmp_path: Path) -> None:
+        """One lock per service, reused across calls."""
+        manager = _make_manager(tmp_path)
+
+        assert manager.get_staking_lock("sc-a") is manager.get_staking_lock("sc-a")
+        assert manager.get_staking_lock("sc-a") is not manager.get_staking_lock("sc-b")
+
+    def test_blocking_caller_runs_the_staking_flow(self, tmp_path: Path) -> None:
+        """The deploy path must never silently skip staking."""
+        manager = _make_manager(tmp_path)
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+
+        assert (
+            manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-a", chain=_CHAIN
+            )
+            is True
+        )
+        manager._stake_service_on_chain_from_safe_unlocked.assert_called_once_with(  # type: ignore[attr-defined]
+            service_config_id="sc-a", chain=_CHAIN
+        )
+
+    def test_non_blocking_caller_skips_on_contention(self, tmp_path: Path) -> None:
+        """A background reconciliation must not queue behind a foreground start."""
+        manager = _make_manager(tmp_path)
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+
+        with manager.get_staking_lock("sc-a"):
+            ran = manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-a", chain=_CHAIN, blocking=False
+            )
+
+        assert ran is False
+        manager._stake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_other_services_are_not_blocked(self, tmp_path: Path) -> None:
+        """Staking one service must not stall staking another."""
+        manager = _make_manager(tmp_path)
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+
+        with manager.get_staking_lock("sc-a"):
+            ran = manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-b", chain=_CHAIN, blocking=False
+            )
+
+        assert ran is True
+
+    def test_lock_is_released_when_the_staking_flow_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """A reverted transaction must not wedge every later start."""
+        manager = _make_manager(tmp_path)
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("reverted")
+        )
+
+        with pytest.raises(RuntimeError, match="reverted"):
+            manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-a", chain=_CHAIN
+            )
+
+        assert manager.get_staking_lock("sc-a").acquire(blocking=False) is True
