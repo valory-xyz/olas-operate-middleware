@@ -1796,6 +1796,7 @@ class TestServiceRoutes:
         svc.deployment.json = {"status": 3}
         svc.get_latest_healthcheck.return_value = {}
         svc.path = Path("/fake/service")
+        svc.service_config_id = "svc1"
         m.service_manager.return_value.load.return_value = svc
         stack, app, _, _ = _open_app(m)
         with stack:

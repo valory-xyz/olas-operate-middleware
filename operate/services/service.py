@@ -1041,9 +1041,8 @@ class Service(LocalResource):
                 healthcheck = json.load(file)
 
             if isinstance(healthcheck, dict) and healthcheck:
-                # The agent only ever refreshes this file while it is alive, so
-                # its age is what separates a live round list from one frozen
-                # just before the process died.
+                # Rewritten only on a successful probe, so its age separates a
+                # live round list from one frozen when the agent died.
                 healthcheck["age_seconds"] = max(
                     0.0, time.time() - healthcheck_json_path.stat().st_mtime
                 )
