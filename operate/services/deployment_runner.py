@@ -552,8 +552,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _stop_agent(self) -> None:
         """Stop agent process using safe PID file operations."""
         self._terminate_recorded_process(
-            self._work_directory / "agent.pid",
-            expected_process_names=["python", "agent", "aea"],
+            self._work_directory / constants.AGENT_PID_FILE,
+            expected_process_names=constants.AGENT_PROCESS_NAMES,
             label="agent",
         )
         kill_processes_on_port(constants.AGENT_HTTP_PORT, logger=self.logger)
@@ -725,12 +725,12 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         self.logger.info(f"Started agent runner process with pid: {process.pid}")
 
         # Write PID file with validation and locking
-        pid_file = working_dir / "agent.pid"
+        pid_file = working_dir / constants.AGENT_PID_FILE
         try:
             write_pid_file(
                 pid_file,
                 process.pid,
-                expected_process_names=["python", "agent", "aea"],
+                expected_process_names=constants.AGENT_PROCESS_NAMES,
             )
         except PIDFileError as e:
             self.logger.error(f"Failed to write agent PID file {pid_file}: {e}")
@@ -1016,12 +1016,12 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
             self._deliver_password_or_kill(process=process, password=password)
 
         # Write PID file with validation and locking
-        pid_file = working_dir / "agent.pid"
+        pid_file = working_dir / constants.AGENT_PID_FILE
         try:
             write_pid_file(
                 pid_file,
                 process.pid,
-                expected_process_names=["python", "agent", "aea"],
+                expected_process_names=constants.AGENT_PROCESS_NAMES,
             )
         except PIDFileError as e:
             self.logger.error(f"Failed to write agent PID file {pid_file}: {e}")

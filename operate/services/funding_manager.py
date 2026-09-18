@@ -74,6 +74,7 @@ from operate.utils.gnosis import (
     transfer_batch_from_safe,
     transfer_erc20_from_eoa,
 )
+from operate.utils.locks import KeyedLocks
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 # An ERC20 `transfer` typically uses ~3x the gas of a native transfer.
@@ -110,8 +111,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         self.logger = logger
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
         self._lock = threading.Lock()
-        self._withdrawal_locks_mu = threading.Lock()
-        self._withdrawal_locks: t.Dict[t.Tuple[str, str], threading.Lock] = {}
+        self._withdrawal_locks: KeyedLocks[t.Tuple[str, str]] = KeyedLocks()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
         self.is_for_quickstart = False
@@ -120,11 +120,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         self, service_config_id: str, chain: Chain
     ) -> threading.Lock:
         """Return the per-(service, chain) lock guarding service-safe withdrawals."""
-        lock_key = (service_config_id, chain.value)
-        with self._withdrawal_locks_mu:
-            if lock_key not in self._withdrawal_locks:
-                self._withdrawal_locks[lock_key] = threading.Lock()
-            return self._withdrawal_locks[lock_key]
+        return self._withdrawal_locks.get((service_config_id, chain.value))
 
     def drain_agents_eoas(
         self, service: Service, withdrawal_address: str, chain: Chain

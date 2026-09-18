@@ -20,6 +20,8 @@
 """Unit tests for operate/services/service.py – no IPFS / Docker / blockchain required."""
 
 import json
+import os
+import time
 import typing as t
 from pathlib import Path
 from unittest.mock import patch
@@ -178,7 +180,44 @@ class TestGetLatestHealthcheck:
         (tmp_path / HEALTHCHECK_JSON).write_text(json.dumps(payload), encoding="utf-8")
         svc = _make_service(tmp_path)
         result = svc.get_latest_healthcheck()
-        assert result == payload
+        assert {k: v for k, v in result.items() if k != "age_seconds"} == payload
+        assert "age_seconds" in result
+
+    def test_reports_the_age_of_the_snapshot(self, tmp_path: Path) -> None:
+        """The agent only refreshes this file while alive, so its age is liveness.
+
+        A crash-looping agent leaves the round list captured just before it
+        died; without the age, that reads exactly like a live one.
+        """
+        healthcheck_json = tmp_path / HEALTHCHECK_JSON
+        healthcheck_json.write_text(json.dumps({"rounds": ["a"]}), encoding="utf-8")
+        os.utime(healthcheck_json, (time.time() - 300, time.time() - 300))
+        svc = _make_service(tmp_path)
+
+        assert svc.get_latest_healthcheck()["age_seconds"] == pytest.approx(300, abs=5)
+
+    def test_age_is_never_negative(self, tmp_path: Path) -> None:
+        """Clock skew must not produce a snapshot from the future."""
+        healthcheck_json = tmp_path / HEALTHCHECK_JSON
+        healthcheck_json.write_text(json.dumps({"rounds": ["a"]}), encoding="utf-8")
+        os.utime(healthcheck_json, (time.time() + 300, time.time() + 300))
+        svc = _make_service(tmp_path)
+
+        assert svc.get_latest_healthcheck()["age_seconds"] == 0.0
+
+    def test_empty_snapshot_carries_no_age(self, tmp_path: Path) -> None:
+        """An empty snapshot has no round list to age, and the docs say so."""
+        (tmp_path / HEALTHCHECK_JSON).write_text("{}", encoding="utf-8")
+        svc = _make_service(tmp_path)
+
+        assert svc.get_latest_healthcheck() == {}
+
+    def test_non_dict_snapshot_is_returned_untouched(self, tmp_path: Path) -> None:
+        """A snapshot that is not an object must not raise out of a read endpoint."""
+        (tmp_path / HEALTHCHECK_JSON).write_text("[1, 2]", encoding="utf-8")
+        svc = _make_service(tmp_path)
+
+        assert svc.get_latest_healthcheck() == [1, 2]
 
     def test_returns_error_dict_on_invalid_json(self, tmp_path: Path) -> None:
         """Test that an error dict is returned when healthcheck.json is malformed."""

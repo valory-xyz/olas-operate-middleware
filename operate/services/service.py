@@ -1038,7 +1038,15 @@ class Service(LocalResource):
 
         try:
             with open(healthcheck_json_path, "r", encoding="utf-8") as file:
-                return json.load(file)
+                healthcheck = json.load(file)
+
+            if isinstance(healthcheck, dict) and healthcheck:
+                # Rewritten only on a successful probe, so its age separates a
+                # live round list from one frozen when the agent died.
+                healthcheck["age_seconds"] = max(
+                    0.0, time.time() - healthcheck_json_path.stat().st_mtime
+                )
+            return healthcheck
         except (IOError, json.JSONDecodeError) as e:
             return {"error": f"Error reading healthcheck.json: {e}"}
 

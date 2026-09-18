@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import aiohttp
 import pytest
 
+from operate.operate_types import StakingReconcileOutcome
 from operate.services.health_checker import HealthChecker
 
 # Save the REAL asyncio.sleep before any test patches it so nested-function
@@ -984,3 +985,188 @@ class TestFailfastBehaviorPinned:
 
         # At least 3 restarts happened (past FAILFAST_NUM=2)
         assert health_checker._service_manager.deploy_service_locally.call_count >= 3
+
+
+class TestRestartStakingReconciliation:
+    """Tests for the staking reconciliation _restart performs before redeploying.
+
+    An evicted agent exits on every boot, so a restart that does not clear the
+    eviction restarts a process that is structurally incapable of staying up.
+    """
+
+    @pytest.fixture
+    def health_checker(self) -> HealthChecker:
+        """Return a HealthChecker whose service manager is fully mocked."""
+        mock_sm = MagicMock()
+        mock_sm.load.return_value.path = Path("/fake/service")
+        mock_sm.reconcile_staking_for_restart.return_value = (
+            StakingReconcileOutcome.NOTHING_TO_DO
+        )
+        return HealthChecker(
+            service_manager=mock_sm,
+            logger=MagicMock(),
+            sleep_period=0,
+            number_of_fails=1,
+        )
+
+    @staticmethod
+    async def _run_until_restart(
+        health_checker: HealthChecker,
+    ) -> t.Optional[BaseException]:
+        """Drive healthcheck_job through one unhealthy cycle and its restart.
+
+        :return: the exception the job ended on, or None if it was still running.
+        """
+
+        async def always_unhealthy(*_args: object, **_kwargs: object) -> bool:
+            return False
+
+        health_checker.check_service_health = always_unhealthy  # type: ignore[assignment]
+
+        with (
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.2)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                return None
+            except Exception as exc:  # pylint: disable=broad-except
+                return exc
+            return None
+
+    @pytest.mark.asyncio
+    async def test_reconciliation_runs_between_stop_and_deploy(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """The ordering is the defect: reconciling after the redeploy fixes nothing."""
+        calls: t.List[str] = []
+        sm = health_checker._service_manager
+        sm.stop_service_locally.side_effect = lambda **_: calls.append("stop")
+
+        def _reconcile(**_kwargs: object) -> StakingReconcileOutcome:
+            calls.append("reconcile")
+            return StakingReconcileOutcome.NOTHING_TO_DO
+
+        sm.reconcile_staking_for_restart.side_effect = _reconcile
+        sm.deploy_service_locally.side_effect = lambda **_: calls.append("deploy")
+
+        await self._run_until_restart(health_checker)
+
+        assert calls[:3] == ["stop", "reconcile", "deploy"]
+
+    @pytest.mark.asyncio
+    async def test_reconciled_eviction_redeploys_and_clears_failfast(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """A cleared eviction makes the restarts it caused stop counting.
+
+        The budget is reset against a condition the chain has confirmed is
+        gone — `reconcile_staking_for_restart` re-reads before reporting
+        RECONCILED — and it resumes counting on the next restart, which is what
+        keeps the loop bounded.
+        """
+        sm = health_checker._service_manager
+        outcomes = [StakingReconcileOutcome.RECONCILED] * 3
+
+        def _reconcile(**_kwargs: object) -> StakingReconcileOutcome:
+            if outcomes:
+                return outcomes.pop()
+            return StakingReconcileOutcome.NOTHING_TO_DO
+
+        sm.reconcile_staking_for_restart.side_effect = _reconcile
+
+        with patch.object(HealthChecker, "FAILFAST_NUM", 2):
+            exc = await self._run_until_restart(health_checker)
+
+        sm.deploy_service_locally.assert_called_with(service_config_id="test-service")
+        # Three reconciled restarts cleared the budget, so the service outlived
+        # FAILFAST_NUM restarts instead of being stopped at the second...
+        assert sm.deploy_service_locally.call_count > 2
+        # ...and once reconciliation stopped clearing evictions, failfast fired.
+        assert isinstance(exc, RuntimeError)
+
+    @pytest.mark.asyncio
+    async def test_skipped_reconciliation_waits_instead_of_redeploying(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Another caller is mid-reconciliation, and will deploy the service itself.
+
+        Booting an agent now would boot it into a service that may still be
+        evicted, and the restart is not this service's fault, so it must not
+        spend failfast budget either.
+        """
+        sm = health_checker._service_manager
+        sm.reconcile_staking_for_restart.return_value = StakingReconcileOutcome.SKIPPED
+
+        with patch.object(HealthChecker, "FAILFAST_NUM", 2):
+            exc = await self._run_until_restart(health_checker)
+
+        sm.deploy_service_locally.assert_not_called()
+        assert exc is None
+
+    @pytest.mark.asyncio
+    async def test_skipped_reconciliation_does_not_count_as_a_restart(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """No restart was attempted, so the count the API reports must not move."""
+        sm = health_checker._service_manager
+        sm.reconcile_staking_for_restart.return_value = StakingReconcileOutcome.SKIPPED
+
+        await self._run_until_restart(health_checker)
+
+        assert (
+            health_checker.get_liveness("test-service")["restarts_since_last_healthy"]
+            == 0
+        )
+
+    @pytest.mark.asyncio
+    async def test_locked_eviction_stops_the_service_with_a_reason(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Restarting into an eviction that cannot be cleared only repeats it."""
+        health_checker._service_manager.reconcile_staking_for_restart.return_value = (
+            StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+        )
+
+        await self._run_until_restart(health_checker)
+
+        health_checker._service_manager.stop_service_locally.assert_called_with(
+            service_config_id="test-service"
+        )
+        health_checker._service_manager.deploy_service_locally.assert_not_called()
+        liveness = health_checker.get_liveness("test-service")
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "evicted_cannot_restake"
+
+    @pytest.mark.asyncio
+    async def test_failing_reconciliation_falls_through_to_a_plain_restart(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """A chain read must never wedge the component that recovers everything else."""
+        health_checker._service_manager.reconcile_staking_for_restart.side_effect = (
+            RuntimeError("rpc down")
+        )
+
+        await self._run_until_restart(health_checker)
+
+        health_checker._service_manager.deploy_service_locally.assert_called_with(
+            service_config_id="test-service"
+        )
+        health_checker.logger.exception.assert_called()  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_restart_counts_towards_liveness(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Restarts since the last healthy probe are reported to API consumers."""
+        await self._run_until_restart(health_checker)
+
+        assert (
+            health_checker.get_liveness("test-service")["restarts_since_last_healthy"]
+            > 0
+        )
