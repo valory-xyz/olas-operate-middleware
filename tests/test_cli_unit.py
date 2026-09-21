@@ -2104,13 +2104,7 @@ class TestServiceRoutes:
             assert resp.status_code == HTTPStatus.OK
 
     def test_stop_service_brackets_the_stop_with_the_health_checker(self) -> None:
-        """The job is cancelled before the stop, the liveness record dropped after.
-
-        A job left running for the duration of the stop can pass its failure
-        threshold and restart the service the user asked to stop; a record
-        dropped before the process is gone makes `get_liveness` fall back to
-        the still-live PID and report the agent as alive.
-        """
+        """The job is cancelled before the stop, the liveness record dropped after."""
         m = _make_mock_operate()
         m.service_manager.return_value.exists.return_value = True
         svc = MagicMock()
@@ -2131,12 +2125,7 @@ class TestServiceRoutes:
             assert observed == ["cancel_job", "deployment_stop", "forget"]
 
     def test_stop_service_cleans_up_when_the_stop_fails(self) -> None:
-        """A stop that raises must still leave no job and no liveness record.
-
-        `Deployment.stop` re-raises, so without a `finally` the job would keep
-        probing a service the user stopped and restart it once it passed its
-        failure threshold.
-        """
+        """A stop that raises must still leave no job and no liveness record."""
         m = _make_mock_operate()
         m.service_manager.return_value.exists.return_value = True
         svc = MagicMock()

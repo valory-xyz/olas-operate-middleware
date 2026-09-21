@@ -1793,12 +1793,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         service.remove_latest_healthcheck()
         deployment = service.deployment
 
-        # The two halves of `stop_for_service` belong at opposite ends of the stop.
-        # Cancel the job first: it stays live for the whole stop otherwise, and a job
-        # near its failure threshold would restart the service the user is stopping.
-        # Drop the liveness record last: `get_liveness` falls back to the PID file
-        # when no record exists, so dropping it while the process is still up reports
-        # the agent alive. A failing `stop` re-raises, so the drop goes in a `finally`.
+        # Cancel first, or a job near its failure threshold restarts the service being
+        # stopped; drop the record last, or `get_liveness` falls back to the live PID.
         health_checker.cancel_job_for_service(service_config_id=safe_id)
         try:
             await run_in_executor(deployment.stop)
