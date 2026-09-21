@@ -337,9 +337,11 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         """Return the liveness of a service's agent for the deployment payload."""
         with self._liveness_lock:
             record = self._liveness.get(service_config_id)
-
-        if record is not None:
-            return record.json()
+            if record is not None:
+                # Serialise while still holding the lock: the writers set
+                # `is_alive` and `reason` in separate statements, so a snapshot
+                # taken between the two reports `is_alive: false` with no reason.
+                return record.json()
 
         # Records are in-memory, so a middleware restart leaves none; the PID
         # file the deployment runner wrote outlives this process.

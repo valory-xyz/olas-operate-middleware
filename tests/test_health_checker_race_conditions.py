@@ -357,3 +357,33 @@ class TestStakingReconciliationRaceConditions:
 
         assert outcome == StakingReconcileOutcome.SKIPPED
         manager._stake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]
+
+
+class TestLivenessSnapshotRaceConditions:
+    """Test that a liveness read cannot observe a half-written record.
+
+    `mark_healthy` and `mark_unhealthy` assign `is_alive` and `reason` in
+    separate statements. A reader that serialises the record after releasing
+    the lock can land between those two assignments and report
+    `is_alive: false` with `reason: null` — a combination that never holds.
+    """
+
+    def test_record_is_serialised_while_the_lock_is_held(self) -> None:
+        """`get_liveness` must serialise inside the lock, not after releasing it."""
+        health_checker = HealthChecker(service_manager=MagicMock(), logger=MagicMock())
+        health_checker.record_healthy_probe(service_config_id="svc")
+        record = health_checker._liveness["svc"]  # type: ignore[attr-defined]
+
+        locked_while_serialising = []
+        original_json = record.json
+
+        def _observe_lock() -> dict:
+            locked_while_serialising.append(
+                health_checker._liveness_lock.locked()  # type: ignore[attr-defined]
+            )
+            return original_json()
+
+        record.json = _observe_lock  # type: ignore[method-assign]
+        health_checker.get_liveness("svc")
+
+        assert locked_while_serialising == [True]
