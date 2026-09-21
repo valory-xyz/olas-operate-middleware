@@ -543,14 +543,10 @@ class TestGetLiveness:
         assert liveness["is_alive"] is False
         assert liveness["reason"] == "evicted_cannot_restake"
 
-    def test_stop_for_service_keeps_an_eviction_reason(
-        self, health_checker: HealthChecker
+    def test_stop_for_service_drops_an_eviction_reason(
+        self, health_checker: HealthChecker, tmp_path: Path
     ) -> None:
-        """`pause_all_services` stops the job of every service, not just one.
-
-        Dropping the reason here would erase one service's
-        `evicted_cannot_restake` because the user started a different one.
-        """
+        """Nothing refreshes the reason once the job is gone, so it would go stale."""
         health_checker.record_reason(
             service_config_id="svc",
             reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
@@ -558,7 +554,7 @@ class TestGetLiveness:
 
         health_checker.stop_for_service(service_config_id="svc")
 
-        assert health_checker.get_liveness("svc")["reason"] == "evicted_cannot_restake"
+        assert health_checker.get_liveness("svc", tmp_path)["reason"] == "not_monitored"
 
     def test_stop_for_service_drops_a_healthy_record(
         self, health_checker: HealthChecker, tmp_path: Path
@@ -575,7 +571,7 @@ class TestGetLiveness:
     def test_stop_for_service_drops_a_record_of_a_dead_agent(
         self, health_checker: HealthChecker, tmp_path: Path
     ) -> None:
-        """Only an eviction outlives the stop; an ordinary failure does not."""
+        """A stopped service keeps no reason from the probe that preceded the stop."""
         health_checker.record_failed_probe(
             service_config_id="svc",
             reason=AgentLivenessReason.AGENT_PROCESS_EXITED,

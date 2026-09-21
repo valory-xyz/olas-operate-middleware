@@ -2116,7 +2116,7 @@ class TestServiceRoutes:
             order = MagicMock()
             order.attach_mock(health_checker.cancel_job_for_service, "cancel_job")
             order.attach_mock(svc.deployment.stop, "deployment_stop")
-            order.attach_mock(health_checker.forget_unless_evicted, "forget")
+            order.attach_mock(health_checker.forget_service, "forget")
             with TestClient(app) as c:
                 resp = c.post("/api/v2/service/svc1/deployment/stop")
                 observed = [call[0] for call in order.mock_calls]
@@ -2141,7 +2141,7 @@ class TestServiceRoutes:
             health_checker.cancel_job_for_service.assert_called_once_with(
                 service_config_id="svc1"
             )
-            health_checker.forget_unless_evicted.assert_called_once_with(
+            health_checker.forget_service.assert_called_once_with(
                 service_config_id="svc1"
             )
 

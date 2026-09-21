@@ -1799,7 +1799,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         try:
             await run_in_executor(deployment.stop)
         finally:
-            health_checker.forget_unless_evicted(service_config_id=safe_id)
+            health_checker.forget_service(service_config_id=safe_id)
         logger.info(f"Cancelling funding job for {service_config_id}")
         return JSONResponse(content=deployment.json)
 
