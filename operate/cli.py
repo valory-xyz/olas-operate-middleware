@@ -1792,9 +1792,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         service = operate.service_manager().load(service_config_id=safe_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        health_checker.stop_for_service(service_config_id=safe_id)
 
+        # Stop the process before dropping its liveness record, as
+        # `pause_all_services` does: in between the two, a deployment GET finds no
+        # record, falls back to the still-live PID and reports the agent alive.
         await run_in_executor(deployment.stop)
+        health_checker.stop_for_service(service_config_id=safe_id)
         logger.info(f"Cancelling funding job for {service_config_id}")
         return JSONResponse(content=deployment.json)
 

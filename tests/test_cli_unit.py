@@ -2103,6 +2103,33 @@ class TestServiceRoutes:
                 resp = c.post("/api/v2/service/svc1/deployment/stop")
             assert resp.status_code == HTTPStatus.OK
 
+    def test_stop_service_stops_the_process_before_forgetting_liveness(self) -> None:
+        """The deployment must stop before its liveness record is dropped.
+
+        `get_liveness` falls back to the PID file when no record exists, so
+        dropping the record first leaves a window in which a deployment GET
+        finds the still-live process and reports the agent as alive.
+        """
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.deployment.json = {"status": "STOPPED"}
+        m.service_manager.return_value.load.return_value = svc
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            order = MagicMock()
+            order.attach_mock(svc.deployment.stop, "deployment_stop")
+            order.attach_mock(
+                cli.HealthChecker.return_value.stop_for_service,  # type: ignore[attr-defined]
+                "stop_for_service",
+            )
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1/deployment/stop")
+                observed = [call[0] for call in order.mock_calls]
+
+            assert resp.status_code == HTTPStatus.OK
+            assert observed == ["deployment_stop", "stop_for_service"]
+
 
 class TestWithdrawAndTerminateRoutes:
     """Cover _withdraw_onchain and _terminate_and_withdraw routes."""
