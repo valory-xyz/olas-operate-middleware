@@ -161,8 +161,11 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
     def stop_for_service(self, service_config_id: str) -> None:
         """Stop for a specific service."""
         # A stopped agent is not alive; only the reason it could not be restarted outlives it.
-        self._forget_unless_evicted(service_config_id=service_config_id)
+        self.forget_unless_evicted(service_config_id=service_config_id)
+        self.cancel_job_for_service(service_config_id=service_config_id)
 
+    def cancel_job_for_service(self, service_config_id: str) -> None:
+        """Cancel the healthcheck job of a service, leaving its liveness record."""
         # Thread-safe job cancellation
         with self._jobs_lock:
             if service_config_id not in self._jobs:
@@ -321,7 +324,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         with self._liveness_lock:
             self._liveness.pop(service_config_id, None)
 
-    def _forget_unless_evicted(self, service_config_id: str) -> None:
+    def forget_unless_evicted(self, service_config_id: str) -> None:
         """Drop the liveness record of a service unless it reports an eviction."""
         with self._liveness_lock:
             record = self._liveness.get(service_config_id)

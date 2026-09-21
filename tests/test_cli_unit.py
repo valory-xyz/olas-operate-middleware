@@ -2103,12 +2103,13 @@ class TestServiceRoutes:
                 resp = c.post("/api/v2/service/svc1/deployment/stop")
             assert resp.status_code == HTTPStatus.OK
 
-    def test_stop_service_stops_the_process_before_forgetting_liveness(self) -> None:
-        """The deployment must stop before its liveness record is dropped.
+    def test_stop_service_brackets_the_stop_with_the_health_checker(self) -> None:
+        """The job is cancelled before the stop, the liveness record dropped after.
 
-        `get_liveness` falls back to the PID file when no record exists, so
-        dropping the record first leaves a window in which a deployment GET
-        finds the still-live process and reports the agent as alive.
+        A job left running for the duration of the stop can pass its failure
+        threshold and restart the service the user asked to stop; a record
+        dropped before the process is gone makes `get_liveness` fall back to
+        the still-live PID and report the agent as alive.
         """
         m = _make_mock_operate()
         m.service_manager.return_value.exists.return_value = True
@@ -2117,18 +2118,43 @@ class TestServiceRoutes:
         m.service_manager.return_value.load.return_value = svc
         stack, app, _, _ = _open_app(m)
         with stack:
+            health_checker = cli.HealthChecker.return_value  # type: ignore[attr-defined]
             order = MagicMock()
+            order.attach_mock(health_checker.cancel_job_for_service, "cancel_job")
             order.attach_mock(svc.deployment.stop, "deployment_stop")
-            order.attach_mock(
-                cli.HealthChecker.return_value.stop_for_service,  # type: ignore[attr-defined]
-                "stop_for_service",
-            )
+            order.attach_mock(health_checker.forget_unless_evicted, "forget")
             with TestClient(app) as c:
                 resp = c.post("/api/v2/service/svc1/deployment/stop")
                 observed = [call[0] for call in order.mock_calls]
 
             assert resp.status_code == HTTPStatus.OK
-            assert observed == ["deployment_stop", "stop_for_service"]
+            assert observed == ["cancel_job", "deployment_stop", "forget"]
+
+    def test_stop_service_cleans_up_when_the_stop_fails(self) -> None:
+        """A stop that raises must still leave no job and no liveness record.
+
+        `Deployment.stop` re-raises, so without a `finally` the job would keep
+        probing a service the user stopped and restart it once it passed its
+        failure threshold.
+        """
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.deployment.stop.side_effect = RuntimeError("stop failed")
+        m.service_manager.return_value.load.return_value = svc
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            health_checker = cli.HealthChecker.return_value  # type: ignore[attr-defined]
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/v2/service/svc1/deployment/stop")
+
+            assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+            health_checker.cancel_job_for_service.assert_called_once_with(
+                service_config_id="svc1"
+            )
+            health_checker.forget_unless_evicted.assert_called_once_with(
+                service_config_id="svc1"
+            )
 
 
 class TestWithdrawAndTerminateRoutes:

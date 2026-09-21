@@ -1793,11 +1793,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         service.remove_latest_healthcheck()
         deployment = service.deployment
 
-        # Stop the process before dropping its liveness record, as
-        # `pause_all_services` does: in between the two, a deployment GET finds no
-        # record, falls back to the still-live PID and reports the agent alive.
-        await run_in_executor(deployment.stop)
-        health_checker.stop_for_service(service_config_id=safe_id)
+        # The two halves of `stop_for_service` belong at opposite ends of the stop.
+        # Cancel the job first: it stays live for the whole stop otherwise, and a job
+        # near its failure threshold would restart the service the user is stopping.
+        # Drop the liveness record last: `get_liveness` falls back to the PID file
+        # when no record exists, so dropping it while the process is still up reports
+        # the agent alive. A failing `stop` re-raises, so the drop goes in a `finally`.
+        health_checker.cancel_job_for_service(service_config_id=safe_id)
+        try:
+            await run_in_executor(deployment.stop)
+        finally:
+            health_checker.forget_unless_evicted(service_config_id=safe_id)
         logger.info(f"Cancelling funding job for {service_config_id}")
         return JSONResponse(content=deployment.json)
 
