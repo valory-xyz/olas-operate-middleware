@@ -463,7 +463,9 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE,
                         StakingReconcileOutcome.SKIPPED,
                     ):
-                        # Booting the agent now would put it straight back into an eviction.
+                        # Either the eviction is known to be unclearable, or another
+                        # caller is mid-reconciliation and it is not yet known to be
+                        # cleared. Neither is a state to boot the agent back into.
                         return outcome
 
                     service_manager.deploy_service_locally(
