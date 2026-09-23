@@ -106,6 +106,7 @@ from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.fund_recovery_manager import FundRecoveryManager
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
+from operate.services.service import Service
 from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import Transfer, get_assets_balances
@@ -1489,18 +1490,28 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return await run_in_executor(_fn)
 
+    def deployment_payload(service: Service) -> t.Dict[str, t.Any]:
+        """Build the deployment payload of a service."""
+        deployment_json = service.deployment.json
+        deployment_json["healthcheck"] = service.get_latest_healthcheck()
+        deployment_json["agent_liveness"] = health_checker.get_liveness(
+            service_config_id=service.service_config_id,
+            service_path=service.path,
+        )
+        return deployment_json
+
     @app.get("/api/v2/services/deployment")
     async def _get_services_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
 
         def _fn() -> JSONResponse:
             service_manager = operate.service_manager()
-            output = {}
-            for service in service_manager.get_all_services()[0]:
-                deployment_json = service.deployment.json
-                deployment_json["healthcheck"] = service.get_latest_healthcheck()
-                output[service.service_config_id] = deployment_json
-            return JSONResponse(content=output)
+            return JSONResponse(
+                content={
+                    service.service_config_id: deployment_payload(service)
+                    for service in service_manager.get_all_services()[0]
+                }
+            )
 
         return await run_in_executor(_fn)
 
@@ -1534,9 +1545,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         def _fn() -> JSONResponse:
             service = operate.service_manager().load(service_config_id=safe_id)
-            deployment_json = service.deployment.json
-            deployment_json["healthcheck"] = service.get_latest_healthcheck()
-            return JSONResponse(content=deployment_json)
+            return JSONResponse(content=deployment_payload(service))
 
         return await run_in_executor(_fn)
 
@@ -1783,9 +1792,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         service = operate.service_manager().load(service_config_id=safe_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        health_checker.stop_for_service(service_config_id=safe_id)
 
-        await run_in_executor(deployment.stop)
+        # Cancel first, or a job near its failure threshold restarts the service being
+        # stopped; drop the record last, or `get_liveness` falls back to the live PID.
+        health_checker.cancel_job_for_service(service_config_id=safe_id)
+        try:
+            await run_in_executor(deployment.stop)
+        finally:
+            health_checker.forget_service(service_config_id=safe_id)
         logger.info(f"Cancelling funding job for {service_config_id}")
         return JSONResponse(content=deployment.json)
 

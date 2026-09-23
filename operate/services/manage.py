@@ -72,6 +72,8 @@ from operate.operate_types import (
     OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
+    StakingEvictionState,
+    StakingReconcileOutcome,
 )
 from operate.services.funding_manager import FundingManager
 from operate.services.protocol import (
@@ -93,6 +95,7 @@ from operate.utils.gnosis import (
     simulate_safe_sub_tx,
     transfer_erc20_from_safe,
 )
+from operate.utils.locks import KeyedLocks
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 # pylint: disable=redefined-builtin
@@ -152,6 +155,7 @@ class ServiceManager:
         self.logger = logger
         self.skip_depencency_check = skip_dependency_check
         self._maintenance_lock = threading.Lock()
+        self._chain_tx_locks: KeyedLocks[str] = KeyedLocks()
 
     def setup(self) -> None:
         """Setup service manager."""
@@ -332,10 +336,13 @@ class ServiceManager:
 
         service = self.load(service_config_id=service_config_id)
         for chain in service.chain_configs.keys():
-            self._deploy_service_onchain_from_safe(
-                service_config_id=service_config_id,
-                chain=chain,
-            )
+            # The health checker reaches the same Safe from a worker thread
+            # that `stop_for_service` cannot cancel.
+            with self.get_chain_tx_lock(chain=chain):
+                self._deploy_service_onchain_from_safe(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                )
 
     def get_mech_configs(
         self,
@@ -1303,7 +1310,8 @@ class ServiceManager:
         service.store()
 
         if user_params.use_staking and not mega_batch_done:
-            self.stake_service_on_chain_from_safe(
+            # The chain lock is already held by `deploy_service_onchain_from_safe`.
+            self._stake_service_on_chain_from_safe_unlocked(
                 service_config_id=service_config_id, chain=chain
             )
 
@@ -1779,10 +1787,193 @@ class ServiceManager:
             service_id=service.chain_configs[chain].chain_data.token
         )
 
-    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
+    def is_service_evicted_on_chain(
+        self, service_config_id: str
+    ) -> t.Dict[str, StakingEvictionState]:
+        """Read the eviction state of a service, per staking-enabled chain.
+
+        :return: Eviction state keyed by chain, for staking-enabled chains only.
+        """
+        service = self.load(service_config_id=service_config_id)
+        eviction_states: t.Dict[str, StakingEvictionState] = {}
+
+        for chain, chain_config in service.chain_configs.items():
+            if not chain_config.chain_data.user_params.use_staking:
+                continue
+
+            staking_program_id = self._get_current_staking_program(service, chain)
+            if staking_program_id is None:
+                eviction_states[chain] = StakingEvictionState.NOT_EVICTED
+                continue
+
+            ledger_config = chain_config.ledger_config
+            service_id = chain_config.chain_data.token
+            staking_contract = get_staking_contract(
+                chain=ledger_config.chain,
+                staking_program_id=staking_program_id,
+            )
+            staking_manager = StakingManager(Chain(chain), rpc=ledger_config.rpc)
+
+            if (
+                staking_manager.staking_state(
+                    service_id=service_id, staking_contract=staking_contract
+                )
+                != StakingState.EVICTED
+            ):
+                eviction_states[chain] = StakingEvictionState.NOT_EVICTED
+                continue
+
+            try:
+                staking_manager.check_if_unstaking_possible(
+                    service_id=service_id, staking_contract=staking_contract
+                )
+            except ValueError:
+                # Still inside minStakingDuration with rewards outstanding: the
+                # eviction cannot be cleared until that window ends.
+                eviction_states[chain] = StakingEvictionState.EVICTED_LOCKED
+                continue
+
+            eviction_states[chain] = StakingEvictionState.EVICTED_UNSTAKABLE
+
+        return eviction_states
+
+    def _read_eviction_states(
+        self, service_config_id: str
+    ) -> t.Optional[t.Dict[str, StakingEvictionState]]:
+        """Read the eviction state of a service, or None if the chain read failed."""
+        try:
+            return self.is_service_evicted_on_chain(service_config_id=service_config_id)
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"Failed to read the eviction state of {service_config_id}. "
+                f"Exception {e}: {traceback.format_exc()}"
+            )
+            return None
+
+    def reconcile_staking_for_restart(  # pylint: disable=too-many-return-statements
+        self, service_config_id: str
+    ) -> StakingReconcileOutcome:
+        """Clear an on-chain eviction that is keeping a service from running."""
+        eviction_states = self._read_eviction_states(
+            service_config_id=service_config_id
+        )
+        if eviction_states is None:
+            return StakingReconcileOutcome.FAILED
+
+        unstakable = [
+            chain
+            for chain, state in eviction_states.items()
+            if state == StakingEvictionState.EVICTED_UNSTAKABLE
+        ]
+        locked = [
+            chain
+            for chain, state in eviction_states.items()
+            if state == StakingEvictionState.EVICTED_LOCKED
+        ]
+
+        if locked:
+            # The agent exits while any staking chain is evicted, so re-staking the others changes nothing.
+            self.logger.info(
+                f"Service {service_config_id} is evicted on {locked} and cannot be "
+                "re-staked yet."
+            )
+            return StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+
+        if not unstakable:
+            return StakingReconcileOutcome.NOTHING_TO_DO
+
+        restaked: t.List[str] = []
+        skipped: t.List[str] = []
+        failed: t.List[str] = []
+        for chain in unstakable:
+            self.logger.info(
+                f"Service {service_config_id} is evicted on {chain} and can be "
+                "unstaked. Re-staking..."
+            )
+            try:
+                # Non-blocking: a background thread must not queue behind a foreground transaction.
+                if self.stake_service_on_chain_from_safe(
+                    service_config_id=service_config_id, chain=chain, blocking=False
+                ):
+                    restaked.append(chain)
+                else:
+                    skipped.append(chain)
+            except Exception as e:  # pylint: disable=broad-except
+                # Keep going: the remaining chains settle on their own Safes.
+                failed.append(chain)
+                self.logger.error(
+                    f"Failed to re-stake {service_config_id} on {chain}. "
+                    f"Exception {e}: {traceback.format_exc()}"
+                )
+
+        self.logger.info(
+            f"Re-staking {service_config_id}: "
+            f"re-staked on {restaked}, skipped {skipped}, failed on {failed}."
+        )
+
+        if failed:
+            return StakingReconcileOutcome.FAILED
+        if skipped:
+            return StakingReconcileOutcome.SKIPPED
+
+        # Having run is not proof of having cleared the eviction: the staking
+        # flow is a no-op unless the service is on-chain DEPLOYED, and its stake
+        # branch also needs rewards and a free slot.
+        eviction_states = self._read_eviction_states(
+            service_config_id=service_config_id
+        )
+        if eviction_states is None:
+            return StakingReconcileOutcome.FAILED
+
+        still_evicted = [
+            chain
+            for chain, state in eviction_states.items()
+            if state != StakingEvictionState.NOT_EVICTED
+        ]
+        if still_evicted:
+            self.logger.error(
+                f"Service {service_config_id} is still evicted on {still_evicted} "
+                "after re-staking. Cannot bring the agent up."
+            )
+            return StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
+
+        return StakingReconcileOutcome.RECONCILED
+
+    def get_chain_tx_lock(self, chain: str) -> threading.Lock:
+        """Return the lock serialising this chain's deploy, stake and unstake flows."""
+        # Keyed on the chain because the master Safe is: its nonce is shared by
+        # every service staked on it. Funding, terminate and claim send from the
+        # same Safe and are not covered.
+        return self._chain_tx_locks.get(chain)
+
+    def stake_service_on_chain_from_safe(
+        self, service_config_id: str, chain: str, blocking: bool = True
+    ) -> bool:
+        """Stake service on-chain, serialised on :meth:`get_chain_tx_lock`.
+
+        :param blocking: wait for the lock; background callers pass False to skip instead.
+        :return: True if the staking flow ran, False if another caller held the lock.
+        """
+        lock = self.get_chain_tx_lock(chain=chain)
+        if not lock.acquire(blocking=blocking):  # pylint: disable=consider-using-with
+            self.logger.info(
+                f"A deploy, stake or unstake flow is already in progress on {chain}. "
+                f"Skipping staking for {service_config_id}."
+            )
+            return False
+
+        try:
+            self._stake_service_on_chain_from_safe_unlocked(
+                service_config_id=service_config_id, chain=chain
+            )
+        finally:
+            lock.release()
+        return True
+
+    def _stake_service_on_chain_from_safe_unlocked(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> None:
-        """Stake service on-chain"""
+        """Stake service on-chain, assuming the per-service staking lock is held."""
         self.logger.info("stake_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
@@ -1826,7 +2017,7 @@ class ServiceManager:
                 self.logger.info(
                     f"Use staking is set to false, but service {chain_config.chain_data.token} is staked and can be unstaked. Unstaking..."
                 )
-                self.unstake_service_on_chain_from_safe(
+                self._unstake_service_on_chain_from_safe_unlocked(
                     service_config_id=service_config_id,
                     chain=chain,
                     staking_program_id=current_staking_program,
@@ -1841,7 +2032,7 @@ class ServiceManager:
                 self.logger.info(
                     f"Service {chain_config.chain_data.token} has been evicted and can be unstaked. Unstaking..."
                 )
-                self.unstake_service_on_chain_from_safe(
+                self._unstake_service_on_chain_from_safe_unlocked(
                     service_config_id=service_config_id,
                     chain=chain,
                     staking_program_id=current_staking_program,
@@ -1866,7 +2057,7 @@ class ServiceManager:
                 self.logger.info(
                     f"{chain_config.chain_data.token} is staked in a different staking program. Unstaking..."
                 )
-                self.unstake_service_on_chain_from_safe(
+                self._unstake_service_on_chain_from_safe_unlocked(
                     service_config_id=service_config_id,
                     chain=chain,
                     staking_program_id=current_staking_program,
@@ -1951,14 +2142,30 @@ class ServiceManager:
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
 
-    def unstake_service_on_chain_from_safe(  # pragma: no cover
+    def unstake_service_on_chain_from_safe(
         self,
         service_config_id: str,
         chain: str,
         staking_program_id: t.Optional[str] = None,
         force: bool = False,
     ) -> None:
-        """Unstake service on-chain"""
+        """Unstake service on-chain, serialised on this chain's lock."""
+        with self.get_chain_tx_lock(chain=chain):
+            self._unstake_service_on_chain_from_safe_unlocked(
+                service_config_id=service_config_id,
+                chain=chain,
+                staking_program_id=staking_program_id,
+                force=force,
+            )
+
+    def _unstake_service_on_chain_from_safe_unlocked(  # pragma: no cover
+        self,
+        service_config_id: str,
+        chain: str,
+        staking_program_id: t.Optional[str] = None,
+        force: bool = False,
+    ) -> None:
+        """Unstake service on-chain, assuming the chain transaction lock is held."""
         # Claim the rewards first so that they are moved to the Master Safe
         self.claim_on_chain_from_safe(
             service_config_id=service_config_id,

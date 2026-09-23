@@ -53,6 +53,10 @@ AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
 AGENT_LOG_DIR = "benchmarks"
 AGENT_LOG_ENV_VAR = "LOG_DIR"
 AGENT_RUNNER_PREFIX = "agent_runner"
+AGENT_PID_FILE = "agent.pid"
+# The agent runner writes the PID file; the health checker reads it back to tell
+# a live agent from a dead one, so both sides must agree on these two values.
+AGENT_PROCESS_NAMES = ["python", "agent", "aea"]
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 

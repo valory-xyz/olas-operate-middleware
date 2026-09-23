@@ -7,13 +7,14 @@ handling instead of broad Exception catches.
 
 import asyncio
 import json
+import typing as t
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
 
-from operate.services.health_checker import HealthChecker
+from operate.services.health_checker import AgentLivenessReason, HealthChecker
 
 # aiohttp used via patch target "operate.services.health_checker.aiohttp.ClientSession"
 
@@ -330,3 +331,266 @@ class TestCheckServiceHealthErrorHandling:
         health_checker.logger.error.assert_called()  # type: ignore[attr-defined]
         call_str = str(health_checker.logger.error.call_args)  # type: ignore[attr-defined]
         assert "unexpected" in call_str.lower()
+
+
+async def _start_for_service(
+    health_checker: HealthChecker, service_config_id: str
+) -> None:
+    """Call start_for_service from inside a running loop, as the app does."""
+    health_checker.start_for_service(service_config_id)
+
+
+class TestCheckServiceHealthLivenessRecording:
+    """Test that every probe outcome lands on the liveness record.
+
+    A dead agent leaves healthcheck.json holding the round list captured just
+    before the crash, so the liveness record is the only signal that says the
+    agent stopped answering.
+    """
+
+    @pytest.fixture
+    def health_checker(self) -> HealthChecker:
+        """Create a HealthChecker instance for testing."""
+        return HealthChecker(service_manager=MagicMock(), logger=MagicMock())
+
+    @staticmethod
+    def _patched_session(mock_resp: AsyncMock) -> t.Any:
+        """Patch aiohttp.ClientSession so session.get() yields mock_resp."""
+        mock_get_ctx = MagicMock()
+        mock_get_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_get_ctx.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_get_ctx)
+
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+        patcher = patch("operate.services.health_checker.aiohttp.ClientSession")
+        started = patcher.start()
+        started.return_value = mock_ctx
+        return patcher
+
+    @pytest.mark.asyncio
+    async def test_healthy_probe_records_alive_and_resets_counters(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A 200 with is_healthy advances last_healthy_at and clears the failures."""
+        health_checker.record_failed_probe(
+            service_config_id="svc",
+            reason=AgentLivenessReason.AGENT_PROCESS_EXITED,
+        )
+        health_checker.record_restart(service_config_id="svc")
+
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"is_healthy": True})
+        patcher = self._patched_session(mock_resp)
+        try:
+            assert await health_checker.check_service_health("svc", tmp_path) is True
+        finally:
+            patcher.stop()
+
+        liveness = health_checker.get_liveness("svc")
+        assert liveness["is_alive"] is True
+        assert liveness["reason"] is None
+        assert liveness["consecutive_failures"] == 0
+        assert liveness["restarts_since_last_healthy"] == 0
+        assert liveness["last_healthy_at"] == liveness["last_checked_at"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "side_effect",
+        [
+            asyncio.TimeoutError("timed out"),
+            aiohttp.ClientError("client error"),
+            OSError("file system error"),
+            RuntimeError("unexpected"),
+        ],
+    )
+    async def test_failed_probe_records_not_alive(
+        self,
+        health_checker: HealthChecker,
+        tmp_path: Path,
+        side_effect: Exception,
+    ) -> None:
+        """Every failure path records the probe, not only the HTTP-200 path."""
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(side_effect=side_effect)
+        patcher = self._patched_session(mock_resp)
+        try:
+            assert await health_checker.check_service_health("svc", tmp_path) is False
+        finally:
+            patcher.stop()
+
+        liveness = health_checker.get_liveness("svc")
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "agent_process_exited"
+        assert liveness["consecutive_failures"] == 1
+        assert liveness["last_checked_at"] is not None
+        assert liveness["last_healthy_at"] is None
+        # The snapshot must not be replaced with a partial body.
+        assert not (tmp_path / "healthcheck.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_failed_probe_with_live_pid_reports_unresponsive(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A live agent process that stopped answering is unresponsive, not exited."""
+        deployment_dir = tmp_path / "deployment"
+        deployment_dir.mkdir()
+        (deployment_dir / "agent.pid").write_text("4242", encoding="utf-8")
+
+        mock_resp = AsyncMock()
+        mock_resp.status = 503
+        mock_resp.text = AsyncMock(return_value="Service Unavailable")
+        patcher = self._patched_session(mock_resp)
+        try:
+            with patch(
+                "operate.services.health_checker.validate_pid", return_value=True
+            ):
+                assert (
+                    await health_checker.check_service_health("svc", tmp_path) is False
+                )
+        finally:
+            patcher.stop()
+
+        assert health_checker.get_liveness("svc")["reason"] == "agent_unresponsive"
+
+    def test_consecutive_failures_accumulate(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Failures count up until a healthy probe resets them."""
+        for _ in range(3):
+            health_checker.record_failed_probe(
+                service_config_id="svc",
+                reason=AgentLivenessReason.AGENT_PROCESS_EXITED,
+            )
+
+        assert health_checker.get_liveness("svc")["consecutive_failures"] == 3
+
+        health_checker.record_healthy_probe(service_config_id="svc")
+        assert health_checker.get_liveness("svc")["consecutive_failures"] == 0
+
+
+class TestGetLiveness:
+    """Test the liveness accessor used by the deployment endpoints."""
+
+    @pytest.fixture
+    def health_checker(self) -> HealthChecker:
+        """Create a HealthChecker instance for testing."""
+        return HealthChecker(service_manager=MagicMock(), logger=MagicMock())
+
+    def test_unknown_service_without_pid_is_not_monitored(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """No record and no PID file means nothing is watching this service."""
+        assert health_checker.get_liveness("svc", tmp_path) == {
+            "is_alive": False,
+            "reason": "not_monitored",
+            "last_checked_at": None,
+            "last_healthy_at": None,
+            "consecutive_failures": 0,
+            "restarts_since_last_healthy": 0,
+        }
+
+    def test_unknown_service_falls_back_to_the_pid_file(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """In-memory records do not survive a middleware restart; agent.pid does."""
+        deployment_dir = tmp_path / "deployment"
+        deployment_dir.mkdir()
+        (deployment_dir / "agent.pid").write_text("4242", encoding="utf-8")
+
+        with patch("operate.services.health_checker.validate_pid", return_value=True):
+            liveness = health_checker.get_liveness("svc", tmp_path)
+
+        assert liveness["is_alive"] is True
+        assert liveness["reason"] is None
+
+    def test_unreadable_pid_file_degrades_to_not_monitored(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A torn PID file must never raise out of a read endpoint."""
+        deployment_dir = tmp_path / "deployment"
+        deployment_dir.mkdir()
+        (deployment_dir / "agent.pid").write_text("not-a-pid", encoding="utf-8")
+
+        assert health_checker.get_liveness("svc", tmp_path)["reason"] == "not_monitored"
+
+    def test_returned_record_is_a_copy(self, health_checker: HealthChecker) -> None:
+        """Callers must not be able to mutate the health checker's state."""
+        health_checker.record_healthy_probe(service_config_id="svc")
+
+        health_checker.get_liveness("svc")["is_alive"] = False
+
+        assert health_checker.get_liveness("svc")["is_alive"] is True
+
+    def test_record_reason_marks_the_service_not_alive(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """An eviction that cannot be cleared is reported without a probe."""
+        health_checker.record_healthy_probe(service_config_id="svc")
+
+        health_checker.record_reason(
+            service_config_id="svc",
+            reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
+        )
+
+        liveness = health_checker.get_liveness("svc")
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "evicted_cannot_restake"
+
+    def test_stop_for_service_drops_an_eviction_reason(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """Nothing refreshes the reason once the job is gone, so it would go stale."""
+        health_checker.record_reason(
+            service_config_id="svc",
+            reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
+        )
+
+        health_checker.stop_for_service(service_config_id="svc")
+
+        assert health_checker.get_liveness("svc", tmp_path)["reason"] == "not_monitored"
+
+    def test_stop_for_service_drops_a_healthy_record(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A stopped service must not keep reporting the agent as running."""
+        health_checker.record_healthy_probe(service_config_id="svc")
+
+        health_checker.stop_for_service(service_config_id="svc")
+
+        liveness = health_checker.get_liveness("svc", tmp_path)
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "not_monitored"
+
+    def test_stop_for_service_drops_a_record_of_a_dead_agent(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A stopped service keeps no reason from the probe that preceded the stop."""
+        health_checker.record_failed_probe(
+            service_config_id="svc",
+            reason=AgentLivenessReason.AGENT_PROCESS_EXITED,
+        )
+
+        health_checker.stop_for_service(service_config_id="svc")
+
+        assert health_checker.get_liveness("svc", tmp_path)["reason"] == "not_monitored"
+
+    def test_start_for_service_forgets_the_previous_record(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """A fresh deployment invalidates the reason the last one stopped with."""
+        health_checker.record_reason(
+            service_config_id="svc",
+            reason=AgentLivenessReason.EVICTED_CANNOT_RESTAKE,
+        )
+
+        with patch.object(health_checker, "healthcheck_job"):
+            asyncio.run(_start_for_service(health_checker, "svc"))
+
+        assert health_checker.get_liveness("svc")["reason"] == "not_monitored"

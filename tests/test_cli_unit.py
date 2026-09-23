@@ -34,7 +34,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from starlette.testclient import TestClient
 
-from operate import __version__
+from operate import __version__, cli
 from operate.cli import (
     CreateSafeStatus,
     OperateApp,
@@ -65,6 +65,16 @@ _TEST_PW_NEWPASS456 = "new" + "pass" + "456"
 _TEST_PW_CORRECT = "corr" + "ect"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+NOT_MONITORED_LIVENESS = {
+    "is_alive": False,
+    "reason": "not_monitored",
+    "last_checked_at": None,
+    "last_healthy_at": None,
+    "consecutive_failures": 0,
+    "restarts_since_last_healthy": 0,
+}
 
 
 def _make_mock_operate() -> MagicMock:
@@ -122,6 +132,9 @@ def _open_app(
     stack.enter_context(patch("operate.cli.OperateApp", return_value=mock_operate))
     mock_hc_cls = stack.enter_context(patch("operate.cli.HealthChecker"))
     mock_hc_cls.NUMBER_OF_FAILS_DEFAULT = 60
+    # The deployment routes serialise whatever get_liveness returns, so the
+    # mocked health checker has to answer with a real record shape.
+    mock_hc_cls.return_value.get_liveness.return_value = NOT_MONITORED_LIVENESS
     stack.enter_context(patch("operate.cli.signal"))
     stack.enter_context(patch("operate.cli.atexit"))
     mock_wd = MagicMock()
@@ -1715,6 +1728,85 @@ class TestServiceRoutes:
                 resp = c.get("/api/v2/service/svc1/deployment")
             assert resp.status_code == HTTPStatus.OK
 
+    def test_services_deployment_carries_agent_liveness(self) -> None:
+        """The deployment payload must say whether the agent process is alive.
+
+        `status` records the last lifecycle transition the middleware performed,
+        so without this a crash-looping agent is indistinguishable from a
+        healthy one.
+        """
+        m = _make_mock_operate()
+        svc = MagicMock()
+        svc.service_config_id = "svc1"
+        svc.deployment.json = {"status": 3}
+        svc.get_latest_healthcheck.return_value = {
+            "rounds": ["round_1"],
+            "age_seconds": 4.1,
+        }
+        m.service_manager.return_value.get_all_services.return_value = ([svc], [])
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            cli.HealthChecker.return_value.get_liveness.return_value = {  # type: ignore[attr-defined]
+                "is_alive": False,
+                "reason": "agent_process_exited",
+                "last_checked_at": 1788940512.0,
+                "last_healthy_at": 1788940031.0,
+                "consecutive_failures": 47,
+                "restarts_since_last_healthy": 5,
+            }
+            with TestClient(app) as c:
+                resp = c.get("/api/v2/services/deployment")
+
+            assert resp.status_code == HTTPStatus.OK
+            body = resp.json()["svc1"]
+            assert body["status"] == 3
+            assert body["agent_liveness"] == {
+                "is_alive": False,
+                "reason": "agent_process_exited",
+                "last_checked_at": 1788940512.0,
+                "last_healthy_at": 1788940031.0,
+                "consecutive_failures": 47,
+                "restarts_since_last_healthy": 5,
+            }
+            assert body["healthcheck"]["age_seconds"] == 4.1
+
+    def test_service_deployment_carries_agent_liveness(self) -> None:
+        """Same contract on the single-service endpoint."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.deployment.json = {"status": 3}
+        svc.get_latest_healthcheck.return_value = {}
+        m.service_manager.return_value.load.return_value = svc
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.get("/api/v2/service/svc1/deployment")
+
+            assert resp.status_code == HTTPStatus.OK
+            assert resp.json()["agent_liveness"] == NOT_MONITORED_LIVENESS
+            # Liveness is never a reason to fail a read.
+            assert resp.json()["healthcheck"] == {}
+
+    def test_service_deployment_liveness_is_queried_per_service(self) -> None:
+        """Liveness is service-scoped, so the id and path must both be passed."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.deployment.json = {"status": 3}
+        svc.get_latest_healthcheck.return_value = {}
+        svc.path = Path("/fake/service")
+        svc.service_config_id = "svc1"
+        m.service_manager.return_value.load.return_value = svc
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                c.get("/api/v2/service/svc1/deployment")
+
+            cli.HealthChecker.return_value.get_liveness.assert_called_with(  # type: ignore[attr-defined]
+                service_config_id="svc1", service_path=Path("/fake/service")
+            )
+
     def test_get_service_achievements_not_found(self) -> None:
         """Cover line 1148: service not found in achievements route."""
         m = _make_mock_operate()
@@ -2010,6 +2102,48 @@ class TestServiceRoutes:
             with TestClient(app) as c:
                 resp = c.post("/api/v2/service/svc1/deployment/stop")
             assert resp.status_code == HTTPStatus.OK
+
+    def test_stop_service_brackets_the_stop_with_the_health_checker(self) -> None:
+        """The job is cancelled before the stop, the liveness record dropped after."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.deployment.json = {"status": "STOPPED"}
+        m.service_manager.return_value.load.return_value = svc
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            health_checker = cli.HealthChecker.return_value  # type: ignore[attr-defined]
+            order = MagicMock()
+            order.attach_mock(health_checker.cancel_job_for_service, "cancel_job")
+            order.attach_mock(svc.deployment.stop, "deployment_stop")
+            order.attach_mock(health_checker.forget_service, "forget")
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1/deployment/stop")
+                observed = [call[0] for call in order.mock_calls]
+
+            assert resp.status_code == HTTPStatus.OK
+            assert observed == ["cancel_job", "deployment_stop", "forget"]
+
+    def test_stop_service_cleans_up_when_the_stop_fails(self) -> None:
+        """A stop that raises must still leave no job and no liveness record."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = MagicMock()
+        svc.deployment.stop.side_effect = RuntimeError("stop failed")
+        m.service_manager.return_value.load.return_value = svc
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            health_checker = cli.HealthChecker.return_value  # type: ignore[attr-defined]
+            with TestClient(app, raise_server_exceptions=False) as c:
+                resp = c.post("/api/v2/service/svc1/deployment/stop")
+
+            assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+            health_checker.cancel_job_for_service.assert_called_once_with(
+                service_config_id="svc1"
+            )
+            health_checker.forget_service.assert_called_once_with(
+                service_config_id="svc1"
+            )
 
 
 class TestWithdrawAndTerminateRoutes:
