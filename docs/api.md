@@ -1509,6 +1509,7 @@ performed. `reason` is `null` when `is_alive` is `true`, and otherwise one of:
 | `agent_unresponsive` | The health probe is failing, the agent did not answer usefully, and the recorded agent process is live. |
 | `evicted_cannot_restake` | The service is evicted on-chain, the middleware could not clear the eviction, and stopped the service rather than restarting into the same condition. |
 | `not_monitored` | No health-check job is running for this service — it is not the running instance, or `HEALTH_CHECKER_OFF=1`. |
+| `stopped_by_failfast` | The middleware restarted the service too many times inside its failfast window and stopped it rather than restarting again. Health checking ends with it, so nothing will move this service off this value until the operator starts it again. |
 
 Clients that do not read `agent_liveness` are unaffected. A client that renders
 "agent is not running" must not read `is_alive` on its own. Two values mean
@@ -1522,10 +1523,16 @@ reports a running agent as down:
   on this value.
 
 The reasons that do positively establish the agent is not healthy are
-`agent_process_exited`, `agent_reported_unhealthy`, `agent_unresponsive` and
-`evicted_cannot_restake`. Of those, `agent_reported_unhealthy` is the one where
-the agent process is demonstrably up and answering — a client rendering "agent is
-not running" should treat it as "not making progress", not as "down".
+`agent_process_exited`, `agent_reported_unhealthy`, `agent_unresponsive`,
+`evicted_cannot_restake` and `stopped_by_failfast`. Of those,
+`agent_reported_unhealthy` is the one where the agent process is demonstrably up
+and answering — a client rendering "agent is not running" should treat it as "not
+making progress", not as "down".
+
+`stopped_by_failfast` and `evicted_cannot_restake` are the two that describe a
+service the middleware has deliberately left stopped. Both are terminal until the
+operator acts: nothing restarts a health-check job after either, so neither value
+will change on its own.
 
 ### `GET /api/v2/service/{service_config_id}`
 

@@ -941,6 +941,33 @@ class TestFailfastBehaviorPinned:
 
         sm.deploy_service_locally.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_failfast_stop_leaves_the_reason_readable(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """The reason must survive the stop, not merely be written before it.
+
+        `_stop()` goes through `ServiceManager`, which holds no health-checker
+        reference, so it cannot drop the liveness record -- which is the only
+        reason a consumer can still read why the service was stopped. That is an
+        absence, so it needs a test: making `_stop()` symmetric with the API stop
+        route would erase the reason and Pearl would see a plain user stop.
+        """
+        clock = self._always_unhealthy_at(health_checker, [0.0, 0.0])
+
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            clock,
+        ):
+            with pytest.raises(RuntimeError, match="stopped by failfast"):
+                await health_checker.healthcheck_job("test-service")
+
+        liveness = health_checker.get_liveness("test-service")
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "stopped_by_failfast"
+
 
 class TestRestartStakingReconciliation:
     """Tests for the staking reconciliation _restart performs before redeploying.

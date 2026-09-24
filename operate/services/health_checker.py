@@ -52,6 +52,7 @@ class AgentLivenessReason(str, enum.Enum):
     AGENT_UNRESPONSIVE = "agent_unresponsive"
     EVICTED_CANNOT_RESTAKE = "evicted_cannot_restake"
     NOT_MONITORED = "not_monitored"
+    STOPPED_BY_FAILFAST = "stopped_by_failfast"
 
 
 @dataclass
@@ -670,6 +671,18 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             f"[HEALTH_CHECKER] {service_config_id} failfast triggered "
                             f"({len(failfast_records)} restarts within "
                             f"{self.FAILFAST_WINDOW}s). Stopping service."
+                        )
+                        # Written before the stop, mirroring the eviction path above,
+                        # and readable afterwards only because `_stop()` goes through
+                        # `ServiceManager`, which holds no health-checker reference and
+                        # so cannot drop the record. The API stop route drops it
+                        # deliberately (`cli.py`); a change that made `_stop()`
+                        # symmetric with that route would erase the reason written
+                        # here. `test_failfast_stop_leaves_the_reason_readable` guards
+                        # that absence.
+                        self.record_reason(
+                            service_config_id=service_config_id,
+                            reason=AgentLivenessReason.STOPPED_BY_FAILFAST,
                         )
                         await _stop(self._service_manager, service_config_id)
                         raise RuntimeError(
