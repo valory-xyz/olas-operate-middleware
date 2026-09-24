@@ -243,8 +243,13 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         A probe runs every `sleep_period` seconds for as long as an agent stays
         unhealthy, so logging every one of them at warning level would bury the rest
         of `cli.log` during an outage. Gated off the liveness record's own failure
-        streak rather than a second rate limiter, matching the cadence
-        `healthcheck_job` already uses for its "not healthy for N time in a row" line.
+        streak rather than a second rate limiter, on the same cadence
+        `healthcheck_job` uses for its "not healthy for N time in a row" line.
+
+        Same cadence, not the same counter: `healthcheck_job` keeps its own `fails`,
+        which also counts connection errors raised out of this method, so the two can
+        drift by a few. That is immaterial to a log gate and is why this reads the
+        record rather than being handed a count.
 
         :param service_config_id: the service the probe was for.
         :param detail: what the probe established, for the operator reading the log.

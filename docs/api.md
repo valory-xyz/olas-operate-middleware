@@ -1505,7 +1505,8 @@ performed. `reason` is `null` when `is_alive` is `true`, and otherwise one of:
 | `reason` | Meaning |
 |---|---|
 | `agent_process_exited` | The health probe is failing and `agent.pid` is absent or invalid. |
-| `agent_unresponsive` | The health probe is failing but the recorded agent process is live. |
+| `agent_reported_unhealthy` | The agent answered the health probe, promptly and well-formed, and reported itself unhealthy. It is running and serving HTTP; its own view of its progress is what failed. The evidence is on the sibling `healthcheck` key — `is_tm_healthy`, `is_transitioning_fast` and `seconds_since_last_transition` — and in `cli.log`. |
+| `agent_unresponsive` | The health probe is failing, the agent did not answer usefully, and the recorded agent process is live. |
 | `evicted_cannot_restake` | The service is evicted on-chain, the middleware could not clear the eviction, and stopped the service rather than restarting into the same condition. |
 | `not_monitored` | No health-check job is running for this service — it is not the running instance, or `HEALTH_CHECKER_OFF=1`. |
 
@@ -1520,8 +1521,11 @@ reports a running agent as down:
   file here, and that probe matches on process names, so a healthy agent can land
   on this value.
 
-The three reasons that do positively establish the agent is down are
-`agent_process_exited`, `agent_unresponsive` and `evicted_cannot_restake`.
+The reasons that do positively establish the agent is not healthy are
+`agent_process_exited`, `agent_reported_unhealthy`, `agent_unresponsive` and
+`evicted_cannot_restake`. Of those, `agent_reported_unhealthy` is the one where
+the agent process is demonstrably up and answering — a client rendering "agent is
+not running" should treat it as "not making progress", not as "down".
 
 ### `GET /api/v2/service/{service_config_id}`
 
