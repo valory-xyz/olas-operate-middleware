@@ -251,11 +251,19 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         drift by a few. That is immaterial to a log gate and is why this reads the
         record rather than being handed a count.
 
+        The one arm deliberately not borrowed is `fails >= number_of_fails`. There it
+        marks a terminating condition -- the loop returns to restart the service the
+        moment it holds, so it fires once. Here there is nothing to terminate, and
+        `consecutive_failures` survives a forced restart (only `mark_healthy` resets
+        it), so the same arm would be true for every probe of a streak that has once
+        passed the threshold: one warning every `sleep_period` for the rest of the
+        outage, which is the flood this gate exists to prevent.
+
         :param service_config_id: the service the probe was for.
         :param detail: what the probe established, for the operator reading the log.
         """
         failures = self._failure_streak(service_config_id)
-        if failures == 1 or failures % 10 == 0 or failures >= self.number_of_fails:
+        if failures == 1 or failures % 10 == 0:
             self.logger.warning(
                 f"[HEALTH_CHECKER] {service_config_id} {detail} not healthy!"
             )
@@ -353,11 +361,17 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         """
         Describe an agent's own unhealthy verdict, from the fields it reported.
 
-        These four separate the cases an engineer otherwise has to reason backwards
+        These five separate the cases an engineer otherwise has to reason backwards
         to from a bare streak count: a Tendermint stall (`is_tm_healthy` false), the
         agent judging its own round progress too slow (`is_transitioning_fast` false
         while Tendermint is fine), and how long it has actually been since the FSM
         last moved.
+
+        `is_healthy` is reported even though the verdict above already consulted it,
+        because that read falls back to `is_transitioning_fast` when the field is
+        absent. Without it, an agent that reported `is_healthy: false` and an older
+        agent that never sent the field at all produce an identical line; `None`
+        rather than `False` here says which of the two answered.
 
         :param response_json: the healthcheck response body the agent returned.
         :return: a log-ready description of what the agent reported.
@@ -366,6 +380,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         current_round = rounds[-1] if rounds else None
         return (
             "answered the health check and reported itself unhealthy: "
+            f"is_healthy={response_json.get('is_healthy')}, "
             f"is_tm_healthy={response_json.get('is_tm_healthy')}, "
             f"is_transitioning_fast={response_json.get('is_transitioning_fast')}, "
             f"seconds_since_last_transition="
