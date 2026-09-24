@@ -123,8 +123,14 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90  # seconds
     NUMBER_OF_FAILS_DEFAULT = 60
-    FAILFAST_NUM = 15
-    FAILFAST_TIMEOUT = 15 * 60  # 15 minutes
+    # A restart takes at least `number_of_fails * sleep_period` seconds of
+    # consecutive failures to trigger -- 300 s on the defaults -- so five inside
+    # the window means the service spent most of an hour unhealthy. Fewer than
+    # that is noise an operator should not lose a staking epoch to: an
+    # unnecessary restart costs minutes, whereas a wrong stop leaves a staked
+    # agent down until the operator happens to notice.
+    FAILFAST_NUM = 5
+    FAILFAST_WINDOW = 60 * 60  # restarts older than an hour stop counting
 
     def __init__(
         self,
@@ -498,11 +504,9 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
             async def _check_health(
                 number_of_fails: int = 5, sleep_period: int = self.sleep_period
-            ) -> float:
-                """Check health in a loop; return the longest continuous healthy span (seconds)."""
+            ) -> None:
+                """Check health in a loop; return once a restart is needed."""
                 fails = 0
-                longest_healthy: float = 0.0
-                healthy_since: float = 0.0
                 while True:
                     try:
                         # Check the service health
@@ -522,11 +526,6 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         healthy = False
 
                     if not healthy:
-                        if healthy_since > 0.0:
-                            longest_healthy = max(
-                                longest_healthy, time.time() - healthy_since
-                            )
-                            healthy_since = 0.0
                         fails += 1
                         if fails == 1 or fails % 10 == 0 or fails >= number_of_fails:
                             self.logger.warning(
@@ -536,8 +535,6 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.debug(
                             f"[HEALTH_CHECKER] {service_config_id} is HEALTHY"
                         )
-                        if healthy_since == 0.0:
-                            healthy_since = time.time()
                         # reset fails if comes healthy
                         fails = 0
 
@@ -545,7 +542,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.error(
                             f"[HEALTH_CHECKER]  {service_config_id} failed {fails} times in a row. restart"
                         )
-                        return longest_healthy
+                        return
 
                     await asyncio.sleep(sleep_period)
 
@@ -606,13 +603,10 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                     self.logger.info(
                         f"[HEALTH_CHECKER]  {service_config_id} port is ready, checking health every {self.sleep_period}"
                     )
-                    longest_healthy = await _check_health(
+                    await _check_health(
                         number_of_fails=self.number_of_fails,
                         sleep_period=self.sleep_period,
                     )
-                    if longest_healthy >= self.FAILFAST_TIMEOUT:
-                        failfast_records = []
-
                 else:
                     self.logger.info(
                         "[HEALTH_CHECKER] port not ready within timeout. restart deployment"
@@ -621,7 +615,20 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                 # perform restart
                 last_restart_exc: t.Optional[Exception] = None
                 while True:
-                    failfast_records.append(time.time())
+                    now = time.time()
+                    # A rolling window, so `failfast_records` holds recent restarts
+                    # rather than a history. Aging records out on append is what makes
+                    # the count below mean "restarts in the last FAILFAST_WINDOW": the
+                    # previous condition compared the age of the *oldest surviving*
+                    # record against the same constant, so once that record was old
+                    # enough the next restart of any kind stopped the service, however
+                    # few had occurred and however well each one had succeeded.
+                    failfast_records = [
+                        at
+                        for at in failfast_records
+                        if now - at <= self.FAILFAST_WINDOW
+                    ]
+                    failfast_records.append(now)
                     restart_failed = False
                     outcome = StakingReconcileOutcome.FAILED
                     try:
@@ -658,18 +665,17 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         )
                         return
 
-                    if failfast_records and (
-                        (len(failfast_records) >= self.FAILFAST_NUM)
-                        or (time.time() - failfast_records[0]) > self.FAILFAST_TIMEOUT
-                    ):
+                    if len(failfast_records) >= self.FAILFAST_NUM:
                         self.logger.error(
                             f"[HEALTH_CHECKER] {service_config_id} failfast triggered "
-                            f"({len(failfast_records)} restarts). Stopping service."
+                            f"({len(failfast_records)} restarts within "
+                            f"{self.FAILFAST_WINDOW}s). Stopping service."
                         )
                         await _stop(self._service_manager, service_config_id)
                         raise RuntimeError(
                             f"Service {service_config_id} stopped by failfast after "
-                            f"{len(failfast_records)} restarts"
+                            f"{len(failfast_records)} restarts within "
+                            f"{self.FAILFAST_WINDOW}s"
                         ) from last_restart_exc
 
                     if not (restart_failed or retry_restart):
