@@ -48,6 +48,7 @@ class AgentLivenessReason(str, enum.Enum):
     """Why the agent of a service is not considered alive."""
 
     AGENT_PROCESS_EXITED = "agent_process_exited"
+    AGENT_REPORTED_UNHEALTHY = "agent_reported_unhealthy"
     AGENT_UNRESPONSIVE = "agent_unresponsive"
     EVICTED_CANNOT_RESTAKE = "evicted_cannot_restake"
     NOT_MONITORED = "not_monitored"
@@ -97,6 +98,22 @@ class AgentLiveness:
         payload = asdict(self)
         payload["reason"] = None if self.reason is None else self.reason.value
         return payload
+
+
+@dataclass
+class ProbeOutcome:
+    """What one probe of the agent's healthcheck endpoint established."""
+
+    healthy: bool
+
+    # Set only when the probe itself knows why the agent is not alive. Left unset
+    # when it got no usable answer, in which case the caller falls back to asking
+    # whether the agent process is still running.
+    reason: t.Optional[AgentLivenessReason] = None
+
+    # Set only when the outcome is not already written to the log by the branch
+    # that produced it.
+    detail: t.Optional[str] = None
 
 
 class HealthChecker:  # pylint: disable=too-many-instance-attributes
@@ -191,29 +208,73 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
         """Check the service health and record the outcome on its liveness record."""
-        healthy = await self._probe_agent(service_path=service_path)
-        if healthy:
+        outcome = await self._probe_agent(service_path=service_path)
+        if outcome.healthy:
             self.record_healthy_probe(service_config_id=service_config_id)
             return True
 
-        # Reads the PID file and asks psutil, so it stays off the event loop.
-        agent_is_running = await asyncio.to_thread(
-            self._is_agent_process_alive, service_path
-        )
-        self.record_failed_probe(
-            service_config_id=service_config_id,
-            reason=(
+        reason = outcome.reason
+        if reason is None:
+            # The probe got no usable answer out of the agent, so "is the process
+            # still running?" is the right discriminator: a live process that says
+            # nothing is unresponsive, a dead one has exited. It is *not* the right
+            # discriminator for an agent that answered, which is why a probe that
+            # knows the reason carries it rather than leaving it to be guessed here.
+            #
+            # Reads the PID file and asks psutil, so it stays off the event loop.
+            agent_is_running = await asyncio.to_thread(
+                self._is_agent_process_alive, service_path
+            )
+            reason = (
                 AgentLivenessReason.AGENT_UNRESPONSIVE
                 if agent_is_running
                 else AgentLivenessReason.AGENT_PROCESS_EXITED
-            ),
-        )
+            )
+
+        self.record_failed_probe(service_config_id=service_config_id, reason=reason)
+        if outcome.detail is not None:
+            self._log_probe_detail(service_config_id, outcome.detail)
         return False
+
+    def _log_probe_detail(self, service_config_id: str, detail: str) -> None:
+        """
+        Log why a probe failed, on the same streak cadence as the failure counter.
+
+        A probe runs every `sleep_period` seconds for as long as an agent stays
+        unhealthy, so logging every one of them at warning level would bury the rest
+        of `cli.log` during an outage. Gated off the liveness record's own failure
+        streak rather than a second rate limiter, matching the cadence
+        `healthcheck_job` already uses for its "not healthy for N time in a row" line.
+
+        :param service_config_id: the service the probe was for.
+        :param detail: what the probe established, for the operator reading the log.
+        """
+        failures = self._failure_streak(service_config_id)
+        if failures == 1 or failures % 10 == 0 or failures >= self.number_of_fails:
+            self.logger.warning(
+                f"[HEALTH_CHECKER] {service_config_id} {detail} not healthy!"
+            )
+
+    def _failure_streak(self, service_config_id: str) -> int:
+        """
+        Return how many probes in a row a service has failed.
+
+        :param service_config_id: the service to report the streak for.
+        :return: the consecutive failed-probe count, or 0 if it has no record.
+        """
+        with self._liveness_lock:
+            record = self._liveness.get(service_config_id)
+            return 0 if record is None else record.consecutive_failures
 
     async def _probe_agent(  # pylint: disable=too-many-return-statements
         self, service_path: t.Optional[Path] = None
-    ) -> bool:
-        """Probe the agent HTTP healthcheck endpoint."""
+    ) -> ProbeOutcome:
+        """
+        Probe the agent HTTP healthcheck endpoint.
+
+        :param service_path: the service directory to persist the response body in.
+        :return: what the probe established.
+        """
         timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -226,7 +287,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.warning(
                             f"[HEALTH_CHECKER] Bad http status code : {status} content: {content}. not healthy!"
                         )
-                        return False
+                        return ProbeOutcome(healthy=False)
 
                     response_json = await resp.json()
 
@@ -236,39 +297,76 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             json.dumps(response_json, indent=2), encoding="utf-8"
                         )
 
-                    return response_json.get(
+                    if response_json.get(
                         "is_healthy", response_json.get("is_transitioning_fast", False)
-                    )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
+                    ):  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
+                        return ProbeOutcome(healthy=True)
+
+                    # The agent answered, promptly and well-formed, and said it is
+                    # not healthy. That is a different thing from not answering, and
+                    # it used to be the one path out of seven that returned in
+                    # silence -- leaving an operator to conclude from `cli.log` that
+                    # the poll never reached the agent at all.
+                    return ProbeOutcome(
+                        healthy=False,
+                        reason=AgentLivenessReason.AGENT_REPORTED_UNHEALTHY,
+                        detail=self._describe_unhealthy_report(response_json),
+                    )
         except asyncio.TimeoutError as e:
             # NOTE: Must come before OSError since TimeoutError is a subclass of OSError in Python 3.10+
             self.logger.error(
                 f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!"
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except aiohttp.ClientError as e:
             self.logger.error(
                 f"[HEALTH_CHECKER] HTTP client error during health check: {e}. set not healthy!"
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except json.JSONDecodeError as e:
             self.logger.error(
                 f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
                 exc_info=True,
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except (OSError, PermissionError) as e:
             # NOTE: Comes after TimeoutError to avoid catching it (TimeoutError is subclass of OSError)
             self.logger.error(
                 f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
                 exc_info=True,
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(
                 f"[HEALTH_CHECKER] Unexpected error during health check: {e}. set not healthy!",
                 exc_info=True,
             )
-            return False
+            return ProbeOutcome(healthy=False)
+
+    @staticmethod
+    def _describe_unhealthy_report(response_json: t.Dict[str, t.Any]) -> str:
+        """
+        Describe an agent's own unhealthy verdict, from the fields it reported.
+
+        These four separate the cases an engineer otherwise has to reason backwards
+        to from a bare streak count: a Tendermint stall (`is_tm_healthy` false), the
+        agent judging its own round progress too slow (`is_transitioning_fast` false
+        while Tendermint is fine), and how long it has actually been since the FSM
+        last moved.
+
+        :param response_json: the healthcheck response body the agent returned.
+        :return: a log-ready description of what the agent reported.
+        """
+        rounds = response_json.get("rounds") or []
+        current_round = rounds[-1] if rounds else None
+        return (
+            "answered the health check and reported itself unhealthy: "
+            f"is_tm_healthy={response_json.get('is_tm_healthy')}, "
+            f"is_transitioning_fast={response_json.get('is_transitioning_fast')}, "
+            f"seconds_since_last_transition="
+            f"{response_json.get('seconds_since_last_transition')}, "
+            f"round={current_round}."
+        )
 
     @staticmethod
     def _is_agent_process_alive(service_path: t.Optional[Path]) -> bool:
