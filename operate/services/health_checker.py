@@ -101,6 +101,14 @@ class AgentLiveness:
         return payload
 
 
+# The reasons a probe of the agent can establish on its own.
+ProbeFailureReason = t.Literal[
+    AgentLivenessReason.AGENT_PROCESS_EXITED,
+    AgentLivenessReason.AGENT_REPORTED_UNHEALTHY,
+    AgentLivenessReason.AGENT_UNRESPONSIVE,
+]
+
+
 @dataclass
 class ProbeOutcome:
     """What one probe of the agent's healthcheck endpoint established."""
@@ -110,7 +118,7 @@ class ProbeOutcome:
     # Set only when the probe itself knows why the agent is not alive. Left unset
     # when it got no usable answer, in which case the caller falls back to asking
     # whether the agent process is still running.
-    reason: t.Optional[AgentLivenessReason] = None
+    reason: t.Optional[ProbeFailureReason] = None
 
     # Set only when the outcome is not already written to the log by the branch
     # that produced it.
@@ -244,36 +252,18 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         return False
 
     def _log_probe_detail(self, service_config_id: str, detail: str) -> None:
-        """
-        Log why a probe failed, on the same streak cadence as the failure counter.
-
-        A probe runs every `sleep_period` seconds for as long as an agent stays
-        unhealthy, so logging every one of them at warning level would bury the rest
-        of `cli.log` during an outage. Gated off the liveness record's own failure
-        streak rather than a second rate limiter, on the same cadence
-        `healthcheck_job` uses for its "not healthy for N time in a row" line.
-
-        Same cadence, not the same counter: `healthcheck_job` keeps its own `fails`,
-        which also counts connection errors raised out of this method, so the two can
-        drift by a few. That is immaterial to a log gate and is why this reads the
-        record rather than being handed a count.
-
-        The one arm deliberately not borrowed is `fails >= number_of_fails`. There it
-        marks a terminating condition -- the loop returns to restart the service the
-        moment it holds, so it fires once. Here there is nothing to terminate, and
-        `consecutive_failures` survives a forced restart (only `mark_healthy` resets
-        it), so the same arm would be true for every probe of a streak that has once
-        passed the threshold: one warning every `sleep_period` for the rest of the
-        outage, which is the flood this gate exists to prevent.
-
-        :param service_config_id: the service the probe was for.
-        :param detail: what the probe established, for the operator reading the log.
-        """
-        failures = self._failure_streak(service_config_id)
-        if failures == 1 or failures % 10 == 0:
+        """Log why a probe failed, on the failure streak's cadence."""
+        # Not borrowing `fails >= number_of_fails`: `consecutive_failures` survives
+        # a forced restart, so that arm would log every probe once past it.
+        if self._is_streak_milestone(self._failure_streak(service_config_id)):
             self.logger.warning(
                 f"[HEALTH_CHECKER] {service_config_id} {detail} not healthy!"
             )
+
+    @staticmethod
+    def _is_streak_milestone(fails: int) -> bool:
+        """Answer whether a failure streak has reached a length worth logging."""
+        return fails == 1 or fails % 10 == 0
 
     def _failure_streak(self, service_config_id: str) -> int:
         """
@@ -365,24 +355,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _describe_unhealthy_report(response_json: t.Dict[str, t.Any]) -> str:
-        """
-        Describe an agent's own unhealthy verdict, from the fields it reported.
-
-        These five separate the cases an engineer otherwise has to reason backwards
-        to from a bare streak count: a Tendermint stall (`is_tm_healthy` false), the
-        agent judging its own round progress too slow (`is_transitioning_fast` false
-        while Tendermint is fine), and how long it has actually been since the FSM
-        last moved.
-
-        `is_healthy` is reported even though the verdict above already consulted it,
-        because that read falls back to `is_transitioning_fast` when the field is
-        absent. Without it, an agent that reported `is_healthy: false` and an older
-        agent that never sent the field at all produce an identical line; `None`
-        rather than `False` here says which of the two answered.
-
-        :param response_json: the healthcheck response body the agent returned.
-        :return: a log-ready description of what the agent reported.
-        """
+        """Describe an agent's own unhealthy verdict, from the fields it reported."""
         rounds = response_json.get("rounds") or []
         current_round = rounds[-1] if rounds else None
         return (
@@ -422,7 +395,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         )
 
     def record_failed_probe(
-        self, service_config_id: str, reason: AgentLivenessReason
+        self, service_config_id: str, reason: ProbeFailureReason
     ) -> None:
         """Record a probe the agent did not answer, and why."""
         probed_at = time.time()
@@ -528,7 +501,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
                     if not healthy:
                         fails += 1
-                        if fails == 1 or fails % 10 == 0 or fails >= number_of_fails:
+                        if self._is_streak_milestone(fails) or fails >= number_of_fails:
                             self.logger.warning(
                                 f"[HEALTH_CHECKER] {service_config_id} not healthy for {fails} time in a row"
                             )
