@@ -208,7 +208,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             log_path.exists()
             and log_path.stat().st_size >= constants.DEPLOYMENT_LOG_MAX_BYTES
         ):
-            log_path.replace(log_path.with_name(f"{log_path.name}.1"))
+            # On Windows the rename fails while anything still holds the file --
+            # a leftover agent process, say. Exceeding the bound until the next
+            # start beats refusing to start the deployment at all.
+            with suppress(OSError):
+                log_path.replace(log_path.with_name(f"{log_path.name}.1"))
         log_file = log_path.open("a+")
         # The file now spans runs, so mark where this one starts.
         log_file.write(

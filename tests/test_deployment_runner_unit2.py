@@ -302,6 +302,23 @@ class TestOpenLogFiles:
         )
         assert "well past the bound" not in log_path.read_text(encoding="utf-8")
 
+    def test_a_failed_rotation_still_opens_the_log(self, tmp_path: Path) -> None:
+        """A rotation the OS refuses must not stop the deployment starting."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(build_dir, is_aea=True)
+        log_path = tmp_path / "agent_runner.log"
+        log_path.write_text("held open by something else\n", encoding="utf-8")
+
+        with (
+            patch.object(constants, "DEPLOYMENT_LOG_MAX_BYTES", 8),
+            patch.object(Path, "replace", side_effect=OSError("in use")),
+        ):
+            log_file = runner._open_agent_runner_log_file()
+
+        log_file.close()
+        assert "held open by something else" in log_path.read_text(encoding="utf-8")
+
 
 class TestGetOperateDir:
     """Tests for _get_operate_dir (line 140-142)."""
