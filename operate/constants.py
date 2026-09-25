@@ -53,6 +53,8 @@ AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
 AGENT_LOG_DIR = "benchmarks"
 AGENT_LOG_ENV_VAR = "LOG_DIR"
 AGENT_RUNNER_PREFIX = "agent_runner"
+AGENT_RUNNER_LOG = "agent_runner.log"
+TENDERMINT_LOG = "tm.log"
 AGENT_PID_FILE = "agent.pid"
 # The agent runner writes the PID file; the health checker reads it back to tell
 # a live agent from a dead one, so both sides must agree on these two values.
@@ -68,6 +70,10 @@ AGENT_LOG_RETAINED_RUNS = 2
 # side of it. These files sit in the operate home directory on the user's disk, so
 # the bound is enforced rather than advisory.
 AGENT_LOG_RETENTION_MAX_BYTES = 20 * 1024 * 1024
+# Bound on `agent_runner.log` / `tm.log`, which are per operate home rather than
+# per service. Matches the 10 MB Pearl already applies to `cli.log` and
+# `electron.log` (`electron/logger.js`); one rotated generation is kept.
+DEPLOYMENT_LOG_MAX_BYTES = 10 * 1024 * 1024
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
