@@ -465,7 +465,9 @@ class Deployment(LocalResource):
     def copy_previous_agent_run_logs(self) -> None:
         """Retain the finished agent run's log without discarding the earlier ones."""
         source_path = self.path / DEPLOYMENT_DIR / "agent" / "log.txt"
-        if not source_path.exists():
+        # An empty log is not evidence, and rotating it in would age real
+        # evidence out -- the failure this retention exists to prevent.
+        if not source_path.exists() or source_path.stat().st_size == 0:
             return
         self._rotate_previous_agent_run_logs()
         self._copy_log_tail(source_path, self._previous_agent_run_log_path(1))

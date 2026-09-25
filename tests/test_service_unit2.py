@@ -669,6 +669,18 @@ class TestDeploymentCopyLogs:
         assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "run two"
         assert (tmp_path / "prev_log_2.txt").read_text(encoding="utf-8") == "run one"
 
+    def test_an_empty_run_log_is_not_retained(self, tmp_path: Path) -> None:
+        """An empty log must not age a real previous run out of retention."""
+        depl = Deployment.new(path=tmp_path)
+
+        _write_agent_run_log(tmp_path, "run one")
+        depl.copy_previous_agent_run_logs()
+        _write_agent_run_log(tmp_path, "")
+        depl.copy_previous_agent_run_logs()
+
+        assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "run one"
+        assert not (tmp_path / "prev_log_2.txt").exists()
+
     def test_retention_stops_at_the_configured_number_of_runs(
         self, tmp_path: Path
     ) -> None:
