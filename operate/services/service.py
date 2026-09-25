@@ -440,12 +440,7 @@ class Deployment(LocalResource):
 
     @staticmethod
     def _copy_log_tail(source_path: Path, destination_path: Path) -> None:
-        """Copy a run log, keeping at most the cap's worth of its tail.
-
-        The truncation notice counts against the cap, so what lands on disk is
-        never larger than the cap allows and the newest retained run always
-        survives the trim below.
-        """
+        """Copy a run log, keeping at most the cap's worth of its tail, notice included."""
         source_bytes = source_path.stat().st_size
         if source_bytes <= AGENT_LOG_RETENTION_MAX_BYTES:
             shutil.copy(source_path, destination_path)
@@ -647,10 +642,15 @@ class Deployment(LocalResource):
 
         if build.exists() and force:
             stop_host_deployment(build_dir=build)
+            # sleep needed to ensure all processes closed/killed otherwise it will block directory removal on windows
+            time.sleep(3)
             try:
-                # sleep needed to ensure all processes closed/killed otherwise it will block directory removal on windows
-                time.sleep(3)
                 self.copy_previous_agent_run_logs()
+            except OSError:
+                logger.warning(
+                    "Failed to retain the previous agent run log", exc_info=True
+                )
+            try:
                 shutil.rmtree(build)
             except Exception:  # pylint: disable=broad-except
                 logger.debug(

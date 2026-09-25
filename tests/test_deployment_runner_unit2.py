@@ -302,6 +302,20 @@ class TestOpenLogFiles:
         )
         assert "well past the bound" not in log_path.read_text(encoding="utf-8")
 
+    def test_file_exactly_at_the_bound_is_rotated(self, tmp_path: Path) -> None:
+        """The bound is inclusive: a file of exactly the limit rotates."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(build_dir, is_aea=True)
+        log_path = tmp_path / "agent_runner.log"
+        log_path.write_bytes(b"12345678")
+
+        with patch.object(constants, "DEPLOYMENT_LOG_MAX_BYTES", 8):
+            runner._open_agent_runner_log_file().close()
+
+        assert (tmp_path / "agent_runner.log.1").read_bytes() == b"12345678"
+        assert "12345678" not in log_path.read_text(encoding="utf-8")
+
     def test_a_failed_rotation_still_opens_the_log(self, tmp_path: Path) -> None:
         """A rotation the OS refuses must not stop the deployment starting."""
         build_dir = tmp_path / "svc" / "hash" / "build"
@@ -313,11 +327,14 @@ class TestOpenLogFiles:
         with (
             patch.object(constants, "DEPLOYMENT_LOG_MAX_BYTES", 8),
             patch.object(Path, "replace", side_effect=OSError("in use")),
+            patch.object(runner, "logger") as mock_logger,
         ):
             log_file = runner._open_agent_runner_log_file()
 
         log_file.close()
         assert "held open by something else" in log_path.read_text(encoding="utf-8")
+        mock_logger.warning.assert_called_once()
+        assert "in use" in mock_logger.warning.call_args[0][0]
 
 
 class TestGetOperateDir:

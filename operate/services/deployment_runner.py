@@ -195,14 +195,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self._tm_log_file: t.Optional[TextIOWrapper] = None
 
     def _open_run_log_file(self, name: str) -> TextIOWrapper:
-        """Open a deployment log file for appending, bounded in size.
-
-        These files used to open `"w+"`, so every start erased the previous run --
-        including the restarts the health checker itself forces, which is how the
-        run that caused a restart became the one run nobody could read. Appending
-        keeps that history inside the file Pearl's log export already ships; the
-        bound stops it growing without limit on the user's disk.
-        """
+        """Open a deployment log file for appending, rotating it once it reaches the bound."""
         log_path = self._get_operate_dir() / name
         if (
             log_path.exists()
@@ -211,8 +204,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             # On Windows the rename fails while anything still holds the file --
             # a leftover agent process, say. Exceeding the bound until the next
             # start beats refusing to start the deployment at all.
-            with suppress(OSError):
+            try:
                 log_path.replace(log_path.with_name(f"{log_path.name}.1"))
+            except OSError as e:
+                self.logger.warning(f"Could not rotate {log_path}: {e}")
         log_file = log_path.open("a+")
         # The file now spans runs, so mark where this one starts.
         log_file.write(
