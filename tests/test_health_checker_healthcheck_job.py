@@ -768,19 +768,13 @@ class TestFailfastBehaviorPinned:
         successful restart never counted toward escalation.  This test must
         fail against that code.
         """
-
-        async def always_unhealthy(*args: object, **kwargs: object) -> bool:
-            return False
-
-        health_checker.check_service_health = always_unhealthy  # type: ignore[assignment]
-        health_checker._service_manager.stop_service_locally = MagicMock()
-        health_checker._service_manager.deploy_service_locally = MagicMock()
+        clock = self._always_unhealthy_at(health_checker, [0.0])
 
         with (
             patch.object(HealthChecker, "FAILFAST_NUM", 3),
             patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
             patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
-            patch("operate.services.health_checker.time.time", return_value=0.0),
+            clock,
         ):
             with pytest.raises(RuntimeError, match="stopped by failfast"):
                 await health_checker.healthcheck_job("test-service")
@@ -915,19 +909,13 @@ class TestFailfastBehaviorPinned:
         """
         sm = health_checker._service_manager
         sm.reconcile_staking_for_restart.return_value = StakingReconcileOutcome.SKIPPED
-
-        async def always_unhealthy(*_args: object, **_kwargs: object) -> bool:
-            return False
-
-        health_checker.check_service_health = always_unhealthy  # type: ignore[assignment]
-        sm.stop_service_locally = MagicMock()
-        sm.deploy_service_locally = MagicMock()
+        clock = self._always_unhealthy_at(health_checker, [0.0])
 
         with (
             patch.object(HealthChecker, "FAILFAST_NUM", 2),
             patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
             patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
-            patch("operate.services.health_checker.time.time", return_value=0.0),
+            clock,
         ):
             task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
             await _REAL_SLEEP(0.3)
