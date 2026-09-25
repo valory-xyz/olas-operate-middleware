@@ -66,6 +66,8 @@ from docker import from_env
 
 from operate.constants import (
     AGENT_FUNDS_STATUS_URL,
+    AGENT_LOG_RETAINED_RUNS,
+    AGENT_LOG_RETENTION_MAX_BYTES,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     CONFIG_JSON,
     DEPLOYMENT_DIR,
@@ -399,12 +401,75 @@ class Deployment(LocalResource):
         """Load a service"""
         return super().load(path)  # type: ignore
 
-    def copy_previous_agent_run_logs(self) -> None:
-        """Copy previous agent logs."""
-        source_path = self.path / DEPLOYMENT_DIR / "agent" / "log.txt"
-        destination_path = self.path / "prev_log.txt"
-        if source_path.exists():
+    def _previous_agent_run_log_path(self, generation: int) -> Path:
+        """Get the path of the n-th newest retained run log (1 is the newest)."""
+        # The newest keeps the historical name: Pearl's log export reads
+        # `prev_log.txt` literally, so renaming it would drop the previous run
+        # out of the exported bundle.
+        if generation == 1:
+            return self.path / "prev_log.txt"
+        return self.path / f"prev_log_{generation}.txt"
+
+    def _rotate_previous_agent_run_logs(self) -> None:
+        """Age every retained run log by one generation, dropping the oldest."""
+        self._previous_agent_run_log_path(AGENT_LOG_RETAINED_RUNS).unlink(
+            missing_ok=True
+        )
+        for generation in range(AGENT_LOG_RETAINED_RUNS - 1, 0, -1):
+            retained_path = self._previous_agent_run_log_path(generation)
+            if retained_path.exists():
+                retained_path.replace(self._previous_agent_run_log_path(generation + 1))
+
+    def _enforce_retained_agent_run_log_cap(self) -> None:
+        """Drop the oldest retained run logs until the rest fit the cap."""
+        remaining_bytes = AGENT_LOG_RETENTION_MAX_BYTES
+        cap_reached = False
+        for generation in range(1, AGENT_LOG_RETAINED_RUNS + 1):
+            retained_path = self._previous_agent_run_log_path(generation)
+            if not retained_path.exists():
+                continue
+            retained_bytes = retained_path.stat().st_size
+            # Trimming prefers the most recent runs, so once one run overflows the
+            # cap it and every older one go -- rather than keeping an older run
+            # that happens to fit in what is left.
+            cap_reached = cap_reached or retained_bytes > remaining_bytes
+            if cap_reached:
+                retained_path.unlink()
+                continue
+            remaining_bytes -= retained_bytes
+
+    @staticmethod
+    def _copy_log_tail(source_path: Path, destination_path: Path) -> None:
+        """Copy a run log, keeping at most the cap's worth of its tail.
+
+        The truncation notice counts against the cap, so what lands on disk is
+        never larger than the cap allows and the newest retained run always
+        survives the trim below.
+        """
+        source_bytes = source_path.stat().st_size
+        if source_bytes <= AGENT_LOG_RETENTION_MAX_BYTES:
             shutil.copy(source_path, destination_path)
+            return
+        # Say that the file was truncated: a reader who cannot tell truncation
+        # from absence is back to reasoning from missing evidence.
+        notice = f"[truncated: the run wrote {source_bytes} bytes]\n".encode()
+        kept_bytes = AGENT_LOG_RETENTION_MAX_BYTES - len(notice)
+        with (
+            source_path.open("rb") as source,
+            destination_path.open("wb") as destination,
+        ):
+            destination.write(notice)
+            source.seek(source_bytes - kept_bytes)
+            shutil.copyfileobj(source, destination)
+
+    def copy_previous_agent_run_logs(self) -> None:
+        """Retain the finished agent run's log without discarding the earlier ones."""
+        source_path = self.path / DEPLOYMENT_DIR / "agent" / "log.txt"
+        if not source_path.exists():
+            return
+        self._rotate_previous_agent_run_logs()
+        self._copy_log_tail(source_path, self._previous_agent_run_log_path(1))
+        self._enforce_retained_agent_run_log_cap()
 
     def _build_kubernetes(  # pragma: no cover
         self, keys_manager: KeysManager, force: bool = True

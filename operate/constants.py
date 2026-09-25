@@ -58,6 +58,17 @@ AGENT_PID_FILE = "agent.pid"
 # a live agent from a dead one, so both sides must agree on these two values.
 AGENT_PROCESS_NAMES = ["python", "agent", "aea"]
 
+# Previous agent runs kept per service beside the current run's
+# `deployment/agent/log.txt`. Two, not one: the health checker can force several
+# restarts inside a single Auto-Run window, and each restart used to overwrite the
+# only retained slot -- so the run that actually failed was the one lost.
+AGENT_LOG_RETAINED_RUNS = 2
+# Cap on the retained runs per service. At the ~90 KB/min a trading agent writes,
+# 20 MB spans 3-4 hours, which covers a ~70 min Auto-Run slot and the runs either
+# side of it. These files sit in the operate home directory on the user's disk, so
+# the bound is enforced rather than advisory.
+AGENT_LOG_RETENTION_MAX_BYTES = 20 * 1024 * 1024
+
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 DEFAULT_TIMEOUT = 30
