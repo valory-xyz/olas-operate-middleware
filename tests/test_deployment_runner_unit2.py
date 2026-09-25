@@ -261,6 +261,81 @@ class TestOpenLogFiles:
         fh.close()
         assert (tmp_path / "tm.log").exists()
 
+    def test_second_run_keeps_the_first_run_in_the_file(self, tmp_path: Path) -> None:
+        """A restart must not erase the run that preceded it.
+
+        `"w+"` truncated on every start, so the forced restarts in OPE-1941 left
+        `agent_runner.log` covering only the run after the failure.
+        """
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(build_dir, is_aea=True)
+
+        first = runner._open_agent_runner_log_file()
+        first.write("first run output\n")
+        first.close()
+        second = runner._open_agent_runner_log_file()
+        second.close()
+
+        contents = (tmp_path / "agent_runner.log").read_text(encoding="utf-8")
+        assert "first run output" in contents
+        assert contents.count("---- run started at ") == 2
+
+    def test_file_over_the_bound_is_rotated_before_reopening(
+        self, tmp_path: Path
+    ) -> None:
+        """Appending is bounded: at the limit the file rotates once."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(build_dir, is_aea=True)
+        log_path = tmp_path / "agent_runner.log"
+
+        with patch.object(constants, "DEPLOYMENT_LOG_MAX_BYTES", 8):
+            first = runner._open_agent_runner_log_file()
+            first.write("well past the bound\n")
+            first.close()
+            second = runner._open_agent_runner_log_file()
+            second.close()
+
+        assert "well past the bound" in (tmp_path / "agent_runner.log.1").read_text(
+            encoding="utf-8"
+        )
+        assert "well past the bound" not in log_path.read_text(encoding="utf-8")
+
+    def test_file_exactly_at_the_bound_is_rotated(self, tmp_path: Path) -> None:
+        """The bound is inclusive: a file of exactly the limit rotates."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(build_dir, is_aea=True)
+        log_path = tmp_path / "agent_runner.log"
+        log_path.write_bytes(b"12345678")
+
+        with patch.object(constants, "DEPLOYMENT_LOG_MAX_BYTES", 8):
+            runner._open_agent_runner_log_file().close()
+
+        assert (tmp_path / "agent_runner.log.1").read_bytes() == b"12345678"
+        assert "12345678" not in log_path.read_text(encoding="utf-8")
+
+    def test_a_failed_rotation_still_opens_the_log(self, tmp_path: Path) -> None:
+        """A rotation the OS refuses must not stop the deployment starting."""
+        build_dir = tmp_path / "svc" / "hash" / "build"
+        build_dir.mkdir(parents=True)
+        runner = ConcreteDeploymentRunner(build_dir, is_aea=True)
+        log_path = tmp_path / "agent_runner.log"
+        log_path.write_text("held open by something else\n", encoding="utf-8")
+
+        with (
+            patch.object(constants, "DEPLOYMENT_LOG_MAX_BYTES", 8),
+            patch.object(Path, "replace", side_effect=OSError("in use")),
+            patch.object(runner, "logger") as mock_logger,
+        ):
+            log_file = runner._open_agent_runner_log_file()
+
+        log_file.close()
+        assert "held open by something else" in log_path.read_text(encoding="utf-8")
+        mock_logger.warning.assert_called_once()
+        assert "in use" in mock_logger.warning.call_args[0][0]
+
 
 class TestGetOperateDir:
     """Tests for _get_operate_dir (line 140-142)."""

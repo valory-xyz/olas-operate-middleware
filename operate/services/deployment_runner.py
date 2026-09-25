@@ -194,13 +194,35 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self._agent_log_file: t.Optional[TextIOWrapper] = None
         self._tm_log_file: t.Optional[TextIOWrapper] = None
 
+    def _open_run_log_file(self, name: str) -> TextIOWrapper:
+        """Open a deployment log file for appending, rotating it once it reaches the bound."""
+        log_path = self._get_operate_dir() / name
+        if (
+            log_path.exists()
+            and log_path.stat().st_size >= constants.DEPLOYMENT_LOG_MAX_BYTES
+        ):
+            # On Windows the rename fails while anything still holds the file --
+            # a leftover agent process, say. Exceeding the bound until the next
+            # start beats refusing to start the deployment at all.
+            try:
+                log_path.replace(log_path.with_name(f"{log_path.name}.1"))
+            except OSError as e:
+                self.logger.warning(f"Could not rotate {log_path}: {e}")
+        log_file = log_path.open("a+")
+        # The file now spans runs, so mark where this one starts.
+        log_file.write(
+            f"---- run started at {time.strftime('%Y-%m-%d %H:%M:%S')} ----\n"
+        )
+        log_file.flush()
+        return log_file
+
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
-        return (self._get_operate_dir() / "agent_runner.log").open("w+")
+        return self._open_run_log_file(constants.AGENT_RUNNER_LOG)
 
     def _open_tendermint_log_file(self) -> TextIOWrapper:
         """Open tm.log file."""
-        return (self._get_operate_dir() / "tm.log").open("w+")
+        return self._open_run_log_file(constants.TENDERMINT_LOG)
 
     def _close_agent_log_file(self) -> None:
         """Close agent log file handle if open."""

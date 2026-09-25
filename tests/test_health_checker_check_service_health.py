@@ -459,6 +459,190 @@ class TestCheckServiceHealthLivenessRecording:
 
         assert health_checker.get_liveness("svc")["reason"] == "agent_unresponsive"
 
+    @pytest.mark.asyncio
+    async def test_self_reported_unhealthy_is_not_recorded_as_unresponsive(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """An agent that answers promptly and says it is unhealthy said something.
+
+        `agent_unresponsive` is for an agent that did not answer. Recording it here
+        states something false about the run -- this is the path a stalling trader
+        takes, and it answers every poll in milliseconds.
+        """
+        deployment_dir = tmp_path / "deployment"
+        deployment_dir.mkdir()
+        (deployment_dir / "agent.pid").write_text("4242", encoding="utf-8")
+
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={
+                "is_healthy": False,
+                "is_tm_healthy": True,
+                "is_transitioning_fast": False,
+                "seconds_since_last_transition": 0.4,
+                "rounds": [
+                    "fetch_markets_router_round",
+                    "polymarket_fetch_market_round",
+                ],
+            }
+        )
+        patcher = self._patched_session(mock_resp)
+        try:
+            with patch(
+                "operate.services.health_checker.validate_pid", return_value=True
+            ):
+                assert (
+                    await health_checker.check_service_health("svc", tmp_path) is False
+                )
+        finally:
+            patcher.stop()
+
+        liveness = health_checker.get_liveness("svc")
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "agent_reported_unhealthy"
+        assert liveness["consecutive_failures"] == 1
+        # The response body was well-formed, so the snapshot is still written.
+        assert (tmp_path / "healthcheck.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_self_reported_unhealthy_is_logged_with_its_evidence(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """The path used to return in silence, so `cli.log` implied nothing answered."""
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={
+                "is_healthy": False,
+                "is_tm_healthy": True,
+                "is_transitioning_fast": False,
+                "seconds_since_last_transition": 0.4,
+                "rounds": [
+                    "fetch_markets_router_round",
+                    "polymarket_fetch_market_round",
+                ],
+            }
+        )
+        patcher = self._patched_session(mock_resp)
+        try:
+            assert await health_checker.check_service_health("svc", tmp_path) is False
+        finally:
+            patcher.stop()
+
+        logged = " ".join(
+            str(call.args[0])
+            for call in t.cast(MagicMock, health_checker.logger).warning.call_args_list
+        )
+        assert "svc" in logged
+        assert "reported itself unhealthy" in logged
+        # The five fields that separate a Tendermint stall from the agent judging
+        # its own round progress too slow.
+        assert "is_healthy=False" in logged
+        assert "is_tm_healthy=True" in logged
+        assert "is_transitioning_fast=False" in logged
+        assert "seconds_since_last_transition=0.4" in logged
+        assert "round=polymarket_fetch_market_round" in logged
+
+    @pytest.mark.asyncio
+    async def test_self_reported_unhealthy_log_follows_the_streak_cadence(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """The probe fires every 5s while unhealthy, so the log must not be per-probe."""
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={"is_healthy": False, "rounds": ["some_round"]}
+        )
+        patcher = self._patched_session(mock_resp)
+        try:
+            for _ in range(11):
+                await health_checker.check_service_health("svc", tmp_path)
+        finally:
+            patcher.stop()
+
+        assert health_checker.get_liveness("svc")["consecutive_failures"] == 11
+        # The 1st and the 10th, matching `healthcheck_job`'s own streak line.
+        assert t.cast(MagicMock, health_checker.logger).warning.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_the_cadence_holds_past_the_restart_threshold(
+        self, tmp_path: Path
+    ) -> None:
+        """A streak that outlives a forced restart must not turn the gate per-probe.
+
+        `consecutive_failures` is reset only by a healthy probe, so on this
+        ticket's own scenario -- an agent that keeps self-reporting unhealthy
+        across a restart -- the streak walks straight past `number_of_fails` and
+        never comes back. Borrowing `healthcheck_job`'s terminal
+        `fails >= number_of_fails` arm here would make every subsequent probe log.
+        """
+        health_checker = HealthChecker(
+            service_manager=MagicMock(), logger=MagicMock(), number_of_fails=5
+        )
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={"is_healthy": False, "rounds": ["some_round"]}
+        )
+        patcher = self._patched_session(mock_resp)
+        try:
+            for _ in range(20):
+                await health_checker.check_service_health("svc", tmp_path)
+        finally:
+            patcher.stop()
+
+        assert health_checker.get_liveness("svc")["consecutive_failures"] == 20
+        # The 1st, the 10th and the 20th -- not the 15 probes past the threshold.
+        assert t.cast(MagicMock, health_checker.logger).warning.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_a_missing_rounds_list_does_not_break_the_log(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """An older or partial body must still produce a line, not an IndexError."""
+        mock_resp = AsyncMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"is_transitioning_fast": False})
+        patcher = self._patched_session(mock_resp)
+        try:
+            assert await health_checker.check_service_health("svc", tmp_path) is False
+        finally:
+            patcher.stop()
+
+        assert (
+            health_checker.get_liveness("svc")["reason"] == "agent_reported_unhealthy"
+        )
+        logged = " ".join(
+            str(call.args[0])
+            for call in t.cast(MagicMock, health_checker.logger).warning.call_args_list
+        )
+        assert "round=None" in logged
+        # `None`, not `False`: this body never carried the field, and the line has
+        # to say so or it reads the same as an agent that reported it false.
+        assert "is_healthy=None" in logged
+
+    @pytest.mark.asyncio
+    async def test_unanswered_probes_keep_the_pid_discriminator(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """A probe that got no usable answer is still judged on whether the PID lives."""
+        mock_resp = AsyncMock()
+        mock_resp.status = 503
+        mock_resp.text = AsyncMock(return_value="Service Unavailable")
+        patcher = self._patched_session(mock_resp)
+        try:
+            with patch(
+                "operate.services.health_checker.validate_pid", return_value=False
+            ):
+                assert (
+                    await health_checker.check_service_health("svc", tmp_path) is False
+                )
+        finally:
+            patcher.stop()
+
+        assert health_checker.get_liveness("svc")["reason"] == "agent_process_exited"
+
     def test_consecutive_failures_accumulate(
         self, health_checker: HealthChecker
     ) -> None:
@@ -594,3 +778,30 @@ class TestGetLiveness:
             asyncio.run(_start_for_service(health_checker, "svc"))
 
         assert health_checker.get_liveness("svc")["reason"] == "not_monitored"
+
+    @pytest.mark.asyncio
+    async def test_cancel_job_for_service_keeps_the_liveness_record(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Cancelling the job alone must not forget why the agent was unhealthy.
+
+        This is the complement of the two tests above, and the pair is what the
+        failfast-vs-user-stop inference rests on: `stop_for_service` forgets the
+        record, so a user stop reads as `not_monitored`, while the failfast path
+        cancels the job without forgetting, so the service keeps reporting the
+        reason it was stopped for. Nothing but this test stops that difference
+        being erased by a one-line change to `cancel_job_for_service`.
+        """
+        with patch.object(health_checker, "healthcheck_job"):
+            health_checker.start_for_service("svc")
+        health_checker.record_failed_probe(
+            service_config_id="svc",
+            reason=AgentLivenessReason.AGENT_REPORTED_UNHEALTHY,
+        )
+
+        health_checker.cancel_job_for_service(service_config_id="svc")
+        await asyncio.sleep(0)
+
+        liveness = health_checker.get_liveness("svc")
+        assert liveness["reason"] == "agent_reported_unhealthy"
+        assert liveness["consecutive_failures"] == 1
