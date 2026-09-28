@@ -333,8 +333,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         service_config_id: t.Optional[str],
         deposit_amounts: t.Optional[t.Dict[str, t.Any]],
     ) -> t.Tuple[t.Dict[str, int], t.Dict[str, int], t.Set[str]]:
-        """Gross targets per mode, net targets = shortfall against holdings,
-        and the tokens whose holdings that netting counted."""
+        """Gross targets per mode, and net targets = shortfall against holdings.
+
+        Also returns the tokens whose holdings that netting counted.
+        """
         if mode == FundingRunMode.ONBOARD:
             service_manager = self.service_manager()
             if not service_manager.exists(service_config_id=service_config_id):
@@ -350,29 +352,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return targets, targets, set(targets)
 
         if mode == FundingRunMode.DEPOSIT:
-            if not isinstance(deposit_amounts, dict):
-                raise FundingRunError("'deposit_amounts' must be an object.")
-            try:
-                gross = {
-                    Web3.to_checksum_address(token): int(amount)
-                    for token, amount in deposit_amounts.items()
-                }
-            except (TypeError, ValueError) as e:
-                raise FundingRunError(f"Invalid deposit_amounts: {e}") from e
-            if any(amount < 0 for amount in gross.values()):
-                raise FundingRunError("deposit_amounts must not be negative.")
-            # The Safe step only sweeps these assets into the Master Safe.
-            depositable = {NATIVE} | {
-                Web3.to_checksum_address(token[destination])
-                for token in ERC20_TOKENS.values()
-                if destination in token
-            }
-            unsupported = set(gross) - depositable
-            if unsupported:
-                raise FundingRunError(
-                    f"Unsupported deposit tokens on {destination.value}: "
-                    f"{', '.join(sorted(unsupported))}."
-                )
+            gross = self._deposit_targets(destination, deposit_amounts)
             held = self.funding_manager.held_balances(destination, gross.keys())
             net = {
                 token: max(0, amount - held.get(token, 0))
@@ -383,6 +363,36 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         reserve = int(DEFAULT_EOA_TOPUPS[destination][NATIVE])
         balance = int(self._wallet().get_balance(destination, NATIVE, from_safe=False))
         return {NATIVE: reserve}, {NATIVE: max(0, reserve - balance)}, {NATIVE}
+
+    @staticmethod
+    def _deposit_targets(
+        destination: Chain, deposit_amounts: t.Any
+    ) -> t.Dict[str, int]:
+        """Validate the user's deposit_amounts into per-token target balances."""
+        if not isinstance(deposit_amounts, dict):
+            raise FundingRunError("'deposit_amounts' must be an object.")
+        try:
+            gross = {
+                Web3.to_checksum_address(token): int(amount)
+                for token, amount in deposit_amounts.items()
+            }
+        except (TypeError, ValueError) as e:
+            raise FundingRunError(f"Invalid deposit_amounts: {e}") from e
+        if any(amount < 0 for amount in gross.values()):
+            raise FundingRunError("deposit_amounts must not be negative.")
+        # The Safe step only sweeps these assets into the Master Safe.
+        depositable = {NATIVE} | {
+            Web3.to_checksum_address(token[destination])
+            for token in ERC20_TOKENS.values()
+            if destination in token
+        }
+        unsupported = set(gross) - depositable
+        if unsupported:
+            raise FundingRunError(
+                f"Unsupported deposit tokens on {destination.value}: "
+                f"{', '.join(sorted(unsupported))}."
+            )
+        return gross
 
     def _receive_baseline(
         self, run: FundingRun, netted: t.Set[str]
