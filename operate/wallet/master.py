@@ -110,6 +110,17 @@ class CreateSafeStatus(str, enum.Enum):
         return self.value
 
 
+class CreateSafeResult(t.TypedDict):
+    """What `create_safe_and_transfer_excess` returns (the POST /api/wallet/safe body)."""
+
+    status: CreateSafeStatus
+    safe: t.Optional[str]
+    create_tx: t.Optional[str]
+    transfer_txs: t.Dict[str, str]
+    transfer_errors: t.Dict[str, str]
+    message: str
+
+
 class MasterWallet(LocalResource):
     """Master wallet."""
 
@@ -1230,12 +1241,12 @@ class EthereumMasterWallet(
         chain: Chain,
         backup_owner: t.Optional[str] = None,
         initial_funds: t.Optional[t.Dict[str, int]] = None,
-    ) -> t.Dict[str, t.Any]:
+    ) -> CreateSafeResult:
         """Ensure the Master Safe exists on `chain`, then fund it from the Master EOA.
 
         With `initial_funds` unset, every Master EOA asset above
         DEFAULT_EOA_TOPUPS moves to the Safe. Otherwise the Safe is topped up
-        to `initial_funds`. Returns a `CreateSafeStatus`-carrying result.
+        to `initial_funds`.
         """
         ledger_api = self.ledger_api(chain=chain)
         create_tx = None
@@ -1279,8 +1290,8 @@ class EthereumMasterWallet(
             )[safe_address]
             funds = subtract_dicts(initial_funds, safe_balances)
 
-        transfer_txs = {}
-        transfer_errors = {}
+        transfer_txs: t.Dict[str, str] = {}
+        transfer_errors: t.Dict[str, str] = {}
         for asset, amount in funds.items():
             if amount <= 0:
                 continue
