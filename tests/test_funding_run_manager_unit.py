@@ -551,6 +551,13 @@ class TestTargets:
                 "deposit_amounts": {NATIVE: 1},
                 "backup_owner": "not-an-address",
             },
+            {"mode": "deposit", "destination_chain": "polygon", "deposit_amounts": [1]},
+            {
+                "mode": "deposit",
+                "destination_chain": "polygon",
+                # Not an asset the Safe step sweeps into the Master Safe.
+                "deposit_amounts": {"0x" + "9" * 40: 1},
+            },
         ],
     )
     def test_invalid_requests_are_rejected(

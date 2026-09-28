@@ -1011,6 +1011,56 @@ class TestFundingRunRoutes:
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json()["error"]
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            [1],
+            {
+                "mode": "signer_gas",
+                "source": "base",
+                "destination": {"chain": "polygon"},
+            },
+            {
+                "mode": "signer_gas",
+                "source": {"chain": "base", "token": ZERO_ADDRESS},
+                "destination": ["polygon"],
+            },
+            {
+                "mode": "deposit",
+                "source": {"chain": "gnosis", "token": ZERO_ADDRESS},
+                "destination": {"chain": "polygon"},
+                "deposit_amounts": [1],
+            },
+        ],
+    )
+    def test_create_rejects_malformed_bodies(
+        self, client: TestClient, body: t.Any
+    ) -> None:
+        """Wrongly shaped bodies are 400s, not 500s."""
+        response = client.post("/api/funding_run", json=body)
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    def test_error_body_does_not_echo_exception_text(self, client: TestClient) -> None:
+        """Refusals carry a fixed message; the exception detail stays in the log."""
+        from operate.funding_run.manager import (  # pylint: disable=import-outside-toplevel
+            FundingRunError,
+        )
+
+        with mock.patch(
+            "operate.cli.FundingRunManager.create_run",
+            side_effect=FundingRunError("provider detail 0xdeadbeef"),
+        ):
+            response = client.post(
+                "/api/funding_run",
+                json={
+                    "mode": "signer_gas",
+                    "source": {"chain": "base", "token": ZERO_ADDRESS},
+                    "destination": {"chain": "polygon"},
+                },
+            )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Invalid funding run request."}
+
     def test_create_conflict_is_409(self, client: TestClient) -> None:
         """A second run while one is processing is refused."""
         from operate.funding_run.manager import (  # pylint: disable=import-outside-toplevel

@@ -63,6 +63,7 @@ from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import (
     CLEAR_DELEGATION_GAS_RESERVE,
     DEFAULT_EOA_TOPUPS,
+    ERC20_TOKENS,
     EXPLORER_URL,
     FUNDING_SOURCES,
     GAS_ABSTRACTION_USDC_CAP,
@@ -346,15 +347,29 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return targets, targets
 
         if mode == FundingRunMode.DEPOSIT:
+            if not isinstance(deposit_amounts, dict):
+                raise FundingRunError("'deposit_amounts' must be an object.")
             try:
                 gross = {
                     Web3.to_checksum_address(token): int(amount)
-                    for token, amount in (deposit_amounts or {}).items()
+                    for token, amount in deposit_amounts.items()
                 }
             except (TypeError, ValueError) as e:
                 raise FundingRunError(f"Invalid deposit_amounts: {e}") from e
             if any(amount < 0 for amount in gross.values()):
                 raise FundingRunError("deposit_amounts must not be negative.")
+            # The Safe step only sweeps these assets into the Master Safe.
+            depositable = {NATIVE} | {
+                Web3.to_checksum_address(token[destination])
+                for token in ERC20_TOKENS.values()
+                if destination in token
+            }
+            unsupported = set(gross) - depositable
+            if unsupported:
+                raise FundingRunError(
+                    f"Unsupported deposit tokens on {destination.value}: "
+                    f"{', '.join(sorted(unsupported))}."
+                )
             held = self.funding_manager.held_balances(destination, gross.keys())
             return gross, {
                 token: max(0, amount - held.get(token, 0))

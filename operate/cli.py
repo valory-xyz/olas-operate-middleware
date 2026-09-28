@@ -2087,21 +2087,28 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     def _funding_run_error(e: Exception) -> JSONResponse:
-        """Map funding run errors onto the documented status codes."""
-        if isinstance(e, FundingRunError):
-            status = HTTPStatus.BAD_REQUEST
-        elif isinstance(e, FundingRunNotFoundError):
-            status = HTTPStatus.NOT_FOUND
-        elif isinstance(e, FundingRunConflictError):
-            status = HTTPStatus.CONFLICT
-        else:
-            logger.error(f"Funding run error: {e}\n{traceback.format_exc()}")
-            return JSONResponse(
-                content={"error": "Funding run failed. Please check the logs."},
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
-        message = e.args[0] if e.args else str(e)
-        return JSONResponse(content={"error": str(message)}, status_code=status)
+        """Map funding run errors onto the documented status codes.
+
+        The body carries a fixed message per status: exception text can
+        embed provider or RPC detail, so it goes to the log only.
+        """
+        for error_type, status, message in (
+            (FundingRunError, HTTPStatus.BAD_REQUEST, "Invalid funding run request."),
+            (FundingRunNotFoundError, HTTPStatus.NOT_FOUND, "Funding run not found."),
+            (
+                FundingRunConflictError,
+                HTTPStatus.CONFLICT,
+                "Funding run conflicts with the current run state.",
+            ),
+        ):
+            if isinstance(e, error_type):
+                logger.warning(f"Funding run request refused ({status}): {e}")
+                return JSONResponse(content={"error": message}, status_code=status)
+        logger.error(f"Funding run error: {e}\n{traceback.format_exc()}")
+        return JSONResponse(
+            content={"error": "Funding run failed. Please check the logs."},
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
 
     @app.get("/api/funding_run/sources")
     async def _funding_run_sources(request: Request) -> JSONResponse:
@@ -2115,15 +2122,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Create a funding run, or replace one still awaiting its deposit."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
+        invalid_request = JSONResponse(
+            content={"error": "Invalid funding run request."},
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
         try:
             data = await request.json()
-            source = data.get("source") or {}
-            destination = data.get("destination") or {}
-        except (ValueError, AttributeError):
-            return JSONResponse(
-                content={"error": "Invalid funding run request."},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+        except ValueError:
+            return invalid_request
+        if not isinstance(data, dict):
+            return invalid_request
+        source = data.get("source") or {}
+        destination = data.get("destination") or {}
+        if not isinstance(source, dict) or not isinstance(destination, dict):
+            return invalid_request
 
         def _fn() -> JSONResponse:
             manager = operate.funding_run_manager
