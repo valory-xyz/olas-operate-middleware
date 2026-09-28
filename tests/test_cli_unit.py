@@ -2275,6 +2275,26 @@ class TestFundServiceRoute:
                 DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
             )
 
+    def test_runs_off_the_event_loop(self) -> None:
+        """fund_service can wait on the Master EOA lock, so it must not block the loop."""
+        m = _make_mock_operate()
+        m.password = "pass"  # nosec B105
+        m.service_manager.return_value.exists.return_value = True
+
+        def _assert_no_running_loop(**_: Any) -> None:
+            with pytest.raises(RuntimeError):
+                asyncio.get_running_loop()
+
+        m.service_manager.return_value.fund_service.side_effect = (
+            _assert_no_running_loop
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1/fund", json={})
+            assert resp.status_code == HTTPStatus.OK
+            m.service_manager.return_value.fund_service.assert_called_once()
+
     def test_insufficient_funds_funding_in_progress_no_structured_error(self) -> None:
         """Conflict response from funding-in-progress does not include structured gas fields."""
         m = _make_mock_operate()

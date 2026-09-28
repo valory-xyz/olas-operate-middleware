@@ -2026,19 +2026,23 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             data = await request.json()
-            service_manager.fund_service(
-                service_config_id=service_config_id,
-                amounts=ChainAmounts(
-                    {
-                        chain_str: {
-                            address: {
-                                asset: int(amount) for asset, amount in assets.items()
-                            }
-                            for address, assets in addresses.items()
+            amounts = ChainAmounts(
+                {
+                    chain_str: {
+                        address: {
+                            asset: int(amount) for asset, amount in assets.items()
                         }
-                        for chain_str, addresses in data.items()
+                        for address, assets in addresses.items()
                     }
-                ),
+                    for chain_str, addresses in data.items()
+                }
+            )
+            # Off the event loop: funding waits on the Master EOA lock, which a
+            # funding run can hold for a whole source leg.
+            await run_in_executor(
+                lambda: service_manager.fund_service(
+                    service_config_id=service_config_id, amounts=amounts
+                )
             )
         except ValueError as e:
             logger.error(
