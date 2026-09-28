@@ -119,6 +119,13 @@ def _make_service(tmp_path: Path, **overrides: t.Any) -> Service:
     return Service.load(path=service_dir)
 
 
+def _write_agent_run_log(service_path: Path, content: str) -> None:
+    """Write the current agent run's log inside a service directory."""
+    agent_dir = service_path / DEPLOYMENT_DIR / "agent"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / "log.txt").write_text(content, encoding="utf-8")
+
+
 def _make_deployment(tmp_path: Path, status: DeploymentStatus) -> Deployment:
     """Create a Deployment with given status, stored on disk."""
     depl = Deployment(
@@ -642,6 +649,80 @@ class TestDeploymentCopyLogs:
         depl.copy_previous_agent_run_logs()  # should not raise
 
         assert not (tmp_path / "prev_log.txt").exists()
+
+    def test_second_run_ages_the_first_instead_of_erasing_it(
+        self, tmp_path: Path
+    ) -> None:
+        """A second retained run must not overwrite the run before it.
+
+        This is OPE-1941's "Gap in the evidence" exactly: two forced restarts
+        inside one Auto-Run window, and the single retained slot left only the
+        second one on disk.
+        """
+        depl = Deployment.new(path=tmp_path)
+
+        _write_agent_run_log(tmp_path, "run one")
+        depl.copy_previous_agent_run_logs()
+        _write_agent_run_log(tmp_path, "run two")
+        depl.copy_previous_agent_run_logs()
+
+        assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "run two"
+        assert (tmp_path / "prev_log_2.txt").read_text(encoding="utf-8") == "run one"
+
+    def test_an_empty_run_log_is_not_retained(self, tmp_path: Path) -> None:
+        """An empty log must not age a real previous run out of retention."""
+        depl = Deployment.new(path=tmp_path)
+
+        _write_agent_run_log(tmp_path, "run one")
+        depl.copy_previous_agent_run_logs()
+        _write_agent_run_log(tmp_path, "")
+        depl.copy_previous_agent_run_logs()
+
+        assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "run one"
+        assert not (tmp_path / "prev_log_2.txt").exists()
+
+    def test_retention_stops_at_the_configured_number_of_runs(
+        self, tmp_path: Path
+    ) -> None:
+        """Retention keeps the configured runs and drops anything older."""
+        depl = Deployment.new(path=tmp_path)
+
+        for run in ("run one", "run two", "run three"):
+            _write_agent_run_log(tmp_path, run)
+            depl.copy_previous_agent_run_logs()
+
+        assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "run three"
+        assert (tmp_path / "prev_log_2.txt").read_text(encoding="utf-8") == "run two"
+        assert not (tmp_path / "prev_log_3.txt").exists()
+
+    def test_cap_drops_the_oldest_retained_run(self, tmp_path: Path) -> None:
+        """The per-service cap is enforced, not advisory."""
+        depl = Deployment.new(path=tmp_path)
+
+        with patch("operate.services.service.AGENT_LOG_RETENTION_MAX_BYTES", 200):
+            _write_agent_run_log(tmp_path, "a" * 150)
+            depl.copy_previous_agent_run_logs()
+            _write_agent_run_log(tmp_path, "b" * 150)
+            depl.copy_previous_agent_run_logs()
+
+        assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "b" * 150
+        assert not (tmp_path / "prev_log_2.txt").exists()
+
+    def test_a_run_over_the_cap_is_kept_as_a_marked_tail(self, tmp_path: Path) -> None:
+        """A single oversized run is tail-truncated and says so."""
+        depl = Deployment.new(path=tmp_path)
+
+        with patch("operate.services.service.AGENT_LOG_RETENTION_MAX_BYTES", 200):
+            _write_agent_run_log(tmp_path, "early entries" + "z" * 300)
+            depl.copy_previous_agent_run_logs()
+
+        retained_path = tmp_path / "prev_log.txt"
+        retained = retained_path.read_text(encoding="utf-8")
+        assert retained.startswith("[truncated: the run wrote 313 bytes]\n")
+        assert retained.endswith("z" * 10)
+        assert "early entries" not in retained
+        # The notice counts against the cap rather than pushing the file past it.
+        assert retained_path.stat().st_size == 200
 
 
 class TestDeploymentStart:

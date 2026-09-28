@@ -48,9 +48,11 @@ class AgentLivenessReason(str, enum.Enum):
     """Why the agent of a service is not considered alive."""
 
     AGENT_PROCESS_EXITED = "agent_process_exited"
+    AGENT_REPORTED_UNHEALTHY = "agent_reported_unhealthy"
     AGENT_UNRESPONSIVE = "agent_unresponsive"
     EVICTED_CANNOT_RESTAKE = "evicted_cannot_restake"
     NOT_MONITORED = "not_monitored"
+    STOPPED_BY_FAILFAST = "stopped_by_failfast"
 
 
 @dataclass
@@ -99,6 +101,30 @@ class AgentLiveness:
         return payload
 
 
+# The reasons a probe of the agent can establish on its own.
+ProbeFailureReason = t.Literal[
+    AgentLivenessReason.AGENT_PROCESS_EXITED,
+    AgentLivenessReason.AGENT_REPORTED_UNHEALTHY,
+    AgentLivenessReason.AGENT_UNRESPONSIVE,
+]
+
+
+@dataclass
+class ProbeOutcome:
+    """What one probe of the agent's healthcheck endpoint established."""
+
+    healthy: bool
+
+    # Set only when the probe itself knows why the agent is not alive. Left unset
+    # when it got no usable answer, in which case the caller falls back to asking
+    # whether the agent process is still running.
+    reason: t.Optional[ProbeFailureReason] = None
+
+    # Set only when the outcome is not already written to the log by the branch
+    # that produced it.
+    detail: t.Optional[str] = None
+
+
 class HealthChecker:  # pylint: disable=too-many-instance-attributes
     """Health checker manager."""
 
@@ -106,8 +132,14 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90  # seconds
     NUMBER_OF_FAILS_DEFAULT = 60
-    FAILFAST_NUM = 15
-    FAILFAST_TIMEOUT = 15 * 60  # 15 minutes
+    # A restart takes at least `number_of_fails * sleep_period` seconds of
+    # consecutive failures to trigger -- 300 s on the defaults -- so five inside
+    # the window means the service spent most of an hour unhealthy. Fewer than
+    # that is noise an operator should not lose a staking epoch to: an
+    # unnecessary restart costs minutes, whereas a wrong stop leaves a staked
+    # agent down until the operator happens to notice.
+    FAILFAST_NUM = 5
+    FAILFAST_WINDOW = 60 * 60  # restarts older than an hour stop counting
 
     def __init__(
         self,
@@ -191,29 +223,68 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
         """Check the service health and record the outcome on its liveness record."""
-        healthy = await self._probe_agent(service_path=service_path)
-        if healthy:
+        outcome = await self._probe_agent(service_path=service_path)
+        if outcome.healthy:
             self.record_healthy_probe(service_config_id=service_config_id)
             return True
 
-        # Reads the PID file and asks psutil, so it stays off the event loop.
-        agent_is_running = await asyncio.to_thread(
-            self._is_agent_process_alive, service_path
-        )
-        self.record_failed_probe(
-            service_config_id=service_config_id,
-            reason=(
+        reason = outcome.reason
+        if reason is None:
+            # The probe got no usable answer out of the agent, so "is the process
+            # still running?" is the right discriminator: a live process that says
+            # nothing is unresponsive, a dead one has exited. It is *not* the right
+            # discriminator for an agent that answered, which is why a probe that
+            # knows the reason carries it rather than leaving it to be guessed here.
+            #
+            # Reads the PID file and asks psutil, so it stays off the event loop.
+            agent_is_running = await asyncio.to_thread(
+                self._is_agent_process_alive, service_path
+            )
+            reason = (
                 AgentLivenessReason.AGENT_UNRESPONSIVE
                 if agent_is_running
                 else AgentLivenessReason.AGENT_PROCESS_EXITED
-            ),
-        )
+            )
+
+        self.record_failed_probe(service_config_id=service_config_id, reason=reason)
+        if outcome.detail is not None:
+            self._log_probe_detail(service_config_id, outcome.detail)
         return False
+
+    def _log_probe_detail(self, service_config_id: str, detail: str) -> None:
+        """Log why a probe failed, on the failure streak's cadence."""
+        # Not borrowing `fails >= number_of_fails`: `consecutive_failures` survives
+        # a forced restart, so that arm would log every probe once past it.
+        if self._is_streak_milestone(self._failure_streak(service_config_id)):
+            self.logger.warning(
+                f"[HEALTH_CHECKER] {service_config_id} {detail} not healthy!"
+            )
+
+    @staticmethod
+    def _is_streak_milestone(fails: int) -> bool:
+        """Answer whether a failure streak has reached a length worth logging."""
+        return fails == 1 or fails % 10 == 0
+
+    def _failure_streak(self, service_config_id: str) -> int:
+        """
+        Return how many probes in a row a service has failed.
+
+        :param service_config_id: the service to report the streak for.
+        :return: the consecutive failed-probe count, or 0 if it has no record.
+        """
+        with self._liveness_lock:
+            record = self._liveness.get(service_config_id)
+            return 0 if record is None else record.consecutive_failures
 
     async def _probe_agent(  # pylint: disable=too-many-return-statements
         self, service_path: t.Optional[Path] = None
-    ) -> bool:
-        """Probe the agent HTTP healthcheck endpoint."""
+    ) -> ProbeOutcome:
+        """
+        Probe the agent HTTP healthcheck endpoint.
+
+        :param service_path: the service directory to persist the response body in.
+        :return: what the probe established.
+        """
         timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -226,7 +297,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.warning(
                             f"[HEALTH_CHECKER] Bad http status code : {status} content: {content}. not healthy!"
                         )
-                        return False
+                        return ProbeOutcome(healthy=False)
 
                     response_json = await resp.json()
 
@@ -236,39 +307,66 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             json.dumps(response_json, indent=2), encoding="utf-8"
                         )
 
-                    return response_json.get(
+                    if response_json.get(
                         "is_healthy", response_json.get("is_transitioning_fast", False)
-                    )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
+                    ):  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
+                        return ProbeOutcome(healthy=True)
+
+                    # The agent answered, promptly and well-formed, and said it is
+                    # not healthy. That is a different thing from not answering, and
+                    # it used to be the one path out of seven that returned in
+                    # silence -- leaving an operator to conclude from `cli.log` that
+                    # the poll never reached the agent at all.
+                    return ProbeOutcome(
+                        healthy=False,
+                        reason=AgentLivenessReason.AGENT_REPORTED_UNHEALTHY,
+                        detail=self._describe_unhealthy_report(response_json),
+                    )
         except asyncio.TimeoutError as e:
             # NOTE: Must come before OSError since TimeoutError is a subclass of OSError in Python 3.10+
             self.logger.error(
                 f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!"
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except aiohttp.ClientError as e:
             self.logger.error(
                 f"[HEALTH_CHECKER] HTTP client error during health check: {e}. set not healthy!"
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except json.JSONDecodeError as e:
             self.logger.error(
                 f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
                 exc_info=True,
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except (OSError, PermissionError) as e:
             # NOTE: Comes after TimeoutError to avoid catching it (TimeoutError is subclass of OSError)
             self.logger.error(
                 f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
                 exc_info=True,
             )
-            return False
+            return ProbeOutcome(healthy=False)
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(
                 f"[HEALTH_CHECKER] Unexpected error during health check: {e}. set not healthy!",
                 exc_info=True,
             )
-            return False
+            return ProbeOutcome(healthy=False)
+
+    @staticmethod
+    def _describe_unhealthy_report(response_json: t.Dict[str, t.Any]) -> str:
+        """Describe an agent's own unhealthy verdict, from the fields it reported."""
+        rounds = response_json.get("rounds") or []
+        current_round = rounds[-1] if rounds else None
+        return (
+            "answered the health check and reported itself unhealthy: "
+            f"is_healthy={response_json.get('is_healthy')}, "
+            f"is_tm_healthy={response_json.get('is_tm_healthy')}, "
+            f"is_transitioning_fast={response_json.get('is_transitioning_fast')}, "
+            f"seconds_since_last_transition="
+            f"{response_json.get('seconds_since_last_transition')}, "
+            f"round={current_round}."
+        )
 
     @staticmethod
     def _is_agent_process_alive(service_path: t.Optional[Path]) -> bool:
@@ -297,7 +395,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
         )
 
     def record_failed_probe(
-        self, service_config_id: str, reason: AgentLivenessReason
+        self, service_config_id: str, reason: ProbeFailureReason
     ) -> None:
         """Record a probe the agent did not answer, and why."""
         probed_at = time.time()
@@ -380,11 +478,9 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
 
             async def _check_health(
                 number_of_fails: int = 5, sleep_period: int = self.sleep_period
-            ) -> float:
-                """Check health in a loop; return the longest continuous healthy span (seconds)."""
+            ) -> None:
+                """Check health in a loop; return once a restart is needed."""
                 fails = 0
-                longest_healthy: float = 0.0
-                healthy_since: float = 0.0
                 while True:
                     try:
                         # Check the service health
@@ -404,13 +500,8 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         healthy = False
 
                     if not healthy:
-                        if healthy_since > 0.0:
-                            longest_healthy = max(
-                                longest_healthy, time.time() - healthy_since
-                            )
-                            healthy_since = 0.0
                         fails += 1
-                        if fails == 1 or fails % 10 == 0 or fails >= number_of_fails:
+                        if self._is_streak_milestone(fails) or fails >= number_of_fails:
                             self.logger.warning(
                                 f"[HEALTH_CHECKER] {service_config_id} not healthy for {fails} time in a row"
                             )
@@ -418,8 +509,6 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.debug(
                             f"[HEALTH_CHECKER] {service_config_id} is HEALTHY"
                         )
-                        if healthy_since == 0.0:
-                            healthy_since = time.time()
                         # reset fails if comes healthy
                         fails = 0
 
@@ -427,7 +516,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.error(
                             f"[HEALTH_CHECKER]  {service_config_id} failed {fails} times in a row. restart"
                         )
-                        return longest_healthy
+                        return
 
                     await asyncio.sleep(sleep_period)
 
@@ -488,13 +577,10 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                     self.logger.info(
                         f"[HEALTH_CHECKER]  {service_config_id} port is ready, checking health every {self.sleep_period}"
                     )
-                    longest_healthy = await _check_health(
+                    await _check_health(
                         number_of_fails=self.number_of_fails,
                         sleep_period=self.sleep_period,
                     )
-                    if longest_healthy >= self.FAILFAST_TIMEOUT:
-                        failfast_records = []
-
                 else:
                     self.logger.info(
                         "[HEALTH_CHECKER] port not ready within timeout. restart deployment"
@@ -503,7 +589,20 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                 # perform restart
                 last_restart_exc: t.Optional[Exception] = None
                 while True:
-                    failfast_records.append(time.time())
+                    now = time.time()
+                    # A rolling window, so `failfast_records` holds recent restarts
+                    # rather than a history. Aging records out on append is what makes
+                    # the count below mean "restarts in the last FAILFAST_WINDOW": the
+                    # previous condition compared the age of the *oldest surviving*
+                    # record against the same constant, so once that record was old
+                    # enough the next restart of any kind stopped the service, however
+                    # few had occurred and however well each one had succeeded.
+                    failfast_records = [
+                        at
+                        for at in failfast_records
+                        if now - at <= self.FAILFAST_WINDOW
+                    ]
+                    failfast_records.append(now)
                     restart_failed = False
                     outcome = StakingReconcileOutcome.FAILED
                     try:
@@ -540,18 +639,29 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         )
                         return
 
-                    if failfast_records and (
-                        (len(failfast_records) >= self.FAILFAST_NUM)
-                        or (time.time() - failfast_records[0]) > self.FAILFAST_TIMEOUT
-                    ):
+                    if len(failfast_records) >= self.FAILFAST_NUM:
                         self.logger.error(
                             f"[HEALTH_CHECKER] {service_config_id} failfast triggered "
-                            f"({len(failfast_records)} restarts). Stopping service."
+                            f"({len(failfast_records)} restarts within "
+                            f"{self.FAILFAST_WINDOW}s). Stopping service."
+                        )
+                        # Written before the stop, mirroring the eviction path above,
+                        # and readable afterwards only because `_stop()` goes through
+                        # `ServiceManager`, which holds no health-checker reference and
+                        # so cannot drop the record. The API stop route drops it
+                        # deliberately (`cli.py`); a change that made `_stop()`
+                        # symmetric with that route would erase the reason written
+                        # here. `test_failfast_stop_leaves_the_reason_readable` guards
+                        # that absence.
+                        self.record_reason(
+                            service_config_id=service_config_id,
+                            reason=AgentLivenessReason.STOPPED_BY_FAILFAST,
                         )
                         await _stop(self._service_manager, service_config_id)
                         raise RuntimeError(
                             f"Service {service_config_id} stopped by failfast after "
-                            f"{len(failfast_records)} restarts"
+                            f"{len(failfast_records)} restarts within "
+                            f"{self.FAILFAST_WINDOW}s"
                         ) from last_restart_exc
 
                     if not (restart_failed or retry_restart):
