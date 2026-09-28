@@ -545,6 +545,12 @@ class TestTargets:
             },
             {"mode": "deposit", "destination_chain": "polygon", "source_chain": "celo"},
             {"mode": "nope", "destination_chain": "polygon"},
+            {
+                "mode": "deposit",
+                "destination_chain": "polygon",
+                "deposit_amounts": {NATIVE: 1},
+                "backup_owner": "not-an-address",
+            },
         ],
     )
     def test_invalid_requests_are_rejected(

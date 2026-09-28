@@ -254,6 +254,8 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             raise FundingRunError("'deposit_amounts' is required in deposit mode.")
         if run_mode == FundingRunMode.ONBOARD and not service_config_id:
             raise FundingRunError("'service_config_id' is required in onboard mode.")
+        if backup_owner is not None and not Web3.is_address(backup_owner):
+            raise FundingRunError(f"Invalid backup_owner {backup_owner}.")
 
         with self._locked():
             current = self.active_run()
