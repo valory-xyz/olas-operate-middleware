@@ -19,6 +19,7 @@
 
 """Unit tests for operate/services/funding_manager.py – no blockchain required."""
 
+import typing as t
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1459,3 +1460,98 @@ class TestGetSafeWithdrawableBalanceInvalidToken:
         assert invalid_token not in result["withdrawable_amounts"]
         assert result["withdrawable_amounts"][ZERO_ADDRESS] == "1000"
         mgr.logger.warning.assert_called_once()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# destination_targets / held_balances (funding run)
+# ---------------------------------------------------------------------------
+
+
+def _wallet_manager(safes: t.Dict) -> MagicMock:
+    wallet = MagicMock()
+    wallet.address = EOA_ADDR
+    wallet.safes = safes
+    wallet_manager = MagicMock()
+    wallet_manager.exists.return_value = True
+    wallet_manager.load.return_value = wallet
+    return wallet_manager
+
+
+class TestDestinationTargets:
+    """FundingManager.destination_targets folds home-chain refill requirements."""
+
+    def test_sums_master_safe_and_master_eoa_entries(self) -> None:
+        """Placeholders and real addresses fold into one target per token."""
+        manager = _make_manager()
+        service = MagicMock()
+        service.home_chain = "polygon"
+        requirements = {
+            "polygon": {
+                MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: 5, ERC20_TOKEN: 7},
+                MASTER_EOA_PLACEHOLDER: {ZERO_ADDRESS: 3},
+            },
+            "gnosis": {SAFE_ADDR: {ZERO_ADDRESS: 100}},
+        }
+        with patch.object(
+            manager,
+            "funding_requirements",
+            return_value={"refill_requirements": requirements},
+        ):
+            targets = manager.destination_targets(service)
+
+        assert targets == {ZERO_ADDRESS: 8, ERC20_TOKEN: 7}
+
+    def test_zero_requirements_drop_out(self) -> None:
+        """Tokens with nothing missing are not targets."""
+        manager = _make_manager()
+        service = MagicMock()
+        service.home_chain = "polygon"
+        with patch.object(
+            manager,
+            "funding_requirements",
+            return_value={
+                "refill_requirements": {"polygon": {SAFE_ADDR: {ZERO_ADDRESS: 0}}}
+            },
+        ):
+            assert manager.destination_targets(service) == {}
+
+
+class TestHeldBalances:
+    """FundingManager.held_balances nets Safe + EOA excess above reserve."""
+
+    def test_safe_plus_eoa_excess_above_reserve(self) -> None:
+        """Only the Master EOA balance above DEFAULT_EOA_TOPUPS counts."""
+        manager = _make_manager(_wallet_manager({Chain.POLYGON: SAFE_ADDR}))
+        reserve = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][ZERO_ADDRESS])
+        balances = {
+            (ZERO_ADDRESS, EOA_ADDR): reserve + 2,
+            (ZERO_ADDRESS, SAFE_ADDR): 10,
+            (ERC20_TOKEN, EOA_ADDR): 4,
+            (ERC20_TOKEN, SAFE_ADDR): 6,
+        }
+        with (
+            patch("operate.services.funding_manager.get_default_ledger_api"),
+            patch(
+                "operate.services.funding_manager.get_asset_balance",
+                side_effect=lambda _api, asset, address, _raise: balances[
+                    (asset, address)
+                ],
+            ),
+        ):
+            held = manager.held_balances(Chain.POLYGON, [ZERO_ADDRESS, ERC20_TOKEN])
+
+        assert held == {ZERO_ADDRESS: 12, ERC20_TOKEN: 10}
+
+    def test_no_safe_counts_only_eoa_excess(self) -> None:
+        """Before the Safe exists, only the Master EOA excess is held."""
+        manager = _make_manager(_wallet_manager({}))
+        with (
+            patch("operate.services.funding_manager.get_default_ledger_api"),
+            patch(
+                "operate.services.funding_manager.get_asset_balance", return_value=1
+            ) as mock_balance,
+        ):
+            held = manager.held_balances(Chain.POLYGON, [ZERO_ADDRESS, ERC20_TOKEN])
+
+        assert held == {ZERO_ADDRESS: 0, ERC20_TOKEN: 1}
+        assert mock_balance.call_count == 2

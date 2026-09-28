@@ -1278,6 +1278,41 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             "agent_funding_in_progress": funding_in_progress,
         }
 
+    def destination_targets(self, service: Service) -> t.Dict[str, int]:
+        """Per-token net shortfall on the service's home chain.
+
+        Folds the Master Safe and Master EOA entries of `refill_requirements`
+        (placeholders included, so it also works before the Safe exists) into
+        one target per token. Already net of balances.
+        """
+        refill_requirements = self.funding_requirements(service)["refill_requirements"]
+        targets: t.Dict[str, int] = defaultdict(int)
+        for assets in refill_requirements.get(service.home_chain, {}).values():
+            for asset, amount in assets.items():
+                targets[asset] += int(amount)
+        return {asset: amount for asset, amount in targets.items() if amount > 0}
+
+    def held_balances(self, chain: Chain, assets: t.Iterable[str]) -> t.Dict[str, int]:
+        """What the Pearl Wallet on `chain` holds towards a funding target.
+
+        Master Safe balance plus the Master EOA balance above its
+        DEFAULT_EOA_TOPUPS reserve, so funds sent to either count.
+        """
+        ledger_api = get_default_ledger_api(chain)
+        master_eoa = self._resolve_master_eoa(chain)
+        master_safe = self._resolve_master_safe(chain)
+        held: t.Dict[str, int] = {}
+        for asset in assets:
+            eoa_balance = get_asset_balance(ledger_api, asset, master_eoa, False)
+            reserve = DEFAULT_EOA_TOPUPS[chain].get(asset, 0)
+            safe_balance = (
+                get_asset_balance(ledger_api, asset, master_safe, False)
+                if master_safe != MASTER_SAFE_PLACEHOLDER
+                else 0
+            )
+            held[asset] = int(safe_balance) + max(int(eoa_balance) - reserve, 0)
+        return held
+
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
         self.fund_chain_amounts(service.get_initial_funding_amounts())
