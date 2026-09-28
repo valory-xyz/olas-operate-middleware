@@ -11,17 +11,15 @@ interactions:
       accept:
       - application/json
     method: GET
-    uri: https://api.relay.link/requests/v2?hash=0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92&sortBy=createdAt
+    uri: https://api.relay.link/intents/status/v3?requestId=0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0
   response:
     body:
-      string: '{"requests":[{"id":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","status":"success","user":"0x308508f09f81a6d28679db6da73359c72f8e22c5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","data":{"slippageTolerance":"475","failReason":"N/A","refundFailReason":"N/A","subsidizedRequest":false,"fees":{"gas":"233096768617","fixed":"7827145322693","price":"20000000000","gateway":"2020186207787"},"feesUsd":{"gas":"0.000455","fixed":"0.015304","price":"0.000039","gateway":"0.003950"},"inTxs":[{"fee":"49108135200","data":{"to":"0xa5f565650890fba1824ee0f21ebbbf660a179934","data":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","from":"0x308508f09f81a6d28679db6da73359c72f8e22c5","value":"110101948674876"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-110101948674876"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"110101948674876"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"}],"hash":"0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92","block":137938320,"type":"onchain","chainId":10,"timestamp":1751475417}],"currency":"eth","currencyObject":{},"feeCurrency":"eth","feeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFeeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFees":[],"paidAppFees":[],"metadata":{"sender":"0x308508F09F81A6d28679db6da73359c72f8e22C5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","currencyIn":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"110101948674876","amountFormatted":"0.000110101948674876","amountUsd":"0.281321","amountUsdCurrent":"0.212549","minimumAmount":"110101948674876"},"currencyOut":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","amountUsdCurrent":"0.193048","minimumAmount":"100000000000000"},"rate":"0.9082491382172863","route":{"origin":{"inputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"outputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"router":"uniswap"},"destination":{"inputCurrency":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"outputCurrency":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"router":"uniswap"}}},"price":"100000000000000","usesExternalLiquidity":false,"timeEstimate":2,"outTxs":[{"fee":"194246847901","data":{"to":"0x308508f09f81a6d28679db6da73359c72f8e22c5","data":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","value":"100000000000000"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-100000000000000"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"100000000000000"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"}],"hash":"0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab","block":25653918,"type":"onchain","chainId":34443,"timestamp":1751475419}]},"createdAt":"2025-07-02T16:56:57.660Z","updatedAt":"2025-07-02T16:58:58.684Z"}]}'
+      string: '{"status":"success","inTxHashes":["0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92"],"txHashes":["0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab"],"updatedAt":1751475538684,"originChainId":10,"destinationChainId":34443,"quoteCreatedAt":1751475391144,"failReason":"N/A","refundFailReason":"N/A"}'
     headers:
       Cache-Control:
       - max-age=600
       Connection:
       - keep-alive
-      Content-Encoding:
-      - gzip
       Content-Type:
       - application/json; charset=utf-8
       Date:
@@ -99,8 +97,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x187729e",
-      false], "id": 1}'
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x187729e", false], "id": 1}'
     headers:
       Accept:
       - '*/*'
@@ -217,8 +214,7 @@ interactions:
       code: 200
       message: OK
 - request:
-    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x838c590",
-      false], "id": 5}'
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x838c590", false], "id": 5}'
     headers:
       Accept:
       - '*/*'
@@ -354,8 +350,7 @@ interactions:
     uri: https://mainnet.mode.network/
   response:
     body:
-      string: '{"jsonrpc":"2.0","error":{"code":-32001,"message":"rpc method is not
-        available"},"id":1}
+      string: '{"jsonrpc":"2.0","error":{"code":-32001,"message":"rpc method is not available"},"id":1}
 
         '
     headers:

@@ -108,6 +108,27 @@ ExecutionStatusCase = t.Tuple[
 ]
 
 
+# Relay `requestId` of each recorded Relay case, keyed by origin tx hash. The
+# v3 status endpoint is looked up by the id stored with the quote response.
+RELAY_REQUEST_IDS: t.Dict[str, str] = {
+    "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e": "0x9cdb1501314814fc8b5d7ea00423eabae7e863db140d9a5d59574b9b1d03e851",
+    "0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92": "0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0",
+    "0xad982ac128a9d0069ed93ca10ebf6595e1c192554c2290a7f99ddf605efd69bb": "0x3b4383f5e5c185e521e6db0f928e1fe3ed3290ed8b7089fe9c6cefac6b1e3109",
+    "0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3": "0x07b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b",
+    "0xdb60d262c71834cd620b49dc69febb822250937d7a2c8f3e1ba22b21b1355113": "0xd0a257ff1e226eb07f881eb7966bd028f4492cb3a583c4a66277109f81affcb1",
+    "0xe05ad614e482b61fe5016716c8dd41f5b1149d509a8e1eca6f00bdbbe3ef6b9d": "0x1a3eb0a09c615b4a0a193e78c602d6f4a7b3f2d969d6a4950323175e367c97ff",
+    "0xa07eacd399371bf789c47f40c390dc96a2f057258584cc2e2d156cf8208ab704": "0x00805e43044c1cd77d1999817aa0a6f34e4415a87cefa78e410160d021679435",
+}
+
+
+def _recorded_provider_data(from_tx_hash: str) -> t.Optional[t.Dict]:
+    """Quote provider data carrying the recorded Relay requestId, if any."""
+    request_id = RELAY_REQUEST_IDS.get(from_tx_hash)
+    if request_id is None:
+        return None
+    return {"response": {"steps": [{"id": "deposit", "requestId": request_id}]}}
+
+
 EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
     # RelayProvider - EXECUTION_DONE tests
     (
@@ -1360,7 +1381,7 @@ class TestProvider(OnTestnet):
             eta=0,
             elapsed_time=0,
             message=None,
-            provider_data=None,
+            provider_data=_recorded_provider_data(from_tx_hash),
             timestamp=0,
         )
 
@@ -1469,7 +1490,7 @@ class TestProvider(OnTestnet):
             eta=0,
             elapsed_time=0,
             message=None,
-            provider_data=None,
+            provider_data=_recorded_provider_data(from_tx_hash),
             timestamp=int(time.time()) - 20,
         )
 

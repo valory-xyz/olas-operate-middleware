@@ -124,6 +124,12 @@ def _make_execution_data(
     )
 
 
+RELAY_REQUEST_ID = "0x" + "e" * 64
+RELAY_PROVIDER_DATA: t.Dict = {
+    "response": {"steps": [{"id": "deposit", "requestId": RELAY_REQUEST_ID}]}
+}
+
+
 class _ConcreteProvider(Provider):
     """Minimal concrete subclass of Provider for testing abstract base methods."""
 
@@ -940,9 +946,9 @@ class TestRelayProviderUnit:
             status=ProviderRequestStatus.EXECUTION_PENDING,
         )
         req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
 
-        response_json = {"requests": [{"status": RelayExecutionStatus.FAILURE.value}]}
+        response_json = {"status": RelayExecutionStatus.FAILURE.value}
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
@@ -963,9 +969,9 @@ class TestRelayProviderUnit:
             status=ProviderRequestStatus.EXECUTION_PENDING,
         )
         req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
 
-        response_json = {"requests": [{"status": RelayExecutionStatus.PENDING.value}]}
+        response_json = {"status": RelayExecutionStatus.PENDING.value}
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
@@ -986,9 +992,9 @@ class TestRelayProviderUnit:
             status=ProviderRequestStatus.EXECUTION_PENDING,
         )
         req.execution_data = _make_execution_data()
-        req.quote_data = _make_quote_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
 
-        response_json = {"requests": [{"status": "some_unrecognized_status"}]}
+        response_json = {"status": "some_unrecognized_status"}
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
         mock_resp.raise_for_status.return_value = None
@@ -1011,7 +1017,7 @@ class TestRelayProviderUnit:
         req.execution_data = _make_execution_data(
             from_tx_hash=None  # no hash → _bridge_tx_likely_failed returns True
         )
-        req.quote_data = _make_quote_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
 
         with patch(
             "operate.bridge.providers.relay_provider.requests.get",
@@ -2064,9 +2070,9 @@ class TestRelayUpdateExecutionStatusAdditional:
         )
         # Old timestamp so _bridge_tx_likely_failed returns True
         req.execution_data = _make_execution_data(timestamp=int(time.time()) - 1500)
-        req.quote_data = _make_quote_data(eta=30)
+        req.quote_data = _make_quote_data(eta=30, provider_data=RELAY_PROVIDER_DATA)
 
-        response_json: t.Dict = {"requests": []}  # empty requests list
+        response_json: t.Dict = {"status": "unknown"}  # requestId not indexed
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
 
@@ -2100,18 +2106,14 @@ class TestRelayUpdateExecutionStatusAdditional:
         from_tx_hash = "0x" + "a" * 64
         to_tx_hash = "0x" + "b" * 64
         req.execution_data = _make_execution_data(from_tx_hash=from_tx_hash)
-        req.quote_data = _make_quote_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
 
         response_json = {
-            "requests": [
-                {
-                    "status": RelayExecutionStatus.SUCCESS.value,
-                    "data": {
-                        "inTxs": [{"hash": from_tx_hash, "chainId": 100}],
-                        "outTxs": [{"hash": to_tx_hash, "chainId": 8453}],
-                    },
-                }
-            ]
+            "status": RelayExecutionStatus.SUCCESS.value,
+            "inTxHashes": [from_tx_hash],
+            "txHashes": [to_tx_hash],
+            "originChainId": 100,
+            "destinationChainId": 8453,
         }
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
@@ -2141,7 +2143,7 @@ class TestRelayUpdateExecutionStatusAdditional:
             status=ProviderRequestStatus.EXECUTION_PENDING,
         )
         req.execution_data = _make_execution_data(timestamp=int(time.time()) - 1500)
-        req.quote_data = _make_quote_data(eta=30)
+        req.quote_data = _make_quote_data(eta=30, provider_data=RELAY_PROVIDER_DATA)
 
         with (
             patch(
@@ -2694,19 +2696,15 @@ class TestRelaySuccessSameChain:
             to_chain="base",
         )
         req.execution_data = _make_execution_data(from_tx_hash=from_tx_hash)
-        req.quote_data = _make_quote_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
 
         same_chain_id = 100
         response_json = {
-            "requests": [
-                {
-                    "status": RelayExecutionStatus.SUCCESS.value,
-                    "data": {
-                        "inTxs": [{"hash": from_tx_hash, "chainId": same_chain_id}],
-                        "outTxs": [{"hash": from_tx_hash, "chainId": same_chain_id}],
-                    },
-                }
-            ]
+            "status": RelayExecutionStatus.SUCCESS.value,
+            "inTxHashes": [from_tx_hash],
+            "txHashes": [from_tx_hash],
+            "originChainId": same_chain_id,
+            "destinationChainId": same_chain_id,
         }
         mock_resp = MagicMock()
         mock_resp.json.return_value = response_json
@@ -5666,3 +5664,135 @@ class TestMayanProviderCallQuoteApiMonoChain:
         call_kwargs = mock_get.call_args
         assert call_kwargs.kwargs["params"]["monoChain"] == "false"
         assert call_kwargs.kwargs["params"]["swift"] == "true"
+
+
+# ---------------------------------------------------------------------------
+# TestRelayIntentsStatusV3
+# ---------------------------------------------------------------------------
+
+
+class TestRelayIntentsStatusV3:
+    """RelayProvider status tracking via GET /intents/status/v3."""
+
+    @staticmethod
+    def _pending_request() -> ProviderRequest:
+        req = _make_request(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+        )
+        req.execution_data = _make_execution_data()
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
+        return req
+
+    @pytest.mark.parametrize(
+        ("relay_status", "expected"),
+        [
+            ("waiting", ProviderRequestStatus.EXECUTION_PENDING),
+            ("depositing", ProviderRequestStatus.EXECUTION_PENDING),
+            ("pending", ProviderRequestStatus.EXECUTION_PENDING),
+            ("submitted", ProviderRequestStatus.EXECUTION_PENDING),
+            ("delayed", ProviderRequestStatus.EXECUTION_PENDING),
+            ("refund", ProviderRequestStatus.EXECUTION_FAILED),
+            ("failure", ProviderRequestStatus.EXECUTION_FAILED),
+            ("unknown", ProviderRequestStatus.EXECUTION_UNKNOWN),
+        ],
+    )
+    def test_maps_every_v3_status(
+        self, relay_status: str, expected: ProviderRequestStatus
+    ) -> None:
+        """Each v3 status maps onto the matching ProviderRequestStatus."""
+        provider = _make_relay_provider()
+        req = self._pending_request()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"status": relay_status}
+
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.get",
+            return_value=mock_resp,
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == expected
+
+    def test_success_maps_to_execution_done(self) -> None:
+        """A v3 `success` completes the request with the destination tx hash."""
+        provider = _make_relay_provider()
+        req = self._pending_request()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "status": "success",
+            "txHashes": ["0x" + "f" * 64],
+            "originChainId": 100,
+            "destinationChainId": 8453,
+        }
+
+        with (
+            patch(
+                "operate.bridge.providers.relay_provider.requests.get",
+                return_value=mock_resp,
+            ),
+            patch(
+                "operate.bridge.providers.provider.Provider._tx_timestamp",
+                return_value=1000,
+            ),
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        assert req.status == ProviderRequestStatus.EXECUTION_DONE
+        assert req.execution_data is not None
+        assert req.execution_data.to_tx_hash == "0x" + "f" * 64
+
+    def test_lookup_uses_stored_request_id(self) -> None:
+        """The status call is keyed by the quote's requestId, not the tx hash."""
+        provider = _make_relay_provider()
+        req = self._pending_request()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"status": "pending"}
+
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.get",
+            return_value=mock_resp,
+        ) as mock_get:
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        _, kwargs = mock_get.call_args
+        assert kwargs["url"].endswith("/intents/status/v3")
+        assert kwargs["params"] == {"requestId": RELAY_REQUEST_ID}
+
+    def test_missing_request_id_skips_lookup(self) -> None:
+        """Without a stored requestId the provider never calls Relay."""
+        provider = _make_relay_provider()
+        req = self._pending_request()
+        req.quote_data = _make_quote_data(provider_data={"response": {"steps": []}})
+
+        with patch("operate.bridge.providers.relay_provider.requests.get") as mock_get:
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        mock_get.assert_not_called()
+        assert req.status in (
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+            ProviderRequestStatus.EXECUTION_FAILED,
+        )
+
+    @pytest.mark.parametrize("explicit_deposit", [True, False])
+    def test_explicit_deposit_passed_through(self, explicit_deposit: bool) -> None:
+        """`explicit_deposit` in the params becomes `explicitDeposit` in the quote."""
+        provider = _make_relay_provider()
+        req = _make_request(provider_id="relay-provider", amount=1000)
+        if explicit_deposit:
+            req.params["explicit_deposit"] = True
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "steps": [{"id": "deposit", "items": [{"data": {"gas": 1}}]}],
+            "details": {"timeEstimate": 10},
+        }
+        mock_resp.status_code = 200
+
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.post",
+            return_value=mock_resp,
+        ) as mock_post:
+            provider.quote(req)
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload.get("explicitDeposit", False) is explicit_deposit

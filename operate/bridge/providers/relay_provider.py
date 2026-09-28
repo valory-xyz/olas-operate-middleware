@@ -130,15 +130,23 @@ RELAY_DEFAULT_GAS = {
 }
 
 
-# https://docs.relay.link/guides/bridging#status-values
+RELAY_QUOTE_URL = "https://api.relay.link/quote"
+# `/requests/v2` (lookup by tx hash) is retired on 24 Nov 2026. The v3 intents
+# endpoint needs no API key, but is keyed by the quote's `requestId`.
+RELAY_STATUS_URL = "https://api.relay.link/intents/status/v3"
+
+
+# https://docs.relay.link/references/api/get-intents-status-v3
 class RelayExecutionStatus(str, enum.Enum):
     """Relay execution status."""
 
     REFUND = "refund"
     DELAYED = "delayed"
     WAITING = "waiting"
+    DEPOSITING = "depositing"
     FAILURE = "failure"
     PENDING = "pending"
+    SUBMITTED = "submitted"
     SUCCESS = "success"
 
     def __str__(self) -> str:
@@ -194,7 +202,7 @@ class RelayProvider(Provider):
             provider_request.status = ProviderRequestStatus.QUOTE_DONE
             return
 
-        url = "https://api.relay.link/quote"
+        url = RELAY_QUOTE_URL
         headers = {"Content-Type": "application/json"}
         payload = {
             "originChainId": Chain(from_chain).id,
@@ -207,6 +215,10 @@ class RelayProvider(Provider):
             "tradeType": "EXACT_OUTPUT",
             "enableTrueExactOutput": False,
         }
+        # Relay requires explicit deposits for 7702-delegated or zero-native
+        # senders (e.g. a deposit submitted inside an ERC-4337 UserOperation).
+        if provider_request.params.get("explicit_deposit"):
+            payload["explicitDeposit"] = True
         for attempt in range(  # pylint: disable=too-many-nested-blocks
             1, DEFAULT_MAX_QUOTE_RETRIES + 1
         ):
@@ -400,29 +412,24 @@ class RelayProvider(Provider):
             provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
-        url = "https://api.relay.link/requests/v2"
+        request_id = self._get_request_id(provider_request)
+        if not request_id:
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return
+
+        url = RELAY_STATUS_URL
         headers = {"accept": "application/json"}
-        params = {
-            "hash": from_tx_hash,
-            "sortBy": "createdAt",
-        }
+        params = {"requestId": request_id}
 
         try:
             self.logger.info(f"[RELAY PROVIDER] GET {url}?{urlencode(params)}")
             response = requests.get(url=url, headers=headers, params=params, timeout=30)
-            response_json = response.json()
-            relay_requests = response_json.get("requests")
-            if relay_requests:
-                relay_status = relay_requests[0].get(
-                    "status", str(RelayExecutionStatus.WAITING)
-                )
-                execution_data.message = str(relay_status)
-            else:
-                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
-                if self._bridge_tx_likely_failed(provider_request):
-                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
-                return
             response.raise_for_status()
+            response_json = response.json()
+            relay_status = response_json.get("status")
+            execution_data.message = str(relay_status)
 
             if relay_status == RelayExecutionStatus.SUCCESS:
                 self.logger.info(
@@ -431,15 +438,15 @@ class RelayProvider(Provider):
                 from_ledger_api = self._from_ledger_api(provider_request)
                 to_ledger_api = self._to_ledger_api(provider_request)
 
+                out_tx_hashes = response_json.get("txHashes") or []
                 if (
-                    response_json["requests"][0]["data"]["outTxs"][0]["chainId"]
-                    == response_json["requests"][0]["data"]["inTxs"][0]["chainId"]
+                    response_json.get("originChainId")
+                    == response_json.get("destinationChainId")
+                    or not out_tx_hashes
                 ):
-                    to_tx_hash = from_tx_hash  # Should match response_json["requests"][0]["data"]["inTxs"][0]["hash"]
+                    to_tx_hash = from_tx_hash
                 else:
-                    to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0][
-                        "hash"
-                    ]
+                    to_tx_hash = out_tx_hashes[0]
 
                 execution_data.message = response_json.get("details", None)
                 execution_data.to_tx_hash = to_tx_hash
@@ -459,10 +466,15 @@ class RelayProvider(Provider):
                 RelayExecutionStatus.PENDING,
                 RelayExecutionStatus.DELAYED,
                 RelayExecutionStatus.WAITING,
+                RelayExecutionStatus.DEPOSITING,
+                RelayExecutionStatus.SUBMITTED,
             ):
                 provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
             else:
+                # Relay answers `unknown` for a requestId it has not indexed.
                 provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                if self._bridge_tx_likely_failed(provider_request):
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
         except Exception as e:  # pylint:disable=broad-except
             self.logger.error(
                 f"[RELAY PROVIDER] Failed to update status for request {provider_request.id}: {e}"
@@ -471,6 +483,17 @@ class RelayProvider(Provider):
             if self._bridge_tx_likely_failed(provider_request):
                 provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
+
+    @staticmethod
+    def _get_request_id(provider_request: ProviderRequest) -> t.Optional[str]:
+        """Get the Relay `requestId` stored with the quote response."""
+        quote_data = provider_request.quote_data
+        if not quote_data or not quote_data.provider_data:
+            return None
+        steps = (quote_data.provider_data.get("response") or {}).get("steps", [])
+        if not steps:
+            return None
+        return steps[-1].get("requestId")
 
     def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
@@ -487,9 +510,8 @@ class RelayProvider(Provider):
         if not provider_data:
             return None
 
-        steps = provider_data.get("response", {}).get("steps", [])
-        if not steps:
+        request_id = self._get_request_id(provider_request)
+        if not request_id:
             return None
 
-        request_id = steps[-1].get("requestId")
         return f"https://relay.link/transaction/{request_id}"
