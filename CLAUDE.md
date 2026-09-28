@@ -30,12 +30,14 @@ flowchart TB
         fundingMgr[FundingManager]
         serviceMgr[ServiceManager]
         bridgeMgr[BridgeManager]
+        fundingRunMgr[FundingRunManager]
         walletRecovery[WalletRecoveryManager]
     end
 
     subgraph Runtime[Runtime Orchestration]
         healthChecker[HealthChecker]
         fundingJob[Funding Job / Async Task]
+        fundingRunJob[Funding Run Job / Async Task]
     end
 
     subgraph ServiceDomain[Service Domain]
@@ -48,6 +50,7 @@ flowchart TB
         agent_runner[Binary]
         ipfs[IPFS]
         bridgeProviders[Bridge Providers]
+        bundler[ERC-4337 Bundler / Circle Paymaster]
         chains[Blockchain Networks]
         walletHierarchy[Master EOA → Master Safe → Agent Safe / Agent EOA]
     end
@@ -64,12 +67,18 @@ flowchart TB
     operateApp -->|exposes| serviceMgr
     operateApp -->|exposes| bridgeMgr
     operateApp -->|exposes| walletRecovery
+    operateApp -->|caches| fundingRunMgr
 
     fastapi -->|starts| healthChecker
     fastapi -->|schedules| fundingJob
     healthChecker -->|checks| serviceMgr
     fundingJob -->|runs with| fundingMgr
     fundingJob -->|uses| serviceMgr
+    fastapi -->|schedules after login| fundingRunJob
+    fundingRunJob -->|advances| fundingRunMgr
+    fundingRunMgr -->|quotes and routes via| bridgeMgr
+    fundingRunMgr -->|targets and locks via| fundingMgr
+    fundingRunMgr -->|gas-abstracted source leg| bundler
 
     serviceMgr -->|manages| service
     service -->|runs via| deployment
@@ -221,8 +230,14 @@ operate daemon
 - See `docs/api.md` for comprehensive API documentation
 
 **Bridge Management (`operate/bridge/`)**
-- `bridge_manager.py`: Orchestrates cross-chain token transfers
-- `providers/`: Relay and native bridge implementations
+- `bridge_manager.py`: Orchestrates cross-chain token transfers; `quote_requests` quotes without touching the cached Transak/bridge bundle
+- `providers/`: Relay, Mayan and native bridge implementations. Relay status is tracked by the quote's `requestId` via `GET /intents/status/v3`
+
+**Funding Run (`operate/funding_run/`)**
+- `manager.py`: `FundingRunManager`, a persisted, resumable state machine turning one deposit (chosen chain + token, sent to the Master EOA) into the destination tokens: quote → receive → source leg → swaps → Safe create + transfer → EIP-7702 delegation clearing. Modes `onboard`, `deposit`, `signer_gas`; one run at a time; advanced by `run_job()` scheduled after login
+- `models.py`: `FundingRun` / `FundingRunStep` persisted under `funding_runs/` (`active.json` points at the live run)
+- `operate/wallet/gas_abstraction.py`: `GasAbstractedSender`, the USDC-paid ERC-4337 UserOperation sender (EIP-7702 to `Simple7702Account`, Circle Paymaster permit, Candide bundler) used for USDC source legs
+- See `docs/wallet-and-funding.md#funding-run` for the custody model and `docs/api.md#funding-run` for the routes
 
 **Ledger Integration (`operate/ledger/`)**
 - `profiles.py`: Chain configs, RPC endpoints, and token addresses
@@ -241,7 +256,7 @@ operate daemon
 
 ## Important Conventions
 
-- **Operate home:** `~/.olas/operate/` (or `OPERATE_HOME`) with `services/`, `keys/`, `wallets/`, and `settings.json`
+- **Operate home:** `~/.olas/operate/` (or `OPERATE_HOME`) with `services/`, `keys/`, `wallets/`, `funding_runs/`, and `settings.json`
 - **Service config:** `service.yaml` from open-autonomy with chain-specific `chain_configs` and IPFS hash history
 - **Code exclusions:** `operate/data/` is auto-generated and excluded from linting; see `tox.ini` for mypy exclusions
 

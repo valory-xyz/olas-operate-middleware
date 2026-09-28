@@ -2653,15 +2653,24 @@ Get bridge refill requirements for cross-chain transactions.
 {
   "bridge_requests": [
     {
-      "source_chain": "ethereum",
-      "target_chain": "gnosis",
-      "amount": "1000000000000000000",
-      "asset": "0x0000000000000000000000000000000000000000"
+      "from": {
+        "chain": "ethereum",
+        "address": "0x<Master EOA or Master Safe>",
+        "token": "0x0000000000000000000000000000000000000000"
+      },
+      "to": {
+        "chain": "gnosis",
+        "address": "0x...",
+        "token": "0x0000000000000000000000000000000000000000",
+        "amount": "1000000000000000000"
+      }
     }
   ],
   "force_update": false
 }
 ```
+
+`from.address` must be the Master EOA or the Master Safe on `from.chain`.
 
 **Response (Success - 200):**
 
@@ -2830,6 +2839,106 @@ Individual bridge request status:
   "error": "Failed to get bridge status. Please check the logs."
 }
 ```
+
+## Funding Run
+
+A funding run turns **one** user transfer of a supported token on a supported chain into the tokens Pearl needs on the destination chain. The user sends to the Master EOA on the source chain (`source.deposit_address`); Pearl then bridges, swaps, creates the Master Safe if missing and moves the funds into it. USDC sources on Ethereum, Base, Optimism, Polygon and Arbitrum work from a zero native balance (EIP-7702 + ERC-4337, gas paid in USDC through Circle Paymaster). See [wallet-and-funding.md](wallet-and-funding.md#funding-run).
+
+All routes return `401` (`{"error": "User not logged in."}`) when not logged in. Amounts are integer strings in base units; token `0x0000000000000000000000000000000000000000` is the chain's native token. The middleware returns kinds, tokens and amounts only; all user-facing copy is the app's.
+
+### `GET /api/funding_run/sources`
+
+The v1 source matrix (chain → accepted source tokens).
+
+```json
+{
+  "sources": {
+    "ethereum": ["0x0000000000000000000000000000000000000000", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"],
+    "base": ["0x0000000000000000000000000000000000000000", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],
+    "optimism": ["0x0000000000000000000000000000000000000000", "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"],
+    "polygon": ["0x0000000000000000000000000000000000000000", "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"],
+    "arbitrum_one": ["0x0000000000000000000000000000000000000000", "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"],
+    "gnosis": ["0x0000000000000000000000000000000000000000"],
+    "robinhood": ["0x0000000000000000000000000000000000000000"]
+  }
+}
+```
+
+### `POST /api/funding_run`
+
+Create a run, or replace a run that is still `AWAITING_DEPOSIT` / `QUOTE_FAILED` (this is how the app's "Change" works).
+
+**Request Body:**
+
+```json
+{
+  "mode": "onboard",
+  "source": { "chain": "base", "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+  "destination": { "chain": "polygon" },
+  "service_config_id": "sc-...",
+  "deposit_amounts": null,
+  "backup_owner": "0x..."
+}
+```
+
+- `mode`:
+  - `onboard`: the target is the service's net shortfall on its home chain. Requires `service_config_id`; `destination.chain` must be the service's home chain.
+  - `deposit`: requires `deposit_amounts` (`{"<token>": "<amount>"}`), the **target balances** the Pearl Wallet should end up with on `destination.chain`, not amounts to add. `service_config_id` is ignored.
+  - `signer_gas`: tops up the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`) on `destination.chain`; the same value as `prefill_amount_wei` in `INSUFFICIENT_SIGNER_GAS` errors.
+- `backup_owner` is used only if the Master Safe has to be created.
+
+If every net target is already met, the run is created directly as `COMPLETED` with empty `steps` and `to_receive`.
+
+**Response (Success - 200):** the run object, which every run route returns:
+
+```json
+{
+  "id": "fr-3f2a...",
+  "mode": "onboard",
+  "status": "AWAITING_DEPOSIT",
+  "source": { "chain": "base", "token": "0x8335...", "symbol": "USDC", "decimals": 6, "deposit_address": "0x<MasterEOA>" },
+  "destination": { "chain": "polygon", "wallet": "master_safe" },
+  "quote": { "required_amount": "15000000", "received_amount": "4000000", "outstanding_amount": "11000000", "eta_seconds": 180, "quoted_at": 1790592071, "next_refresh_at": 1790592251 },
+  "quote_message": null,
+  "to_receive": [ { "token": "0x0000...", "symbol": "POL", "amount": "6000000000000000000" } ],
+  "steps": [
+    { "id": "receive", "kind": "RECEIVE", "status": "PENDING", "token": "0x8335...", "amount": "15000000", "tx_hash": null, "explorer_link": null, "started_at": null, "finished_at": null, "is_slow": false, "visible": true },
+    { "id": "bridge", "kind": "BRIDGE", "status": "PENDING", "...": "..." },
+    { "id": "native", "kind": "NATIVE", "status": "PENDING", "...": "..." },
+    { "id": "swap:0xFEF5...", "kind": "SWAP", "status": "PENDING", "...": "..." },
+    { "id": "safe", "kind": "SAFE_AND_TRANSFER", "status": "PENDING", "visible": false, "...": "..." },
+    { "id": "clear_delegation", "kind": "CLEAR_DELEGATION", "status": "PENDING", "visible": false, "...": "..." }
+  ],
+  "error": null
+}
+```
+
+- Run `status` ∈ `AWAITING_DEPOSIT | QUOTE_FAILED | PROCESSING | FAILED | COMPLETED | CANCELLED`; step `status` ∈ `PENDING | PROCESSING | DONE | FAILED`.
+- `quote` is `null` until a quote succeeded; `quote_message` carries the provider message while `QUOTE_FAILED`. The quote is refreshed every `next_refresh_at`; once `outstanding_amount` reaches 0 the run re-quotes once more and moves to `PROCESSING`, after which the selection can no longer change.
+- Step kinds: `BRIDGE` (the carrier moved to the destination chain; for a native source it is the only source-leg step), `NATIVE` (destination native for fees), one `SWAP` per remaining target token, then the hidden `SAFE_AND_TRANSFER` (`onboard`/`deposit` only) and `CLEAR_DELEGATION` (USDC sources only). `is_slow` flags a step running well past its ETA.
+- `to_receive` is the **net** delivery (what the user gains after existing balances); it can be empty.
+- `destination.wallet` is `master_safe` for `onboard`/`deposit` and `master_eoa` for `signer_gas`.
+- `error` is `{"step_id", "message"}` when `FAILED`. A hidden Safe/transfer failure is reported against the last visible step. `CLEAR_DELEGATION` never sets `error` and never blocks `COMPLETED`.
+
+**Errors:** `400` unsupported source chain/token, missing `deposit_amounts`/`service_config_id`, or an `onboard` destination that is not the service home chain; `409` while another run is `PROCESSING`/`FAILED`.
+
+### `GET /api/funding_run/active`
+
+The run object of the single non-terminal run. If there is none, the run that completed in the last 5 minutes (so the app can show the success modal after a restart); otherwise `null`. The app polls this route.
+
+### `POST /api/funding_run/{id}/refresh_quote`
+
+Re-quote now. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. Body (optional): `{"force": true}`.
+
+### `POST /api/funding_run/{id}/retry`
+
+Resume a `FAILED` run at its failed step. A step whose on-chain effect has landed meanwhile (e.g. the Relay fill later succeeded) is reconciled instead of resent; only failed requests are re-quoted.
+
+### `DELETE /api/funding_run/{id}`
+
+Cancel. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. Funds already received stay in the Master EOA and count toward the next quote.
+
+**Errors (run routes):** `404` unknown run id; `409` wrong state for the action.
 
 ## Store Management
 
