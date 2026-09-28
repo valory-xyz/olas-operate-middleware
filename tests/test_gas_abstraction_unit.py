@@ -426,3 +426,48 @@ class TestBundlerErrors:
                 sender._wait_for_receipt(  # pylint: disable=protected-access
                     Chain.BASE, USER_OP_HASH
                 )
+
+
+class TestPrepareBatch:
+    """prepare_batch signs without submitting, so the hash can be persisted first."""
+
+    def test_prepare_does_not_submit(self, tmp_path: Path) -> None:
+        """Only estimation reaches the bundler; the hash matches getUserOpHash."""
+        sender, _ = _sender(tmp_path)
+        w3 = MagicMock()
+        w3.eth.get_code.return_value = b""
+        w3.eth.get_transaction_count.return_value = 1
+        contract = w3.eth.contract.return_value
+        contract.functions.getNonce.return_value.call.return_value = 0
+        contract.functions.getUserOpHash.return_value.call.return_value = bytes.fromhex(
+            USER_OP_HASH[2:]
+        )
+        ledger_api = MagicMock()
+        ledger_api.try_get_gas_pricing.return_value = {"gasPrice": 50}
+        methods: t.List[str] = []
+
+        def _post(url: str, json: t.Dict, timeout: int) -> MagicMock:
+            methods.append(json["method"])
+            return _bundler_response(
+                {
+                    "callGasLimit": "0x1",
+                    "verificationGasLimit": "0x1",
+                    "preVerificationGas": "0x1",
+                }
+            )
+
+        with (
+            patch.object(GasAbstractedSender, "_w3", return_value=w3),
+            patch(f"{MODULE}.get_default_ledger_api", return_value=ledger_api),
+            patch.object(GasAbstractedSender, "permit_typed_data") as mock_permit,
+            patch.object(
+                EthereumMasterWallet, "sign_typed_data", return_value="0x" + "22" * 65
+            ),
+            patch(f"{MODULE}.requests.post", side_effect=_post),
+        ):
+            mock_permit.return_value = {}
+            prepared = sender.prepare_batch(Chain.BASE, [])
+
+        assert methods == ["eth_estimateUserOperationGas"]
+        assert prepared.user_op_hash == USER_OP_HASH
+        assert prepared.authorization_nonce == 1

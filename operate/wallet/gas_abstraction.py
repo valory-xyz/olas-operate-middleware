@@ -157,6 +157,15 @@ class Call:
 
 
 @dataclass
+class PreparedUserOperation:
+    """A signed UserOperation that has not been submitted yet."""
+
+    user_op: t.Dict[str, t.Any]
+    user_op_hash: str
+    authorization_nonce: t.Optional[int]
+
+
+@dataclass
 class UserOperationResult:
     """Outcome of a submitted UserOperation."""
 
@@ -441,27 +450,51 @@ class GasAbstractedSender:
         user_op["preVerificationGas"] = estimate["preVerificationGas"]
         return user_op, delegated, authorization_nonce
 
-    def send_batch(self, chain: Chain, calls: t.List[Call]) -> UserOperationResult:
-        """Submit `calls` as one gas-abstracted UserOperation and wait for it."""
+    def prepare_batch(self, chain: Chain, calls: t.List[Call]) -> PreparedUserOperation:
+        """Build and sign `calls` as one UserOperation, without sending it.
+
+        The hash is known before submission, so a caller can persist it first
+        and reconcile after a crash instead of resending.
+        """
         user_op, delegated, authorization_nonce = self.build_user_operation(
             chain, calls
         )
         op_hash = self.user_op_hash(chain, user_op, delegated)
         user_op["signature"] = self.wallet.unsafe_sign_hash(op_hash)
-
-        user_op_hash = self._bundler(
-            chain, "eth_sendUserOperation", [user_op, ERC4337_ENTRYPOINT]
+        return PreparedUserOperation(
+            user_op=user_op,
+            user_op_hash="0x" + op_hash.hex(),
+            authorization_nonce=authorization_nonce,
         )
-        receipt = self._wait_for_receipt(chain, user_op_hash)
+
+    def submit(self, chain: Chain, prepared: PreparedUserOperation) -> str:
+        """Hand a prepared UserOperation to the bundler."""
+        return self._bundler(
+            chain, "eth_sendUserOperation", [prepared.user_op, ERC4337_ENTRYPOINT]
+        )
+
+    @staticmethod
+    def tx_hash_of(receipt: t.Dict) -> str:
+        """The bundler's handleOps tx hash, or an error if the UserOp reverted."""
         tx_hash = receipt.get("receipt", {}).get("transactionHash")
         if not receipt.get("success"):
             raise GasAbstractionError(
-                f"UserOperation {user_op_hash} reverted: {receipt.get('reason') or 'no reason'} (tx {tx_hash})."
+                f"UserOperation {receipt.get('userOpHash')} reverted: {receipt.get('reason') or 'no reason'} (tx {tx_hash})."
             )
+        return tx_hash
+
+    def wait_for_tx_hash(self, chain: Chain, user_op_hash: str) -> str:
+        """Wait for a submitted UserOperation and return its handleOps tx hash."""
+        return self.tx_hash_of(self._wait_for_receipt(chain, user_op_hash))
+
+    def send_batch(self, chain: Chain, calls: t.List[Call]) -> UserOperationResult:
+        """Submit `calls` as one gas-abstracted UserOperation and wait for it."""
+        prepared = self.prepare_batch(chain, calls)
+        user_op_hash = self.submit(chain, prepared)
         return UserOperationResult(
             user_op_hash=user_op_hash,
-            tx_hash=tx_hash,
-            authorization_nonce=authorization_nonce,
+            tx_hash=self.wait_for_tx_hash(chain, user_op_hash),
+            authorization_nonce=prepared.authorization_nonce,
         )
 
     def get_user_op_receipt(
