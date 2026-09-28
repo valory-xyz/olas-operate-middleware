@@ -63,7 +63,11 @@ from operate.ledger.profiles import (
 )
 from operate.operate_types import Chain
 from operate.serialization import BigInt
-from operate.wallet.gas_abstraction import GasAbstractionError, PreparedUserOperation
+from operate.wallet.gas_abstraction import (
+    GasAbstractionError,
+    PreparedUserOperation,
+    RECEIPT_TIMEOUT,
+)
 from operate.wallet.master import CreateSafeStatus
 
 MODULE = "operate.funding_run.manager"
@@ -805,6 +809,60 @@ class TestExecution:
         restarted.sender.submit.assert_not_called()
         restarted.sender.prepare_batch.assert_not_called()
         assert run.source_tx_hash == "0x" + "2b" * 32
+
+    def test_lost_user_op_fails_after_receipt_timeout(self, tmp_path: Path) -> None:
+        """A UserOp with no receipt waits, then fails as retryable past the timeout."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.submit.side_effect = GasAbstractionError("bundler down")
+        env.sender.get_user_op_receipt.return_value = None
+        env.manager.tick()  # hash persisted, submission lost
+
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+
+        for step in run.steps:
+            if step.kind in (FundingStepKind.BRIDGE, FundingStepKind.NATIVE):
+                step.started_at = int(time.time()) - RECEIPT_TIMEOUT - 1
+        run.store()
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": f"UserOperation {run.user_op_hash} was not included.",
+        }
+
+    def test_unexpected_source_leg_error_fails_the_run(self, tmp_path: Path) -> None:
+        """A non-GasAbstractionError from preparing the UserOp is a visible failure."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.prepare_batch.side_effect = ConnectionError("rpc unreachable")
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {"step_id": STEP_BRIDGE, "message": "rpc unreachable"}
+
+    def test_unexpected_safe_step_error_fails_the_run(self, tmp_path: Path) -> None:
+        """An exception from the hidden Safe step surfaces on the last visible step."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.wallet.create_safe_and_transfer_excess.side_effect = ConnectionError(
+            "rpc unreachable"
+        )
+
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+
+        assert run.step(STEP_SAFE).status == FundingStepStatus.FAILED
+        assert run.error == {
+            "step_id": f"swap:{POLYGON_PUSD}",
+            "message": "rpc unreachable",
+        }
 
     def test_interrupted_native_send_is_not_resent(self, tmp_path: Path) -> None:
         """A native-source request marked as sending but unrecorded fails, not resends."""

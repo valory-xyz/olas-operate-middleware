@@ -907,12 +907,23 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 continue
             if step.kind == FundingStepKind.CLEAR_DELEGATION:
                 break  # never blocks completion
-            if step.kind in SOURCE_LEG_KINDS:
-                self._advance_source_leg(run)
-            elif step.kind == FundingStepKind.SWAP:
-                self._advance_swap(run, step)
-            elif step.kind == FundingStepKind.SAFE_AND_TRANSFER:
-                self._advance_safe(run, step)
+            try:
+                if step.kind in SOURCE_LEG_KINDS:
+                    self._advance_source_leg(run)
+                elif step.kind == FundingStepKind.SWAP:
+                    self._advance_swap(run, step)
+                elif step.kind == FundingStepKind.SAFE_AND_TRANSFER:
+                    self._advance_safe(run, step)
+            except Exception as e:  # pylint: disable=broad-except
+                # Surface it as a retryable failure: left uncaught, the step
+                # would sit in PROCESSING with no error and no way out.
+                self.logger.exception(f"[FUNDING RUN] {run.id} step {step.id} raised")
+                message = str(e) or type(e).__name__
+                if step.kind in SOURCE_LEG_KINDS:
+                    self._fail_source_steps(run, message)
+                else:
+                    step.status = FundingStepStatus.FAILED
+                    step.message = message
             failed = next(
                 (s for s in run.steps if s.status == FundingStepStatus.FAILED), None
             )
@@ -927,6 +938,12 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
     def _source_steps(self, run: FundingRun) -> t.List[FundingRunStep]:
         return [s for s in run.steps if s.kind in SOURCE_LEG_KINDS]
+
+    def _fail_source_steps(self, run: FundingRun, message: str) -> None:
+        """The source leg is one UserOp or send: it fails as a whole."""
+        for step in self._source_steps(run):
+            step.status = FundingStepStatus.FAILED
+            step.message = message
 
     def _advance_source_leg(self, run: FundingRun) -> None:
         source = Chain(run.source_chain)
@@ -986,9 +1003,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         try:
             prepared = sender.prepare_batch(source, calls)
         except GasAbstractionError as e:
-            for step in self._source_steps(run):
-                step.status = FundingStepStatus.FAILED
-                step.message = str(e)
+            self._fail_source_steps(run, str(e))
             return
         run.user_op_hash = prepared.user_op_hash
         run.delegation_auth_nonce = prepared.authorization_nonce
@@ -1021,15 +1036,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 self._record_source_tx(run, sender.tx_hash_of(receipt))
                 return
         except GasAbstractionError as e:
-            for step in self._source_steps(run):
-                step.status = FundingStepStatus.FAILED
-                step.message = str(e)
+            self._fail_source_steps(run, str(e))
             return
         started = min((s.started_at or _now()) for s in self._source_steps(run))
         if _now() - started > RECEIPT_TIMEOUT:
-            for step in self._source_steps(run):
-                step.status = FundingStepStatus.FAILED
-                step.message = f"UserOperation {run.user_op_hash} was not included."
+            self._fail_source_steps(
+                run, f"UserOperation {run.user_op_hash} was not included."
+            )
 
     def _advance_swap(self, run: FundingRun, step: FundingRunStep) -> None:
         (request,) = run.requests_of(step)
