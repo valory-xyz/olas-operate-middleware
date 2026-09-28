@@ -131,7 +131,10 @@ The three modes differ only in how the target is produced and where funds
 end up; quoting, monitoring and execution are shared:
 
 - `onboard`: the service's net shortfall on its home chain, from
-  `FundingManager.destination_targets`. Ends in the Master Safe.
+  `FundingManager.destination_targets`. That shortfall already includes the
+  Master EOA reserve (and, before the Safe exists, the larger
+  `DEFAULT_EOA_TOPUPS_WITHOUT_SAFE` that pays for creating it), so the quote
+  adds only transfer gas. Ends in the Master Safe.
 - `deposit`: user-entered **target balances** for the Pearl Wallet, netted
   against the Master Safe plus the Master EOA balance above its reserve
   (`FundingManager.held_balances`). Ends in the Master Safe.
@@ -144,9 +147,12 @@ end up; quoting, monitoring and execution are shared:
    source leg that delivers the carrier plus destination native for every
    later step, so only the source leg ever needs gas abstraction.
 2. **Receive**: the user sends the quoted amount to the Master EOA on the
-   source chain, in one transfer or several. "Received" is simply the
+   source chain, in one transfer or several. "Received" is derived from the
    current Master EOA balance, so partial deposits and restarts need no
-   bookkeeping. On full receipt the run re-quotes once more and freezes.
+   bookkeeping. When the source chain is the destination chain, the targets
+   were already netted against that same balance, so only its growth above
+   the balance at run creation counts. On full receipt the run re-quotes once
+   more and freezes.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
    the Master EOA reserve moves to the Master Safe), then, for USDC sources,
    **delegation clearing**.
