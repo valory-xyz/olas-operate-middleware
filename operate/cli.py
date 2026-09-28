@@ -56,6 +56,7 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     AGENT_RUNNER_PREFIX,
     DEPLOYMENT_DIR,
+    FUNDING_RUNS_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
     MSG_INVALID_MNEMONIC,
@@ -68,6 +69,12 @@ from operate.constants import (
     VERSION_FILE,
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
+)
+from operate.funding_run.manager import (
+    FundingRunConflictError,
+    FundingRunError,
+    FundingRunManager,
+    FundingRunNotFoundError,
 )
 from operate.keys import KeysManager
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS
@@ -217,6 +224,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             wallet_manager=self._wallet_manager,
             logger=logger,
         )
+        self._funding_run_manager: t.Optional[FundingRunManager] = None
 
         self._migration_manager = MigrationManager(self._path, logger)
         self._migration_manager.migrate_user_account()
@@ -451,6 +459,24 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         )
         return manager
 
+    @property
+    def funding_run_manager(self) -> FundingRunManager:
+        """Load the funding run manager.
+
+        Cached, unlike `bridge_manager`: it owns the lock that serialises
+        run mutations between API handlers and the background job.
+        """
+        if self._funding_run_manager is None:
+            self._funding_run_manager = FundingRunManager(
+                path=self._path / FUNDING_RUNS_DIR,
+                wallet_manager=self.wallet_manager,
+                bridge_manager=self.bridge_manager,
+                funding_manager=self.funding_manager,
+                service_manager=self.service_manager,
+                logger=logger,
+            )
+        return self._funding_run_manager
+
     def setup(self) -> None:
         """Make the root directory."""
         self._path.mkdir(exist_ok=True)
@@ -483,6 +509,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     operate = OperateApp(home=home)
 
     funding_job: t.Optional[asyncio.Task] = None
+    funding_run_job: t.Optional[asyncio.Task] = None
     maintenance_task: t.Optional[asyncio.Task] = None
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails, logger=logger
@@ -537,6 +564,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         else:
             logger.info("Funding job cancellation failed")
 
+    def cancel_funding_run_job() -> None:
+        """Cancel the funding run job."""
+        nonlocal funding_run_job
+        if funding_run_job is not None:
+            funding_run_job.cancel()
+            funding_run_job = None
+
     def post_login_schedule() -> None:
         """Schedule that runs right after login."""
         # service_maintenance never raises; failures are logged inside.
@@ -545,6 +579,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         nonlocal maintenance_task
         maintenance_task = asyncio.get_running_loop().create_task(
             run_in_executor(operate.service_manager().service_maintenance)
+        )
+        # Signing needs the keystore, so the run only advances once logged in.
+        nonlocal funding_run_job
+        cancel_funding_run_job()
+        funding_run_job = asyncio.get_running_loop().create_task(
+            operate.funding_run_manager.run_job()
         )
 
     def recover_stale_deployment_statuses() -> None:
@@ -635,6 +675,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         with suppress(Exception):
             cancel_funding_job()
+
+        with suppress(Exception):
+            cancel_funding_run_job()
 
         with suppress(Exception):
             await watchdog.stop()
@@ -2037,6 +2080,115 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(
             content={"error": None, "message": "Funded from Master Safe successfully"}
+        )
+
+    def _funding_run_error(e: Exception) -> JSONResponse:
+        """Map funding run errors onto the documented status codes."""
+        if isinstance(e, FundingRunError):
+            status = HTTPStatus.BAD_REQUEST
+        elif isinstance(e, FundingRunNotFoundError):
+            status = HTTPStatus.NOT_FOUND
+        elif isinstance(e, FundingRunConflictError):
+            status = HTTPStatus.CONFLICT
+        else:
+            logger.error(f"Funding run error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={"error": "Funding run failed. Please check the logs."},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        message = e.args[0] if e.args else str(e)
+        return JSONResponse(content={"error": str(message)}, status_code=status)
+
+    @app.get("/api/funding_run/sources")
+    async def _funding_run_sources(request: Request) -> JSONResponse:
+        """Chains and tokens a funding run accepts deposits in."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        return JSONResponse(content={"sources": FundingRunManager.sources()})
+
+    @app.post("/api/funding_run")
+    async def _create_funding_run(request: Request) -> JSONResponse:
+        """Create a funding run, or replace one still awaiting its deposit."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        try:
+            data = await request.json()
+            source = data.get("source") or {}
+            destination = data.get("destination") or {}
+        except (ValueError, AttributeError):
+            return JSONResponse(
+                content={"error": "Invalid funding run request."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            run = manager.create_run(
+                mode=str(data.get("mode")),
+                source_chain=str(source.get("chain")),
+                source_token=str(source.get("token")),
+                destination_chain=str(destination.get("chain")),
+                service_config_id=data.get("service_config_id"),
+                deposit_amounts=data.get("deposit_amounts"),
+                backup_owner=data.get("backup_owner"),
+            )
+            return JSONResponse(content=manager.run_json(run))
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
+    @app.get("/api/funding_run/active")
+    async def _active_funding_run(request: Request) -> JSONResponse:
+        """The live run, a run completed moments ago, or null."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            run = manager.active_run()
+            return JSONResponse(content=manager.run_json(run) if run else None)
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
+    async def _funding_run_action(
+        run_id: str, action: t.Callable[[FundingRunManager, str], t.Any]
+    ) -> JSONResponse:
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            return JSONResponse(content=manager.run_json(action(manager, run_id)))
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
+    @app.post("/api/funding_run/{run_id}/refresh_quote")
+    async def _refresh_funding_run_quote(run_id: str) -> JSONResponse:
+        """Re-quote a run awaiting its deposit."""
+        return await _funding_run_action(
+            run_id, lambda manager, rid: manager.refresh_quote(rid)
+        )
+
+    @app.post("/api/funding_run/{run_id}/retry")
+    async def _retry_funding_run(run_id: str) -> JSONResponse:
+        """Resume a failed run at its failed step."""
+        return await _funding_run_action(
+            run_id, lambda manager, rid: manager.retry(rid)
+        )
+
+    @app.delete("/api/funding_run/{run_id}")
+    async def _cancel_funding_run(run_id: str) -> JSONResponse:
+        """Cancel a run that has not started processing."""
+        return await _funding_run_action(
+            run_id, lambda manager, rid: manager.cancel(rid)
         )
 
     @app.post("/api/bridge/bridge_refill_requirements")

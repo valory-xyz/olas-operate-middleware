@@ -880,3 +880,198 @@ class TestWalletCreateSafe(OnTestnet):
             expected_balances=excess_initial_funds,
             native_asset_tolerance=0.05,
         )
+
+
+class TestFundingRunRoutes:
+    """/api/funding_run routes (no network: quoting is mocked where reached)."""
+
+    RUN_JSON = {"id": "fr-x", "status": "AWAITING_DEPOSIT"}
+
+    def test_routes_require_login(self, tmp_path: Path, password: str) -> None:
+        """Every route answers 401 before login (signing needs the keystore)."""
+        client = TestClient(create_app(home=tmp_path / OPERATE))
+        client.post(url="/api/account", json={"password": password})
+        client = TestClient(create_app(home=tmp_path / OPERATE))
+        for method, url in (
+            ("get", "/api/funding_run/sources"),
+            ("post", "/api/funding_run"),
+            ("get", "/api/funding_run/active"),
+            ("post", "/api/funding_run/fr-x/refresh_quote"),
+            ("post", "/api/funding_run/fr-x/retry"),
+            ("delete", "/api/funding_run/fr-x"),
+        ):
+            response = getattr(client, method)(url)
+            assert response.status_code == HTTPStatus.UNAUTHORIZED, url
+
+    def test_sources_lists_v1_matrix(self, client: TestClient) -> None:
+        """The source matrix is served from FUNDING_SOURCES."""
+        response = client.get("/api/funding_run/sources")
+        assert response.status_code == HTTPStatus.OK
+        sources = response.json()["sources"]
+        assert sources["gnosis"] == [ZERO_ADDRESS]
+        assert sources["robinhood"] == [ZERO_ADDRESS]
+        assert sources["base"] == [ZERO_ADDRESS, USDC[Chain.BASE]]
+        assert set(sources) == {
+            "ethereum",
+            "base",
+            "optimism",
+            "polygon",
+            "arbitrum_one",
+            "gnosis",
+            "robinhood",
+        }
+
+    def test_active_is_null_without_runs(self, client: TestClient) -> None:
+        """No run yet: null."""
+        response = client.get("/api/funding_run/active")
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() is None
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {
+                "mode": "onboard",
+                "source": {"chain": "base", "token": USDC[Chain.BASE]},
+                "destination": {"chain": "polygon"},
+                "service_config_id": "sc-1",
+                "backup_owner": "0x" + "1" * 40,
+            },
+            {
+                "mode": "deposit",
+                "source": {"chain": "gnosis", "token": ZERO_ADDRESS},
+                "destination": {"chain": "polygon"},
+                "deposit_amounts": {OLAS[Chain.POLYGON]: "5"},
+            },
+            {
+                "mode": "signer_gas",
+                "source": {"chain": "base", "token": ZERO_ADDRESS},
+                "destination": {"chain": "polygon"},
+            },
+        ],
+    )
+    def test_create_passes_request_through(
+        self, client: TestClient, body: t.Dict
+    ) -> None:
+        """Each mode's body reaches create_run and the run object comes back."""
+        with (
+            mock.patch(
+                "operate.cli.FundingRunManager.create_run", return_value=mock.Mock()
+            ) as create_run,
+            mock.patch(
+                "operate.cli.FundingRunManager.run_json", return_value=self.RUN_JSON
+            ),
+        ):
+            response = client.post("/api/funding_run", json=body)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == self.RUN_JSON
+        create_run.assert_called_once_with(
+            mode=body["mode"],
+            source_chain=body["source"]["chain"],
+            source_token=body["source"]["token"],
+            destination_chain=body["destination"]["chain"],
+            service_config_id=body.get("service_config_id"),
+            deposit_amounts=body.get("deposit_amounts"),
+            backup_owner=body.get("backup_owner"),
+        )
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {
+                "mode": "deposit",
+                "source": {"chain": "celo", "token": ZERO_ADDRESS},
+                "destination": {"chain": "polygon"},
+                "deposit_amounts": {ZERO_ADDRESS: "1"},
+            },
+            {
+                "mode": "deposit",
+                "source": {"chain": "gnosis", "token": USDC[Chain.GNOSIS]},
+                "destination": {"chain": "polygon"},
+                "deposit_amounts": {ZERO_ADDRESS: "1"},
+            },
+            {
+                "mode": "deposit",
+                "source": {"chain": "base", "token": ZERO_ADDRESS},
+                "destination": {"chain": "polygon"},
+            },
+            {
+                "mode": "onboard",
+                "source": {"chain": "base", "token": ZERO_ADDRESS},
+                "destination": {"chain": "polygon"},
+            },
+        ],
+    )
+    def test_create_rejects_invalid_requests(
+        self, client: TestClient, body: t.Dict
+    ) -> None:
+        """Unsupported sources and missing mode fields are 400s."""
+        response = client.post("/api/funding_run", json=body)
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json()["error"]
+
+    def test_create_conflict_is_409(self, client: TestClient) -> None:
+        """A second run while one is processing is refused."""
+        from operate.funding_run.manager import (  # pylint: disable=import-outside-toplevel
+            FundingRunConflictError,
+        )
+
+        with mock.patch(
+            "operate.cli.FundingRunManager.create_run",
+            side_effect=FundingRunConflictError("Funding run fr-1 is PROCESSING."),
+        ):
+            response = client.post(
+                "/api/funding_run",
+                json={
+                    "mode": "signer_gas",
+                    "source": {"chain": "base", "token": ZERO_ADDRESS},
+                    "destination": {"chain": "polygon"},
+                },
+            )
+        assert response.status_code == HTTPStatus.CONFLICT
+
+    @pytest.mark.parametrize(
+        ("method", "suffix"),
+        [("post", "/refresh_quote"), ("post", "/retry"), ("delete", "")],
+    )
+    def test_unknown_run_is_404(
+        self, client: TestClient, method: str, suffix: str
+    ) -> None:
+        """Unknown run ids are 404s on every run route."""
+        response = getattr(client, method)(
+            f"/api/funding_run/fr-00000000-0000-0000-0000-000000000000{suffix}"
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize(
+        ("method", "suffix", "action"),
+        [
+            ("post", "/refresh_quote", "refresh_quote"),
+            ("post", "/retry", "retry"),
+            ("delete", "", "cancel"),
+        ],
+    )
+    def test_run_actions_delegate_and_map_409(
+        self, client: TestClient, method: str, suffix: str, action: str
+    ) -> None:
+        """Each action calls the manager; a wrong state is a 409."""
+        from operate.funding_run.manager import (  # pylint: disable=import-outside-toplevel
+            FundingRunConflictError,
+        )
+
+        url = f"/api/funding_run/fr-x{suffix}"
+        with (
+            mock.patch(
+                f"operate.cli.FundingRunManager.{action}", return_value=mock.Mock()
+            ) as call,
+            mock.patch(
+                "operate.cli.FundingRunManager.run_json", return_value=self.RUN_JSON
+            ),
+        ):
+            response = getattr(client, method)(url)
+            assert response.status_code == HTTPStatus.OK
+            assert response.json() == self.RUN_JSON
+            call.assert_called_once_with("fr-x")
+            call.side_effect = FundingRunConflictError("wrong state")
+            assert getattr(client, method)(url).status_code == HTTPStatus.CONFLICT

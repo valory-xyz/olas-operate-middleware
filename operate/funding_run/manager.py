@@ -31,6 +31,7 @@ UserOp hash, tx hash or Relay requestId is reconciled, never blindly resent.
 """
 
 import asyncio
+import re
 import threading
 import time
 import typing as t
@@ -89,6 +90,9 @@ if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 NATIVE = ZERO_ADDRESS
+FUNDING_RUN_ID_RE = re.compile(
+    rf"{FUNDING_RUN_PREFIX}[0-9a-f]{{8}}(-[0-9a-f]{{4}}){{3}}-[0-9a-f]{{12}}"
+)
 RUN_JOB_INTERVAL = 10
 # How long GET /active keeps returning a finished run, so the app can still
 # show the success modal after a restart.
@@ -168,8 +172,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
     def load(self, run_id: str) -> FundingRun:
         """Load a run by id."""
+        # Ids come from the URL path: only accept ids this manager could mint.
+        if not FUNDING_RUN_ID_RE.fullmatch(run_id):
+            raise FundingRunNotFoundError(run_id)
         path = self._run_path(run_id)
-        if not run_id.startswith(FUNDING_RUN_PREFIX) or not path.exists():
+        if not path.exists():
             raise FundingRunNotFoundError(run_id)
         return t.cast(FundingRun, FundingRun.load(path))
 

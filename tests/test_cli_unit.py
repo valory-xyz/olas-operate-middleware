@@ -101,6 +101,8 @@ def _make_mock_operate() -> MagicMock:
     m.wallet_recovery_manager = MagicMock()
     m.funding_manager = MagicMock()
     m.funding_manager.funding_job = AsyncMock()
+    m.funding_run_manager = MagicMock()
+    m.funding_run_manager.run_job = AsyncMock()
     # Service manager returns empty list by default
     svc_mgr = MagicMock()
     svc_mgr.validate_services.return_value = True
@@ -387,6 +389,23 @@ class TestCreateAppInfra:
                 assert resp.status_code == HTTPStatus.OK
                 # The task runs in the app's event loop / executor; wait for it.
                 assert maintenance_called.wait(timeout=5)
+
+    def test_login_schedules_funding_run_job(self) -> None:
+        """A successful login starts the funding run background loop."""
+        m = _make_mock_operate()
+        ua = MagicMock()
+        ua.is_valid.return_value = True
+        m.user_account = ua
+
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                resp = client.post(
+                    "/api/account/login",
+                    json={"password": _TEST_PW_TESTPASS123},
+                )
+                assert resp.status_code == HTTPStatus.OK
+        m.funding_run_manager.run_job.assert_called_once_with()
 
     # ── cancel_funding_job ────────────────────────────────────────────────────
 

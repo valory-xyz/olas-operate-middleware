@@ -862,6 +862,11 @@ class TestLifecycle:
     def test_unknown_run_is_not_found(self, tmp_path: Path) -> None:
         """Unknown or malformed ids are 404s."""
         env = Env(tmp_path)
-        for run_id in ("fr-missing", "../../etc/passwd"):
+        for run_id in (
+            f"fr-{uuid.uuid4()}",
+            "fr-missing",
+            "fr-../../etc/passwd",
+            "../../etc/passwd",
+        ):
             with pytest.raises(FundingRunNotFoundError):
                 env.manager.load(run_id)
