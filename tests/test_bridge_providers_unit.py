@@ -5796,3 +5796,40 @@ class TestRelayIntentsStatusV3:
 
         payload = mock_post.call_args.kwargs["json"]
         assert payload.get("explicitDeposit", False) is explicit_deposit
+
+
+# ---------------------------------------------------------------------------
+# TestProviderExternalExecution
+# ---------------------------------------------------------------------------
+
+
+class TestProviderExternalExecution:
+    """Provider.get_txs / record_external_execution."""
+
+    def test_get_txs_returns_provider_txs(self) -> None:
+        """get_txs() exposes the provider's transaction list."""
+        txs = [("approve-0", {"to": "0x1"}), ("deposit-0", {"to": "0x2"})]
+        provider = _ConcreteProvider(txs_to_return=txs)
+        req = _make_request()
+
+        assert provider.get_txs(req) == txs
+
+    def test_record_external_execution_sets_pending_with_hash(self) -> None:
+        """A UserOp-sent request tracks status like one sent by execute()."""
+        provider = _ConcreteProvider()
+        req = _make_request(status=ProviderRequestStatus.QUOTE_DONE)
+        req.quote_data = _make_quote_data()
+
+        provider.record_external_execution(req, "0x" + "1" * 64)
+
+        assert req.status == ProviderRequestStatus.EXECUTION_PENDING
+        assert req.execution_data is not None
+        assert req.execution_data.from_tx_hash == "0x" + "1" * 64
+
+    def test_record_external_execution_rejects_unquoted(self) -> None:
+        """Only a quoted request can be marked as externally executed."""
+        provider = _ConcreteProvider()
+        req = _make_request(status=ProviderRequestStatus.QUOTE_FAILED)
+
+        with pytest.raises(RuntimeError, match="Cannot record execution"):
+            provider.record_external_execution(req, "0x" + "1" * 64)

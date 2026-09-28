@@ -250,6 +250,40 @@ class Provider(ABC):
         """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
+    def get_txs(
+        self, provider_request: ProviderRequest
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote.
+
+        Public so an external sender (e.g. a gas-abstracted UserOperation)
+        can batch them instead of sending each through ``execute``.
+        """
+        self._validate(provider_request)
+        return self._get_txs(provider_request)
+
+    def record_external_execution(
+        self, provider_request: ProviderRequest, from_tx_hash: str
+    ) -> None:
+        """Mark a request as executed by a sender other than ``execute``.
+
+        Status tracking and the explorer link then work exactly as after
+        ``execute``.
+        """
+        self._validate(provider_request)
+        if provider_request.status != ProviderRequestStatus.QUOTE_DONE:
+            raise RuntimeError(
+                f"Cannot record execution for request {provider_request.id} with status {provider_request.status}."
+            )
+        provider_request.execution_data = ExecutionData(
+            elapsed_time=0,
+            message=None,
+            timestamp=int(time.time()),
+            from_tx_hash=from_tx_hash,
+            to_tx_hash=None,
+            provider_data=None,
+        )
+        provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
+
     def requirements(  # pylint: disable=too-many-locals
         self, provider_request: ProviderRequest
     ) -> ChainAmounts:

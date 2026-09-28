@@ -1189,3 +1189,79 @@ class TestBridgeRefillRequirementsWithChains:
         assert "id" in result
         manager.wallet_manager.load.assert_called()  # type: ignore[union-attr]
         mock_get_balances.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# TestBridgeManagerQuoteRequests
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeManagerQuoteRequests:
+    """Tests for the cache-free BridgeManager.quote_requests."""
+
+    @staticmethod
+    def _params() -> t.List[t.Dict]:
+        return [
+            {
+                "from": {
+                    "chain": "gnosis",
+                    "address": "0x" + "a" * 40,
+                    "token": "0x" + "0" * 40,
+                },
+                "to": {
+                    "chain": "base",
+                    "address": "0x" + "b" * 40,
+                    "token": "0x" + "0" * 40,
+                    "amount": 100,
+                },
+            }
+        ]
+
+    def test_quote_requests_does_not_touch_last_requested_bundle(
+        self, tmp_path: Path
+    ) -> None:
+        """The cached Transak/bridge bundle survives a funding-run quote."""
+        manager = _make_bridge_manager(tmp_path)
+        cached = _make_real_bundle()
+        manager.data.last_requested_bundle = cached
+        mock_provider = MagicMock()
+        mock_provider.create_request.return_value = _make_provider_request_real()
+        manager._providers["relay-provider"] = (  # pylint: disable=protected-access
+            mock_provider
+        )
+
+        with (
+            patch.object(manager, "_raise_if_invalid"),
+            patch.object(manager, "quote_bundle") as mock_quote,
+            patch.object(manager, "_store_data") as mock_store,
+        ):
+            bundle = manager.quote_requests(self._params())
+
+        assert bundle is not cached
+        assert manager.data.last_requested_bundle is cached
+        mock_quote.assert_called_once_with(bundle)
+        mock_store.assert_not_called()
+
+    def test_quote_requests_validates_from_address(self, tmp_path: Path) -> None:
+        """quote_requests rejects a sender that is neither Master EOA nor Safe."""
+        manager = _make_bridge_manager(tmp_path)
+        wallet = MagicMock()
+        wallet.address = "0x" + "c" * 40
+        wallet.safes = {}
+        manager.wallet_manager.load.return_value = wallet
+
+        with pytest.raises(ValueError, match="does not match Master EOA"):
+            manager.quote_requests(self._params())
+
+    def test_execute_request_delegates_to_owning_provider(self, tmp_path: Path) -> None:
+        """execute_request runs the request through its own provider."""
+        manager = _make_bridge_manager(tmp_path)
+        mock_provider = MagicMock()
+        manager._providers["relay-provider"] = (  # pylint: disable=protected-access
+            mock_provider
+        )
+        request = _make_provider_request_real()
+
+        manager.execute_request(request)
+
+        mock_provider.execute.assert_called_once_with(request)
