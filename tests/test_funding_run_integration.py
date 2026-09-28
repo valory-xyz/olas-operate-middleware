@@ -52,7 +52,7 @@ class TestFundingRunOnFork(OnTestnet):
     def test_same_chain_native_deposit_creates_safe_and_transfers(
         self, test_operate: OperateApp
     ) -> None:
-        """xDAI on Gnosis -> Pearl Wallet on Gnosis: receive, Safe, transfer."""
+        """Gnosis xDAI to the Gnosis Pearl Wallet: receive, Safe, transfer."""
         chain = Chain.GNOSIS
         test_operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
         wallet = test_operate.wallet_manager.load(LedgerType.ETHEREUM)

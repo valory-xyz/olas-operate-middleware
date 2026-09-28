@@ -2123,7 +2123,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         def _fn() -> JSONResponse:
             manager = operate.funding_run_manager
-            run = manager.create_run(
+            funding_run = manager.create_run(
                 mode=str(data.get("mode")),
                 source_chain=str(source.get("chain")),
                 source_token=str(source.get("token")),
@@ -2132,7 +2132,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 deposit_amounts=data.get("deposit_amounts"),
                 backup_owner=data.get("backup_owner"),
             )
-            return JSONResponse(content=manager.run_json(run))
+            return JSONResponse(content=manager.run_json(funding_run))
 
         try:
             return await run_in_executor(_fn)
@@ -2147,8 +2147,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         def _fn() -> JSONResponse:
             manager = operate.funding_run_manager
-            run = manager.active_run()
-            return JSONResponse(content=manager.run_json(run) if run else None)
+            funding_run = manager.active_run()
+            return JSONResponse(
+                content=manager.run_json(funding_run) if funding_run else None
+            )
 
         try:
             return await run_in_executor(_fn)

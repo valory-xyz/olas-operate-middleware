@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from logging import Logger
 
 import requests
-from eth_account import Account
 from web3 import Web3
 
 from operate.ledger import get_default_ledger_api
@@ -63,6 +62,12 @@ PAYMASTER_POST_OP_GAS_LIMIT = 35_000
 # Candide's abstractionkit for 7702 accounts.
 EIP7702_VERIFICATION_GAS_BUFFER = 55_000
 GAS_PRICE_MULTIPLIER = 1.2
+# Well-formed estimation signature (a throwaway key over a zero hash):
+# Simple7702Account's ECDSA.recover reverts on malformed signatures.
+PLACEHOLDER_SIGNATURE = (
+    "0xe0a180fdd0fe38037cc878c03832861b40a29d32bd7b40b10c9e1efc8c1468a0"
+    "5ae06d1624896d0d29f4b31e32772ea3cb1b4d7ed4e077e5da28dcc33c0e78121c"
+)
 BUNDLER_TIMEOUT = 30
 RECEIPT_TIMEOUT = 300
 RECEIPT_POLL_INTERVAL = 3.0
@@ -374,7 +379,7 @@ class GasAbstractedSender:
 
     # --- sending -----------------------------------------------------------
 
-    def build_user_operation(
+    def build_user_operation(  # pylint: disable=too-many-locals
         self, chain: Chain, calls: t.List[Call]
     ) -> t.Tuple[t.Dict[str, t.Any], bool, t.Optional[int]]:
         """Build an unsigned, gas-estimated UserOperation.
@@ -414,11 +419,7 @@ class GasAbstractedSender:
             "paymasterVerificationGasLimit": _hex(PAYMASTER_VERIFICATION_GAS_LIMIT),
             "paymasterPostOpGasLimit": _hex(PAYMASTER_POST_OP_GAS_LIMIT),
             "paymasterData": self.paymaster_data(chain, permit_signature),
-            # Well-formed placeholder: Simple7702Account's ECDSA.recover
-            # reverts on malformed signatures, even during estimation.
-            "signature": Account.create()
-            .unsafe_sign_hash(b"\x00" * 32)
-            .signature.to_0x_hex(),
+            "signature": PLACEHOLDER_SIGNATURE,
         }
 
         authorization_nonce: t.Optional[int] = None

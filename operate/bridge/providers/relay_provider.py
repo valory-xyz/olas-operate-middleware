@@ -389,7 +389,9 @@ class RelayProvider(Provider):
 
         return txs
 
-    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
+    def _update_execution_status(  # pylint: disable=too-many-locals,too-many-statements
+        self, provider_request: ProviderRequest
+    ) -> None:
         """Update the execution status."""
 
         if provider_request.status not in (

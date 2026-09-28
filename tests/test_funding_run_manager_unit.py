@@ -62,6 +62,7 @@ from operate.ledger.profiles import (
     USDC,
 )
 from operate.operate_types import Chain
+from operate.serialization import BigInt
 from operate.wallet.gas_abstraction import GasAbstractionError, PreparedUserOperation
 from operate.wallet.master import CreateSafeStatus
 
@@ -86,6 +87,7 @@ class FakeProvider:
     """Deterministic provider: 1 from-unit per to-unit, GAS native per request."""
 
     def __init__(self, bridge: "FakeBridge") -> None:
+        """Bind to the owning bridge."""
         self.bridge = bridge
 
     def requirements(self, request: ProviderRequest) -> t.Dict:
@@ -160,6 +162,7 @@ class FakeBridge:
     """Stands in for BridgeManager."""
 
     def __init__(self) -> None:
+        """Start with no quotes, executions or outcomes."""
         self.provider = FakeProvider(self)
         self.quoted: t.List[t.Dict] = []
         self.executed: t.List[str] = []
@@ -208,6 +211,7 @@ class Env:
     """A manager wired to fakes, with controllable balances."""
 
     def __init__(self, tmp_path: Path, safes: t.Optional[t.Dict] = None) -> None:
+        """Wire a manager to fakes under `tmp_path`."""
         self.balances: t.Dict[t.Tuple[Chain, str], int] = {}
         self.wallet = MagicMock()
         self.wallet.address = EOA
@@ -286,6 +290,11 @@ def _no_rpc() -> t.Iterator[None]:
         patch(f"{MODULE}.get_asset_decimals", return_value=6),
     ):
         yield
+
+
+def _required(run: FundingRun) -> int:
+    assert run.required_amount is not None
+    return int(run.required_amount)
 
 
 def _overhead(n_assets: int, with_safe: bool = False, eoa_native: int = 0) -> int:
@@ -394,9 +403,7 @@ class TestQuote:
         body = env.manager.run_json(run)
 
         assert body["quote"]["received_amount"] == "1000"
-        assert (
-            int(body["quote"]["outstanding_amount"]) == int(run.required_amount) - 1000
-        )
+        assert int(body["quote"]["outstanding_amount"]) == _required(run) - 1000
 
     def test_same_chain_native_partial_deposit_is_not_double_counted(
         self, tmp_path: Path
@@ -406,14 +413,14 @@ class TestQuote:
         run = _deposit_run(
             env, source_chain="polygon", source_token=NATIVE, amounts={NATIVE: 100}
         )
-        required = int(run.required_amount)
+        required = _required(run)
         assert required == 100 + _overhead(n_assets=1)
 
         env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE
         env.manager.refresh_quote(run.id)
         run = env.reload(run)
 
-        assert int(run.required_amount) == required
+        assert _required(run) == required
         assert int(run.received_amount) == POLYGON_RESERVE
 
     def test_quote_failure_sets_quote_failed(self, tmp_path: Path) -> None:
@@ -506,7 +513,7 @@ class TestTargets:
         assert run.step(STEP_RECEIVE).status == FundingStepStatus.DONE
 
     def test_onboard_uses_service_targets_on_home_chain(self, tmp_path: Path) -> None:
-        """onboard nets through FundingManager.destination_targets."""
+        """Onboarding nets through FundingManager.destination_targets."""
         env = Env(tmp_path)
         env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
 
@@ -575,9 +582,7 @@ class TestMonitor:
         body = env.manager.run_json(run)
         assert run.status == FundingRunStatus.AWAITING_DEPOSIT
         assert body["quote"]["received_amount"] == "100"
-        assert (
-            int(body["quote"]["outstanding_amount"]) == int(run.required_amount) - 100
-        )
+        assert int(body["quote"]["outstanding_amount"]) == _required(run) - 100
 
     def test_wrong_token_or_chain_never_processes(self, tmp_path: Path) -> None:
         """Only the chosen token on the chosen chain counts as received."""
@@ -594,13 +599,13 @@ class TestMonitor:
         """If the final quote grew past the deposit, the run keeps waiting."""
         env = Env(tmp_path)
         run = _deposit_run(env)
-        env.balances[(Chain.BASE, BASE_USDC)] = int(run.required_amount)
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
         env.funding_manager.held_balances.return_value = {}
         # The final quote sees a bigger target (price moved).
         original = env.manager._quote  # pylint: disable=protected-access
 
         def _bigger(r: FundingRun) -> None:
-            r.net_targets[POLYGON_OLAS] = r.net_targets[POLYGON_OLAS] + 1_000
+            r.net_targets[POLYGON_OLAS] = BigInt(r.net_targets[POLYGON_OLAS] + 1_000)
             original(r)
 
         with patch.object(env.manager, "_quote", side_effect=_bigger):
@@ -614,7 +619,7 @@ class TestMonitor:
         """Full receipt freezes the plan and marks RECEIVE done."""
         env = Env(tmp_path)
         run = _deposit_run(env)
-        env.balances[(Chain.BASE, BASE_USDC)] = int(run.required_amount)
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
 
         env.manager.tick()
 
@@ -630,7 +635,7 @@ class TestMonitor:
 
 def _funded(env: Env, **kwargs: t.Any) -> FundingRun:
     run = _deposit_run(env, **kwargs)
-    env.balances[(Chain(run.source_chain), run.source_token)] = int(run.required_amount)
+    env.balances[(Chain(run.source_chain), run.source_token)] = _required(run)
     env.manager.tick()
     return env.reload(run)
 
@@ -694,7 +699,8 @@ class TestExecution:
         env.sender.submit.side_effect = GasAbstractionError("process died")
         env.manager.tick()  # hash persisted, submit "fails"
         run = env.reload(run)
-        assert run.user_op_hash and not run.source_tx_hash
+        assert run.user_op_hash
+        assert not run.source_tx_hash
 
         restarted = Env(tmp_path)
         restarted.sender.get_user_op_receipt.return_value = {"success": True}
@@ -835,7 +841,8 @@ class TestExecution:
         env.bridge.execute_request = _execute  # type: ignore[method-assign]
         _all_succeed(env)
         env.tick_until(run, FundingRunStatus.COMPLETED)
-        assert seen and all(seen)
+        assert seen
+        assert all(seen)
 
 
 # ---------------------------------------------------------------------------
@@ -847,7 +854,7 @@ class TestLifecycle:
     """Replace, cancel, refresh, 404/409."""
 
     def test_create_replaces_awaiting_run(self, tmp_path: Path) -> None:
-        """'Change' replaces an AWAITING_DEPOSIT run."""
+        """Using 'Change' replaces an AWAITING_DEPOSIT run."""
         env = Env(tmp_path)
         first = _deposit_run(env)
         second = _deposit_run(env, source_token=NATIVE)

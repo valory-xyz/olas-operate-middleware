@@ -137,7 +137,7 @@ class TestPaymasterData:
     """Circle Paymaster v0.8 permit-mode paymasterData."""
 
     def test_layout_and_cap(self) -> None:
-        """mode byte, token, permit amount ($1.00), permit signature."""
+        """Layout: mode byte, token, permit amount ($1.00), permit signature."""
         signature = "0x" + "11" * 65
         data = bytes.fromhex(
             GasAbstractedSender.paymaster_data(Chain.BASE, signature)[2:]

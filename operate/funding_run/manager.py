@@ -482,7 +482,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     # --- quoting ------------------------------------------------------------
 
     @staticmethod
-    def _params(
+    def _params(  # pylint: disable=too-many-arguments
         from_chain: Chain,
         from_token: str,
         to_chain: Chain,
