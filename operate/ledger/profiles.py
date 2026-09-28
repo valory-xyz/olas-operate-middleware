@@ -389,6 +389,43 @@ DEFAULT_RECOVERY_TOPUPS = {
 
 DEFAULT_EOA_THRESHOLD = 0.5
 
+#: Source chain -> tokens a funding run accepts deposits in (v1 matrix).
+#: USDC sources are gas-abstracted only where CIRCLE_PAYMASTER has an entry.
+FUNDING_SOURCES: t.Dict[Chain, t.List[str]] = {
+    Chain.ETHEREUM: [ZERO_ADDRESS, USDC[Chain.ETHEREUM]],
+    Chain.BASE: [ZERO_ADDRESS, USDC[Chain.BASE]],
+    Chain.OPTIMISM: [ZERO_ADDRESS, USDC[Chain.OPTIMISM]],
+    Chain.POLYGON: [ZERO_ADDRESS, USDC[Chain.POLYGON]],
+    Chain.ARBITRUM_ONE: [ZERO_ADDRESS, USDC[Chain.ARBITRUM_ONE]],
+    Chain.GNOSIS: [ZERO_ADDRESS],
+    Chain.ROBINHOOD: [ZERO_ADDRESS],
+}
+
+# Pearl Mini contract set for gas-abstracted funding (verified on-chain).
+EIP7702_DELEGATE = "0xe6Cae83BdE06E4c305530e199D7217f42808555B"  # Simple7702Account
+ERC4337_ENTRYPOINT = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"  # v0.8
+_CIRCLE_PAYMASTER_V08 = "0x0578cFB241215b77442a541325d6A4E6dFE700Ec"
+#: Chains where Circle Paymaster v0.8 is deployed. Absence of a chain here is
+#: the single switch that keeps a USDC source from being gas-abstracted.
+CIRCLE_PAYMASTER: t.Dict[Chain, str] = {
+    Chain.ETHEREUM: _CIRCLE_PAYMASTER_V08,
+    Chain.BASE: _CIRCLE_PAYMASTER_V08,
+    Chain.OPTIMISM: _CIRCLE_PAYMASTER_V08,
+    Chain.POLYGON: _CIRCLE_PAYMASTER_V08,
+    Chain.ARBITRUM_ONE: _CIRCLE_PAYMASTER_V08,
+}
+BUNDLER_URL_TEMPLATE = "https://api.candide.dev/public/v3/{chain_id}"
+#: EIP-2612 permit value granted to the paymaster per operation ($1.00 USDC).
+GAS_ABSTRACTION_USDC_CAP = 1_000_000
+#: Source-chain native reserved for the self-sponsored delegation-clearing tx.
+CLEAR_DELEGATION_GAS_RESERVE: t.Dict[Chain, int] = {
+    Chain.ETHEREUM: 500_000_000_000_000,
+    Chain.BASE: 20_000_000_000_000,
+    Chain.OPTIMISM: 20_000_000_000_000,
+    Chain.POLYGON: 20_000_000_000_000_000,
+    Chain.ARBITRUM_ONE: 20_000_000_000_000,
+}
+
 EXPLORER_URL = {
     Chain.ARBITRUM_ONE: {
         "tx": "https://arbiscan.io/tx/{tx_hash}",
