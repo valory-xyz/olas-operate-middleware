@@ -21,18 +21,21 @@
 
 import json
 import typing as t
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 from autonomy.chain.exceptions import ChainInteractionError
+from eth_account import Account
+from eth_account.messages import encode_typed_data
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import CONTRACTS, DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import BatchResult, Transfer
 from operate.wallet.master import (
+    CreateSafeStatus,
     EthereumMasterWallet,
     InsufficientFundsException,
     MasterWallet,
@@ -2726,3 +2729,254 @@ class TestTransferBatchFromSafeThenEoa:
                     Chain.GNOSIS, [(EOA_ADDR, TOKEN_ADDR, 120)]
                 )
         mock_transfer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet.create_safe_and_transfer_excess
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSafeAndTransferExcess:
+    """The Safe create/fund helper extracted from POST /api/wallet/safe."""
+
+    @staticmethod
+    def _run(
+        wallet: EthereumMasterWallet,
+        balances: t.Dict[str, int],
+        transfer: t.Any = "0xtx",
+        initial_funds: t.Optional[t.Dict[str, int]] = None,
+        create_safe: t.Any = None,
+    ) -> t.Tuple[t.Dict, MagicMock]:
+        def _balances(**kwargs: t.Any) -> t.Dict:
+            (address,) = kwargs["addresses"]
+            return {address: dict(balances)}
+
+        ledger_api = MagicMock()
+        ledger_api.api.to_checksum_address.side_effect = lambda a: a.upper()
+        with (
+            patch.object(wallet, "ledger_api", return_value=ledger_api),
+            patch("operate.wallet.master.get_assets_balances", side_effect=_balances),
+            patch.object(
+                wallet,
+                "transfer",
+                **(
+                    {"side_effect": transfer}
+                    if not isinstance(transfer, str)
+                    else {"return_value": transfer}
+                ),
+            ) as mock_transfer,
+            patch.object(wallet, "create_safe", side_effect=create_safe) as mock_cs,
+        ):
+            result = wallet.create_safe_and_transfer_excess(
+                chain=Chain.GNOSIS,
+                backup_owner=BACKUP_ADDR,
+                initial_funds=initial_funds,
+            )
+        mock_transfer.create_safe = mock_cs  # expose for assertions
+        return result, mock_transfer
+
+    def test_creates_safe_and_moves_excess_above_eoa_reserve(
+        self, tmp_path: Path
+    ) -> None:
+        """Everything above DEFAULT_EOA_TOPUPS moves; the reserve stays."""
+        wallet = _make_wallet(tmp_path)
+        reserve = DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+
+        def _create(chain: Chain, backup_owner: t.Optional[str]) -> str:
+            wallet.safes[chain] = SAFE_ADDR
+            return "0xcreate"
+
+        result, mock_transfer = self._run(
+            wallet, balances={ZERO_ADDRESS: reserve + 5}, create_safe=_create
+        )
+
+        assert result["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
+        assert result["safe"] == SAFE_ADDR
+        assert result["create_tx"] == "0xcreate"
+        mock_transfer.assert_called_once_with(
+            to=SAFE_ADDR,
+            amount=5,
+            chain=Chain.GNOSIS,
+            asset=ZERO_ADDRESS,
+            from_safe=False,
+        )
+        mock_transfer.create_safe.assert_called_once_with(
+            chain=Chain.GNOSIS, backup_owner=BACKUP_ADDR.upper()
+        )
+
+    def test_creation_failure_is_reported(self, tmp_path: Path) -> None:
+        """A failed Safe creation yields SAFE_CREATION_FAILED and no transfers."""
+        wallet = _make_wallet(tmp_path)
+
+        result, mock_transfer = self._run(
+            wallet, balances={}, create_safe=RuntimeError("boom")
+        )
+
+        assert result["status"] == CreateSafeStatus.SAFE_CREATION_FAILED
+        assert result["safe"] is None
+        mock_transfer.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("transfer", "expected"),
+        [
+            ("0xtx", CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED),
+            (
+                ["0xtx", RuntimeError("fail")],
+                CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED,
+            ),
+        ],
+    )
+    def test_existing_safe_topped_up_to_initial_funds(
+        self, tmp_path: Path, transfer: t.Any, expected: CreateSafeStatus
+    ) -> None:
+        """With initial_funds, the Safe is topped up net of what it holds."""
+        wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
+
+        result, mock_transfer = self._run(
+            wallet,
+            balances={ZERO_ADDRESS: 1, TOKEN_ADDR: 0},
+            transfer=transfer,
+            initial_funds={ZERO_ADDRESS: 11, TOKEN_ADDR: 7},
+        )
+
+        assert result["status"] == expected
+        assert mock_transfer.call_count == 2
+        mock_transfer.create_safe.assert_not_called()
+
+    def test_existing_safe_already_funded(self, tmp_path: Path) -> None:
+        """Nothing to move and nothing created: SAFE_EXISTS_ALREADY_FUNDED."""
+        wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
+
+        result, mock_transfer = self._run(
+            wallet, balances={ZERO_ADDRESS: 10}, initial_funds={ZERO_ADDRESS: 10}
+        )
+
+        assert result["status"] == CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
+        mock_transfer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Signing passthroughs and EIP-7702 delegation clearing
+# ---------------------------------------------------------------------------
+
+
+def _wallet_with_real_key(tmp_path: Path) -> t.Tuple[EthereumMasterWallet, t.Any]:
+    """A wallet whose crypto entity is a real eth-account LocalAccount."""
+    account = Account.create()
+    wallet = _make_wallet(tmp_path)
+    wallet.address = account.address
+    crypto = MagicMock()
+    crypto.entity = account
+    crypto.address = account.address
+    wallet._crypto = crypto  # pylint: disable=protected-access
+    return wallet, account
+
+
+class TestSigningPassthroughs:
+    """sign_authorization / unsafe_sign_hash / sign_typed_data."""
+
+    def test_authorization_is_bound_to_the_chain(self, tmp_path: Path) -> None:
+        """The 7702 authorization carries the given chain id, never 0."""
+        wallet, account = _wallet_with_real_key(tmp_path)
+
+        auth = wallet.sign_authorization(chain=Chain.BASE, address=TOKEN_ADDR, nonce=3)
+
+        assert auth.chain_id == Chain.BASE.id
+        assert auth.nonce == 3
+        assert auth.authority.hex().lower() == account.address[2:].lower()
+
+    def test_unsafe_sign_hash_has_no_eip191_prefix(self, tmp_path: Path) -> None:
+        """The signature recovers over the raw hash, as Simple7702Account expects."""
+        wallet, account = _wallet_with_real_key(tmp_path)
+        digest = bytes.fromhex("11" * 32)
+
+        signature = wallet.unsafe_sign_hash(digest)
+
+        assert (
+            Account._recover_hash(  # pylint: disable=protected-access
+                digest, signature=bytes.fromhex(signature[2:])
+            )
+            == account.address
+        )
+
+    def test_sign_typed_data_recovers_to_master_eoa(self, tmp_path: Path) -> None:
+        """EIP-712 signatures come from the Master EOA key."""
+        wallet, account = _wallet_with_real_key(tmp_path)
+        message = {
+            "types": {
+                "EIP712Domain": [{"name": "name", "type": "string"}],
+                "Ping": [{"name": "value", "type": "uint256"}],
+            },
+            "primaryType": "Ping",
+            "domain": {"name": "test"},
+            "message": {"value": 1},
+        }
+
+        signature = wallet.sign_typed_data(message)
+
+        assert (
+            Account.recover_message(
+                encode_typed_data(full_message=message), signature=signature
+            )
+            == account.address
+        )
+
+
+class TestClearDelegation:
+    """EthereumMasterWallet.clear_delegation."""
+
+    @staticmethod
+    def _run(
+        wallet: EthereumMasterWallet, nonces: t.List[int], builds: int
+    ) -> t.Tuple[str, t.List[t.Dict]]:
+        ledger_api = MagicMock()
+        ledger_api.api.eth.get_transaction_count.side_effect = nonces
+        built: t.List[t.Dict] = []
+        settler = MagicMock()
+        settler.transact.return_value = settler
+        settler.settle.return_value = settler
+        settler.tx_hash = "0xclear"
+
+        def _settler(**kwargs: t.Any) -> MagicMock:
+            # Emulate TxSettler discarding tx_dict after nonce errors.
+            for _ in range(builds):
+                built.append(kwargs["tx_builder"]())
+            return settler
+
+        with (
+            patch.object(wallet, "ledger_api", return_value=ledger_api),
+            patch("operate.wallet.master.TxSettler", side_effect=_settler),
+            patch(
+                "operate.wallet.master.wrap_gas_spike_as_insufficient_funds",
+                return_value=nullcontext(),
+            ),
+            patch("operate.wallet.master.update_tx_with_gas_estimate") as mock_est,
+        ):
+            tx_hash = wallet.clear_delegation(Chain.BASE)
+        mock_est.assert_not_called()
+        return tx_hash, built
+
+    def test_authorizes_address_zero_with_nonce_plus_one(self, tmp_path: Path) -> None:
+        """A self-sponsored authorization to address(0) on the source chain."""
+        wallet, account = _wallet_with_real_key(tmp_path)
+
+        tx_hash, (tx,) = self._run(wallet, nonces=[7], builds=1)
+
+        assert tx_hash == "0xclear"
+        (auth,) = tx["authorizationList"]
+        assert tx["nonce"] == 7
+        assert auth.nonce == 8
+        assert auth.chain_id == Chain.BASE.id
+        assert "0x" + auth.address.hex() == ZERO_ADDRESS
+        assert tx["from"] == tx["to"] == account.address
+        assert auth.authority.hex().lower() == account.address[2:].lower()
+
+    def test_rebuild_resigns_against_fresh_nonce(self, tmp_path: Path) -> None:
+        """A rebuild after `nonce too low` never reuses a stale authorization."""
+        wallet, _ = _wallet_with_real_key(tmp_path)
+
+        _, (first, second) = self._run(wallet, nonces=[7, 9], builds=2)
+
+        assert first["authorizationList"][0].nonce == 8
+        assert second["nonce"] == 9
+        assert second["authorizationList"][0].nonce == 10

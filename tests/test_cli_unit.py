@@ -32,22 +32,22 @@ from pathlib import Path
 from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from starlette.testclient import TestClient
 
 from operate import __version__, cli
 from operate.cli import (
-    CreateSafeStatus,
     OperateApp,
     create_app,
     main,
     service_not_found_error,
 )
 from operate.constants import OPERATE, SERVICES_DIR, ZERO_ADDRESS
-from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
+from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus
 from operate.services.funding_manager import FundingInProgressError
-from operate.wallet.master import InsufficientFundsException
+from operate.wallet.master import CreateSafeStatus, InsufficientFundsException
 from operate.wallet.wallet_recovery_manager import WalletRecoveryError
 
 # Test-only password fixtures. These are not credentials; they are arbitrary
@@ -1063,236 +1063,44 @@ class TestCreateSafeRoute:
                 )
             assert resp.status_code == HTTPStatus.NOT_FOUND
 
-    def test_safe_creation_failed_exception(self) -> None:
-        """Cover lines 845-857: create_safe raises → SAFE_CREATION_FAILED."""
+    @pytest.mark.parametrize(
+        ("body", "expected_initial_funds"),
+        [
+            ({"chain": "gnosis"}, DEFAULT_NEW_SAFE_FUNDS[Chain.GNOSIS]),
+            ({"chain": "gnosis", "initial_funds": {"0x0": 5}}, {"0x0": 5}),
+            ({"chain": "gnosis", "transfer_excess_assets": True}, None),
+        ],
+    )
+    def test_delegates_to_wallet_helper(
+        self, body: dict, expected_initial_funds: Optional[dict]
+    ) -> None:
+        """The route returns the wallet helper's result unchanged."""
         m = self._setup()
         m.wallet_manager.exists.return_value = True
         wallet_mock = MagicMock()
-        wallet_mock.safes = None
-        wallet_mock.create_safe.side_effect = RuntimeError("creation failed")
-        wallet_mock.ledger_api.return_value = MagicMock()
+        result = {
+            "status": CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED,
+            "safe": "0xsafe",
+            "create_tx": "0xcreate_tx",
+            "transfer_txs": {"0x0": "0xtx"},
+            "transfer_errors": {},
+            "message": "ok",
+        }
+        wallet_mock.create_safe_and_transfer_excess.return_value = result
         m.wallet_manager.load.return_value = wallet_mock
         stack, app, _, _ = _open_app(m)
         with stack:
             with TestClient(app) as client:
                 resp = client.post(
-                    "/api/wallet/safe",
-                    json={"chain": "gnosis"},
+                    "/api/wallet/safe", json={**body, "backup_owner": "0xbackup"}
                 )
             assert resp.status_code == HTTPStatus.OK
-            assert resp.json()["status"] == CreateSafeStatus.SAFE_CREATION_FAILED
-
-    def test_safe_created_transfer_completed(self) -> None:
-        """Cover lines 916-922: safe created, transfers succeeded."""
-        m = self._setup()
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = None  # will be created
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.create_safe.return_value = "0xcreate_tx"
-        wallet_mock.address = "0xeoa"
-        wallet_mock.transfer.return_value = "0xtransfer_tx"
-        # After creation reload returns wallet with safe
-        reloaded_wallet = MagicMock()
-        reloaded_wallet.safes = {Chain.GNOSIS: "0xsafe"}
-        reloaded_wallet.ledger_api.return_value = MagicMock()
-        reloaded_wallet.address = "0xeoa"
-        reloaded_wallet.transfer.return_value = "0xtransfer_tx"
-
-        load_call_count = [0]
-
-        def _mock_load(*args: Any, **kwargs: Any) -> Any:
-            load_call_count[0] += 1
-            if load_call_count[0] == 1:
-                return wallet_mock
-            return reloaded_wallet
-
-        m.wallet_manager.load.side_effect = _mock_load
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            mock_balances.return_value = {"0xsafe": {"0x0": 0}}
-            mock_subtract.return_value = {"0x0": 1000}
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as client:
-                    resp = client.post(
-                        "/api/wallet/safe",
-                        json={"chain": "gnosis"},
-                    )
-                assert resp.status_code == HTTPStatus.OK
-
-    def test_safe_exists_already_funded(self) -> None:
-        """Cover lines 930-932: safe exists, no transfers needed."""
-        m = self._setup()
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = {Chain.GNOSIS: "0xsafe"}
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.address = "0xeoa"
-        m.wallet_manager.load.return_value = wallet_mock
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            # All amounts are 0 → no transfers needed
-            mock_balances.return_value = {"0xsafe": {"0x0": 0}}
-            mock_subtract.return_value = {}  # empty → no transfers
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as client:
-                    resp = client.post(
-                        "/api/wallet/safe",
-                        json={"chain": "gnosis"},
-                    )
-                assert resp.status_code == HTTPStatus.OK
-                assert (
-                    resp.json()["status"] == CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
-                )
-
-    def test_safe_exists_transfer_completed(self) -> None:
-        """Cover lines 923-929: safe exists, transfer succeeded."""
-        m = self._setup()
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = {Chain.GNOSIS: "0xsafe"}
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.address = "0xeoa"
-        wallet_mock.transfer.return_value = "0xtransfer_tx"
-        m.wallet_manager.load.return_value = wallet_mock
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            mock_balances.return_value = {"0xsafe": {"0x0": 0}}
-            mock_subtract.return_value = {"0x0": 500}  # positive → transfer
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as client:
-                    resp = client.post(
-                        "/api/wallet/safe",
-                        json={"chain": "gnosis"},
-                    )
-                assert resp.status_code == HTTPStatus.OK
-                assert (
-                    resp.json()["status"]
-                    == CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
-                )
-
-    def test_safe_created_transfer_failed(self) -> None:
-        """Cover lines 917-919: safe created, transfer failed."""
-        m = self._setup()
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = None
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.create_safe.return_value = "0xcreate_tx"
-        wallet_mock.address = "0xeoa"
-        wallet_mock.transfer.side_effect = RuntimeError("transfer failed")
-
-        reloaded_wallet = MagicMock()
-        reloaded_wallet.safes = {Chain.GNOSIS: "0xsafe"}
-        reloaded_wallet.ledger_api.return_value = MagicMock()
-        reloaded_wallet.address = "0xeoa"
-        reloaded_wallet.transfer.side_effect = RuntimeError("transfer failed")
-
-        call_count = [0]
-
-        def _mock_load(*args: Any, **kwargs: Any) -> Any:
-            call_count[0] += 1
-            return wallet_mock if call_count[0] == 1 else reloaded_wallet
-
-        m.wallet_manager.load.side_effect = _mock_load
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            mock_balances.return_value = {"0xsafe": {"0x0": 0}}
-            mock_subtract.return_value = {"0x0": 1000}
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as client:
-                    resp = client.post(
-                        "/api/wallet/safe",
-                        json={"chain": "gnosis"},
-                    )
-                assert resp.status_code == HTTPStatus.OK
-                assert (
-                    resp.json()["status"]
-                    == CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
-                )
-
-    def test_transfer_excess_assets_path(self) -> None:
-        """Cover lines 869-881: transfer_excess_assets=True branch."""
-        m = self._setup()
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = {Chain.GNOSIS: "0xsafe"}
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.address = "0xeoa"
-        wallet_mock.transfer.return_value = "0xtx"
-        m.wallet_manager.load.return_value = wallet_mock
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            mock_balances.return_value = {"0xeoa": {"0x0": 0}}
-            mock_subtract.return_value = {}
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as client:
-                    resp = client.post(
-                        "/api/wallet/safe",
-                        json={
-                            "chain": "gnosis",
-                            "transfer_excess_assets": True,
-                        },
-                    )
-                assert resp.status_code == HTTPStatus.OK
-
-    def test_safe_exists_transfer_failed(self) -> None:
-        """Cover lines 924-926: safe exists, one transfer succeeds, one fails."""
-        m = self._setup()
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = {Chain.GNOSIS: "0xsafe"}
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.address = "0xeoa"
-        # First transfer succeeds, second raises → mixed result = SAFE_EXISTS_TRANSFER_FAILED
-        wallet_mock.transfer.side_effect = ["0xtx_ok", RuntimeError("fail")]
-        m.wallet_manager.load.return_value = wallet_mock
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            mock_balances.return_value = {"0xsafe": {"0x0": 0}}
-            # Two assets: both positive so both transfers are attempted
-            mock_subtract.return_value = {"0xtoken": 50, "0x0": 100}
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app) as client:
-                    resp = client.post(
-                        "/api/wallet/safe",
-                        json={"chain": "gnosis"},
-                    )
-                assert resp.status_code == HTTPStatus.OK
-                assert (
-                    resp.json()["status"]
-                    == CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED
-                )
+            assert resp.json() == result
+            wallet_mock.create_safe_and_transfer_excess.assert_called_once_with(
+                chain=Chain.GNOSIS,
+                backup_owner="0xbackup",
+                initial_funds=expected_initial_funds,
+            )
 
 
 class TestUpdateSafeRoute:
@@ -3384,63 +3192,6 @@ class TestExtraCoverageLines:
                 )
             assert resp.status_code == HTTPStatus.OK
             assert resp.json()["private_key"] == "0xprivkey"
-
-    # ── _create_safe with backup_owner (line 835) ────────────────────────────
-
-    def test_create_safe_with_backup_owner_calls_checksum(self) -> None:
-        """Cover line 835: backup_owner is passed through to_checksum_address."""
-        m = _make_mock_operate()
-        m.user_account = MagicMock()
-        m.password = "pass"  # nosec B105
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = None  # no safe yet → create path
-        wallet_mock.ledger_api.return_value.api.to_checksum_address.return_value = (
-            "0xbackup"
-        )
-        wallet_mock.create_safe.side_effect = RuntimeError("creation aborted")
-        m.wallet_manager.load.return_value = wallet_mock
-        stack, app, _, _ = _open_app(m)
-        with stack:
-            with TestClient(app, raise_server_exceptions=False) as c:
-                resp = c.post(
-                    "/api/wallet/safe",
-                    json={"chain": "gnosis", "backup_owner": "0xbackup"},
-                )
-            # create_safe raises → SAFE_CREATION_FAILED (still 200)
-            assert resp.status_code == HTTPStatus.OK
-
-    # ── _create_safe zero/negative amount skipped (line 899) ─────────────────
-
-    def test_create_safe_zero_amount_skipped(self) -> None:
-        """Cover line 899: transfer loop continues when amount <= 0."""
-        m = _make_mock_operate()
-        m.user_account = MagicMock()
-        m.password = "pass"  # nosec B105
-        m.wallet_manager.exists.return_value = True
-        wallet_mock = MagicMock()
-        wallet_mock.safes = {Chain.GNOSIS: "0xsafe"}
-        wallet_mock.ledger_api.return_value = MagicMock()
-        wallet_mock.address = "0xeoa"
-        m.wallet_manager.load.return_value = wallet_mock
-
-        with (
-            patch("operate.cli.get_assets_balances") as mock_balances,
-            patch("operate.cli.subtract_dicts") as mock_subtract,
-        ):
-            mock_balances.return_value = {"0xsafe": {"0x0": 0}}
-            # Return a zero amount so the `if amount <= 0: continue` branch runs
-            mock_subtract.return_value = {"0x0": 0}
-
-            stack, app, _, _ = _open_app(m)
-            with stack:
-                with TestClient(app, raise_server_exceptions=False) as c:
-                    resp = c.post("/api/wallet/safe", json={"chain": "gnosis"})
-                assert resp.status_code == HTTPStatus.OK
-                # Zero amount → no transfers → SAFE_EXISTS_ALREADY_FUNDED
-                assert (
-                    resp.json()["status"] == CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
-                )
 
     # ── achievement acknowledge service not found with auth (line 1171) ───────
 

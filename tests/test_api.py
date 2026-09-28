@@ -28,7 +28,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from operate.cli import CreateSafeStatus, create_app
+from operate.cli import create_app
 from operate.constants import (
     MIN_PASSWORD_LENGTH,
     MSG_SAFE_CREATED_TRANSFER_COMPLETED,
@@ -51,7 +51,7 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain, LedgerType
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_asset_balance, get_assets_balances
-from operate.wallet.master import EthereumMasterWallet
+from operate.wallet.master import CreateSafeStatus, EthereumMasterWallet
 
 from tests.conftest import OnTestnet, random_mnemonic, tenderly_add_balance
 

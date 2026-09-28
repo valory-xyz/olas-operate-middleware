@@ -21,7 +21,6 @@
 
 import asyncio
 import atexit
-import enum
 import multiprocessing
 import os
 import shutil
@@ -62,12 +61,6 @@ from operate.constants import (
     MSG_INVALID_MNEMONIC,
     MSG_INVALID_PASSWORD,
     MSG_NEW_PASSWORD_MISSING,
-    MSG_SAFE_CREATED_TRANSFER_COMPLETED,
-    MSG_SAFE_CREATED_TRANSFER_FAILED,
-    MSG_SAFE_CREATION_FAILED,
-    MSG_SAFE_EXISTS_AND_FUNDED,
-    MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
-    MSG_SAFE_EXISTS_TRANSFER_FAILED,
     OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
@@ -75,14 +68,9 @@ from operate.constants import (
     VERSION_FILE,
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
-    ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger.profiles import (
-    DEFAULT_EOA_TOPUPS,
-    DEFAULT_NEW_SAFE_FUNDS,
-    ERC20_TOKENS,
-)
+from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
 from operate.operate_types import (
     Chain,
@@ -108,8 +96,7 @@ from operate.services.funding_manager import FundingInProgressError, FundingMana
 from operate.services.health_checker import HealthChecker
 from operate.services.service import Service
 from operate.settings import Settings
-from operate.utils import subtract_dicts
-from operate.utils.gnosis import Transfer, get_assets_balances
+from operate.utils.gnosis import Transfer
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
@@ -194,21 +181,6 @@ class ValidatedServiceRoute(APIRoute):
             return await original_handler(request)
 
         return custom_handler
-
-
-class CreateSafeStatus(str, enum.Enum):
-    """ProviderRequestStatus"""
-
-    SAFE_CREATED_TRANSFER_COMPLETED = "SAFE_CREATED_TRANSFER_COMPLETED"
-    SAFE_CREATED_TRANSFER_FAILED = "SAFE_CREATED_TRANSFER_FAILED"
-    SAFE_EXISTS_TRANSFER_COMPLETED = "SAFE_EXISTS_TRANSFER_COMPLETED"
-    SAFE_EXISTS_TRANSFER_FAILED = "SAFE_EXISTS_TRANSFER_FAILED"
-    SAFE_CREATION_FAILED = "SAFE_CREATION_FAILED"
-    SAFE_EXISTS_ALREADY_FUNDED = "SAFE_EXISTS_ALREADY_FUNDED"
-
-    def __str__(self) -> str:
-        """__str__"""
-        return self.value
 
 
 class OperateApp:  # pylint: disable=too-many-instance-attributes
@@ -1066,125 +1038,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         wallet = manager.load(ledger_type=ledger_type)
-        ledger_api = wallet.ledger_api(chain=chain)
-
-        # 1. Ensure Safe exists (create if missing)
-        safe_address = None
-        create_tx = None
-
-        if wallet.safes is None or chain not in wallet.safes:
-            backup_owner = data.get("backup_owner")
-            if backup_owner:
-                backup_owner = ledger_api.api.to_checksum_address(backup_owner)
-
-            try:
-                create_tx = wallet.create_safe(
-                    chain=chain,
-                    backup_owner=backup_owner,
-                )
-                # After creation the safe should be in wallet.safes
-                wallet = manager.load(ledger_type=ledger_type)  # reload
-                safe_address = wallet.safes[chain]
-            except Exception as e:  # pylint: disable=broad-except
-                logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
-                return JSONResponse(
-                    content={
-                        "status": CreateSafeStatus.SAFE_CREATION_FAILED,
-                        "safe": None,
-                        "create_tx": None,
-                        "transfer_txs": {},
-                        "transfer_errors": {},
-                        "message": MSG_SAFE_CREATION_FAILED,
-                    },
-                    status_code=HTTPStatus.OK,
-                )
-        else:
-            safe_address = wallet.safes[chain]
-            logger.info(f"Safe already exists: {safe_address}")
-
-        # 2. Determine what should be transferred
-        # A default nonzero balance might be required on the Safe after creation.
-        # This is possibly required to estimate gas in protocol transactions.
         transfer_excess_assets = (
             str(data.get("transfer_excess_assets", "false")).lower() == "true"
         )
-
-        if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {
-                token[chain] for token in ERC20_TOKENS.values() if chain in token
-            }
-            master_eoa_balances = get_assets_balances(
-                ledger_api=ledger_api,
-                addresses={wallet.address},
-                asset_addresses=asset_addresses,
-                raise_on_invalid_address=False,
-            )[wallet.address]
-            initial_funds = subtract_dicts(
-                master_eoa_balances, DEFAULT_EOA_TOPUPS[chain]
-            )
-        else:
-            initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
-            safe_balances = get_assets_balances(
-                ledger_api=ledger_api,
-                addresses={safe_address},
-                asset_addresses=set(initial_funds.keys()) | {ZERO_ADDRESS},
-                raise_on_invalid_address=False,
-            )[safe_address]
-            initial_funds = subtract_dicts(initial_funds, safe_balances)
-
-        logger.info(f"_create_safe Computed {initial_funds=}")
-
-        transfer_txs = {}
-        transfer_errors = {}
-        for asset, amount in initial_funds.items():
-            try:
-                if amount <= 0:
-                    continue
-
-                logger.info(
-                    f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
-                )
-                tx_hash = wallet.transfer(
-                    to=safe_address,
-                    amount=int(amount),
-                    chain=chain,
-                    asset=asset,
-                    from_safe=False,
-                )
-                transfer_txs[asset] = tx_hash
-            except Exception as e:  # pylint: disable=broad-except
-                logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
-                transfer_errors[asset] = str(e)
-
-        if create_tx:
-            if transfer_errors:
-                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
-                message = MSG_SAFE_CREATED_TRANSFER_FAILED
-            else:  # If there are no transfer_txs, it means the Safe is sufficiently funded.
-                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
-                message = MSG_SAFE_CREATED_TRANSFER_COMPLETED
-        elif transfer_txs:
-            if transfer_errors:
-                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED
-                message = MSG_SAFE_EXISTS_TRANSFER_FAILED
-            else:
-                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
-                message = MSG_SAFE_EXISTS_TRANSFER_COMPLETED
-        else:  # No create_tx and no transfer_txs means the Safe already exists and is sufficiently funded.
-            status = CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
-            message = MSG_SAFE_EXISTS_AND_FUNDED
-
-        return JSONResponse(
-            content={
-                "status": status,
-                "safe": safe_address,
-                "create_tx": create_tx,
-                "transfer_txs": transfer_txs,
-                "transfer_errors": transfer_errors,
-                "message": message,
-            },
-            status_code=HTTPStatus.OK,
+        result = wallet.create_safe_and_transfer_excess(
+            chain=chain,
+            backup_owner=data.get("backup_owner"),
+            initial_funds=(
+                None
+                if transfer_excess_assets
+                else data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
+            ),
         )
+        return JSONResponse(content=result, status_code=HTTPStatus.OK)
 
     @app.put("/api/wallet/safe")
     async def _update_safe(  # pylint: disable=too-many-return-statements
