@@ -522,6 +522,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if destination not in wallet.safes:
             gas += SAFE_CREATION_GAS
         balance = int(wallet.get_balance(destination, NATIVE, from_safe=False))
+        if run.source_chain == run.destination_chain and run.source_token == NATIVE:
+            # The deposit itself lands here: it is already counted as received
+            # and must not also count as covering the reserve.
+            balance -= self._received(run)
         reserve = int(DEFAULT_EOA_TOPUPS[destination][NATIVE])
         return gas * self._native_price(destination) + max(0, reserve - balance)
 

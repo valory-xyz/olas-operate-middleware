@@ -398,6 +398,24 @@ class TestQuote:
             int(body["quote"]["outstanding_amount"]) == int(run.required_amount) - 1000
         )
 
+    def test_same_chain_native_partial_deposit_is_not_double_counted(
+        self, tmp_path: Path
+    ) -> None:
+        """A partial native deposit on the destination chain still owes the reserve."""
+        env = Env(tmp_path)
+        run = _deposit_run(
+            env, source_chain="polygon", source_token=NATIVE, amounts={NATIVE: 100}
+        )
+        required = int(run.required_amount)
+        assert required == 100 + _overhead(n_assets=1)
+
+        env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE
+        env.manager.refresh_quote(run.id)
+        run = env.reload(run)
+
+        assert int(run.required_amount) == required
+        assert int(run.received_amount) == POLYGON_RESERVE
+
     def test_quote_failure_sets_quote_failed(self, tmp_path: Path) -> None:
         """A failed Relay quote leaves the run in QUOTE_FAILED with a message."""
         env = Env(tmp_path)
