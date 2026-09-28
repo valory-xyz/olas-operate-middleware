@@ -111,6 +111,9 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         self.logger = logger
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
         self._lock = threading.Lock()
+        # Held by a funding run while it moves Master EOA funds, so the
+        # funding job cannot spend them mid-run.
+        self.master_eoa_lock = threading.Lock()
         self._withdrawal_locks: KeyedLocks[t.Tuple[str, str]] = KeyedLocks()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
@@ -1055,6 +1058,10 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
 
     def fund_master_eoa(self) -> None:
         """Fund Master EOA"""
+        with self.master_eoa_lock:
+            self._fund_master_eoa()
+
+    def _fund_master_eoa(self) -> None:
         if not self.wallet_manager.exists(LedgerType.ETHEREUM):
             self.logger.warning(
                 "[FUNDING MANAGER] Cannot fund Master EOA: No Ethereum wallet available."
@@ -1402,7 +1409,8 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts, require_all=True)
+            with self.master_eoa_lock:
+                self.fund_chain_amounts(amounts, require_all=True)
         finally:
             # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:

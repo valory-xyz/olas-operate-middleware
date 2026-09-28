@@ -1555,3 +1555,34 @@ class TestHeldBalances:
 
         assert held == {ZERO_ADDRESS: 0, ERC20_TOKEN: 1}
         assert mock_balance.call_count == 2
+
+
+class TestMasterEoaLock:
+    """fund_master_eoa and fund_service wait for a funding run's lock."""
+
+    def test_fund_master_eoa_holds_lock(self) -> None:
+        """The hourly Master EOA top-up runs under master_eoa_lock."""
+        manager = _make_manager()
+        seen: t.List[bool] = []
+        with patch.object(
+            manager,
+            "_fund_master_eoa",
+            side_effect=lambda: seen.append(manager.master_eoa_lock.locked()),
+        ):
+            manager.fund_master_eoa()
+        assert seen == [True]
+        assert not manager.master_eoa_lock.locked()
+
+    def test_fund_service_holds_lock(self) -> None:
+        """Service funding transfers run under master_eoa_lock."""
+        manager = _make_manager()
+        service = MagicMock()
+        service.service_config_id = "sc-1"
+        seen: t.List[bool] = []
+        with patch.object(
+            manager,
+            "fund_chain_amounts",
+            side_effect=lambda *_a, **_k: seen.append(manager.master_eoa_lock.locked()),
+        ):
+            manager.fund_service(service, ChainAmounts())
+        assert seen == [True]
