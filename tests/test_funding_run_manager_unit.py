@@ -423,6 +423,63 @@ class TestQuote:
         assert _required(run) == required
         assert int(run.received_amount) == POLYGON_RESERVE
 
+    def test_same_chain_netted_balance_is_not_also_received(
+        self, tmp_path: Path
+    ) -> None:
+        """USDC already netted against the target is not counted again as received."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50
+        env.funding_manager.held_balances.return_value = {POLYGON_USDC: 50}
+
+        run = _deposit_run(
+            env,
+            source_chain="polygon",
+            source_token=POLYGON_USDC,
+            amounts={POLYGON_USDC: 100},
+        )
+        assert run.net_targets == {POLYGON_USDC: 50}
+        assert int(run.received_amount) == 0
+
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50 + _required(run) - 1
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50 + _required(run)
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.PROCESSING
+
+    def test_same_chain_unnetted_balance_counts_as_received(
+        self, tmp_path: Path
+    ) -> None:
+        """Same-chain source funds no target counted still count toward the quote."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
+
+        run = _deposit_run(env, source_chain="polygon", source_token=POLYGON_USDC)
+
+        assert int(run.received_amount) == 30
+
+    def test_onboard_overhead_leaves_reserve_to_refill_requirements(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding adds only transfer gas: the reserve and Safe gas are in the targets."""
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        # One swap (GAS native) plus the transfer gas of the other modes, with
+        # no reserve or Safe-creation term.
+        assert run.step(STEP_NATIVE).amount == GAS + _overhead(
+            n_assets=2, with_safe=True, eoa_native=POLYGON_RESERVE
+        )
+
     def test_quote_failure_sets_quote_failed(self, tmp_path: Path) -> None:
         """A failed Relay quote leaves the run in QUOTE_FAILED with a message."""
         env = Env(tmp_path)
@@ -511,6 +568,29 @@ class TestTargets:
         env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE
         run = env.tick_until(run, FundingRunStatus.COMPLETED)
         assert run.step(STEP_RECEIVE).status == FundingStepStatus.DONE
+
+    @pytest.mark.parametrize("with_safe", [False, True])
+    def test_signer_gas_same_chain_native_asks_only_the_shortfall(
+        self, tmp_path: Path, with_safe: bool
+    ) -> None:
+        """The existing balance nets the target once: R-B completes the top-up."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE} if with_safe else {})
+        existing = POLYGON_RESERVE * 3 // 4
+        env.balances[(Chain.POLYGON, NATIVE)] = existing
+
+        run = env.manager.create_run(
+            mode="signer_gas",
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+        )
+        assert _required(run) == POLYGON_RESERVE - existing
+
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+
+        env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE
+        env.tick_until(run, FundingRunStatus.COMPLETED)
 
     def test_onboard_uses_service_targets_on_home_chain(self, tmp_path: Path) -> None:
         """Onboarding nets through FundingManager.destination_targets."""

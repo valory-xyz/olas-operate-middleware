@@ -1290,14 +1290,15 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
 
         Folds the Master Safe and Master EOA entries of `refill_requirements`
         (placeholders included, so it also works before the Safe exists) into
-        one target per token. Already net of balances.
+        one target per token. Already net of balances. A zero entry marks a
+        token whose balances were netted and already cover it.
         """
         refill_requirements = self.funding_requirements(service)["refill_requirements"]
         targets: t.Dict[str, int] = defaultdict(int)
         for assets in refill_requirements.get(service.home_chain, {}).values():
             for asset, amount in assets.items():
                 targets[asset] += int(amount)
-        return {asset: amount for asset, amount in targets.items() if amount > 0}
+        return dict(targets)
 
     def held_balances(self, chain: Chain, assets: t.Iterable[str]) -> t.Dict[str, int]:
         """What the Pearl Wallet on `chain` holds towards a funding target.

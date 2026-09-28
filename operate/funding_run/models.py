@@ -135,6 +135,9 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     swap_requests: t.List[ProviderRequest] = field(default_factory=list)
     required_amount: t.Optional[BigInt] = None
     received_amount: BigInt = field(default_factory=lambda: BigInt(0))
+    # Same-chain runs only: the Master EOA source-token balance at creation
+    # that the targets already netted. Only growth above it is "received".
+    receive_baseline: t.Optional[BigInt] = None
     eta_seconds: t.Optional[int] = None
     quoted_at: t.Optional[int] = None
     quote_message: t.Optional[str] = None

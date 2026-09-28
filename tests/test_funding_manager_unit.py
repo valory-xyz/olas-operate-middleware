@@ -1501,8 +1501,8 @@ class TestDestinationTargets:
 
         assert targets == {ZERO_ADDRESS: 8, ERC20_TOKEN: 7}
 
-    def test_zero_requirements_drop_out(self) -> None:
-        """Tokens with nothing missing are not targets."""
+    def test_zero_requirements_are_kept(self) -> None:
+        """Covered tokens stay as zero entries: their balances were netted."""
         manager = _make_manager()
         service = MagicMock()
         service.home_chain = "polygon"
@@ -1513,7 +1513,7 @@ class TestDestinationTargets:
                 "refill_requirements": {"polygon": {SAFE_ADDR: {ZERO_ADDRESS: 0}}}
             },
         ):
-            assert manager.destination_targets(service) == {}
+            assert manager.destination_targets(service) == {ZERO_ADDRESS: 0}
 
 
 class TestHeldBalances:

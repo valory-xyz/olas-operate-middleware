@@ -268,7 +268,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     f"Funding run {current.id} is {current.status}."
                 )
 
-            gross, net = self._targets(
+            gross, net, netted = self._targets(
                 run_mode, destination, service_config_id, deposit_amounts
             )
             run = FundingRun(
@@ -300,6 +300,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 self._finish(run, FundingRunStatus.COMPLETED)
                 return run
 
+            run.receive_baseline = self._receive_baseline(run, netted)
             self._quote(run)
             self._store(run)
             self._set_active(run)
@@ -331,8 +332,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         destination: Chain,
         service_config_id: t.Optional[str],
         deposit_amounts: t.Optional[t.Dict[str, t.Any]],
-    ) -> t.Tuple[t.Dict[str, int], t.Dict[str, int]]:
-        """Gross targets per mode, and net targets = shortfall against holdings."""
+    ) -> t.Tuple[t.Dict[str, int], t.Dict[str, int], t.Set[str]]:
+        """Gross targets per mode, net targets = shortfall against holdings,
+        and the tokens whose holdings that netting counted."""
         if mode == FundingRunMode.ONBOARD:
             service_manager = self.service_manager()
             if not service_manager.exists(service_config_id=service_config_id):
@@ -342,9 +344,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 raise FundingRunError(
                     f"Onboarding destination must be the service home chain {service.home_chain}."
                 )
-            # funding_requirements is already net of balances.
+            # funding_requirements is already net of balances; covered tokens
+            # come back as zero entries.
             targets = self.funding_manager.destination_targets(service)
-            return targets, targets
+            return targets, targets, set(targets)
 
         if mode == FundingRunMode.DEPOSIT:
             if not isinstance(deposit_amounts, dict):
@@ -371,14 +374,37 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     f"{', '.join(sorted(unsupported))}."
                 )
             held = self.funding_manager.held_balances(destination, gross.keys())
-            return gross, {
+            net = {
                 token: max(0, amount - held.get(token, 0))
                 for token, amount in gross.items()
             }
+            return gross, net, set(gross)
 
         reserve = int(DEFAULT_EOA_TOPUPS[destination][NATIVE])
         balance = int(self._wallet().get_balance(destination, NATIVE, from_safe=False))
-        return {NATIVE: reserve}, {NATIVE: max(0, reserve - balance)}
+        return {NATIVE: reserve}, {NATIVE: max(0, reserve - balance)}, {NATIVE}
+
+    def _receive_baseline(
+        self, run: FundingRun, netted: t.Set[str]
+    ) -> t.Optional[BigInt]:
+        """Source-token balance that must not count as received.
+
+        Only same-chain runs need one: there the targets were netted against
+        the very balance "received" is measured on, so counting both would
+        credit the same funds twice.
+        """
+        if run.source_chain != run.destination_chain:
+            return None
+        source = Chain(run.source_chain)
+        balance = int(
+            self._wallet().get_balance(source, run.source_token, from_safe=False)
+        )
+        if run.source_token.lower() in {token.lower() for token in netted}:
+            return BigInt(balance)
+        if run.source_token == NATIVE:
+            # The reserve is never a deposit; the quote asks for its shortfall.
+            return BigInt(min(balance, int(DEFAULT_EOA_TOPUPS[source][NATIVE])))
+        return BigInt(0)
 
     def cancel(self, run_id: str) -> FundingRun:
         """Cancel a run that has not started processing."""
@@ -534,8 +560,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if run.mode == FundingRunMode.SIGNER_GAS:
             return 0
         destination = Chain(run.destination_chain)
-        wallet = self._wallet()
         gas = SAFE_TRANSFER_GAS * (n_assets + 1)
+        if run.mode == FundingRunMode.ONBOARD:
+            # refill_requirements already asks for the Master EOA reserve, or
+            # before the Safe exists for DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, which
+            # covers its creation.
+            return gas * self._native_price(destination)
+        wallet = self._wallet()
         if destination not in wallet.safes:
             gas += SAFE_CREATION_GAS
         balance = int(wallet.get_balance(destination, NATIVE, from_safe=False))
@@ -768,12 +799,15 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _received(self, run: FundingRun) -> int:
         """What the Master EOA holds of the source token on the source chain.
 
-        Idempotent by construction: "received" is simply the current balance,
-        so partial deposits and restarts need no bookkeeping.
+        Idempotent by construction: "received" is derived from the current
+        balance (above the creation baseline for same-chain runs), so partial
+        deposits and restarts need no bookkeeping.
         """
         source = Chain(run.source_chain)
         wallet = self._wallet()
         balance = int(wallet.get_balance(source, run.source_token, from_safe=False))
+        if run.receive_baseline is not None:
+            return max(0, balance - int(run.receive_baseline))
         if run.source_token == NATIVE and source in wallet.safes:
             balance -= int(DEFAULT_EOA_TOPUPS[source][NATIVE])
         return max(0, balance)
