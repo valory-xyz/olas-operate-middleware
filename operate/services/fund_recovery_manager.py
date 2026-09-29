@@ -230,12 +230,15 @@ def _fetch_logs_in_chunks(
     return transfers
 
 
-def _is_safe_owner(ledger_api: t.Any, safe: str, eoa_address: str) -> bool:
-    """Return whether *eoa_address* is an owner of *safe*; False if *safe* is not a Safe."""
+def _is_safe_owner(ledger_api: t.Any, safe: str, eoa_address: str) -> t.Optional[bool]:
+    """Return whether *eoa_address* owns the Safe *safe*, or None if that could not be read."""
     try:
+        if not ledger_api.api.eth.get_code(safe):
+            return False
         owners = get_owners(ledger_api=ledger_api, safe=safe)
-    except Exception:  # pylint: disable=broad-except
-        return False
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning(f"Could not read the owners of mint recipient {safe}: {exc}")
+        return None
     return eoa_address.lower() in (o.lower() for o in owners)
 
 
@@ -269,7 +272,10 @@ def _enumerate_services_minted_to_owned_safes(
     service_ids: t.List[int] = []
     for recipient, token_id in sorted(mints, key=lambda mint: mint[1]):
         if recipient not in owned_by_eoa:
-            owned_by_eoa[recipient] = _is_safe_owner(ledger_api, recipient, eoa_address)
+            owned = _is_safe_owner(ledger_api, recipient, eoa_address)
+            if owned is None:
+                continue  # not cached, so the recipient's next mint retries
+            owned_by_eoa[recipient] = owned
         if owned_by_eoa[recipient]:
             service_ids.append(token_id)
     return service_ids

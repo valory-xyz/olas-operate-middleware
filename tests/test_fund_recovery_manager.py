@@ -227,17 +227,18 @@ class TestEnumerateServicesMintedToOwnedSafes:
     _EOA_RECIPIENT = "0x" + "e" * 40
 
     def _owners(self, ledger_api: t.Any, safe: str) -> t.List[str]:
-        """Fake get_owners: only the two safes are Safes; the EOA has no code."""
+        """Fake get_owners for the two Safes."""
         if safe.lower() == self._OWNED_SAFE:
             return ["0x" + "9" * 40, _TEST_EOA_ADDRESS]
-        if safe.lower() == self._FOREIGN_SAFE:
-            return ["0x" + "9" * 40]
-        raise ValueError("Could not decode contract function call")
+        return ["0x" + "9" * 40]
 
     def _ledger(self, logs: t.List[dict]) -> MagicMock:
         ledger = MagicMock()
         ledger.api.eth.block_number = SERVICE_REGISTRY_START_BLOCKS[Chain.POLYGON] + 10
         ledger.api.eth.get_logs.return_value = logs
+        ledger.api.eth.get_code.side_effect = lambda address: (
+            b"" if address.lower() == self._EOA_RECIPIENT else b"\x60\x80"
+        )
         return ledger
 
     def test_returns_only_services_minted_to_safes_the_eoa_owns(self) -> None:
@@ -290,6 +291,25 @@ class TestEnumerateServicesMintedToOwnedSafes:
             )
         assert result == [1, 2]
         assert owners.call_count == 1
+
+    def test_owner_read_failure_is_logged_and_retried(self) -> None:
+        """A failed owner read skips that mint only; the Safe's next mint retries."""
+        ledger = self._ledger(
+            [_mint_log(self._OWNED_SAFE, 1), _mint_log(self._OWNED_SAFE, 2)]
+        )
+        owners = [Exception("429 Too Many Requests"), [_TEST_EOA_ADDRESS]]
+        with (
+            patch(f"{_MODULE}.get_owners", side_effect=owners),
+            patch(f"{_MODULE}.logger") as mock_logger,
+        ):
+            result = _enumerate_services_minted_to_owned_safes(
+                ledger_api=ledger,
+                chain=Chain.POLYGON,
+                service_registry_address=_SERVICE_REGISTRY,
+                eoa_address=_TEST_EOA_ADDRESS,
+            )
+        assert result == [2]
+        mock_logger.warning.assert_called_once()
 
     def test_returns_empty_when_block_number_unavailable(self) -> None:
         """An RPC failure before the sweep yields no services instead of raising."""
