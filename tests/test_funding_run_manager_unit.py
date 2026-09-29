@@ -41,6 +41,7 @@ from operate.funding_run.manager import (
     FundingRunError,
     FundingRunManager,
     FundingRunNotFoundError,
+    MESSAGE_AWAITING_CONFIRMATION,
     STEP_BRIDGE,
     STEP_CLEAR_DELEGATION,
     STEP_NATIVE,
@@ -148,11 +149,21 @@ class FakeProvider:
         request.status = ProviderRequestStatus.EXECUTION_PENDING
 
     def status_json(self, request: ProviderRequest) -> t.Dict:
-        """Resolve to the outcome configured for the target token."""
+        """Resolve to the outcome configured for the target token.
+
+        Like the real providers, a request already settled is not looked up.
+        """
         outcome = self.bridge.outcomes.get(request.params["to"]["token"])
-        if outcome is not None:
+        if outcome is not None and request.status in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+        ):
             request.status = outcome
         return {"tx_hash": "0x" + "e" * 64, "explorer_link": "https://relay.link/x"}
+
+    def failure_is_final(self, request: ProviderRequest) -> bool:
+        """Final unless the target token is configured as still unconfirmed."""
+        return request.params["to"]["token"] not in self.bridge.unconfirmed
 
 
 @dataclass
@@ -171,6 +182,7 @@ class FakeBridge:
         self.quoted: t.List[t.Dict] = []
         self.executed: t.List[str] = []
         self.outcomes: t.Dict[str, ProviderRequestStatus] = {}
+        self.unconfirmed: t.Set[str] = set()
         self.fail_quote = False
         self.fail_execute = False
         self.quote_count = 0
@@ -949,6 +961,52 @@ class TestExecution:
 
         assert len(env.bridge.quoted) == quoted_before
         assert run.step(STEP_NATIVE).status == FundingStepStatus.DONE
+
+    def test_retry_keeps_unconfirmed_source_leg_failed_without_resending(
+        self, tmp_path: Path
+    ) -> None:
+        """A deposit that landed but the bridge never confirmed is not sent twice."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_FAILED
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        env.bridge.unconfirmed.add(NATIVE)
+
+        quoted_before = len(env.bridge.quoted)
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {
+            "step_id": STEP_NATIVE,
+            "message": MESSAGE_AWAITING_CONFIRMATION,
+        }
+        assert len(env.bridge.quoted) == quoted_before
+        env.sender.prepare_batch.assert_called_once()
+        assert env.reload(run).error == run.error
+
+    def test_retry_keeps_unconfirmed_swap_failed_without_resending(
+        self, tmp_path: Path
+    ) -> None:
+        """A swap that landed but was never confirmed is not re-quoted or resent."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_FAILED
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        env.bridge.unconfirmed.add(POLYGON_OLAS)
+        executed_before = list(env.bridge.executed)
+
+        quoted_before = len(env.bridge.quoted)
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {
+            "step_id": f"swap:{POLYGON_OLAS}",
+            "message": MESSAGE_AWAITING_CONFIRMATION,
+        }
+        assert len(env.bridge.quoted) == quoted_before
+        assert env.bridge.executed == executed_before
 
     def test_hidden_safe_failure_surfaces_on_last_visible_step(
         self, tmp_path: Path

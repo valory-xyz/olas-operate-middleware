@@ -1028,6 +1028,54 @@ class TestRelayProviderUnit:
         # from_tx_hash is None → _bridge_tx_likely_failed returns True → EXECUTION_FAILED
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
 
+    @pytest.mark.parametrize(
+        ("from_tx_hash", "message", "receipt", "expected"),
+        [
+            (None, None, None, True),
+            ("0x" + "d" * 64, RelayExecutionStatus.FAILURE.value, None, True),
+            ("0x" + "d" * 64, RelayExecutionStatus.REFUND.value, None, True),
+            ("0x" + "d" * 64, "unknown", {"status": 0}, True),
+            ("0x" + "d" * 64, "unknown", TransactionNotFound("gone"), True),
+            ("0x" + "d" * 64, "unknown", {"status": 1}, False),
+            ("0x" + "d" * 64, None, ConnectionError("rpc down"), False),
+        ],
+    )
+    def test_failure_is_final_only_when_nothing_can_still_be_filled(
+        self,
+        from_tx_hash: t.Optional[str],
+        message: t.Optional[str],
+        receipt: t.Any,
+        expected: bool,
+    ) -> None:
+        """A mined deposit stays unsettled until Relay itself reports failure or refund."""
+        provider = _make_relay_provider()
+        req = _make_request(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.EXECUTION_FAILED,
+        )
+        req.execution_data = _make_execution_data(from_tx_hash=from_tx_hash)
+        req.execution_data.message = message
+        req.quote_data = _make_quote_data(provider_data=RELAY_PROVIDER_DATA)
+
+        with patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
+            mock_w3 = MagicMock()
+            if isinstance(receipt, Exception):
+                mock_w3.eth.get_transaction_receipt.side_effect = receipt
+            else:
+                mock_w3.eth.get_transaction_receipt.return_value = receipt
+            mock_api.return_value = MagicMock(api=mock_w3)
+
+            assert provider.failure_is_final(req) is expected
+
+    def test_base_provider_failure_is_always_final(self) -> None:
+        """Providers without their own settlement check keep resending failed requests."""
+        req = _make_request(status=ProviderRequestStatus.EXECUTION_FAILED)
+        req.execution_data = _make_execution_data()
+
+        assert _ConcreteProvider().failure_is_final(req) is True
+
     def test_get_explorer_link_no_execution_data(self) -> None:
         """_get_explorer_link() returns None when no execution_data (line 462)."""
         provider = _make_relay_provider()

@@ -106,6 +106,10 @@ SAFE_CREATION_GAS = 1_000_000
 SAFE_TRANSFER_GAS = 100_000
 SLOW_STEP_MIN_SECONDS = 600
 CLEAR_DELEGATION_RETRY_SECONDS = 600
+MESSAGE_AWAITING_CONFIRMATION = (
+    "The transfer was sent but the bridge has not confirmed it yet. "
+    "Try again in a few minutes."
+)
 
 STEP_RECEIVE = "receive"
 STEP_BRIDGE = "bridge"
@@ -461,13 +465,15 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 if run.user_op_hash and not run.source_tx_hash:
                     self._reconcile_user_op(run)
                 for step in source_steps:
-                    self._track(run, step)
+                    self._recheck(run, step)
                 failed = [
                     r
                     for s in source_steps
                     if s.status == FundingStepStatus.FAILED
                     for r in run.requests_of(s)
                 ]
+                if self._unconfirmed(failed):
+                    return self._keep_failed_unconfirmed(run)
                 if failed:
                     # A source leg that never landed also takes the hidden
                     # clearing-reserve request with it.
@@ -488,8 +494,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     step.kind == FundingStepKind.SWAP
                     and step.status == FundingStepStatus.FAILED
                 ):
-                    self._track(run, step)
+                    self._recheck(run, step)
                     if step.status == FundingStepStatus.FAILED:
+                        if self._unconfirmed(run.requests_of(step)):
+                            return self._keep_failed_unconfirmed(run)
                         self._reset_requests(run, run.requests_of(step))
                 if step.status == FundingStepStatus.FAILED:
                     self._reset_step(step)
@@ -498,6 +506,37 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             run.status = FundingRunStatus.PROCESSING
             self._store(run)
             return run
+
+    def _recheck(self, run: FundingRun, step: FundingRunStep) -> None:
+        """Track a step with a fresh lookup of its failed requests.
+
+        Providers never re-read a request once it is marked failed, and that
+        mark can come from a status timeout rather than from the provider.
+        """
+        for request in run.requests_of(step):
+            if (
+                request.status == ProviderRequestStatus.EXECUTION_FAILED
+                and request.execution_data is not None
+                and request.execution_data.from_tx_hash
+            ):
+                request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+        self._track(run, step)
+
+    def _unconfirmed(self, requests: t.List[ProviderRequest]) -> bool:
+        """Whether a failed request may still deliver, so resending could pay twice."""
+        return any(
+            request.status == ProviderRequestStatus.EXECUTION_FAILED
+            and not self.bridge_manager.provider_for(request).failure_is_final(request)
+            for request in requests
+        )
+
+    def _keep_failed_unconfirmed(self, run: FundingRun) -> FundingRun:
+        run.error = {
+            "step_id": t.cast(t.Dict[str, str], run.error)["step_id"],
+            "message": MESSAGE_AWAITING_CONFIRMATION,
+        }
+        self._store(run)
+        return run
 
     @staticmethod
     def _reset_step(step: FundingRunStep) -> None:

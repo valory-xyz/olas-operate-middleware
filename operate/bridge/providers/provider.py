@@ -547,6 +547,12 @@ class Provider(ABC):
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
 
+    def failure_is_final(  # pylint: disable=unused-argument
+        self, provider_request: ProviderRequest
+    ) -> bool:
+        """Whether a failed request certainly delivered nothing, so resending it is safe."""
+        return True
+
     def status_json(self, provider_request: ProviderRequest) -> t.Dict:
         """JSON representation of the status."""
         self._validate(provider_request)

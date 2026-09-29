@@ -28,6 +28,7 @@ from http import HTTPStatus
 from urllib.parse import urlencode
 
 import requests
+from web3.exceptions import TransactionNotFound
 
 from operate.bridge.providers.provider import (
     DEFAULT_MAX_QUOTE_RETRIES,
@@ -485,6 +486,33 @@ class RelayProvider(Provider):
             if self._bridge_tx_likely_failed(provider_request):
                 provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
+
+    def failure_is_final(self, provider_request: ProviderRequest) -> bool:
+        """Whether a failed request certainly delivered nothing, so resending it is safe.
+
+        A deposit that mined can still be filled after a status timeout; only
+        Relay's own `failure` / `refund` settles it.
+        """
+        execution_data = provider_request.execution_data
+        if not execution_data or not execution_data.from_tx_hash:
+            return True
+        if execution_data.message in (
+            RelayExecutionStatus.FAILURE.value,
+            RelayExecutionStatus.REFUND.value,
+        ):
+            return True
+        try:
+            receipt = self._from_ledger_api(
+                provider_request
+            ).api.eth.get_transaction_receipt(execution_data.from_tx_hash)
+        except TransactionNotFound:
+            return True
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning(
+                f"[RELAY PROVIDER] Cannot read receipt of {execution_data.from_tx_hash}: {e}"
+            )
+            return False
+        return receipt["status"] != 1
 
     @staticmethod
     def _get_request_id(provider_request: ProviderRequest) -> t.Optional[str]:
