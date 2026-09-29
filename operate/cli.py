@@ -2024,6 +2024,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         try:
             data = await request.json()
             amounts = ChainAmounts(
@@ -2041,7 +2043,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # funding run can hold for a whole source leg.
             await run_in_executor(
                 lambda: service_manager.fund_service(
-                    service_config_id=service_config_id, amounts=amounts
+                    service_config_id=safe_id, amounts=amounts
                 )
             )
         except ValueError as e:

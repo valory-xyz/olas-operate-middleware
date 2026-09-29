@@ -74,6 +74,7 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain, LedgerType
 from operate.serialization import BigInt
 from operate.services.funding_manager import FundingManager
+from operate.validators import SAFE_ID_RE
 from operate.wallet.gas_abstraction import (
     Call,
     GasAbstractedSender,
@@ -253,8 +254,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         )
         if run_mode == FundingRunMode.DEPOSIT and not deposit_amounts:
             raise FundingRunError("'deposit_amounts' is required in deposit mode.")
-        if run_mode == FundingRunMode.ONBOARD and not service_config_id:
-            raise FundingRunError("'service_config_id' is required in onboard mode.")
+        if run_mode == FundingRunMode.ONBOARD:
+            if not service_config_id:
+                raise FundingRunError(
+                    "'service_config_id' is required in onboard mode."
+                )
+            # It is joined into a filesystem path by ServiceManager.
+            if not isinstance(service_config_id, str) or not SAFE_ID_RE.fullmatch(
+                service_config_id
+            ):
+                raise FundingRunError("Invalid 'service_config_id'.")
         if backup_owner is not None and not Web3.is_address(backup_owner):
             raise FundingRunError(f"Invalid backup_owner {backup_owner}.")
 

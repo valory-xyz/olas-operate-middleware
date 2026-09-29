@@ -244,6 +244,7 @@ class Env:
         self.service.home_chain = "polygon"
         service_manager = MagicMock()
         service_manager.load.return_value = self.service
+        self.service_manager = service_manager
         self.sender = MagicMock()
         self.sender.prepare_batch.return_value = PreparedUserOperation(
             user_op={}, user_op_hash="0x" + "0f" * 32, authorization_nonce=3
@@ -657,6 +658,24 @@ class TestTargets:
         }
         with pytest.raises(FundingRunError):
             env.manager.create_run(**params)
+
+    @pytest.mark.parametrize("service_config_id", ["../../keys", "sc 1", 123])
+    def test_unsafe_service_config_id_is_rejected_before_any_lookup(
+        self, tmp_path: Path, service_config_id: t.Any
+    ) -> None:
+        """The id reaches a filesystem path, so only safe identifiers pass."""
+        env = Env(tmp_path)
+
+        with pytest.raises(FundingRunError):
+            env.manager.create_run(
+                mode="onboard",
+                source_chain="base",
+                source_token=BASE_USDC,
+                destination_chain="polygon",
+                service_config_id=service_config_id,
+            )
+        env.service_manager.exists.assert_not_called()
+        env.service_manager.load.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
