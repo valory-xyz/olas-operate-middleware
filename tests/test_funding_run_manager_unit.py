@@ -19,13 +19,14 @@
 
 """Unit tests for operate/funding_run/manager.py (providers, chain and bundler faked)."""
 
+import asyncio
 import threading
 import time
 import typing as t
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -42,6 +43,8 @@ from operate.funding_run.manager import (
     FundingRunManager,
     FundingRunNotFoundError,
     MESSAGE_AWAITING_CONFIRMATION,
+    RUN_JOB_INTERVAL,
+    SLOW_STEP_MIN_SECONDS,
     STEP_BRIDGE,
     STEP_CLEAR_DELEGATION,
     STEP_NATIVE,
@@ -50,6 +53,7 @@ from operate.funding_run.manager import (
 )
 from operate.funding_run.models import (
     FundingRun,
+    FundingRunMode,
     FundingRunStatus,
     FundingStepKind,
     FundingStepStatus,
@@ -655,6 +659,22 @@ class TestTargets:
                 # Not an asset the Safe step sweeps into the Master Safe.
                 "deposit_amounts": {"0x" + "9" * 40: 1},
             },
+            {
+                "mode": "deposit",
+                "destination_chain": "polygon",
+                "deposit_amounts": {POLYGON_OLAS: "not-a-number"},
+            },
+            {
+                "mode": "deposit",
+                "destination_chain": "polygon",
+                "deposit_amounts": {POLYGON_OLAS: -1},
+            },
+            # A valid Chain without a Master EOA reserve profile.
+            {
+                "mode": "deposit",
+                "destination_chain": "local",
+                "deposit_amounts": {NATIVE: 1},
+            },
         ],
     )
     def test_invalid_requests_are_rejected(
@@ -1123,3 +1143,487 @@ class TestLifecycle:
         ):
             with pytest.raises(FundingRunNotFoundError):
                 env.manager.load(run_id)
+
+
+# ---------------------------------------------------------------------------
+# Validation, baselines and quoting edge cases
+# ---------------------------------------------------------------------------
+
+
+def _fail_source_leg_quotes(env: Env, source_chain: str, message: str) -> None:
+    """Make every quote leaving `source_chain` fail while swaps still quote."""
+    original = env.bridge.quote_requests
+
+    def _quote(requests_params: t.List[t.Dict]) -> FakeBundle:
+        bundle = original(requests_params)
+        for request in bundle.provider_requests:
+            if request.params["from"]["chain"] == source_chain:
+                request.status = ProviderRequestStatus.QUOTE_FAILED
+                t.cast(QuoteData, request.quote_data).message = message
+        return bundle
+
+    env.bridge.quote_requests = _quote  # type: ignore[method-assign]
+
+
+class TestEdgeCases:
+    """Paths off the main flow: unknown services, baselines, stale quotes, locks."""
+
+    def test_onboard_unknown_service_is_rejected(self, tmp_path: Path) -> None:
+        """An onboard run for a service that does not exist is a 400."""
+        env = Env(tmp_path)
+        env.service_manager.exists.return_value = False
+
+        with pytest.raises(FundingRunError, match="not found"):
+            env.manager.create_run(
+                mode="onboard",
+                source_chain="base",
+                source_token=BASE_USDC,
+                destination_chain="polygon",
+                service_config_id="sc-1",
+            )
+        env.service_manager.load.assert_not_called()
+        assert env.manager.active_run() is None
+
+    def test_same_chain_native_source_baseline_is_the_reserve(
+        self, tmp_path: Path
+    ) -> None:
+        """Native held on the destination up to the reserve is not a deposit; above it is."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE + 500
+
+        run = _deposit_run(
+            env,
+            source_chain="polygon",
+            source_token=NATIVE,
+            amounts={POLYGON_OLAS: 40},
+        )
+
+        assert run.receive_baseline == POLYGON_RESERVE
+        assert int(run.received_amount) == 500
+
+    def test_cross_chain_native_source_keeps_source_reserve_when_safe_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """With a Safe on the source chain, its Master EOA reserve is not "received"."""
+        env = Env(tmp_path, safes={Chain.BASE: SAFE})
+        base_reserve = int(DEFAULT_EOA_TOPUPS[Chain.BASE][NATIVE])
+        env.balances[(Chain.BASE, NATIVE)] = base_reserve + 123
+
+        run = _deposit_run(env, source_token=NATIVE)
+
+        assert run.receive_baseline is None
+        assert int(run.received_amount) == 123
+
+    def test_source_leg_quote_failure_sets_quote_failed(self, tmp_path: Path) -> None:
+        """Swaps quote but the source leg does not: QUOTE_FAILED with its message."""
+        env = Env(tmp_path)
+        _fail_source_leg_quotes(env, "base", "no source route")
+
+        run = _deposit_run(env)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == "no source route"
+        assert run.required_amount is None
+        assert run.source_requests == []
+        assert env.reload(run).status == FundingRunStatus.QUOTE_FAILED
+
+    def test_quote_failed_run_requotes_only_once_stale(self, tmp_path: Path) -> None:
+        """A QUOTE_FAILED run waits out the validity period, then re-quotes and recovers."""
+        env = Env(tmp_path)
+        env.bridge.fail_quote = True
+        run = _deposit_run(env)
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        quoted = len(env.bridge.quoted)
+
+        env.manager.tick()
+        assert len(env.bridge.quoted) == quoted
+        assert env.reload(run).status == FundingRunStatus.QUOTE_FAILED
+
+        env.bridge.fail_quote = False
+        run = env.reload(run)
+        run.quoted_at = 0
+        run.store()
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert len(env.bridge.quoted) > quoted
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+        assert run.quote_message is None
+        assert run.required_amount is not None
+
+    def test_stale_awaiting_quote_is_refreshed_on_tick(self, tmp_path: Path) -> None:
+        """An AWAITING_DEPOSIT quote past its validity is re-quoted by the loop."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        run.quoted_at = 1
+        run.store()
+        quoted = len(env.bridge.quoted)
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert len(env.bridge.quoted) > quoted
+        assert run.quoted_at is not None and run.quoted_at > 1
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+
+    def test_busy_lock_is_a_conflict(self, tmp_path: Path) -> None:
+        """A mutation that cannot take the run lock in time is refused with a 409."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        held, release = threading.Event(), threading.Event()
+
+        def _hold() -> None:
+            with env.manager._lock:  # pylint: disable=protected-access
+                held.set()
+                release.wait(5)
+
+        holder = threading.Thread(target=_hold)
+        holder.start()
+        try:
+            assert held.wait(5)
+            with patch(f"{MODULE}.LOCK_TIMEOUT", 0.01):
+                with pytest.raises(FundingRunConflictError, match="being processed"):
+                    env.manager.cancel(run.id)
+        finally:
+            release.set()
+            holder.join()
+        assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+
+
+# ---------------------------------------------------------------------------
+# Execution edge cases
+# ---------------------------------------------------------------------------
+
+
+def _source_leg_done(env: Env, run: FundingRun) -> FundingRun:
+    """Tick until both source-leg steps are DONE (no swap sent yet)."""
+    for _ in range(5):
+        env.manager.tick()
+        run = env.reload(run)
+        if all(
+            s.status == FundingStepStatus.DONE
+            for s in run.steps
+            if s.kind in (FundingStepKind.BRIDGE, FundingStepKind.NATIVE)
+        ):
+            return run
+    raise AssertionError(f"source leg of {run.id} not done: {run.steps}")
+
+
+class TestExecutionEdgeCases:
+    """Native sends, bundler errors, swap re-quotes, slow steps, clearing."""
+
+    def test_native_source_run_sends_directly_end_to_end(self, tmp_path: Path) -> None:
+        """A native source is sent as a plain transaction, never as a UserOp."""
+        env = Env(tmp_path)
+        run = _funded(env, source_token=NATIVE)
+        _all_succeed(env)
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert env.bridge.executed == [NATIVE, POLYGON_OLAS, POLYGON_PUSD]
+        assert run.sending_request_ids == []
+        assert run.step(STEP_BRIDGE).status == FundingStepStatus.DONE
+        env.sender.prepare_batch.assert_not_called()
+        env.wallet.clear_delegation.assert_not_called()
+
+    def test_pending_steps_are_processing_then_flagged_slow(
+        self, tmp_path: Path
+    ) -> None:
+        """Unconfirmed source-leg requests keep their steps PROCESSING, then slow."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.manager.tick()  # UserOp sent; requests EXECUTION_PENDING
+        env.manager.tick()
+
+        run = env.reload(run)
+        bridge = run.step(STEP_BRIDGE)
+        assert bridge.status == FundingStepStatus.PROCESSING
+        assert bridge.is_slow is False
+
+        later = int(time.time()) + SLOW_STEP_MIN_SECONDS + 60
+        with patch(f"{MODULE}._now", return_value=later):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.step(STEP_BRIDGE).is_slow is True
+        body = env.manager.run_json(run)
+        assert {s["id"]: s["is_slow"] for s in body["steps"]}[STEP_NATIVE] is True
+
+    def test_user_op_preparation_error_fails_the_source_leg(
+        self, tmp_path: Path
+    ) -> None:
+        """A bundler refusal while preparing fails the leg before any hash is stored."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.prepare_batch.side_effect = GasAbstractionError("paymaster refused")
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {"step_id": STEP_BRIDGE, "message": "paymaster refused"}
+        assert run.user_op_hash is None
+        env.sender.submit.assert_not_called()
+
+    def test_retry_after_receipt_error_requotes_the_unsent_source_leg(
+        self, tmp_path: Path
+    ) -> None:
+        """A UserOp that never landed is re-quoted in full, clearing reserve included."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.submit.side_effect = GasAbstractionError("bundler down")
+        env.manager.tick()  # hash stored, submission lost
+        env.sender.get_user_op_receipt.side_effect = GasAbstractionError("bad op")
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {"step_id": STEP_BRIDGE, "message": "bad op"}
+        old_ids = {r.id for r in run.source_requests}
+        assert len(old_ids) == 3  # carrier, native, clearing reserve
+
+        env.sender.get_user_op_receipt.side_effect = None
+        env.sender.get_user_op_receipt.return_value = None
+        quoted = len(env.bridge.quoted)
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.user_op_hash is None
+        assert run.source_tx_hash is None
+        assert len(env.bridge.quoted) == quoted + 3
+        assert not old_ids & {r.id for r in run.source_requests}
+        assert not old_ids & set(run.step(STEP_CLEAR_DELEGATION).request_ids)
+        assert run.step(STEP_BRIDGE).status == FundingStepStatus.PENDING
+        assert run.step(STEP_NATIVE).status == FundingStepStatus.PENDING
+
+        env.sender.submit.side_effect = None
+        _all_succeed(env)
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+        assert env.sender.prepare_batch.call_count == 2
+
+    def test_retry_resets_failed_safe_step(self, tmp_path: Path) -> None:
+        """Retry after a Safe failure re-runs only the Safe step."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        ok = env.wallet.create_safe_and_transfer_excess.return_value
+        env.wallet.create_safe_and_transfer_excess.return_value = {
+            **ok,
+            "status": CreateSafeStatus.SAFE_CREATION_FAILED,
+            "message": "Failed to create Safe.",
+        }
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        executed = list(env.bridge.executed)
+
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.step(STEP_SAFE).status == FundingStepStatus.PENDING
+        assert run.step(STEP_SAFE).message is None
+        env.wallet.create_safe_and_transfer_excess.return_value = ok
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+        assert env.wallet.create_safe_and_transfer_excess.call_count == 2
+        assert env.bridge.executed == executed
+        assert run.step(STEP_SAFE).tx_hash == ok["create_tx"]
+
+    def test_interrupted_swap_is_not_resent(self, tmp_path: Path) -> None:
+        """A swap marked PROCESSING with nothing recorded fails instead of resending."""
+        env = Env(tmp_path)
+        _all_succeed(env)
+        run = _source_leg_done(env, _funded(env))
+        swap_id = f"swap:{POLYGON_OLAS}"
+        run.step(swap_id).status = FundingStepStatus.PROCESSING
+        run.store()
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert env.bridge.executed == []
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {
+            "step_id": swap_id,
+            "message": "Interrupted before the swap was confirmed.",
+        }
+
+    def test_stale_swap_quote_is_refreshed_before_sending(self, tmp_path: Path) -> None:
+        """A swap whose quote expired is re-quoted, then sent."""
+        env = Env(tmp_path)
+        _all_succeed(env)
+        run = _source_leg_done(env, _funded(env))
+        t.cast(QuoteData, run.swap_requests[0].quote_data).timestamp = 0
+        run.store()
+
+        env.manager.tick()
+
+        assert env.bridge.quote_count == 1
+        assert env.bridge.executed == [POLYGON_OLAS]
+
+    @pytest.mark.parametrize(
+        ("quote_data", "message"),
+        [
+            (
+                QuoteData(
+                    eta=None,
+                    elapsed_time=0,
+                    message="price moved",
+                    timestamp=0,
+                    provider_data=None,
+                ),
+                "price moved",
+            ),
+            (None, "Quote failed."),
+        ],
+    )
+    def test_failed_swap_requote_fails_the_step(
+        self, tmp_path: Path, quote_data: t.Optional[QuoteData], message: str
+    ) -> None:
+        """A re-quote that fails stops the run at that swap, without sending it."""
+        env = Env(tmp_path)
+        _all_succeed(env)
+        run = _source_leg_done(env, _funded(env))
+        t.cast(QuoteData, run.swap_requests[0].quote_data).timestamp = 0
+        run.store()
+
+        def _fail(request: ProviderRequest) -> None:
+            request.status = ProviderRequestStatus.QUOTE_FAILED
+            request.quote_data = quote_data
+
+        with patch.object(env.bridge.provider, "quote", side_effect=_fail):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert env.bridge.executed == []
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {"step_id": f"swap:{POLYGON_OLAS}", "message": message}
+
+    def test_clearing_waits_for_its_reserve_request(self, tmp_path: Path) -> None:
+        """Clearing is deferred while the source-chain reserve swap is unsettled."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        original = env.bridge.provider.status_json
+
+        def _reserve_pending(request: ProviderRequest) -> t.Dict:
+            if request.params["to"]["chain"] == "base":
+                return {"tx_hash": None, "explorer_link": None}
+            return original(request)
+
+        with patch.object(
+            env.bridge.provider, "status_json", side_effect=_reserve_pending
+        ):
+            run = env.tick_until(run, FundingRunStatus.COMPLETED)
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.step(STEP_CLEAR_DELEGATION).status == FundingStepStatus.PENDING
+        assert not run.delegation_cleared
+        env.wallet.clear_delegation.assert_not_called()
+        pointer = env.manager._pointer()  # pylint: disable=protected-access
+        assert pointer.pending_clear_run_ids == [run.id]
+
+        env.manager.tick()
+
+        assert env.reload(run).delegation_cleared is True
+        env.wallet.clear_delegation.assert_called_once_with(Chain.BASE)
+
+    def test_delegation_still_present_after_clearing_is_retried(
+        self, tmp_path: Path
+    ) -> None:
+        """A clearing tx that leaves the delegation in place keeps the run pending."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.wallet.clear_delegation.side_effect = lambda chain: "0x" + "c2" * 32
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        step = run.step(STEP_CLEAR_DELEGATION)
+        assert step.status == FundingStepStatus.FAILED
+        assert step.message == "Delegation still present after clearing."
+        assert run.clear_delegation_tx_hash == "0x" + "c2" * 32
+        assert not run.delegation_cleared
+        pointer = env.manager._pointer()  # pylint: disable=protected-access
+        assert pointer.pending_clear_run_ids == [run.id]
+
+
+# ---------------------------------------------------------------------------
+# Background loop
+# ---------------------------------------------------------------------------
+
+
+class TestBackgroundLoop:
+    """reconcile / tick robustness and run_job."""
+
+    def test_missing_pending_clear_runs_are_skipped(self, tmp_path: Path) -> None:
+        """A pending-clear id whose file is gone does not break reconcile or tick."""
+        env = Env(tmp_path)
+        pointer = env.manager._pointer()  # pylint: disable=protected-access
+        pointer.pending_clear_run_ids = [f"fr-{uuid.uuid4()}"]
+        pointer.store()
+
+        env.manager.reconcile()
+        env.manager.tick()
+
+        env.wallet.clear_delegation.assert_not_called()
+        env.sender.delegation_of.assert_not_called()
+
+    async def test_run_job_survives_reconcile_and_tick_errors(
+        self, tmp_path: Path
+    ) -> None:
+        """Failures are logged and the loop keeps going until cancelled."""
+        env = Env(tmp_path)
+        manager = env.manager
+        with (
+            patch.object(
+                manager, "reconcile", side_effect=RuntimeError("reconcile")
+            ) as reconcile,
+            patch.object(manager, "tick", side_effect=RuntimeError("tick")) as tick,
+            patch(
+                f"{MODULE}.asyncio.sleep",
+                new=AsyncMock(side_effect=[None, asyncio.CancelledError()]),
+            ) as sleep,
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await manager.run_job()
+
+        reconcile.assert_called_once_with()
+        assert tick.call_count == 2
+        sleep.assert_awaited_with(RUN_JOB_INTERVAL)
+        logged = [
+            c.args[0]
+            for c in t.cast(MagicMock, manager.logger).exception.call_args_list
+        ]
+        assert logged == [
+            "[FUNDING RUN] Reconciliation failed",
+            "[FUNDING RUN] Tick failed",
+            "[FUNDING RUN] Tick failed",
+        ]
+
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+
+class TestModels:
+    """Enum rendering and step lookup."""
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            FundingRunMode.DEPOSIT,
+            FundingRunStatus.PROCESSING,
+            FundingStepKind.SWAP,
+            FundingStepStatus.DONE,
+        ],
+    )
+    def test_enums_render_as_their_value(self, member: t.Any) -> None:
+        """str() of every model enum is its persisted value."""
+        assert str(member) == member.value
+
+    def test_unknown_step_raises_key_error(self, tmp_path: Path) -> None:
+        """Looking up a step the plan does not have is a KeyError."""
+        run = _deposit_run(Env(tmp_path))
+        with pytest.raises(KeyError):
+            run.step("nope")
