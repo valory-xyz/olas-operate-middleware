@@ -23,6 +23,7 @@ import typing as t
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
@@ -57,7 +58,12 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
 
     @pytest.mark.integration
     @pytest.mark.flaky(reruns=2)
-    def test_scan_and_execute_with_service(self, test_env: OperateTestEnv) -> None:
+    @pytest.mark.parametrize(
+        "subgraph_down", [False, True], ids=["subgraph", "subgraph_down"]
+    )
+    def test_scan_and_execute_with_service(
+        self, test_env: OperateTestEnv, subgraph_down: bool
+    ) -> None:
         """Full scan → execute round-trip with a deployed Trader service on Gnosis.
 
         The test_env fixture provides:
@@ -67,6 +73,8 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
         Note: One external call is patched because Tenderly virtual forks are
         not indexed by public APIs:
         - _fetch_services_from_subgraph: The subgraph doesn't index fork services.
+          With ``subgraph_down`` it raises on the service chains instead, so the
+          services are found by the on-chain mint-log sweep.
 
         This test:
         1. Deploys the service on-chain.
@@ -158,6 +166,8 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
 
             for chain, subgraph_url in SUBGRAPH_URLS.items():
                 if subgraph_url == url:
+                    if subgraph_down and chain in SERVICE_CHAINS:
+                        raise requests.ConnectionError("subgraph unreachable")
                     return known_service_ids.get(chain.id, [])
             return []
 
