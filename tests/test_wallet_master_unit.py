@@ -30,7 +30,7 @@ from autonomy.chain.exceptions import ChainInteractionError
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import MSG_SAFE_CREATED_TRANSFER_FAILED, ZERO_ADDRESS
 from operate.ledger.profiles import CONTRACTS, DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import BatchResult, Transfer
@@ -2843,6 +2843,28 @@ class TestCreateSafeAndTransferExcess:
         assert mock_transfer.call_count == 2
         mock_transfer.create_safe.assert_not_called()
 
+    def test_new_safe_with_failed_transfer_is_reported(self, tmp_path: Path) -> None:
+        """Safe created but the funding transfer failed: SAFE_CREATED_TRANSFER_FAILED."""
+        wallet = _make_wallet(tmp_path)
+        reserve = DEFAULT_EOA_TOPUPS[Chain.GNOSIS][ZERO_ADDRESS]
+
+        def _create(chain: Chain, backup_owner: t.Optional[str]) -> str:
+            wallet.safes[chain] = SAFE_ADDR
+            return "0xcreate"
+
+        result, _ = self._run(
+            wallet,
+            balances={ZERO_ADDRESS: reserve + 5},
+            transfer=RuntimeError("fail"),
+            create_safe=_create,
+        )
+
+        assert result["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
+        assert result["message"] == MSG_SAFE_CREATED_TRANSFER_FAILED
+        assert result["create_tx"] == "0xcreate"
+        assert result["transfer_txs"] == {}
+        assert result["transfer_errors"] == {ZERO_ADDRESS: "fail"}
+
     def test_existing_safe_already_funded(self, tmp_path: Path) -> None:
         """Nothing to move and nothing created: SAFE_EXISTS_ALREADY_FUNDED."""
         wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
@@ -2884,6 +2906,17 @@ class TestSigningPassthroughs:
         assert auth.chain_id == Chain.BASE.id
         assert auth.nonce == 3
         assert auth.authority.hex().lower() == account.address[2:].lower()
+
+    def test_authorization_refuses_chain_id_zero(self, tmp_path: Path) -> None:
+        """A chain resolving to id 0 is refused: that authorization is valid everywhere."""
+        wallet, _ = _wallet_with_real_key(tmp_path)
+        wallet._crypto = MagicMock()  # pylint: disable=protected-access
+
+        with pytest.raises(ValueError, match="bound to a chain id"):
+            wallet.sign_authorization(
+                chain=MagicMock(id=0), address=TOKEN_ADDR, nonce=0
+            )
+        wallet._crypto.entity.sign_authorization.assert_not_called()  # pylint: disable=protected-access
 
     def test_unsafe_sign_hash_has_no_eip191_prefix(self, tmp_path: Path) -> None:
         """The signature recovers over the raw hash, as Simple7702Account expects."""

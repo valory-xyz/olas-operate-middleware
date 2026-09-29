@@ -43,6 +43,7 @@ from operate.wallet.gas_abstraction import (
     GasAbstractedSender,
     GasAbstractionError,
     PERMIT_DEADLINE,
+    RECEIPT_POLL_INTERVAL,
     is_gas_abstracted,
 )
 from operate.wallet.master import EthereumMasterWallet
@@ -427,6 +428,37 @@ class TestBundlerErrors:
                     Chain.BASE, USER_OP_HASH
                 )
 
+
+    def test_receipt_polling_sleeps_between_empty_polls(self, tmp_path: Path) -> None:
+        """An empty poll sleeps RECEIPT_POLL_INTERVAL, then the next poll's receipt returns."""
+        wallet, _ = _wallet(tmp_path)
+        sleeps: t.List[float] = []
+        sender = GasAbstractedSender(wallet, logger=MagicMock(), sleep=sleeps.append)
+        receipt = {"success": True, "receipt": {"transactionHash": HANDLE_OPS_TX}}
+        with patch(
+            f"{MODULE}.requests.post",
+            side_effect=[_bundler_response(None), _bundler_response(receipt)],
+        ):
+            assert (
+                sender._wait_for_receipt(  # pylint: disable=protected-access
+                    Chain.BASE, USER_OP_HASH
+                )
+                == receipt
+            )
+        assert sleeps == [RECEIPT_POLL_INTERVAL]
+
+
+class TestW3:
+    """_w3 resolves the chain's default ledger API."""
+
+    def test_uses_default_ledger_api(self) -> None:
+        """The Web3 instance is the default ledger API's `.api` for that chain."""
+        with patch(f"{MODULE}.get_default_ledger_api") as get_api:
+            w3 = GasAbstractedSender._w3(  # pylint: disable=protected-access
+                Chain.BASE
+            )
+        get_api.assert_called_once_with(Chain.BASE)
+        assert w3 is get_api.return_value.api
 
 class TestPrepareBatch:
     """prepare_batch signs without submitting, so the hash can be persisted first."""
