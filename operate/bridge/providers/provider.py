@@ -547,11 +547,36 @@ class Provider(ABC):
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
 
-    def failure_is_final(  # pylint: disable=unused-argument
+    def failure_is_final(self, provider_request: ProviderRequest) -> bool:
+        """Whether a failed request certainly delivered nothing, so resending it is safe.
+
+        A failed mark can come from a status timeout, and a deposit that mined
+        may still be delivered after one: only the provider's own terminal
+        status or an origin transaction that never succeeded settles it.
+        """
+        execution_data = provider_request.execution_data
+        if not execution_data or not execution_data.from_tx_hash:
+            return True
+        if self._reported_terminal_failure(provider_request):
+            return True
+        try:
+            receipt = self._from_ledger_api(
+                provider_request
+            ).api.eth.get_transaction_receipt(execution_data.from_tx_hash)
+        except TransactionNotFound:
+            return True
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning(
+                f"[PROVIDER] Cannot read receipt of {execution_data.from_tx_hash}: {e}"
+            )
+            return False
+        return receipt["status"] != 1
+
+    def _reported_terminal_failure(  # pylint: disable=unused-argument
         self, provider_request: ProviderRequest
     ) -> bool:
-        """Whether a failed request certainly delivered nothing, so resending it is safe."""
-        return True
+        """Whether the provider itself reported that the request will never be delivered."""
+        return False
 
     def status_json(self, provider_request: ProviderRequest) -> t.Dict:
         """JSON representation of the status."""

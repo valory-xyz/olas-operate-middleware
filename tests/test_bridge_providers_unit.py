@@ -1069,12 +1069,54 @@ class TestRelayProviderUnit:
 
             assert provider.failure_is_final(req) is expected
 
-    def test_base_provider_failure_is_always_final(self) -> None:
-        """Providers without their own settlement check keep resending failed requests."""
+    def test_provider_without_terminal_status_never_settles_a_mined_deposit(
+        self,
+    ) -> None:
+        """With no terminal status of its own, a provider trusts only the origin receipt."""
         req = _make_request(status=ProviderRequestStatus.EXECUTION_FAILED)
         req.execution_data = _make_execution_data()
+        req.execution_data.message = "Execution failed: ETA exceeded."
 
-        assert _ConcreteProvider().failure_is_final(req) is True
+        with patch(
+            "operate.bridge.providers.provider.get_default_ledger_api"
+        ) as mock_api:
+            mock_w3 = MagicMock()
+            mock_w3.eth.get_transaction_receipt.return_value = {"status": 1}
+            mock_api.return_value = MagicMock(api=mock_w3)
+
+            assert _ConcreteProvider().failure_is_final(req) is False
+
+    @pytest.mark.parametrize("client_status", ["REFUNDED", "FAILED"])
+    def test_mayan_terminal_status_settles_a_mined_deposit(
+        self, client_status: str
+    ) -> None:
+        """Mayan's own REFUNDED / FAILED settles a request whose deposit mined."""
+        provider = _make_mayan_provider()
+        req = _make_request(
+            provider_id="mayan-provider",
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+        )
+        req.execution_data = _make_execution_data()
+        req.quote_data = _make_quote_data()
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"clientStatus": client_status}
+
+        with (
+            patch(
+                "operate.bridge.providers.mayan_provider.requests.get",
+                return_value=response,
+            ),
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api"
+            ) as mock_api,
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+            mock_w3 = MagicMock()
+            mock_w3.eth.get_transaction_receipt.return_value = {"status": 1}
+            mock_api.return_value = MagicMock(api=mock_w3)
+
+            assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+            assert provider.failure_is_final(req) is True
 
     def test_execution_status_str_is_value(self) -> None:
         """Relay execution statuses render as the raw Relay status string."""

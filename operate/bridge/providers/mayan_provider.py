@@ -51,6 +51,7 @@ MAYAN_EXPLORER_URL = "https://explorer.mayan.finance/tx"
 
 MAYAN_FORWARDER_ADDRESS = "0x337685fdaB40D39bd02028545a4FfA7D287cC3E2"
 MAYAN_SLIPPAGE_BUFFER = 0.02  # 200 bps over-delivery buffer
+MAYAN_TERMINAL_FAILURE_STATUSES = ("REFUNDED", "FAILED")
 
 # Wormhole chain IDs for EVM chains
 WORMHOLE_CHAIN_IDS: t.Dict[str, int] = {
@@ -104,6 +105,10 @@ MAYAN_DEFAULT_GAS: t.Dict[Chain, t.Dict[str, int]] = {
 }
 
 _ABI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "contracts"
+
+
+def _terminal_failure_message(client_status: str) -> str:
+    return f"{MESSAGE_EXECUTION_FAILED} Mayan status: {client_status}"
 
 
 def _load_abi(contract_dir: str, contract_name: str) -> t.List[t.Dict]:
@@ -1224,10 +1229,8 @@ class MayanProvider(Provider):
 
                 provider_request.status = ProviderRequestStatus.EXECUTION_DONE
 
-            elif client_status in ("REFUNDED", "FAILED"):
-                execution_data.message = (
-                    f"{MESSAGE_EXECUTION_FAILED} Mayan status: {client_status}"
-                )
+            elif client_status in MAYAN_TERMINAL_FAILURE_STATUSES:
+                execution_data.message = _terminal_failure_message(client_status)
                 provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
             elif client_status in ("INPROGRESS", "PENDING", ""):
@@ -1253,6 +1256,14 @@ class MayanProvider(Provider):
             provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
             if self._bridge_tx_likely_failed(provider_request):
                 provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+    def _reported_terminal_failure(self, provider_request: ProviderRequest) -> bool:
+        """Whether Mayan answered REFUNDED or FAILED for the request."""
+        execution_data = provider_request.execution_data
+        return execution_data is not None and execution_data.message in {
+            _terminal_failure_message(status)
+            for status in MAYAN_TERMINAL_FAILURE_STATUSES
+        }
 
     def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the Mayan Explorer link for a transaction."""
