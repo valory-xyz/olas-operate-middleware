@@ -1125,3 +1125,48 @@ class TestFundingRunRoutes:
             call.assert_called_once_with("fr-x")
             call.side_effect = FundingRunConflictError("wrong state")
             assert getattr(client, method)(url).status_code == HTTPStatus.CONFLICT
+
+    def test_create_rejects_non_json_body(self, client: TestClient) -> None:
+        """A body that is not JSON at all is a 400, not a 500."""
+        response = client.post(
+            "/api/funding_run",
+            content=b"not json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Invalid funding run request."}
+
+    @pytest.mark.parametrize(
+        ("method", "url", "target", "body"),
+        [
+            (
+                "post",
+                "/api/funding_run",
+                "create_run",
+                {
+                    "mode": "signer_gas",
+                    "source": {"chain": "base", "token": ZERO_ADDRESS},
+                    "destination": {"chain": "polygon"},
+                },
+            ),
+            ("get", "/api/funding_run/active", "active_run", None),
+        ],
+    )
+    def test_unexpected_error_is_500_without_detail(
+        self,
+        client: TestClient,
+        method: str,
+        url: str,
+        target: str,
+        body: t.Optional[t.Dict],
+    ) -> None:
+        """An unexpected exception is a 500 with a fixed body; its text is not echoed."""
+        kwargs = {"json": body} if body is not None else {}
+        with mock.patch(
+            f"operate.cli.FundingRunManager.{target}",
+            side_effect=RuntimeError("secret detail"),
+        ):
+            response = getattr(client, method)(url, **kwargs)
+        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert response.json() == {"error": "Funding run failed. Please check the logs."}
+        assert "secret detail" not in response.text
