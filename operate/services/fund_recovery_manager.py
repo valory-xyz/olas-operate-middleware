@@ -116,15 +116,15 @@ SUBGRAPH_ENDPOINTS: t.Dict[Chain, t.Tuple[SubgraphDialect, str]] = {
     ),
     Chain.OPTIMISM: (
         "graph",
-        "https://registry-optimism.subgraph.autonolas.tech/graphql",
+        "https://registry-optimism.subgraph.autonolas.tech",
     ),
     Chain.POLYGON: (
         "graph",
-        "https://registry-polygon.subgraph.autonolas.tech/graphql",
+        "https://registry-polygon.subgraph.autonolas.tech",
     ),
     Chain.BASE: (
         "graph",
-        "https://registry-base.subgraph.autonolas.tech/graphql",
+        "https://registry-base.subgraph.autonolas.tech",
     ),
     Chain.ROBINHOOD: (
         "squid",

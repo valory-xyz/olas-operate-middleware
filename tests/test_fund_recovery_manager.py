@@ -1915,6 +1915,24 @@ class TestFetchServicesFromSubgraph:
         assert query == f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"
         assert result == [7, 12]
 
+    @pytest.mark.parametrize(
+        ("chain", "url"),
+        [
+            (Chain.POLYGON, "https://registry-polygon.subgraph.autonolas.tech"),
+            (Chain.BASE, "https://registry-base.subgraph.autonolas.tech"),
+            (Chain.OPTIMISM, "https://registry-optimism.subgraph.autonolas.tech"),
+            (
+                Chain.ROBINHOOD,
+                "https://subgraph.autonolas.tech/squid/service-registry-robinhood/graphql",
+            ),
+        ],
+    )
+    def test_registry_proxy_urls_post_to_root(self, chain: Chain, url: str) -> None:
+        """The registry proxies serve POST at the root; only the squid uses /graphql."""
+        from operate.services.fund_recovery_manager import SUBGRAPH_URLS
+
+        assert SUBGRAPH_URLS[chain] == url
+
 
 def test_inject_safe_into_wallet(tmp_path: Path) -> None:
     """_inject_safe_into_wallet sets wallet.safes[chain] and persists."""
