@@ -1076,6 +1076,45 @@ class TestRelayProviderUnit:
 
         assert _ConcreteProvider().failure_is_final(req) is True
 
+    def test_execution_status_str_is_value(self) -> None:
+        """RelayExecutionStatus renders as the raw Relay status string."""
+        assert str(RelayExecutionStatus.SUCCESS) == "success"
+
+    @pytest.mark.parametrize(
+        ("provider_data", "age_seconds", "expected"),
+        [
+            ({"response": {"steps": []}}, 0, ProviderRequestStatus.EXECUTION_UNKNOWN),
+            (None, 0, ProviderRequestStatus.EXECUTION_UNKNOWN),
+            (
+                {"response": {"steps": []}},
+                3600,
+                ProviderRequestStatus.EXECUTION_FAILED,
+            ),
+        ],
+    )
+    def test_update_execution_status_without_request_id(
+        self,
+        provider_data: t.Optional[t.Dict],
+        age_seconds: int,
+        expected: ProviderRequestStatus,
+    ) -> None:
+        """No stored requestId: Relay is not polled; the tx age decides UNKNOWN vs FAILED."""
+        provider = _make_relay_provider()
+        req = _make_request(
+            provider_id="relay-provider",
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+        )
+        req.execution_data = _make_execution_data(
+            timestamp=int(time.time()) - age_seconds
+        )
+        req.quote_data = _make_quote_data(provider_data=provider_data)
+
+        with patch("operate.bridge.providers.relay_provider.requests.get") as get:
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        get.assert_not_called()
+        assert req.status == expected
+
     def test_get_explorer_link_no_execution_data(self) -> None:
         """_get_explorer_link() returns None when no execution_data (line 462)."""
         provider = _make_relay_provider()
