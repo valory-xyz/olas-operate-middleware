@@ -1263,7 +1263,8 @@ class TestEdgeCases:
 
         run = env.reload(run)
         assert len(env.bridge.quoted) > quoted
-        assert run.quoted_at is not None and run.quoted_at > 1
+        assert run.quoted_at is not None
+        assert run.quoted_at > 1
         assert run.status == FundingRunStatus.AWAITING_DEPOSIT
 
     def test_busy_lock_is_a_conflict(self, tmp_path: Path) -> None:

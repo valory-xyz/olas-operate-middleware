@@ -1077,7 +1077,7 @@ class TestRelayProviderUnit:
         assert _ConcreteProvider().failure_is_final(req) is True
 
     def test_execution_status_str_is_value(self) -> None:
-        """RelayExecutionStatus renders as the raw Relay status string."""
+        """Relay execution statuses render as the raw Relay status string."""
         assert str(RelayExecutionStatus.SUCCESS) == "success"
 
     @pytest.mark.parametrize(
