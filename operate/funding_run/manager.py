@@ -884,19 +884,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         run.received_amount = BigInt(self._received(run))
         if stale:
             self._quote(run)
-        if (
-            run.status == FundingRunStatus.AWAITING_DEPOSIT
-            and run.required_amount is not None
-            and run.received_amount >= run.required_amount
-        ):
+        if self._deposit_covered(run):
             # Final quote against the funds actually held; a shortfall sends
             # the run back to waiting with the new amount.
             self._quote(run)
-            if (
-                run.status == FundingRunStatus.AWAITING_DEPOSIT
-                and run.required_amount is not None
-                and run.received_amount >= run.required_amount
-            ):
+            if self._deposit_covered(run):
                 receive = run.step(STEP_RECEIVE)
                 receive.status = FundingStepStatus.DONE
                 receive.started_at = receive.started_at or run.created_at
@@ -906,6 +898,14 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     f"[FUNDING RUN] {run.id} deposit received; processing."
                 )
         self._store(run)
+
+    @staticmethod
+    def _deposit_covered(run: FundingRun) -> bool:
+        return (
+            run.status == FundingRunStatus.AWAITING_DEPOSIT
+            and run.required_amount is not None
+            and run.received_amount >= run.required_amount
+        )
 
     # --- execution -----------------------------------------------------------
 
