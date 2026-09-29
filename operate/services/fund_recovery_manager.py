@@ -140,6 +140,20 @@ SQUID_URLS: t.FrozenSet[str] = frozenset(
     url for dialect, url in SUBGRAPH_ENDPOINTS.values() if dialect == "squid"
 )
 
+#: Deployment block of the service registry per chain, where the mint-log sweep
+#: starts.  Pinned because the default RPCs of some chains are not archive nodes,
+#: so the deployment block cannot be found via historical ``eth_getCode``.
+SERVICE_REGISTRY_START_BLOCKS: t.Dict[Chain, int] = {
+    Chain.GNOSIS: 27_871_084,
+    Chain.POLYGON: 41_783_952,
+    Chain.BASE: 10_827_380,
+    Chain.OPTIMISM: 116_423_039,
+    Chain.ROBINHOOD: 58_564_789,
+}
+
+_TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
+_ZERO_ADDRESS_TOPIC = "0x" + "0" * 64
+
 #: A real IPFS CID used when constructing a synthetic service via
 #: ``ServiceManager.create()``.  The downloaded package contents are never
 #: accessed during recovery — only ``chain_configs`` and ``agent_addresses``
@@ -171,74 +185,15 @@ def _get_service_registry_contract(
     )
 
 
-def _get_safe_deploy_and_last_tx_block(
-    w3: "Web3", safe: str, current_block: int
-) -> t.Tuple[int, int]:
-    """Find the block when the Safe was deployed and the block of its last transaction."""
-    safe_checksum = w3.to_checksum_address(safe)
-
-    # 1. Binary search for deployment block
-    low = 0
-    high = current_block
-    deploy_block = current_block
-
-    while low <= high:
-        mid = (low + high) // 2
-        try:
-            code = w3.eth.get_code(safe_checksum, block_identifier=mid)
-            if len(code) > 2:
-                deploy_block = mid
-                high = mid - 1
-            else:
-                low = mid + 1
-        except Exception:  # pylint: disable=broad-except
-            low = mid + 1
-
-    # 2. Binary search for last transaction block
-    try:
-        # Keccak of "nonce()"
-        nonce_data = Web3.keccak(text="nonce()")[:4].hex()
-        res = w3.eth.call(
-            {"to": safe_checksum, "data": nonce_data}, block_identifier=current_block
-        )
-        current_nonce = int.from_bytes(res, "big") if res else 0
-    except Exception:  # pylint: disable=broad-except
-        current_nonce = 0
-
-    last_tx_block = current_block
-    if current_nonce > 0:
-        low = deploy_block
-        high = current_block
-        last_tx_block = current_block
-
-        while low <= high:
-            mid = (low + high) // 2
-            try:
-                res = w3.eth.call(
-                    {"to": safe_checksum, "data": nonce_data}, block_identifier=mid
-                )
-                mid_nonce = int.from_bytes(res, "big") if res else 0
-
-                if mid_nonce == current_nonce:
-                    last_tx_block = mid
-                    high = mid - 1
-                else:
-                    low = mid + 1
-            except Exception:  # pylint: disable=broad-except
-                low = mid + 1
-
-    return deploy_block, last_tx_block
-
-
 def _fetch_logs_in_chunks(
     w3: "Web3",
     registry: str,
     start_block: int,
     end_block: int,
     topics: t.List[t.Optional[str]],
-) -> t.Set[int]:
-    """Fetch logs dynamically adjusting chunk sizes on failure."""
-    token_ids: t.Set[int] = set()
+) -> t.Set[t.Tuple[str, int]]:
+    """Fetch ``(to, token_id)`` pairs of Transfer logs, adjusting chunk sizes on failure."""
+    transfers: t.Set[t.Tuple[str, int]] = set()
     current_start = start_block
     chunk_size = 100_000
     registry_checksum = w3.to_checksum_address(registry)
@@ -256,7 +211,8 @@ def _fetch_logs_in_chunks(
             )
             for log in logs:
                 if len(log["topics"]) >= 4:
-                    token_ids.add(int(log["topics"][3].hex(), 16))
+                    to = Web3.to_checksum_address(bytes(log["topics"][2])[-20:])
+                    transfers.add((to, int.from_bytes(log["topics"][3], "big")))
 
             current_start = chunk_end + 1
             # Grow chunk size on success up to max
@@ -271,57 +227,52 @@ def _fetch_logs_in_chunks(
             else:
                 chunk_size = max(1, chunk_size // 2)
 
-    return token_ids
+    return transfers
 
 
-def _enumerate_owned_services(  # pylint: disable=too-many-locals
+def _is_safe_owner(ledger_api: t.Any, safe: str, eoa_address: str) -> bool:
+    """Return whether *eoa_address* is an owner of *safe*; False if *safe* is not a Safe."""
+    try:
+        owners = get_owners(ledger_api=ledger_api, safe=safe)
+    except Exception:  # pylint: disable=broad-except
+        return False
+    return eoa_address.lower() in (o.lower() for o in owners)
+
+
+def _enumerate_services_minted_to_owned_safes(
     ledger_api: t.Any,
+    chain: Chain,
     service_registry_address: str,
-    owner_address: str,
+    eoa_address: str,
 ) -> t.List[int]:
     """
-    Enumerate service IDs owned by *owner_address* by scanning Transfer events.
+    Enumerate IDs of services minted to a Safe owned by *eoa_address*.
 
-    ServiceRegistryL2 does NOT expose ``getServicesOfOwner``.  Instead we scan
-    Transfer events where ``to == owner_address`` in bounded chunks, then filter
-    via ``ownerOf(tokenId)`` to skip transferred-away NFTs.
+    Pearl mints the service NFT to the Master Safe and moves it to the staking
+    contract while staked, so neither the EOA nor the current NFT owner finds it.
+    The mint recipient does, so we sweep the registry's mint logs instead.
     """
-    contract = _get_service_registry_contract(ledger_api, service_registry_address)
     try:
-        latest_block = ledger_api.api.eth.block_number
-        owner_checksum: str = str(Web3.to_checksum_address(owner_address))
-
-        deploy_block, last_tx_block = _get_safe_deploy_and_last_tx_block(
-            ledger_api.api, owner_checksum, latest_block
-        )
-
-        topics: t.List[t.Optional[str]] = [
-            Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex(),
-            None,
-            "0x" + "0" * 24 + owner_checksum[2:].lower(),
-        ]
-
-        token_ids = _fetch_logs_in_chunks(
-            ledger_api.api,
+        w3 = ledger_api.api
+        mints = _fetch_logs_in_chunks(
+            w3,
             service_registry_address,
-            deploy_block,
-            last_tx_block,
-            topics,
+            SERVICE_REGISTRY_START_BLOCKS[chain],
+            w3.eth.block_number,
+            [_TRANSFER_TOPIC, _ZERO_ADDRESS_TOPIC, None],
         )
-
-        owned = []
-        for token_id in token_ids:
-            try:
-                current_owner = contract.functions.ownerOf(token_id).call()
-                if current_owner.lower() == owner_address.lower():
-                    owned.append(token_id)
-            except Exception:  # pylint: disable=broad-except  # nosec B110
-                pass  # token may not exist or call failed
-
-        return owned
     except Exception as exc:  # pylint: disable=broad-except
-        logger.warning(f"Service enumeration failed: {exc}")
+        logger.warning(f"Service enumeration failed on {chain.value}: {exc}")
         return []
+
+    owned_by_eoa: t.Dict[str, bool] = {}
+    service_ids: t.List[int] = []
+    for recipient, token_id in sorted(mints, key=lambda mint: mint[1]):
+        if recipient not in owned_by_eoa:
+            owned_by_eoa[recipient] = _is_safe_owner(ledger_api, recipient, eoa_address)
+        if owned_by_eoa[recipient]:
+            service_ids.append(token_id)
+    return service_ids
 
 
 def _get_service_state(
@@ -376,21 +327,22 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
     service_registry_address: str,
     eoa_address: str,
     subgraph_url: t.Optional[str],
-) -> t.List[str]:
-    """Discover MasterSafe addresses for *eoa_address* via on-chain contract lookups.
+) -> t.Dict[str, t.List[int]]:
+    """Discover MasterSafe addresses for *eoa_address* and the service IDs under each.
 
     Replaces the Safe Transaction Service API dependency in the recovery flow.
     Uses the OLAS subgraph as primary service-ID source, falls back to on-chain
-    Transfer-event enumeration, then resolves each service's MasterSafe via
-    ``StakingManager.get_current_staking_program`` (handles both staked and
-    non-staked cases) and ``StakingManager.service_info`` (staked branch).
+    mint-log enumeration only when the subgraph is unavailable, then resolves
+    each service's MasterSafe via ``StakingManager.get_current_staking_program``
+    (handles both staked and non-staked cases) and
+    ``StakingManager.service_info`` (staked branch).
 
     Only safes where *eoa_address* is a confirmed owner are returned.
     """
-    safe_addresses: t.Set[str] = set()
+    safe_services: t.Dict[str, t.List[int]] = {}
 
     # ── 1. Service ID discovery ──────────────────────────────────────────────
-    service_ids: t.List[int] = []
+    service_ids: t.Optional[t.List[int]] = None
     if subgraph_url:
         try:
             service_ids = _fetch_services_from_subgraph(subgraph_url, eoa_address)
@@ -401,17 +353,15 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
                 subgraph_url,
                 exc,
             )
-            service_ids = []
 
-    if not service_ids:
-        logger.warning(
-            "No service IDs found from subgraph for EOA %s; falling back to on-chain enumeration.",
-            eoa_address,
-        )
-        service_ids = _enumerate_owned_services(
+    # An empty subgraph result is trusted: sweeping full registry history on
+    # every chain the user never used would make recovery take hours.
+    if service_ids is None:
+        service_ids = _enumerate_services_minted_to_owned_safes(
             ledger_api=ledger_api,
+            chain=chain,
             service_registry_address=service_registry_address,
-            owner_address=eoa_address,
+            eoa_address=eoa_address,
         )
 
     # ── 2. MasterSafe resolution per service ID ─────────────────────────────
@@ -469,7 +419,7 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
                 )
                 continue
 
-            safe_addresses.add(master_safe_cs)
+            safe_services.setdefault(master_safe_cs, []).append(svc_id)
 
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(
@@ -478,7 +428,7 @@ def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
                 exc,
             )
 
-    return list(safe_addresses)
+    return safe_services
 
 
 def _check_gas_warning(
@@ -601,17 +551,17 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         chain_balances[eoa_address][token_addr] = BigInt(bal)
 
                 # --- Master Safe discovery ---
-                _contract_addrs_for_safe = CONTRACTS.get(chain)
-                _service_registry_addr_for_safe = (
-                    _contract_addrs_for_safe.get("service_registry", "")
-                    if _contract_addrs_for_safe
+                _contract_addrs = CONTRACTS.get(chain)
+                service_registry_addr = (
+                    _contract_addrs.get("service_registry", "")
+                    if _contract_addrs
                     else ""
                 )
-                if _service_registry_addr_for_safe:
-                    safe_addresses = _get_master_safes_from_contracts(
+                if service_registry_addr:
+                    safe_services = _get_master_safes_from_contracts(
                         chain=chain,
                         ledger_api=ledger_api,
-                        service_registry_address=_service_registry_addr_for_safe,
+                        service_registry_address=service_registry_addr,
                         eoa_address=eoa_address,
                         subgraph_url=SUBGRAPH_URLS.get(chain),
                     )
@@ -619,8 +569,8 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                     self._logger.warning(
                         "Service registry address not found for chain %s", chain.value
                     )
-                    safe_addresses = []
-                for safe_addr in safe_addresses:
+                    safe_services = {}
+                for safe_addr in safe_services:
                     safe_native = get_asset_balance(
                         ledger_api=ledger_api,
                         asset_address=ZERO_ADDRESS,
@@ -641,205 +591,150 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
                 # --- Service enumeration ---
                 try:
-                    contract_addresses = CONTRACTS.get(chain)
-                    if contract_addresses:
-                        service_registry_addr = contract_addresses.get(
-                            "service_registry", ""
-                        )
-                        if service_registry_addr:
-                            seen_service_ids: t.Set[int] = set()
-                            all_service_ids: t.List[int] = []
-
-                            subgraph_url = SUBGRAPH_URLS.get(chain)
-                            if subgraph_url:
-                                try:
-                                    all_service_ids = _fetch_services_from_subgraph(
-                                        subgraph_url, eoa_address
-                                    )
-                                except Exception as e:  # pylint: disable=broad-except
-                                    self._logger.warning(
-                                        "Failed to fetch services from subgraph on %s: %s. Falling back to RPC.",
-                                        chain.value,
-                                        e,
-                                    )
-                                    subgraph_url = None  # trigger fallback
-                            else:
-                                self._logger.warning(
-                                    "No subgraph URL configured for chain %s; falling back to on-chain enumeration.",
-                                    chain.value,
-                                )
-
-                            if not subgraph_url:
-                                # Fallback: Enumerate services owned by each master safe
-                                for safe_addr in safe_addresses:
-                                    safe_owned_ids = _enumerate_owned_services(
-                                        ledger_api=ledger_api,
-                                        service_registry_address=service_registry_addr,
-                                        owner_address=safe_addr,
-                                    )
-                                    all_service_ids.extend(safe_owned_ids)
-
-                            for svc_id in all_service_ids:
-                                if svc_id in seen_service_ids:
-                                    continue  # pragma: no cover  -- unreachable in practice
-                                seen_service_ids.add(svc_id)
-                                state = _get_service_state(
-                                    ledger_api=ledger_api,
-                                    service_registry_address=service_registry_addr,
+                    for service_ids in safe_services.values():
+                        for svc_id in service_ids:
+                            state = _get_service_state(
+                                ledger_api=ledger_api,
+                                service_registry_address=service_registry_addr,
+                                service_id=svc_id,
+                            )
+                            can_unstake = state in (
+                                OnChainState.DEPLOYED,
+                                OnChainState.TERMINATED_BONDED,
+                            )
+                            chain_services.append(
+                                RecoveredServiceInfo(
+                                    chain_id=chain_id,
                                     service_id=svc_id,
+                                    state=state,
+                                    can_unstake=can_unstake,
                                 )
-                                can_unstake = state in (
-                                    OnChainState.DEPLOYED,
-                                    OnChainState.TERMINATED_BONDED,
-                                )
-                                chain_services.append(
-                                    RecoveredServiceInfo(
-                                        chain_id=chain_id,
-                                        service_id=svc_id,
-                                        state=state,
-                                        can_unstake=can_unstake,
-                                    )
-                                )
+                            )
 
-                                # Discover staked OLAS locked in a staking contract.
-                                try:
-                                    staking_manager = StakingManager(
-                                        chain=chain,
-                                        rpc=get_default_rpc(chain),
+                            # Discover staked OLAS locked in a staking contract.
+                            try:
+                                staking_manager = StakingManager(
+                                    chain=chain,
+                                    rpc=get_default_rpc(chain),
+                                )
+                                staking_program_id = (
+                                    staking_manager.get_current_staking_program(svc_id)
+                                )
+                                if staking_program_id is not None:
+                                    staking_contract = STAKING[chain].get(
+                                        staking_program_id
                                     )
-                                    staking_program_id = (
-                                        staking_manager.get_current_staking_program(
-                                            svc_id
+                                    if staking_contract:
+                                        staking_params = (
+                                            staking_manager.get_staking_params(
+                                                staking_contract
+                                            )
                                         )
-                                    )
-                                    if staking_program_id is not None:
-                                        staking_contract = STAKING[chain].get(
-                                            staking_program_id
+                                        staked_olas = (
+                                            staking_params["min_staking_deposit"] * 2
                                         )
-                                        if staking_contract:
-                                            staking_params = (
-                                                staking_manager.get_staking_params(
-                                                    staking_contract
+                                        if staked_olas > 0:
+                                            olas_address = OLAS.get(chain)
+                                            if olas_address:
+                                                staking_contract_cs = (
+                                                    Web3.to_checksum_address(
+                                                        staking_contract
+                                                    )
                                                 )
-                                            )
-                                            staked_olas = (
-                                                staking_params["min_staking_deposit"]
-                                                * 2
-                                            )
-                                            if staked_olas > 0:
-                                                olas_address = OLAS.get(chain)
-                                                if olas_address:
-                                                    staking_contract_cs = (
-                                                        Web3.to_checksum_address(
-                                                            staking_contract
-                                                        )
-                                                    )
-                                                    if (
+                                                if (
+                                                    staking_contract_cs
+                                                    not in chain_balances
+                                                ):
+                                                    chain_balances[
                                                         staking_contract_cs
-                                                        not in chain_balances
-                                                    ):
-                                                        chain_balances[
-                                                            staking_contract_cs
-                                                        ] = {}
-                                                    chain_balances[staking_contract_cs][
-                                                        olas_address
-                                                    ] = BigInt(staked_olas)
-                                                else:
-                                                    self._logger.warning(
-                                                        "OLAS token address not found for chain %s; skipping staked OLAS balance.",
-                                                        chain_id,
-                                                    )
+                                                    ] = {}
+                                                chain_balances[staking_contract_cs][
+                                                    olas_address
+                                                ] = BigInt(staked_olas)
                                             else:
-                                                self._logger.info(
-                                                    "Service %s on chain %s is staked but has zero staked OLAS; skipping staking balance check.",
-                                                    svc_id,
+                                                self._logger.warning(
+                                                    "OLAS token address not found for chain %s; skipping staked OLAS balance.",
                                                     chain_id,
                                                 )
                                         else:
-                                            self._logger.warning(
-                                                "Staking contract not found for program ID %s on chain %s; skipping staking balance check.",
-                                                staking_program_id,
+                                            self._logger.info(
+                                                "Service %s on chain %s is staked but has zero staked OLAS; skipping staking balance check.",
+                                                svc_id,
                                                 chain_id,
                                             )
                                     else:
-                                        self._logger.info(
-                                            "Service %s on chain %s is not staked; skipping staking balance check.",
-                                            svc_id,
+                                        self._logger.warning(
+                                            "Staking contract not found for program ID %s on chain %s; skipping staking balance check.",
+                                            staking_program_id,
                                             chain_id,
                                         )
-                                except (  # pylint: disable=broad-except
-                                    Exception
-                                ) as _staking_exc:
-                                    self._logger.warning(
-                                        "Failed to fetch staked OLAS for service %s on chain %s: %s",
+                                else:
+                                    self._logger.info(
+                                        "Service %s on chain %s is not staked; skipping staking balance check.",
                                         svc_id,
                                         chain_id,
-                                        _staking_exc,
                                     )
+                            except (  # pylint: disable=broad-except
+                                Exception
+                            ) as _staking_exc:
+                                self._logger.warning(
+                                    "Failed to fetch staked OLAS for service %s on chain %s: %s",
+                                    svc_id,
+                                    chain_id,
+                                    _staking_exc,
+                                )
 
-                                # Fetch agent safe (multisig) balances so the
-                                # scan result includes all recoverable funds.
-                                try:
-                                    _svc_info = get_service_info(
+                            # Fetch agent safe (multisig) balances so the
+                            # scan result includes all recoverable funds.
+                            try:
+                                _svc_info = get_service_info(
+                                    ledger_api=ledger_api,
+                                    chain_type=ChainType(chain.value),
+                                    token_id=svc_id,
+                                )
+                                _agent_safe = _svc_info[1]
+                            except (  # pylint: disable=broad-except
+                                Exception
+                            ) as _svc_info_exc:
+                                logger.warning(
+                                    "Failed to fetch service info for service %s on chain %s: %s",
+                                    svc_id,
+                                    chain_id,
+                                    _svc_info_exc,
+                                )
+                                _agent_safe = ZERO_ADDRESS
+                            if (
+                                _agent_safe
+                                and _agent_safe.lower() != _ZERO_ADDRESS_LOWER
+                                and _agent_safe not in chain_balances
+                            ):
+                                _agent_safe_cs = Web3.to_checksum_address(_agent_safe)
+                                _agent_native = get_asset_balance(
+                                    ledger_api=ledger_api,
+                                    asset_address=ZERO_ADDRESS,
+                                    address=_agent_safe_cs,
+                                    raise_on_invalid_address=False,
+                                )
+                                chain_balances[_agent_safe_cs] = {
+                                    ZERO_ADDRESS: BigInt(_agent_native)
+                                }
+                                for token_addr in tokens:
+                                    _agent_tok_bal = get_asset_balance(
                                         ledger_api=ledger_api,
-                                        chain_type=ChainType(chain.value),
-                                        token_id=svc_id,
-                                    )
-                                    _agent_safe = _svc_info[1]
-                                except (  # pylint: disable=broad-except
-                                    Exception
-                                ) as _svc_info_exc:
-                                    logger.warning(
-                                        "Failed to fetch service info for service %s on chain %s: %s",
-                                        svc_id,
-                                        chain_id,
-                                        _svc_info_exc,
-                                    )
-                                    _agent_safe = ZERO_ADDRESS
-                                if (
-                                    _agent_safe
-                                    and _agent_safe.lower() != _ZERO_ADDRESS_LOWER
-                                    and _agent_safe not in chain_balances
-                                ):
-                                    _agent_safe_cs = Web3.to_checksum_address(
-                                        _agent_safe
-                                    )
-                                    _agent_native = get_asset_balance(
-                                        ledger_api=ledger_api,
-                                        asset_address=ZERO_ADDRESS,
+                                        asset_address=token_addr,
                                         address=_agent_safe_cs,
                                         raise_on_invalid_address=False,
                                     )
-                                    chain_balances[_agent_safe_cs] = {
-                                        ZERO_ADDRESS: BigInt(_agent_native)
-                                    }
-                                    for token_addr in tokens:
-                                        _agent_tok_bal = get_asset_balance(
-                                            ledger_api=ledger_api,
-                                            asset_address=token_addr,
-                                            address=_agent_safe_cs,
-                                            raise_on_invalid_address=False,
+                                    if _agent_tok_bal > 0:
+                                        chain_balances[_agent_safe_cs][token_addr] = (
+                                            BigInt(_agent_tok_bal)
                                         )
-                                        if _agent_tok_bal > 0:
-                                            chain_balances[_agent_safe_cs][
-                                                token_addr
-                                            ] = BigInt(_agent_tok_bal)
-                                else:
-                                    self._logger.warning(
-                                        "AgentSafe %s on chain %s is zero address or already tracked; skipping balance fetch.",
-                                        _agent_safe,
-                                        chain_id,
-                                    )
-                        else:
-                            self._logger.warning(  # pragma: no cover  -- impossible: else requires truthy zero address
-                                "Resolved AgentSafe for service %s is zero address; skipping.",
-                                svc_id,
-                            )
-                    else:
-                        self._logger.warning(
-                            "No contract addresses configured for chain %s; skipping service enumeration.",
-                            chain.value,
-                        )
+                            else:
+                                self._logger.warning(
+                                    "AgentSafe %s on chain %s is zero address or already tracked; skipping balance fetch.",
+                                    _agent_safe,
+                                    chain_id,
+                                )
                 except Exception as exc:  # pylint: disable=broad-except
                     self._logger.warning(
                         f"Service enumeration failed for chain {chain_id}: {exc}"
@@ -962,7 +857,7 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                         )
                         chain_str = chain.value
                         rpc = get_default_rpc(chain)
-                        safe_addresses = (
+                        safe_services = (
                             _get_master_safes_from_contracts(
                                 chain=chain,
                                 ledger_api=ledger_api,
@@ -971,14 +866,14 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
                                 subgraph_url=SUBGRAPH_URLS.get(chain),
                             )
                             if service_registry_addr
-                            else []
+                            else {}
                         )
 
                         # Iterate per-safe: inject the safe into the wallet once, run
                         # all service recovery steps under it, then drain it before
                         # moving to the next safe.  This avoids per-service injection
                         # noise and keeps the manager calls simple.
-                        for safe_addr in safe_addresses:
+                        for safe_addr, service_ids in safe_services.items():
                             # ── Inject safe ──────────────────────────────────────────
                             _inject_safe_into_wallet(
                                 wallet=wallet,
@@ -988,171 +883,140 @@ class FundRecoveryManager:  # pylint: disable=too-few-public-methods
 
                             try:
                                 # ── Service recovery (Steps 1–4) ─────────────────────
-                                if service_registry_addr:
-                                    all_service_ids: t.Set[int] = set()
-
-                                    subgraph_url = SUBGRAPH_URLS.get(chain)
-                                    if subgraph_url:
+                                for svc_id in service_ids:
+                                    try:
+                                        service = svc_manager.create(
+                                            service_template=ServiceTemplate(
+                                                name=f"recovery-stub-{svc_id}",
+                                                hash=_RECOVERY_SERVICE_HASH,
+                                                description="",
+                                                home_chain=chain_str,
+                                                configurations={
+                                                    chain_str: {
+                                                        "staking_program_id": NO_STAKING_PROGRAM_ID,
+                                                        "nft": "",
+                                                        "rpc": rpc,
+                                                        "agent_id": 1,
+                                                        "cost_of_bond": 0,
+                                                        "fund_requirements": {},
+                                                        "fallback_chain_params": None,
+                                                    }
+                                                },
+                                                env_variables={},
+                                                agent_release={
+                                                    "is_aea": False,
+                                                    "repository": {
+                                                        "owner": "",
+                                                        "name": "",
+                                                        "version": "",
+                                                    },
+                                                },
+                                            ),
+                                            agent_addresses=[],
+                                        )
+                                        # Patch in the real on-chain token ID and
+                                        # the current Safe address, then re-persist
+                                        # so downstream svc_manager calls that
+                                        # reload via self.load() see the correct
+                                        # values.
+                                        chain_config = service.chain_configs[chain_str]
+                                        chain_config.chain_data.token = svc_id
+                                        # Fetch the agent safe (multisig) on-chain.
+                                        # get_service_info returns ServiceInfo tuple;
+                                        # index 1 is the multisig / agent safe address.
                                         try:
-                                            all_service_ids = set(
-                                                _fetch_services_from_subgraph(
-                                                    subgraph_url, eoa_address
-                                                )
+                                            _svc_info = get_service_info(
+                                                ledger_api=ledger_api,
+                                                chain_type=ChainType(chain.value),
+                                                token_id=svc_id,
                                             )
+                                            _agent_safe = _svc_info[1]
                                         except (  # pylint: disable=broad-except
                                             Exception
                                         ):
-                                            subgraph_url = None  # trigger fallback
-
-                                    if not subgraph_url:
-                                        all_service_ids.update(
-                                            _enumerate_owned_services(
-                                                ledger_api=ledger_api,
-                                                service_registry_address=service_registry_addr,
-                                                owner_address=safe_addr,
+                                            _agent_safe = ZERO_ADDRESS
+                                        if _agent_safe == ZERO_ADDRESS:
+                                            chain_config.chain_data.multisig = (
+                                                NON_EXISTENT_MULTISIG
                                             )
-                                        )
+                                        else:
+                                            chain_config.chain_data.multisig = (
+                                                Web3.to_checksum_address(_agent_safe)
+                                            )
+                                        service.store()
+                                        service_config_id = service.service_config_id
 
-                                    for svc_id in all_service_ids:
+                                        # Step 1-3: terminate (handles unstake +
+                                        # terminate + unbond internally)
                                         try:
-                                            service = svc_manager.create(
-                                                service_template=ServiceTemplate(
-                                                    name=f"recovery-stub-{svc_id}",
-                                                    hash=_RECOVERY_SERVICE_HASH,
-                                                    description="",
-                                                    home_chain=chain_str,
-                                                    configurations={
-                                                        chain_str: {
-                                                            "staking_program_id": NO_STAKING_PROGRAM_ID,
-                                                            "nft": "",
-                                                            "rpc": rpc,
-                                                            "agent_id": 1,
-                                                            "cost_of_bond": 0,
-                                                            "fund_requirements": {},
-                                                            "fallback_chain_params": None,
-                                                        }
-                                                    },
-                                                    env_variables={},
-                                                    agent_release={
-                                                        "is_aea": False,
-                                                        "repository": {
-                                                            "owner": "",
-                                                            "name": "",
-                                                            "version": "",
-                                                        },
-                                                    },
-                                                ),
-                                                agent_addresses=[],
+                                            svc_manager.terminate_service_on_chain_from_safe(
+                                                service_config_id=service_config_id,
+                                                chain=chain_str,
                                             )
-                                            # Patch in the real on-chain token ID and
-                                            # the current Safe address, then re-persist
-                                            # so downstream svc_manager calls that
-                                            # reload via self.load() see the correct
-                                            # values.
-                                            chain_config = service.chain_configs[
-                                                chain_str
-                                            ]
-                                            chain_config.chain_data.token = svc_id
-                                            # Fetch the agent safe (multisig) on-chain.
-                                            # get_service_info returns ServiceInfo tuple;
-                                            # index 1 is the multisig / agent safe address.
-                                            try:
-                                                _svc_info = get_service_info(
-                                                    ledger_api=ledger_api,
-                                                    chain_type=ChainType(chain.value),
-                                                    token_id=svc_id,
-                                                )
-                                                _agent_safe = _svc_info[1]
-                                            except (  # pylint: disable=broad-except
-                                                Exception
-                                            ):
-                                                _agent_safe = ZERO_ADDRESS
-                                            if _agent_safe == ZERO_ADDRESS:
-                                                chain_config.chain_data.multisig = (
-                                                    NON_EXISTENT_MULTISIG
-                                                )
-                                            else:
-                                                chain_config.chain_data.multisig = (
-                                                    Web3.to_checksum_address(
-                                                        _agent_safe
-                                                    )
-                                                )
-                                            service.store()
-                                            service_config_id = (
-                                                service.service_config_id
-                                            )
-
-                                            # Step 1-3: terminate (handles unstake +
-                                            # terminate + unbond internally)
-                                            try:
-                                                svc_manager.terminate_service_on_chain_from_safe(
-                                                    service_config_id=service_config_id,
-                                                    chain=chain_str,
-                                                )
-                                            except (  # pylint: disable=broad-except
-                                                Exception
-                                            ) as exc:
-                                                logger.warning(
-                                                    "chain=%s service=%s terminate failed: %s",
-                                                    chain_id,
-                                                    svc_id,
-                                                    exc,
-                                                )
-                                                errors.append(
-                                                    f"chain={chain_id} service={svc_id} terminate failed: {exc}"
-                                                )
-
-                                            # Step 4: Recovery module flow
-                                            try:
-                                                svc_manager._execute_recovery_module_flow_from_safe(  # pylint: disable=protected-access
-                                                    service_config_id=service_config_id,
-                                                    chain=chain_str,
-                                                )
-                                            except (  # pylint: disable=broad-except
-                                                Exception
-                                            ) as exc:
-                                                logger.warning(
-                                                    "chain=%s service=%s recovery module failed: %s",
-                                                    chain_id,
-                                                    svc_id,
-                                                    exc,
-                                                )
-                                                errors.append(
-                                                    f"chain={chain_id} service={svc_id} recovery module failed: {exc}"
-                                                )
-
-                                            # Step 4b: Drain Agent Safe assets
-                                            try:
-                                                svc_manager.drain(
-                                                    service_config_id=service_config_id,
-                                                    chain_str=chain_str,
-                                                    withdrawal_address=destination_checksum,
-                                                )
-                                            except (  # pylint: disable=broad-except
-                                                Exception
-                                            ) as exc:
-                                                logger.warning(
-                                                    "chain=%s service=%s drain failed: %s",
-                                                    chain_id,
-                                                    svc_id,
-                                                    exc,
-                                                )
-                                                errors.append(
-                                                    f"chain={chain_id} service={svc_id} drain failed: {exc}"
-                                                )
-
                                         except (  # pylint: disable=broad-except
                                             Exception
                                         ) as exc:
                                             logger.warning(
-                                                "chain=%s service=%s recovery failed: %s",
+                                                "chain=%s service=%s terminate failed: %s",
                                                 chain_id,
                                                 svc_id,
                                                 exc,
                                             )
                                             errors.append(
-                                                f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
+                                                f"chain={chain_id} service={svc_id} terminate failed: {exc}"
                                             )
+
+                                        # Step 4: Recovery module flow
+                                        try:
+                                            svc_manager._execute_recovery_module_flow_from_safe(  # pylint: disable=protected-access
+                                                service_config_id=service_config_id,
+                                                chain=chain_str,
+                                            )
+                                        except (  # pylint: disable=broad-except
+                                            Exception
+                                        ) as exc:
+                                            logger.warning(
+                                                "chain=%s service=%s recovery module failed: %s",
+                                                chain_id,
+                                                svc_id,
+                                                exc,
+                                            )
+                                            errors.append(
+                                                f"chain={chain_id} service={svc_id} recovery module failed: {exc}"
+                                            )
+
+                                        # Step 4b: Drain Agent Safe assets
+                                        try:
+                                            svc_manager.drain(
+                                                service_config_id=service_config_id,
+                                                chain_str=chain_str,
+                                                withdrawal_address=destination_checksum,
+                                            )
+                                        except (  # pylint: disable=broad-except
+                                            Exception
+                                        ) as exc:
+                                            logger.warning(
+                                                "chain=%s service=%s drain failed: %s",
+                                                chain_id,
+                                                svc_id,
+                                                exc,
+                                            )
+                                            errors.append(
+                                                f"chain={chain_id} service={svc_id} drain failed: {exc}"
+                                            )
+
+                                    except (  # pylint: disable=broad-except
+                                        Exception
+                                    ) as exc:
+                                        logger.warning(
+                                            "chain=%s service=%s recovery failed: %s",
+                                            chain_id,
+                                            svc_id,
+                                            exc,
+                                        )
+                                        errors.append(
+                                            f"chain={chain_id} service={svc_id}: {type(exc).__name__}"
+                                        )
 
                                 # ── Step 5: Drain this Master Safe ────────────────────
                                 moved = wallet.drain(
