@@ -1168,5 +1168,7 @@ class TestFundingRunRoutes:
         ):
             response = getattr(client, method)(url, **kwargs)
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
-        assert response.json() == {"error": "Funding run failed. Please check the logs."}
+        assert response.json() == {
+            "error": "Funding run failed. Please check the logs."
+        }
         assert "secret detail" not in response.text

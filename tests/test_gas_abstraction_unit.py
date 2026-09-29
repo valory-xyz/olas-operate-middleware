@@ -428,7 +428,6 @@ class TestBundlerErrors:
                     Chain.BASE, USER_OP_HASH
                 )
 
-
     def test_receipt_polling_sleeps_between_empty_polls(self, tmp_path: Path) -> None:
         """An empty poll sleeps RECEIPT_POLL_INTERVAL, then the next poll's receipt returns."""
         wallet, _ = _wallet(tmp_path)
@@ -454,11 +453,10 @@ class TestW3:
     def test_uses_default_ledger_api(self) -> None:
         """The Web3 instance is the default ledger API's `.api` for that chain."""
         with patch(f"{MODULE}.get_default_ledger_api") as get_api:
-            w3 = GasAbstractedSender._w3(  # pylint: disable=protected-access
-                Chain.BASE
-            )
+            w3 = GasAbstractedSender._w3(Chain.BASE)  # pylint: disable=protected-access
         get_api.assert_called_once_with(Chain.BASE)
         assert w3 is get_api.return_value.api
+
 
 class TestPrepareBatch:
     """prepare_batch signs without submitting, so the hash can be persisted first."""
