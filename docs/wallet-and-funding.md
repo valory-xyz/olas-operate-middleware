@@ -163,7 +163,8 @@ a time. The run is persisted in `funding_runs/<id>.json` (with
 `funding_runs/active.json` pointing at the live one), and every transition is
 stored before its side effect: after a restart a step with a recorded UserOp
 hash, tx hash or Relay `requestId` is reconciled, never blindly resent, and a
-retry re-quotes only failed requests. While a run moves Master EOA funds it
+retry re-quotes only failed requests. A `FAILED` run with nothing in flight
+can be cancelled instead, leaving its funds in the Master EOA. While a run moves Master EOA funds it
 holds `FundingManager.master_eoa_lock`, so the periodic funding job cannot
 spend them mid-run.
 

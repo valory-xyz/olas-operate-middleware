@@ -2936,7 +2936,7 @@ Resume a `FAILED` run at its failed step. A step whose on-chain effect has lande
 
 ### `DELETE /api/funding_run/{id}`
 
-Cancel. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. Funds already received stay in the Master EOA and count toward the next quote.
+Cancel. Valid in `AWAITING_DEPOSIT` / `QUOTE_FAILED`, and in `FAILED` once nothing is still in flight, so a step that keeps failing does not block every later run. A `FAILED` run is `409` while its source-leg UserOperation may still land, a sent request is still pending, or a failed request may still deliver (the cases where `retry` shows the "not confirmed yet" message). Funds stay in the Master EOA, on whichever chain the run left them, and count toward the next quote. Cancelling a `FAILED` USDC-source run queues the background delegation clearing.
 
 **Errors (run routes):** `404` unknown run id; `409` wrong state for the action.
 
