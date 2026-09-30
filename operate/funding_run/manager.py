@@ -70,6 +70,7 @@ from operate.ledger.profiles import (
     USDC,
     get_asset_decimals,
     get_asset_name,
+    get_asset_symbol,
 )
 from operate.operate_types import Chain, LedgerType
 from operate.serialization import BigInt
@@ -1010,9 +1011,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if step.kind == FundingStepKind.BRIDGE:
             return f"Couldn't bridge to {destination.value.replace('_', ' ').title()}"
         if step.kind in (FundingStepKind.NATIVE, FundingStepKind.SWAP):
-            return (
-                f"Couldn't get {get_asset_name(destination, t.cast(str, step.token))}"
-            )
+            symbol = get_asset_symbol(destination, t.cast(str, step.token))
+            if symbol:
+                return f"Couldn't get {symbol}"
         return MESSAGE_TRANSFER_FAILED
 
     def _track(self, run: FundingRun, step: FundingRunStep) -> None:
@@ -1468,7 +1469,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             "to_receive": [
                 {
                     "token": token,
-                    "symbol": get_asset_name(destination, token),
+                    "symbol": get_asset_symbol(destination, token),
                     "amount": str(amount),
                 }
                 for token, amount in run.net_targets.items()

@@ -1461,6 +1461,47 @@ def _fail_source_leg_quotes(env: Env, source_chain: str, message: str) -> None:
 class TestEdgeCases:
     """Paths off the main flow: unknown services, baselines, stale quotes, locks."""
 
+    @pytest.mark.parametrize(
+        ("read_symbol", "symbol", "message"),
+        [
+            ({"return_value": "FOO"}, "FOO", "Couldn't get FOO"),
+            (
+                {"side_effect": ValueError("execution reverted")},
+                None,
+                MESSAGE_TRANSFER_FAILED,
+            ),
+        ],
+    )
+    def test_unknown_token_is_named_by_its_on_chain_symbol(
+        self,
+        tmp_path: Path,
+        read_symbol: t.Dict[str, t.Any],
+        symbol: t.Optional[str],
+        message: str,
+    ) -> None:
+        """A token outside the known maps never shows as a raw address."""
+        unknown = "0x" + "c" * 40
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {unknown: 5}
+        _all_succeed(env)
+        env.bridge.outcomes[unknown] = ProviderRequestStatus.EXECUTION_FAILED
+
+        with patch("operate.ledger.profiles._get_erc20_symbol", **read_symbol):
+            run = env.manager.create_run(
+                mode="onboard",
+                source_chain="base",
+                source_token=BASE_USDC,
+                destination_chain="polygon",
+                service_config_id="sc-1",
+            )
+            assert env.manager.run_json(run)["to_receive"] == [
+                {"token": unknown, "symbol": symbol, "amount": "5"}
+            ]
+            env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+            run = env.tick_until(run, FundingRunStatus.FAILED)
+
+        assert run.error == {"step_id": f"swap:{unknown}", "message": message}
+
     def test_onboard_unknown_service_is_rejected(self, tmp_path: Path) -> None:
         """An onboard run for a service that does not exist is a 400."""
         env = Env(tmp_path)
