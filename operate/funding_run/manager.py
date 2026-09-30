@@ -80,6 +80,7 @@ from operate.wallet.gas_abstraction import (
     GasAbstractedSender,
     GasAbstractionError,
     RECEIPT_TIMEOUT,
+    UserOperationReverted,
     is_gas_abstracted,
 )
 from operate.wallet.master import (
@@ -100,6 +101,10 @@ RUN_JOB_INTERVAL = 10
 # show the success modal after a restart.
 RECENT_COMPLETION_WINDOW = 5 * 60
 LOCK_TIMEOUT = 30
+# Consecutive monitor failures before the run shows QUOTE_FAILED.
+MONITOR_FAILURE_LIMIT = 3
+# Fixed text: the exception may carry an RPC URL with its API key.
+MESSAGE_MONITOR_FAILED = "Unable to check the deposit or refresh the quote."
 # Conservative destination gas budgets for the Safe step, priced at the
 # current gas price when quoting.
 SAFE_CREATION_GAS = 1_000_000
@@ -118,6 +123,10 @@ STEP_SAFE = "safe"
 STEP_CLEAR_DELEGATION = "clear_delegation"
 SWAP_STEP_PREFIX = "swap:"
 SOURCE_LEG_KINDS = (FundingStepKind.BRIDGE, FundingStepKind.NATIVE)
+USER_OP_LANDED = "landed"
+USER_OP_PENDING = "pending"
+USER_OP_DROPPED = "dropped"
+USER_OP_UNKNOWN = "unknown"
 
 
 class FundingRunError(ValueError):
@@ -130,6 +139,10 @@ class FundingRunNotFoundError(KeyError):
 
 class FundingRunConflictError(RuntimeError):
     """The request conflicts with the run's state or another run (HTTP 409)."""
+
+
+class _QuoteError(RuntimeError):
+    """A quote cannot be trusted; the run goes to QUOTE_FAILED."""
 
 
 def _now() -> int:
@@ -165,6 +178,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         # Serialises run mutations between API handlers and the background
         # loop. Reads (GET /active) go to disk without it.
         self._lock = threading.RLock()
+        self._monitor_failures = 0
 
     # --- persistence --------------------------------------------------------
 
@@ -317,6 +331,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             self._quote(run)
             self._store(run)
             self._set_active(run)
+            self._monitor_failures = 0
             return run
 
     @staticmethod
@@ -389,7 +404,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 Web3.to_checksum_address(token): int(amount)
                 for token, amount in deposit_amounts.items()
             }
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError, OverflowError) as e:
             raise FundingRunError(f"Invalid deposit_amounts: {e}") from e
         if any(amount < 0 for amount in gross.values()):
             raise FundingRunError("deposit_amounts must not be negative.")
@@ -463,7 +478,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             source_steps = self._source_steps(run)
             if any(s.status == FundingStepStatus.FAILED for s in source_steps):
                 if run.user_op_hash and not run.source_tx_hash:
-                    self._reconcile_user_op(run)
+                    try:
+                        state = self._user_op_state(run, check_dropped=True)
+                    except UserOperationReverted:
+                        state = USER_OP_DROPPED  # included, but delivered nothing
+                    if state in (USER_OP_PENDING, USER_OP_UNKNOWN):
+                        # It may still land on the requests already quoted.
+                        return self._resume_user_op(run)
                 for step in source_steps:
                     self._recheck(run, step)
                 failed = [
@@ -488,6 +509,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     ]
                     self._reset_requests(run, failed)
                     run.user_op_hash = None
+                    run.user_op_nonce = None
                     run.source_tx_hash = None
             for step in run.steps:
                 if (
@@ -506,6 +528,18 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             run.status = FundingRunStatus.PROCESSING
             self._store(run)
             return run
+
+    def _resume_user_op(self, run: FundingRun) -> FundingRun:
+        """Go back to waiting for the stored UserOp instead of replacing it."""
+        for step in self._source_steps(run):
+            if step.status == FundingStepStatus.FAILED:
+                self._reset_step(step)
+                step.status = FundingStepStatus.PROCESSING
+                step.started_at = _now()
+        run.error = None
+        run.status = FundingRunStatus.PROCESSING
+        self._store(run)
+        return run
 
     def _recheck(self, run: FundingRun, step: FundingRunStep) -> None:
         """Track a step with a fresh lookup of its failed requests.
@@ -609,9 +643,14 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             params["explicit_deposit"] = True
         return params
 
-    def _native_price(self, chain: Chain) -> int:
+    @staticmethod
+    def _native_price(chain: Chain) -> int:
         pricing = get_default_ledger_api(chain).try_get_gas_pricing() or {}
-        return int(pricing.get("maxFeePerGas", pricing.get("gasPrice", 0)))
+        price = int(pricing.get("maxFeePerGas", pricing.get("gasPrice", 0)))
+        if price <= 0:
+            # A zero price would quote the destination gas as free.
+            raise _QuoteError(f"Unable to retrieve gas pricing on {chain.value}.")
+        return price
 
     def _destination_overhead(self, run: FundingRun, n_assets: int) -> int:
         """Destination native for the Safe step and the Master EOA reserve."""
@@ -639,9 +678,19 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         requirements = self.bridge_manager.provider_for(request).requirements(request)
         chain = request.params["from"]["chain"]
         address = request.params["from"]["address"]
-        return int(requirements[chain][address].get(token, 0))
+        try:
+            return int(requirements[chain][address][token])
+        except KeyError as e:
+            raise _QuoteError(f"No {token} requirement for {request.id}.") from e
 
-    def _quote(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    def _quote(self, run: FundingRun) -> None:
+        """Quote the run, or mark it QUOTE_FAILED."""
+        try:
+            self._quote_plan(run)
+        except _QuoteError as e:
+            self._set_quote_failed(run, str(e))
+
+    def _quote_plan(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         self, run: FundingRun
     ) -> None:
         """Walk back from the net targets to one source-chain amount."""
@@ -673,6 +722,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             native_needed += self._source_amount(request, NATIVE)
             if carrier != NATIVE:
                 carrier_needed += self._source_amount(request, carrier)
+        # requirements() marks a request whose txs cannot be built as failed.
+        if self._quote_failed(run, swaps):
+            return
 
         if swaps or native_needed or carrier_needed:
             native_needed += self._destination_overhead(run, len(targets) + 1)
@@ -750,8 +802,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
         # (c) Required = source-leg inputs + direct amounts + gas allowance.
         required = direct + sum(self._source_amount(r, token) for r in source_requests)
+        if self._quote_failed(run, source_requests):
+            return
         if gas_abstracted and source_requests:
-            required += GAS_ABSTRACTION_USDC_CAP
+            required += GAS_ABSTRACTION_USDC_CAP[source]
 
         run.source_requests = list(source_requests)
         run.swap_requests = list(swaps)
@@ -772,15 +826,24 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         failed = [r for r in requests if r.status == ProviderRequestStatus.QUOTE_FAILED]
         if not failed:
             return False
-        run.status = FundingRunStatus.QUOTE_FAILED
-        run.quoted_at = _now()
-        run.quote_message = next(
-            (r.quote_data.message for r in failed if r.quote_data), "Quote failed."
-        )
-        self.logger.warning(
-            f"[FUNDING RUN] Quote failed for {run.id}: {run.quote_message}"
+        self._set_quote_failed(
+            run,
+            next(
+                (
+                    r.quote_data.message
+                    for r in failed
+                    if r.quote_data and r.quote_data.message
+                ),
+                "Quote failed.",
+            ),
         )
         return True
+
+    def _set_quote_failed(self, run: FundingRun, message: str) -> None:
+        run.status = FundingRunStatus.QUOTE_FAILED
+        run.quoted_at = _now()
+        run.quote_message = message
+        self.logger.warning(f"[FUNDING RUN] Quote failed for {run.id}: {message}")
 
     def _plan_steps(
         self,
@@ -1064,13 +1127,21 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             self._fail_source_steps(run, str(e))
             return
         run.user_op_hash = prepared.user_op_hash
+        run.user_op_nonce = prepared.nonce
         run.delegation_auth_nonce = prepared.authorization_nonce
         self._store(run)
         try:
             sender.submit(source, prepared)
+        except GasAbstractionError as e:
+            # Retry checks the bundler really dropped it before replacing it.
+            self._fail_source_steps(run, str(e))
+            return
+        try:
             self._record_source_tx(
                 run, sender.wait_for_tx_hash(source, run.user_op_hash)
             )
+        except UserOperationReverted as e:
+            self._fail_source_steps(run, str(e))
         except GasAbstractionError as e:
             # Reconciled against the bundler on the next tick.
             self.logger.warning(f"[FUNDING RUN] UserOp {run.user_op_hash}: {e}")
@@ -1085,22 +1156,53 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 )
         self._store(run)
 
-    def _reconcile_user_op(self, run: FundingRun) -> None:
+    def _user_op_state(self, run: FundingRun, check_dropped: bool) -> str:
+        """Record the stored UserOp's receipt if it has one, and say where it stands.
+
+        Raises UserOperationReverted if it was included and reverted. A lookup
+        error is USER_OP_UNKNOWN: the UserOp may still land.
+        """
         source = Chain(run.source_chain)
         sender = self._sender_factory(self._wallet())
+        op_hash = t.cast(str, run.user_op_hash)
         try:
-            receipt = sender.get_user_op_receipt(source, t.cast(str, run.user_op_hash))
-            if receipt:
-                self._record_source_tx(run, sender.tx_hash_of(receipt))
-                return
-        except GasAbstractionError as e:
+            receipt = sender.get_user_op_receipt(source, op_hash)
+            if (
+                receipt is None
+                and check_dropped
+                and not sender.user_op_pending(
+                    source, op_hash, t.cast(int, run.user_op_nonce)
+                )
+            ):
+                # It may have been included between the two lookups.
+                receipt = sender.get_user_op_receipt(source, op_hash)
+                if receipt is None:
+                    return USER_OP_DROPPED
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning(f"[FUNDING RUN] UserOp {op_hash} lookup failed: {e}")
+            return USER_OP_UNKNOWN
+        if receipt is None:
+            return USER_OP_PENDING
+        self._record_source_tx(run, sender.tx_hash_of(receipt))
+        return USER_OP_LANDED
+
+    def _reconcile_user_op(self, run: FundingRun) -> None:
+        steps = self._source_steps(run)
+        started = min((s.started_at or _now()) for s in steps)
+        # Bundlers may not list a pending UserOp: only ask once it is overdue.
+        overdue = _now() - started > RECEIPT_TIMEOUT
+        try:
+            state = self._user_op_state(run, check_dropped=overdue)
+        except UserOperationReverted as e:
             self._fail_source_steps(run, str(e))
             return
-        started = min((s.started_at or _now()) for s in self._source_steps(run))
-        if _now() - started > RECEIPT_TIMEOUT:
+        if state == USER_OP_DROPPED:
             self._fail_source_steps(
                 run, f"UserOperation {run.user_op_hash} was not included."
             )
+        elif state != USER_OP_LANDED:
+            for step in steps:
+                self._mark_slow(step)
 
     def _advance_swap(self, run: FundingRun, step: FundingRunStep) -> None:
         (request,) = run.requests_of(step)
@@ -1226,14 +1328,40 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def reconcile(self) -> None:
         """Start-up reconciliation of pending delegation clearing."""
         with self._lock:
-            for run_id in list(self._pointer().pending_clear_run_ids):
-                try:
-                    run = self.load(run_id)
-                except FundingRunNotFoundError:
-                    continue
-                step = run.step(STEP_CLEAR_DELEGATION)
-                step.started_at = None  # retry now
-                self._clear_delegation(run)
+            self._retry_pending_clears(now=True)
+
+    def _retry_pending_clears(self, now: bool = False) -> None:
+        """Retry clearing for each terminal run whose delegation may remain."""
+        for run_id in list(self._pointer().pending_clear_run_ids):
+            try:
+                run = self.load(run_id)
+                if now:
+                    run.step(STEP_CLEAR_DELEGATION).started_at = None
+                # The clearing tx takes a Master EOA nonce.
+                with self.funding_manager.master_eoa_lock:
+                    self._clear_delegation(run)
+            except FundingRunNotFoundError:
+                continue
+            except Exception:  # pylint: disable=broad-except
+                # One broken run must not stop clearing for the others.
+                self.logger.exception(
+                    f"[FUNDING RUN] Pending clearing for {run_id} failed"
+                )
+
+    def _monitor_safely(self, run: FundingRun) -> None:
+        """Monitor a waiting run; repeated failures surface as QUOTE_FAILED."""
+        try:
+            self._monitor(run)
+            self._monitor_failures = 0
+        except Exception:  # pylint: disable=broad-except
+            self._monitor_failures += 1
+            self.logger.exception(f"[FUNDING RUN] Monitoring {run.id} failed")
+            if self._monitor_failures < MONITOR_FAILURE_LIMIT:
+                return
+            # Drop whatever the failed attempt changed in memory.
+            run = self.load(run.id)
+            self._set_quote_failed(run, MESSAGE_MONITOR_FAILED)
+            self._store(run)
 
     def tick(self) -> None:
         """Advance the active run and retry pending delegation clearing."""
@@ -1244,15 +1372,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     FundingRunStatus.AWAITING_DEPOSIT,
                     FundingRunStatus.QUOTE_FAILED,
                 ):
-                    self._monitor(run)
+                    self._monitor_safely(run)
                 elif run.status == FundingRunStatus.PROCESSING:
                     with self.funding_manager.master_eoa_lock:
                         self._advance(run)
-            for run_id in list(self._pointer().pending_clear_run_ids):
-                try:
-                    self._clear_delegation(self.load(run_id))
-                except FundingRunNotFoundError:
-                    continue
+            self._retry_pending_clears()
 
     async def run_job(self, loop: t.Optional[asyncio.AbstractEventLoop] = None) -> None:
         """Background loop advancing the run, started after login."""

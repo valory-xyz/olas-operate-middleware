@@ -44,6 +44,7 @@ from operate.wallet.gas_abstraction import (
     GasAbstractionError,
     PERMIT_DEADLINE,
     RECEIPT_POLL_INTERVAL,
+    UserOperationReverted,
     is_gas_abstracted,
 )
 from operate.wallet.master import EthereumMasterWallet
@@ -137,19 +138,22 @@ class TestDelegationOf:
 class TestPaymasterData:
     """Circle Paymaster v0.8 permit-mode paymasterData."""
 
-    def test_layout_and_cap(self) -> None:
-        """Layout: mode byte, token, permit amount ($1.00), permit signature."""
+    @pytest.mark.parametrize(
+        ("chain", "cap"), [(Chain.BASE, 1_000_000), (Chain.ETHEREUM, 10_000_000)]
+    )
+    def test_layout_and_cap(self, chain: Chain, cap: int) -> None:
+        """Layout: mode byte, token, the chain's permit amount, permit signature."""
         signature = "0x" + "11" * 65
-        data = bytes.fromhex(
-            GasAbstractedSender.paymaster_data(Chain.BASE, signature)[2:]
-        )
+        data = bytes.fromhex(GasAbstractedSender.paymaster_data(chain, signature)[2:])
 
         assert data[0] == 0
-        assert "0x" + data[1:21].hex() == USDC[Chain.BASE].lower()
-        assert (
-            int.from_bytes(data[21:53], "big") == GAS_ABSTRACTION_USDC_CAP == 1_000_000
-        )
+        assert "0x" + data[1:21].hex() == USDC[chain].lower()
+        assert int.from_bytes(data[21:53], "big") == cap
         assert data[53:] == bytes.fromhex("11" * 65)
+
+    def test_every_paymaster_chain_has_a_cap(self) -> None:
+        """A gas-abstracted chain without a cap would fail at quote time."""
+        assert set(GAS_ABSTRACTION_USDC_CAP) == set(CIRCLE_PAYMASTER)
 
 
 class TestPermitTypedData:
@@ -176,7 +180,7 @@ class TestPermitTypedData:
         assert typed["message"] == {
             "owner": account.address,
             "spender": CIRCLE_PAYMASTER[Chain.BASE],
-            "value": GAS_ABSTRACTION_USDC_CAP,
+            "value": 1_000_000,
             "nonce": 4,
             "deadline": PERMIT_DEADLINE,
         }
@@ -380,7 +384,7 @@ class TestSendBatch:
                 "receipt": {"transactionHash": HANDLE_OPS_TX},
             },
         )
-        assert isinstance(result, GasAbstractionError)
+        assert isinstance(result, UserOperationReverted)
         assert "AA33 reverted" in str(result)
 
     def test_no_paymaster_chain_is_rejected(self, tmp_path: Path) -> None:
@@ -468,7 +472,7 @@ class TestPrepareBatch:
         w3.eth.get_code.return_value = b""
         w3.eth.get_transaction_count.return_value = 1
         contract = w3.eth.contract.return_value
-        contract.functions.getNonce.return_value.call.return_value = 0
+        contract.functions.getNonce.return_value.call.return_value = 7
         contract.functions.getUserOpHash.return_value.call.return_value = bytes.fromhex(
             USER_OP_HASH[2:]
         )
@@ -501,3 +505,47 @@ class TestPrepareBatch:
         assert methods == ["eth_estimateUserOperationGas"]
         assert prepared.user_op_hash == USER_OP_HASH
         assert prepared.authorization_nonce == 1
+        assert prepared.nonce == 7
+
+
+class TestUserOpPending:
+    """Whether a UserOperation without a receipt may still be included."""
+
+    @pytest.mark.parametrize(
+        ("entrypoint_nonce", "by_hash", "pending"),
+        [
+            (4, {"userOperation": {}}, True),
+            (4, None, False),  # the bundler no longer knows it
+            (5, {"userOperation": {}}, False),  # its nonce was used by another op
+        ],
+    )
+    def test_pending_needs_unused_nonce_and_bundler_record(
+        self,
+        tmp_path: Path,
+        entrypoint_nonce: int,
+        by_hash: t.Optional[t.Dict],
+        pending: bool,
+    ) -> None:
+        """Pending only while the nonce is unused and the bundler still lists it."""
+        sender, account = _sender(tmp_path)
+        w3 = MagicMock()
+        contract = w3.eth.contract.return_value
+        contract.functions.getNonce.return_value.call.return_value = entrypoint_nonce
+        sent: t.List[t.Dict] = []
+
+        def _post(url: str, json: t.Dict, timeout: int) -> MagicMock:
+            sent.append(json)
+            return _bundler_response(by_hash)
+
+        with (
+            patch.object(GasAbstractedSender, "_w3", return_value=w3),
+            patch(f"{MODULE}.requests.post", side_effect=_post),
+        ):
+            assert sender.user_op_pending(Chain.BASE, USER_OP_HASH, 4) is pending
+
+        contract.functions.getNonce.assert_called_once_with(account.address, 0)
+        assert [(j["method"], j["params"]) for j in sent] == (
+            [("eth_getUserOperationByHash", [USER_OP_HASH])]
+            if entrypoint_nonce == 4
+            else []
+        )

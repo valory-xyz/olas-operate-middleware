@@ -152,6 +152,10 @@ class GasAbstractionError(RuntimeError):
     """A gas-abstracted operation could not be built, sent or confirmed."""
 
 
+class UserOperationReverted(GasAbstractionError):
+    """A UserOperation was included on-chain and reverted."""
+
+
 @dataclass
 class Call:
     """One call inside ``Simple7702Account.executeBatch``."""
@@ -168,6 +172,7 @@ class PreparedUserOperation:
     user_op: t.Dict[str, t.Any]
     user_op_hash: str
     authorization_nonce: t.Optional[int]
+    nonce: int
 
 
 @dataclass
@@ -231,7 +236,7 @@ class GasAbstractedSender:
             + (
                 CIRCLE_PAYMASTER_PERMIT_MODE.to_bytes(1, "big")
                 + bytes.fromhex(USDC[chain][2:])
-                + GAS_ABSTRACTION_USDC_CAP.to_bytes(32, "big")
+                + GAS_ABSTRACTION_USDC_CAP[chain].to_bytes(32, "big")
                 + bytes.fromhex(permit_signature[2:])
             ).hex()
         )
@@ -266,7 +271,7 @@ class GasAbstractedSender:
             "message": {
                 "owner": self.wallet.address,
                 "spender": CIRCLE_PAYMASTER[chain],
-                "value": GAS_ABSTRACTION_USDC_CAP,
+                "value": GAS_ABSTRACTION_USDC_CAP[chain],
                 "nonce": token.functions.nonces(self.wallet.address).call(),
                 "deadline": PERMIT_DEADLINE,
             },
@@ -466,6 +471,7 @@ class GasAbstractedSender:
             user_op=user_op,
             user_op_hash="0x" + op_hash.hex(),
             authorization_nonce=authorization_nonce,
+            nonce=int(user_op["nonce"], 16),
         )
 
     def submit(self, chain: Chain, prepared: PreparedUserOperation) -> str:
@@ -479,7 +485,7 @@ class GasAbstractedSender:
         """The bundler's handleOps tx hash, or an error if the UserOp reverted."""
         tx_hash = receipt.get("receipt", {}).get("transactionHash")
         if not receipt.get("success"):
-            raise GasAbstractionError(
+            raise UserOperationReverted(
                 f"UserOperation {receipt.get('userOpHash')} reverted: {receipt.get('reason') or 'no reason'} (tx {tx_hash})."
             )
         return tx_hash
@@ -503,3 +509,19 @@ class GasAbstractedSender:
     ) -> t.Optional[t.Dict]:
         """Look up a previously submitted UserOperation (restart reconciliation)."""
         return self._bundler(chain, "eth_getUserOperationReceipt", [user_op_hash])
+
+    def user_op_pending(self, chain: Chain, user_op_hash: str, nonce: int) -> bool:
+        """Whether a UserOperation with no receipt may still be included.
+
+        It cannot once its EntryPoint nonce has been used, or once the bundler
+        it was sent to no longer knows it.
+        """
+        entrypoint = self._w3(chain).eth.contract(
+            address=ERC4337_ENTRYPOINT, abi=_ENTRYPOINT_ABI
+        )
+        if entrypoint.functions.getNonce(self.wallet.address, 0).call() > nonce:
+            return False
+        return (
+            self._bundler(chain, "eth_getUserOperationByHash", [user_op_hash])
+            is not None
+        )

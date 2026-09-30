@@ -43,6 +43,7 @@ from operate.funding_run.manager import (
     FundingRunManager,
     FundingRunNotFoundError,
     MESSAGE_AWAITING_CONFIRMATION,
+    MESSAGE_MONITOR_FAILED,
     RUN_JOB_INTERVAL,
     SLOW_STEP_MIN_SECONDS,
     STEP_BRIDGE,
@@ -69,9 +70,12 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 from operate.wallet.gas_abstraction import (
+    Call,
+    GasAbstractedSender,
     GasAbstractionError,
     PreparedUserOperation,
     RECEIPT_TIMEOUT,
+    UserOperationReverted,
 )
 from operate.wallet.master import CreateSafeStatus
 
@@ -92,6 +96,10 @@ POLYGON_RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][NATIVE])
 # ---------------------------------------------------------------------------
 
 
+class _Crash(BaseException):
+    """Simulates the process dying: nothing in the manager catches it."""
+
+
 class FakeProvider:
     """Deterministic provider: 1 from-unit per to-unit, GAS native per request."""
 
@@ -109,8 +117,8 @@ class FakeProvider:
         return {chain: {EOA: result}}
 
     def get_txs(self, request: ProviderRequest) -> t.List[t.Tuple[str, t.Dict]]:
-        """One deposit tx per request."""
-        return [("deposit-0", {"to": "0x" + "c" * 40, "value": 0, "data": "0x01"})]
+        """One deposit tx per request, distinct per destination chain and token."""
+        return [("deposit-0", _deposit_tx(request))]
 
     def quote(self, request: ProviderRequest) -> None:
         """Re-quote in place."""
@@ -168,6 +176,15 @@ class FakeProvider:
     def failure_is_final(self, request: ProviderRequest) -> bool:
         """Final unless the target token is configured as still unconfirmed."""
         return request.params["to"]["token"] not in self.bridge.unconfirmed
+
+
+def _deposit_tx(request: ProviderRequest) -> t.Dict:
+    to = request.params["to"]
+    return {
+        "to": "0x" + "c" * 40,
+        "value": int(to["amount"]),
+        "data": "0x" + to["chain"].encode().hex() + to["token"][2:].lower(),
+    }
 
 
 @dataclass
@@ -263,9 +280,12 @@ class Env:
         self.service_manager = service_manager
         self.sender = MagicMock()
         self.sender.prepare_batch.return_value = PreparedUserOperation(
-            user_op={}, user_op_hash="0x" + "0f" * 32, authorization_nonce=3
+            user_op={}, user_op_hash="0x" + "0f" * 32, authorization_nonce=3, nonce=4
         )
         self.sender.wait_for_tx_hash.return_value = "0x" + "1a" * 32
+        self.sender.get_user_op_receipt.return_value = None
+        self.sender.user_op_pending.return_value = True
+        self.sender.tx_hash_of.side_effect = GasAbstractedSender.tx_hash_of
         self.delegated = True
         self.sender.delegation_of.side_effect = lambda chain: (
             "0xdelegate" if self.delegated else None
@@ -356,7 +376,9 @@ class TestQuote:
         native = 2 * GAS + _overhead(n_assets=3)
         clear = CLEAR_DELEGATION_GAS_RESERVE[Chain.BASE]
         # Source leg: carrier, native and (b2) clearing reserve, each GAS extra.
-        assert run.required_amount == 50 + native + clear + GAS_ABSTRACTION_USDC_CAP
+        assert run.required_amount == (
+            50 + native + clear + GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
+        )
         kinds = [s.kind for s in run.steps]
         assert kinds == [
             FundingStepKind.RECEIVE,
@@ -669,6 +691,12 @@ class TestTargets:
                 "destination_chain": "polygon",
                 "deposit_amounts": {POLYGON_OLAS: -1},
             },
+            # JSON 1e999 parses as inf, and int(inf) overflows.
+            {
+                "mode": "deposit",
+                "destination_chain": "polygon",
+                "deposit_amounts": {POLYGON_OLAS: float("inf")},
+            },
             # A valid Chain without a Master EOA reserve profile.
             {
                 "mode": "deposit",
@@ -801,13 +829,31 @@ class TestExecution:
         env = Env(tmp_path)
         run = _funded(env)
         _all_succeed(env)
+        source_requests = list(run.source_requests)
 
         run = env.tick_until(run, FundingRunStatus.COMPLETED)
 
         env.sender.prepare_batch.assert_called_once()
-        (_, calls), _ = env.sender.prepare_batch.call_args
-        assert len(calls) == 3  # carrier + native + clearing reserve
+        (chain, calls), _ = env.sender.prepare_batch.call_args
+        assert chain == Chain.BASE
+        # Carrier, native, then the clearing reserve, each request's own tx.
+        assert [
+            (r.params["to"]["chain"], r.params["to"]["token"]) for r in source_requests
+        ] == [
+            ("polygon", POLYGON_USDC),
+            ("polygon", NATIVE),
+            ("base", NATIVE),
+        ]
+        assert calls == [
+            Call(target=tx["to"], value=tx["value"], data=tx["data"])
+            for tx in map(_deposit_tx, source_requests)
+        ]
+        assert len({c.data for c in calls}) == 3
+        env.sender.submit.assert_called_once_with(
+            Chain.BASE, env.sender.prepare_batch.return_value
+        )
         assert run.user_op_hash == "0x" + "0f" * 32
+        assert run.user_op_nonce == 4
         assert run.source_tx_hash == "0x" + "1a" * 32
         assert run.delegation_auth_nonce == 3
         assert env.bridge.executed == [POLYGON_OLAS, POLYGON_PUSD]
@@ -824,60 +870,142 @@ class TestExecution:
     def test_state_round_trips_through_disk_at_every_transition(
         self, tmp_path: Path
     ) -> None:
-        """Each tick's state is what a fresh manager loads from disk."""
+        """What a fresh manager loads after each tick is the run the tick left in memory."""
         env = Env(tmp_path)
         run = _funded(env)
         _all_succeed(env)
+        stored: t.List[FundingRun] = []
+        real_store = FundingRunManager._store  # pylint: disable=protected-access
+
+        def _spy(r: FundingRun) -> None:
+            stored.append(r)
+            real_store(r)
+
         seen = set()
-        for _ in range(20):
-            env.manager.tick()
-            fresh = Env(tmp_path).manager.load(run.id)
-            assert fresh.json == env.manager.load(run.id).json
-            seen.add(fresh.status)
-            if fresh.status == FundingRunStatus.COMPLETED:
-                break
+        with patch.object(env.manager, "_store", side_effect=_spy):
+            for _ in range(20):
+                stored.clear()
+                env.manager.tick()
+                in_memory = [r for r in stored if r.id == run.id][-1]
+                fresh = Env(tmp_path).manager.load(run.id)
+                assert fresh.json == in_memory.json
+                seen.add(fresh.status)
+                if fresh.status == FundingRunStatus.COMPLETED:
+                    break
         assert seen >= {FundingRunStatus.PROCESSING, FundingRunStatus.COMPLETED}
 
     def test_restart_with_recorded_user_op_reconciles_without_resend(
         self, tmp_path: Path
     ) -> None:
-        """A persisted UserOp hash is looked up, never resubmitted."""
+        """A UserOp hash persisted before a crash is looked up, never resubmitted."""
         env = Env(tmp_path)
         run = _funded(env)
-        env.sender.submit.side_effect = GasAbstractionError("process died")
-        env.manager.tick()  # hash persisted, submit "fails"
+        env.sender.submit.side_effect = _Crash()
+        with pytest.raises(_Crash):
+            env.manager.tick()  # the process dies between persisting and submitting
         run = env.reload(run)
         assert run.user_op_hash
         assert not run.source_tx_hash
 
         restarted = Env(tmp_path)
-        restarted.sender.get_user_op_receipt.return_value = {"success": True}
-        restarted.sender.tx_hash_of.return_value = "0x" + "2b" * 32
+        restarted.sender.get_user_op_receipt.return_value = {
+            "success": True,
+            "receipt": {"transactionHash": "0x" + "2b" * 32},
+        }
         restarted.manager.reconcile()
         restarted.manager.tick()
 
         run = restarted.reload(run)
         restarted.sender.submit.assert_not_called()
         restarted.sender.prepare_batch.assert_not_called()
+        assert run.status == FundingRunStatus.PROCESSING
         assert run.source_tx_hash == "0x" + "2b" * 32
+        assert all(
+            r.execution_data is not None
+            and r.execution_data.from_tx_hash == "0x" + "2b" * 32
+            for r in run.source_requests
+        )
 
-    def test_lost_user_op_fails_after_receipt_timeout(self, tmp_path: Path) -> None:
-        """A UserOp with no receipt waits, then fails as retryable past the timeout."""
+    def test_reverted_user_op_fails_with_its_reason_and_records_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """success=false fails the leg with the revert reason; no request counts as sent."""
         env = Env(tmp_path)
         run = _funded(env)
-        env.sender.submit.side_effect = GasAbstractionError("bundler down")
-        env.sender.get_user_op_receipt.return_value = None
-        env.manager.tick()  # hash persisted, submission lost
+        env.sender.wait_for_tx_hash.side_effect = GasAbstractionError("timed out")
+        env.manager.tick()
+        env.sender.get_user_op_receipt.return_value = {
+            "success": False,
+            "reason": "AA33 reverted",
+            "userOpHash": "0x" + "0f" * 32,
+            "receipt": {"transactionHash": "0x" + "3c" * 32},
+        }
+
+        with patch.object(env.bridge.provider, "record_external_execution") as record:
+            env.manager.tick()
+
+        run = env.reload(run)
+        record.assert_not_called()
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error is not None
+        assert run.error["step_id"] == STEP_BRIDGE
+        assert "AA33 reverted" in run.error["message"]
+        assert run.source_tx_hash is None
+        assert all(r.execution_data is None for r in run.source_requests)
+
+    def test_receipt_lookup_error_keeps_waiting(self, tmp_path: Path) -> None:
+        """A bundler lookup error is "unknown": the leg waits, then records the receipt."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.wait_for_tx_hash.side_effect = GasAbstractionError("timed out")
+        env.manager.tick()
+        env.sender.get_user_op_receipt.side_effect = GasAbstractionError("503")
+
+        later = int(time.time()) + RECEIPT_TIMEOUT + 60
+        with patch(f"{MODULE}._now", return_value=later):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.error is None
+        assert run.step(STEP_BRIDGE).status == FundingStepStatus.PROCESSING
+        env.sender.user_op_pending.assert_not_called()
+
+        env.sender.get_user_op_receipt.side_effect = None
+        env.sender.get_user_op_receipt.return_value = {
+            "success": True,
+            "receipt": {"transactionHash": "0x" + "4d" * 32},
+        }
+        env.manager.tick()
+
+        assert env.reload(run).source_tx_hash == "0x" + "4d" * 32
+        env.sender.prepare_batch.assert_called_once()
+
+    def test_lost_user_op_fails_only_once_overdue_and_dropped(
+        self, tmp_path: Path
+    ) -> None:
+        """No receipt: wait; overdue but still pending: keep waiting; dropped: fail."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.wait_for_tx_hash.side_effect = GasAbstractionError("timed out")
+        env.manager.tick()  # submitted, no receipt yet
 
         env.manager.tick()
         run = env.reload(run)
         assert run.status == FundingRunStatus.PROCESSING
+        env.sender.user_op_pending.assert_not_called()
 
-        for step in run.steps:
-            if step.kind in (FundingStepKind.BRIDGE, FundingStepKind.NATIVE):
-                step.started_at = int(time.time()) - RECEIPT_TIMEOUT - 1
-        run.store()
-        env.manager.tick()
+        later = int(time.time()) + max(RECEIPT_TIMEOUT, SLOW_STEP_MIN_SECONDS) + 60
+        with patch(f"{MODULE}._now", return_value=later):
+            env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.step(STEP_BRIDGE).is_slow is True
+        env.sender.user_op_pending.assert_called_with(Chain.BASE, "0x" + "0f" * 32, 4)
+
+        env.sender.user_op_pending.return_value = False
+        with patch(f"{MODULE}._now", return_value=later):
+            env.manager.tick()
 
         run = env.reload(run)
         assert run.status == FundingRunStatus.FAILED
@@ -932,6 +1060,66 @@ class TestExecution:
             "step_id": STEP_BRIDGE,
             "message": "Interrupted before the transfer was confirmed.",
         }
+
+    def test_retry_after_interrupted_native_send_resends_it_once(
+        self, tmp_path: Path
+    ) -> None:
+        """Retry is the user's go-ahead: the interrupted request is re-quoted and sent once.
+
+        Nothing checks on-chain whether the interrupted send went out.
+        """
+        env = Env(tmp_path)
+        run = _funded(env, source_token=NATIVE)
+        interrupted = run.source_requests[0]
+        run.sending_request_ids = [interrupted.id]
+        run.step(STEP_BRIDGE).status = FundingStepStatus.PROCESSING
+        run.store()
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        quoted = len(env.bridge.quoted)
+
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.sending_request_ids == []
+        assert env.bridge.quoted[quoted:] == [interrupted.params]
+        assert interrupted.id not in {r.id for r in run.source_requests}
+        assert run.step(STEP_BRIDGE).status == FundingStepStatus.PENDING
+        _all_succeed(env)
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+        assert env.bridge.executed == [NATIVE, POLYGON_OLAS, POLYGON_PUSD]
+
+    def test_retry_after_interrupted_swap_resends_it_once(self, tmp_path: Path) -> None:
+        """The swap equivalent: only the interrupted swap is re-quoted and sent once."""
+        env = Env(tmp_path)
+        _all_succeed(env)
+        run = _funded(env)
+        for _ in range(5):
+            env.manager.tick()
+            run = env.reload(run)
+            if run.step(STEP_NATIVE).status == FundingStepStatus.DONE:
+                break
+        swap_id = f"swap:{POLYGON_OLAS}"
+        (interrupted,) = run.requests_of(run.step(swap_id))
+        run.step(swap_id).status = FundingStepStatus.PROCESSING
+        run.store()
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.error == {
+            "step_id": swap_id,
+            "message": "Interrupted before the swap was confirmed.",
+        }
+        quoted = len(env.bridge.quoted)
+
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert env.bridge.quoted[quoted:] == [interrupted.params]
+        assert run.step(swap_id).status == FundingStepStatus.PENDING
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+        assert env.bridge.executed == [POLYGON_OLAS, POLYGON_PUSD]
+        env.sender.prepare_batch.assert_called_once()
 
     def test_failed_swap_retry_resumes_at_failed_step(self, tmp_path: Path) -> None:
         """Retry re-quotes only the failed swap and continues from it."""
@@ -1267,6 +1455,67 @@ class TestEdgeCases:
         assert run.quoted_at > 1
         assert run.status == FundingRunStatus.AWAITING_DEPOSIT
 
+    @pytest.mark.parametrize("pricing", [None, {}, {"maxFeePerGas": 0}])
+    def test_missing_gas_price_fails_the_quote(
+        self, tmp_path: Path, pricing: t.Optional[t.Dict]
+    ) -> None:
+        """No destination gas price is QUOTE_FAILED, not a quote that omits the Safe gas."""
+        env = Env(tmp_path)
+        ledger_api = MagicMock()
+        ledger_api.try_get_gas_pricing.return_value = pricing
+        with patch(f"{MODULE}.get_default_ledger_api", return_value=ledger_api):
+            run = _deposit_run(env)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == "Unable to retrieve gas pricing on polygon."
+        assert run.required_amount is None
+        assert env.reload(run).status == FundingRunStatus.QUOTE_FAILED
+
+    @pytest.mark.parametrize("failing_chain", ["base", "polygon"])
+    def test_requirements_failure_fails_the_quote(
+        self, tmp_path: Path, failing_chain: str
+    ) -> None:
+        """A request requirements() marks failed is QUOTE_FAILED, never a zero amount."""
+        env = Env(tmp_path)
+        original = env.bridge.provider.requirements
+
+        def _requirements(request: ProviderRequest) -> t.Dict:
+            if request.params["from"]["chain"] != failing_chain:
+                return original(request)
+            # What Provider.requirements does when _get_txs raises.
+            request.status = ProviderRequestStatus.QUOTE_FAILED
+            t.cast(QuoteData, request.quote_data).message = "cannot build txs"
+            token = request.params["from"]["token"]
+            return {failing_chain: {EOA: {NATIVE: 0, token: 0}}}
+
+        with patch.object(
+            env.bridge.provider, "requirements", side_effect=_requirements
+        ):
+            run = _deposit_run(env, source_token=NATIVE)
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == "cannot build txs"
+        assert run.required_amount is None
+        assert run.steps == []
+
+    def test_requirement_missing_the_token_fails_the_quote(
+        self, tmp_path: Path
+    ) -> None:
+        """A requirements() result without the source token is QUOTE_FAILED, not 0."""
+        env = Env(tmp_path)
+        with patch.object(
+            env.bridge.provider,
+            "requirements",
+            side_effect=lambda r: {r.params["from"]["chain"]: {EOA: {}}},
+        ):
+            run = _deposit_run(env)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message is not None
+        assert run.quote_message.startswith("No ")
+
     def test_busy_lock_is_a_conflict(self, tmp_path: Path) -> None:
         """A mutation that cannot take the run lock in time is refused with a 409."""
         env = Env(tmp_path)
@@ -1367,30 +1616,34 @@ class TestExecutionEdgeCases:
         assert run.user_op_hash is None
         env.sender.submit.assert_not_called()
 
-    def test_retry_after_receipt_error_requotes_the_unsent_source_leg(
+    def test_rejected_submit_fails_with_bundler_message_and_retry_requotes(
         self, tmp_path: Path
     ) -> None:
-        """A UserOp that never landed is re-quoted in full, clearing reserve included."""
+        """The bundler's rejection is the error; once dropped, retry re-quotes the leg."""
         env = Env(tmp_path)
         run = _funded(env)
-        env.sender.submit.side_effect = GasAbstractionError("bundler down")
-        env.manager.tick()  # hash stored, submission lost
-        env.sender.get_user_op_receipt.side_effect = GasAbstractionError("bad op")
+        env.sender.submit.side_effect = GasAbstractionError(
+            "Bundler eth_sendUserOperation error -32602: USDC below cap"
+        )
         env.manager.tick()
 
         run = env.reload(run)
         assert run.status == FundingRunStatus.FAILED
-        assert run.error == {"step_id": STEP_BRIDGE, "message": "bad op"}
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": "Bundler eth_sendUserOperation error -32602: USDC below cap",
+        }
+        env.sender.wait_for_tx_hash.assert_not_called()
         old_ids = {r.id for r in run.source_requests}
         assert len(old_ids) == 3  # carrier, native, clearing reserve
 
-        env.sender.get_user_op_receipt.side_effect = None
-        env.sender.get_user_op_receipt.return_value = None
+        env.sender.user_op_pending.return_value = False
         quoted = len(env.bridge.quoted)
         run = env.manager.retry(run.id)
 
         assert run.status == FundingRunStatus.PROCESSING
         assert run.user_op_hash is None
+        assert run.user_op_nonce is None
         assert run.source_tx_hash is None
         assert len(env.bridge.quoted) == quoted + 3
         assert not old_ids & {r.id for r in run.source_requests}
@@ -1402,6 +1655,89 @@ class TestExecutionEdgeCases:
         _all_succeed(env)
         env.tick_until(run, FundingRunStatus.COMPLETED)
         assert env.sender.prepare_batch.call_count == 2
+
+    @pytest.mark.parametrize("lookup_error", [False, True])
+    def test_retry_keeps_a_user_op_that_may_still_land(
+        self, tmp_path: Path, lookup_error: bool
+    ) -> None:
+        """A pending or unknown UserOp is waited for again, then tracked on its own requests."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.submit.side_effect = GasAbstractionError("Bundler 503")
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        old_ids = [r.id for r in run.source_requests]
+        if lookup_error:
+            env.sender.get_user_op_receipt.side_effect = GasAbstractionError("503")
+
+        quoted = len(env.bridge.quoted)
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.error is None
+        assert run.user_op_hash == "0x" + "0f" * 32
+        assert [r.id for r in run.source_requests] == old_ids
+        assert len(env.bridge.quoted) == quoted
+        assert run.step(STEP_BRIDGE).status == FundingStepStatus.PROCESSING
+        assert env.reload(run).user_op_hash == run.user_op_hash
+
+        # The old UserOp lands: its requests are the ones tracked, nothing is resent.
+        env.sender.get_user_op_receipt.side_effect = None
+        env.sender.get_user_op_receipt.return_value = {
+            "success": True,
+            "receipt": {"transactionHash": "0x" + "5e" * 32},
+        }
+        _all_succeed(env)
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+        assert run.source_tx_hash == "0x" + "5e" * 32
+        env.sender.prepare_batch.assert_called_once()
+        env.sender.submit.assert_called_once()
+
+    def test_retry_records_a_user_op_included_between_lookups(
+        self, tmp_path: Path
+    ) -> None:
+        """No receipt, then a used nonce, then a receipt: it landed, nothing is re-quoted."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.submit.side_effect = GasAbstractionError("Bundler 503")
+        env.manager.tick()
+        env.sender.user_op_pending.return_value = False
+        env.sender.get_user_op_receipt.side_effect = [
+            None,
+            {"success": True, "receipt": {"transactionHash": "0x" + "6f" * 32}},
+        ]
+        quoted = len(env.bridge.quoted)
+
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.source_tx_hash == "0x" + "6f" * 32
+        assert run.user_op_hash == "0x" + "0f" * 32
+        assert len(env.bridge.quoted) == quoted
+
+    def test_retry_after_revert_requotes(self, tmp_path: Path) -> None:
+        """A UserOp that was included and reverted delivered nothing: retry re-quotes."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.wait_for_tx_hash.side_effect = UserOperationReverted("AA33")
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {"step_id": STEP_BRIDGE, "message": "AA33"}
+        env.sender.get_user_op_receipt.return_value = {
+            "success": False,
+            "reason": "AA33",
+            "receipt": {"transactionHash": "0x" + "3c" * 32},
+        }
+        quoted = len(env.bridge.quoted)
+
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.user_op_hash is None
+        assert len(env.bridge.quoted) == quoted + 3
+        env.sender.user_op_pending.assert_not_called()
 
     def test_retry_resets_failed_safe_step(self, tmp_path: Path) -> None:
         """Retry after a Safe failure re-runs only the Safe step."""
@@ -1555,6 +1891,112 @@ class TestExecutionEdgeCases:
 
 class TestBackgroundLoop:
     """reconcile / tick robustness and run_job."""
+
+    def test_repeated_monitor_failures_surface_as_quote_failed(
+        self, tmp_path: Path
+    ) -> None:
+        """A monitor that keeps raising shows QUOTE_FAILED, and recovers once it works."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.wallet.get_balance.side_effect = ConnectionError("https://rpc/key-123")
+
+        for _ in range(2):
+            env.manager.tick()
+            assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == MESSAGE_MONITOR_FAILED
+        assert env.manager.run_json(run)["quote_message"] == MESSAGE_MONITOR_FAILED
+
+        env.wallet.get_balance.side_effect = (
+            lambda chain, asset=NATIVE, from_safe=True: 0
+        )
+        run.quoted_at = 0
+        run.store()
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+        assert run.quote_message is None
+
+    def test_monitor_failure_does_not_stop_pending_clears(self, tmp_path: Path) -> None:
+        """Delegation clearing still runs while the active run's monitor raises."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.wallet.clear_delegation.side_effect = RuntimeError("no gas")
+        done = env.tick_until(run, FundingRunStatus.COMPLETED)
+        env.wallet.clear_delegation.side_effect = None
+        env.wallet.clear_delegation.return_value = "0x" + "c1" * 32
+        env.delegated = False
+        # Make the pending clear due again.
+        done.step(STEP_CLEAR_DELEGATION).started_at = 1
+        done.store()
+
+        waiting = _deposit_run(env)
+        with patch.object(env.manager, "_monitor", side_effect=RuntimeError("rpc")):
+            env.manager.tick()
+
+        assert env.reload(done).delegation_cleared is True
+        assert env.reload(waiting).status == FundingRunStatus.AWAITING_DEPOSIT
+
+    def test_one_broken_pending_clear_does_not_block_the_others(
+        self, tmp_path: Path
+    ) -> None:
+        """Each pending clear is attempted on its own."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        first = env.tick_until(run, FundingRunStatus.COMPLETED)
+        pointer = env.manager._pointer()  # pylint: disable=protected-access
+        broken = f"fr-{uuid.uuid4()}"
+        pointer.pending_clear_run_ids = [broken, first.id]
+        pointer.store()
+        first.delegation_cleared = None
+        first.step(STEP_CLEAR_DELEGATION).started_at = None
+        first.store()
+        real_load = env.manager.load
+
+        def _load(run_id: str) -> FundingRun:
+            if run_id == broken:
+                raise ValueError("corrupt run file")
+            return real_load(run_id)
+
+        with patch.object(env.manager, "load", side_effect=_load):
+            env.manager.tick()
+
+        assert env.reload(first).delegation_cleared is True
+        assert any(
+            broken in c.args[0]
+            for c in t.cast(MagicMock, env.manager.logger).exception.call_args_list
+        )
+
+    @pytest.mark.parametrize("entry", ["tick", "reconcile"])
+    def test_pending_clear_holds_the_master_eoa_lock(
+        self, tmp_path: Path, entry: str
+    ) -> None:
+        """The clearing tx takes a Master EOA nonce, so it runs under master_eoa_lock."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.wallet.clear_delegation.side_effect = RuntimeError("no gas")
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+        run.step(STEP_CLEAR_DELEGATION).started_at = 1
+        run.store()
+        seen: t.List[bool] = []
+
+        def _clear(chain: Chain) -> str:
+            seen.append(env.funding_manager.master_eoa_lock.locked())
+            env.delegated = False
+            return "0x" + "c1" * 32
+
+        env.wallet.clear_delegation.side_effect = _clear
+        getattr(env.manager, entry)()
+
+        assert seen == [True]
+        assert env.reload(run).delegation_cleared is True
 
     def test_missing_pending_clear_runs_are_skipped(self, tmp_path: Path) -> None:
         """A pending-clear id whose file is gone does not break reconcile or tick."""

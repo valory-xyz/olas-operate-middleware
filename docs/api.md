@@ -2928,11 +2928,11 @@ The run object of the single non-terminal run. If there is none, the run that co
 
 ### `POST /api/funding_run/{id}/refresh_quote`
 
-Re-quote now. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. Body (optional): `{"force": true}`.
+Re-quote now. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. No request body.
 
 ### `POST /api/funding_run/{id}/retry`
 
-Resume a `FAILED` run at its failed step. A step whose on-chain effect has landed meanwhile (e.g. the Relay fill later succeeded) is reconciled instead of resent; only failed requests are re-quoted.
+Resume a `FAILED` run at its failed step. A step whose on-chain effect has landed meanwhile (e.g. the Relay fill later succeeded) is reconciled instead of resent; only failed requests are re-quoted. A source-leg UserOperation that may still be included (the bundler still lists it and its EntryPoint nonce is unused, or the lookup failed) is waited for again rather than replaced.
 
 ### `DELETE /api/funding_run/{id}`
 
