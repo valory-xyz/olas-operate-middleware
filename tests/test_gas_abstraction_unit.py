@@ -42,8 +42,10 @@ from operate.wallet.gas_abstraction import (
     EIP7702_INITCODE_MARKER_PADDED,
     GasAbstractedSender,
     GasAbstractionError,
+    LOG_BLOCK_CHUNK_SIZE,
     PERMIT_DEADLINE,
     RECEIPT_POLL_INTERVAL,
+    USER_OPERATION_EVENT_TOPIC,
     UserOperationReverted,
     is_gas_abstracted,
 )
@@ -471,6 +473,7 @@ class TestPrepareBatch:
         w3 = MagicMock()
         w3.eth.get_code.return_value = b""
         w3.eth.get_transaction_count.return_value = 1
+        w3.eth.block_number = 900
         contract = w3.eth.contract.return_value
         contract.functions.getNonce.return_value.call.return_value = 7
         contract.functions.getUserOpHash.return_value.call.return_value = bytes.fromhex(
@@ -506,46 +509,103 @@ class TestPrepareBatch:
         assert prepared.user_op_hash == USER_OP_HASH
         assert prepared.authorization_nonce == 1
         assert prepared.nonce == 7
+        assert prepared.block_number == 900
 
 
-class TestUserOpPending:
-    """Whether a UserOperation without a receipt may still be included."""
+class TestUserOpLookups:
+    """Where a UserOperation without a bundler receipt stands."""
 
-    @pytest.mark.parametrize(
-        ("entrypoint_nonce", "by_hash", "pending"),
-        [
-            (4, {"userOperation": {}}, True),
-            (4, None, False),  # the bundler no longer knows it
-            (5, {"userOperation": {}}, False),  # its nonce was used by another op
-        ],
-    )
-    def test_pending_needs_unused_nonce_and_bundler_record(
-        self,
-        tmp_path: Path,
-        entrypoint_nonce: int,
-        by_hash: t.Optional[t.Dict],
-        pending: bool,
+    @pytest.mark.parametrize(("entrypoint_nonce", "used"), [(4, False), (5, True)])
+    def test_nonce_used_once_the_entrypoint_moved_past_it(
+        self, tmp_path: Path, entrypoint_nonce: int, used: bool
     ) -> None:
-        """Pending only while the nonce is unused and the bundler still lists it."""
+        """The EntryPoint nonce of the Master EOA says whether the op's nonce is spent."""
         sender, account = _sender(tmp_path)
         w3 = MagicMock()
         contract = w3.eth.contract.return_value
         contract.functions.getNonce.return_value.call.return_value = entrypoint_nonce
+
+        with patch.object(GasAbstractedSender, "_w3", return_value=w3):
+            assert sender.user_op_nonce_used(Chain.BASE, 4) is used
+
+        contract.functions.getNonce.assert_called_once_with(account.address, 0)
+
+    @pytest.mark.parametrize(
+        ("by_hash", "known"), [({"userOperation": {}}, True), (None, False)]
+    )
+    def test_known_while_the_bundler_lists_it(
+        self, tmp_path: Path, by_hash: t.Optional[t.Dict], known: bool
+    ) -> None:
+        """eth_getUserOperationByHash returning null means the bundler dropped it."""
+        sender, _ = _sender(tmp_path)
         sent: t.List[t.Dict] = []
 
         def _post(url: str, json: t.Dict, timeout: int) -> MagicMock:
             sent.append(json)
             return _bundler_response(by_hash)
 
-        with (
-            patch.object(GasAbstractedSender, "_w3", return_value=w3),
-            patch(f"{MODULE}.requests.post", side_effect=_post),
-        ):
-            assert sender.user_op_pending(Chain.BASE, USER_OP_HASH, 4) is pending
+        with patch(f"{MODULE}.requests.post", side_effect=_post):
+            assert sender.user_op_known(Chain.BASE, USER_OP_HASH) is known
 
-        contract.functions.getNonce.assert_called_once_with(account.address, 0)
-        assert [(j["method"], j["params"]) for j in sent] == (
-            [("eth_getUserOperationByHash", [USER_OP_HASH])]
-            if entrypoint_nonce == 4
-            else []
+        assert [(j["method"], j["params"]) for j in sent] == [
+            ("eth_getUserOperationByHash", [USER_OP_HASH])
+        ]
+
+    @staticmethod
+    def _event_log(success: bool) -> t.Dict:
+        data = b"".join(v.to_bytes(32, "big") for v in (4, int(success), 1_000, 90_000))
+        return {"data": data, "transactionHash": bytes.fromhex(HANDLE_OPS_TX[2:])}
+
+    @pytest.mark.parametrize("success", [True, False])
+    def test_event_becomes_a_bundler_style_receipt(
+        self, tmp_path: Path, success: bool
+    ) -> None:
+        """The EntryPoint event gives the handleOps tx and the op's success flag."""
+        sender, _ = _sender(tmp_path)
+        w3 = MagicMock()
+        w3.eth.block_number = 120
+        w3.eth.get_logs.return_value = [self._event_log(success)]
+
+        with patch.object(GasAbstractedSender, "_w3", return_value=w3):
+            receipt = sender.find_user_op_event(Chain.BASE, USER_OP_HASH, 100)
+
+        assert receipt is not None
+        assert receipt["success"] is success
+        if success:
+            assert GasAbstractedSender.tx_hash_of(receipt) == HANDLE_OPS_TX
+        else:
+            with pytest.raises(UserOperationReverted):
+                GasAbstractedSender.tx_hash_of(receipt)
+        (query,) = [c.args[0] for c in w3.eth.get_logs.call_args_list]
+        assert query == {
+            "address": ERC4337_ENTRYPOINT,
+            "topics": [USER_OPERATION_EVENT_TOPIC, USER_OP_HASH],
+            "fromBlock": 100,
+            "toBlock": 120,
+        }
+
+    def test_event_search_walks_the_range_in_chunks(self, tmp_path: Path) -> None:
+        """Ranges wider than one chunk are searched chunk by chunk, up to latest."""
+        sender, _ = _sender(tmp_path)
+        w3 = MagicMock()
+        w3.eth.block_number = 100 + 2 * LOG_BLOCK_CHUNK_SIZE
+        w3.eth.get_logs.return_value = []
+
+        with patch.object(GasAbstractedSender, "_w3", return_value=w3):
+            assert sender.find_user_op_event(Chain.BASE, USER_OP_HASH, 100) is None
+
+        ranges = [
+            (c.args[0]["fromBlock"], c.args[0]["toBlock"])
+            for c in w3.eth.get_logs.call_args_list
+        ]
+        assert ranges == [
+            (100, 99 + LOG_BLOCK_CHUNK_SIZE),
+            (100 + LOG_BLOCK_CHUNK_SIZE, 99 + 2 * LOG_BLOCK_CHUNK_SIZE),
+            (100 + 2 * LOG_BLOCK_CHUNK_SIZE, 100 + 2 * LOG_BLOCK_CHUNK_SIZE),
+        ]
+
+    def test_event_topic_is_the_entrypoint_user_operation_event(self) -> None:
+        """The topic is EntryPoint v0.8's UserOperationEvent signature hash."""
+        assert USER_OPERATION_EVENT_TOPIC == (
+            "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
         )

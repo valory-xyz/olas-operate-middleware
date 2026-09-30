@@ -2914,11 +2914,11 @@ If every net target is already met, the run is created directly as `COMPLETED` w
 ```
 
 - Run `status` ∈ `AWAITING_DEPOSIT | QUOTE_FAILED | PROCESSING | FAILED | COMPLETED | CANCELLED`; step `status` ∈ `PENDING | PROCESSING | DONE | FAILED`.
-- `quote` is `null` until a quote succeeded; `quote_message` carries the provider message while `QUOTE_FAILED`. The quote is refreshed every `next_refresh_at`; once `outstanding_amount` reaches 0 the run re-quotes once more and moves to `PROCESSING`, after which the selection can no longer change.
+- `quote` is `null` until a quote succeeded; `quote_message` is `"Couldn't get a quote"` while `QUOTE_FAILED` (the provider detail is logged, not returned). The quote is refreshed every `next_refresh_at`; once `outstanding_amount` reaches 0 the run re-quotes once more and moves to `PROCESSING`, after which the selection can no longer change.
 - Step kinds: `RECEIVE` (the deposit arriving at the Master EOA), `BRIDGE` (the carrier moved to the destination chain; for a native source it is the only source-leg step), `NATIVE` (destination native for fees), one `SWAP` per remaining target token, then the hidden `SAFE_AND_TRANSFER` (`onboard`/`deposit` only) and `CLEAR_DELEGATION` (USDC sources only). `is_slow` flags a step running well past its ETA.
 - `to_receive` is the **net** delivery (what the user gains after existing balances); it can be empty.
 - `destination.wallet` is `master_safe` for `onboard`/`deposit` and `master_eoa` for `signer_gas`.
-- `error` is `{"step_id", "message"}` when `FAILED`. A hidden Safe/transfer failure is reported against the last visible step. `CLEAR_DELEGATION` never sets `error` and never blocks `COMPLETED`.
+- `error` is `{"step_id", "message"}` when `FAILED`. `message` is user-facing copy, never raw provider or RPC text (that is logged): `"Couldn't bridge to <Chain>"` (`BRIDGE`), `"Couldn't get <SYMBOL>"` (`NATIVE`, `SWAP`), `"Couldn't finish the transfer"` (anything else), or `"The transfer was sent but the bridge has not confirmed it yet. Try again in a few minutes."` when the outcome is not known yet. A hidden Safe/transfer failure is reported against the last visible step, with `"Couldn't finish the transfer"`. `CLEAR_DELEGATION` never sets `error` and never blocks `COMPLETED`.
 
 **Errors:** `400` a malformed body, an unsupported source chain/token, a missing `deposit_amounts`/`service_config_id`, a `deposit_amounts` token the Pearl Wallet does not hold on that chain, or an `onboard` destination that is not the service home chain; `409` while another run is `PROCESSING`/`FAILED`. Every refusal carries one fixed `error` message per status (`"Invalid funding run request."`, `"Funding run not found."`, `"Funding run conflicts with the current run state."`); the detail is logged, not returned.
 
@@ -2932,7 +2932,7 @@ Re-quote now. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. No request body
 
 ### `POST /api/funding_run/{id}/retry`
 
-Resume a `FAILED` run at its failed step. A step whose on-chain effect has landed meanwhile (e.g. the Relay fill later succeeded) is reconciled instead of resent; only failed requests are re-quoted. A source-leg UserOperation that may still be included (the bundler still lists it and its EntryPoint nonce is unused, or the lookup failed) is waited for again rather than replaced.
+Resume a `FAILED` run at its failed step. A step whose on-chain effect has landed meanwhile (e.g. the Relay fill later succeeded) is reconciled instead of resent; only failed requests are re-quoted. A source-leg UserOperation that may still be included, or may already have been (the bundler still lists it; its EntryPoint nonce is used but neither the bundler nor the EntryPoint `UserOperationEvent` logs show it yet; or the lookup failed), is waited for again rather than replaced. One that stays unresolved for 30 minutes fails the run with the "not confirmed yet" message, so the user can retry.
 
 ### `DELETE /api/funding_run/{id}`
 

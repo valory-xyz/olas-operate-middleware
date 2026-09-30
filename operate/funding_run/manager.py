@@ -105,6 +105,10 @@ LOCK_TIMEOUT = 30
 MONITOR_FAILURE_LIMIT = 3
 # Fixed text: the exception may carry an RPC URL with its API key.
 MESSAGE_MONITOR_FAILED = "Unable to check the deposit or refresh the quote."
+# User-facing copy: the app shows it as the failure title. The detail is
+# only logged.
+MESSAGE_QUOTE_FAILED = "Couldn't get a quote"
+MESSAGE_TRANSFER_FAILED = "Couldn't finish the transfer"
 # Conservative destination gas budgets for the Safe step, priced at the
 # current gas price when quoting.
 SAFE_CREATION_GAS = 1_000_000
@@ -115,6 +119,9 @@ MESSAGE_AWAITING_CONFIRMATION = (
     "The transfer was sent but the bridge has not confirmed it yet. "
     "Try again in a few minutes."
 )
+# Past this, a UserOp that is neither included nor dropped fails the leg, so
+# the user can act. Retry re-checks it before replacing it.
+USER_OP_RESOLUTION_TIMEOUT = 6 * RECEIPT_TIMEOUT
 
 STEP_RECEIVE = "receive"
 STEP_BRIDGE = "bridge"
@@ -510,6 +517,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     self._reset_requests(run, failed)
                     run.user_op_hash = None
                     run.user_op_nonce = None
+                    run.user_op_block = None
                     run.source_tx_hash = None
             for step in run.steps:
                 if (
@@ -839,11 +847,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         )
         return True
 
-    def _set_quote_failed(self, run: FundingRun, message: str) -> None:
+    def _set_quote_failed(self, run: FundingRun, detail: str) -> None:
         run.status = FundingRunStatus.QUOTE_FAILED
         run.quoted_at = _now()
-        run.quote_message = message
-        self.logger.warning(f"[FUNDING RUN] Quote failed for {run.id}: {message}")
+        run.quote_message = MESSAGE_QUOTE_FAILED
+        self.logger.warning(f"[FUNDING RUN] Quote failed for {run.id}: {detail}")
 
     def _plan_steps(
         self,
@@ -976,19 +984,36 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _has_step(run: FundingRun, step_id: str) -> bool:
         return any(step.id == step_id for step in run.steps)
 
-    def _fail(self, run: FundingRun, step: FundingRunStep, message: str) -> None:
+    def _fail(self, run: FundingRun, step: FundingRunStep, detail: str) -> None:
         step.status = FundingStepStatus.FAILED
-        step.message = message
+        step.message = detail
         step.finished_at = _now()
         # A hidden step fails through the last visible step before it.
         reported = step
         if not step.visible:
             visible = [s for s in run.steps[: run.steps.index(step)] if s.visible]
             reported = visible[-1] if visible else step
-        run.error = {"step_id": reported.id, "message": message}
+        run.error = {
+            "step_id": reported.id,
+            "message": self._failure_message(run, step),
+        }
         run.status = FundingRunStatus.FAILED
         self._store(run)
-        self.logger.error(f"[FUNDING RUN] {run.id} step {step.id} failed: {message}")
+        self.logger.error(f"[FUNDING RUN] {run.id} step {step.id} failed: {detail}")
+
+    @staticmethod
+    def _failure_message(run: FundingRun, step: FundingRunStep) -> str:
+        """User-facing copy for a failed step."""
+        if step.message == MESSAGE_AWAITING_CONFIRMATION:
+            return MESSAGE_AWAITING_CONFIRMATION
+        destination = Chain(run.destination_chain)
+        if step.kind == FundingStepKind.BRIDGE:
+            return f"Couldn't bridge to {destination.value.replace('_', ' ').title()}"
+        if step.kind in (FundingStepKind.NATIVE, FundingStepKind.SWAP):
+            return (
+                f"Couldn't get {get_asset_name(destination, t.cast(str, step.token))}"
+            )
+        return MESSAGE_TRANSFER_FAILED
 
     def _track(self, run: FundingRun, step: FundingRunStep) -> None:
         """Refresh a step from the provider status of its requests."""
@@ -1128,6 +1153,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return
         run.user_op_hash = prepared.user_op_hash
         run.user_op_nonce = prepared.nonce
+        run.user_op_block = prepared.block_number
         run.delegation_auth_nonce = prepared.authorization_nonce
         self._store(run)
         try:
@@ -1167,16 +1193,20 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         op_hash = t.cast(str, run.user_op_hash)
         try:
             receipt = sender.get_user_op_receipt(source, op_hash)
-            if (
-                receipt is None
-                and check_dropped
-                and not sender.user_op_pending(
-                    source, op_hash, t.cast(int, run.user_op_nonce)
-                )
-            ):
-                # It may have been included between the two lookups.
-                receipt = sender.get_user_op_receipt(source, op_hash)
-                if receipt is None:
+            if receipt is None and check_dropped:
+                # Asked before the nonce: a UserOp leaving the bundler because
+                # it was just included is then seen as a used nonce.
+                known = sender.user_op_known(source, op_hash)
+                if sender.user_op_nonce_used(source, t.cast(int, run.user_op_nonce)):
+                    # Only funding runs send UserOps from the Master EOA, so
+                    # this one was included; the bundler may just not return
+                    # its receipt (e.g. it only searches recent blocks).
+                    receipt = sender.find_user_op_event(
+                        source, op_hash, t.cast(int, run.user_op_block)
+                    )
+                    if receipt is None:
+                        return USER_OP_UNKNOWN
+                elif not known:
                     return USER_OP_DROPPED
         except Exception as e:  # pylint: disable=broad-except
             self.logger.warning(f"[FUNDING RUN] UserOp {op_hash} lookup failed: {e}")
@@ -1201,6 +1231,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 run, f"UserOperation {run.user_op_hash} was not included."
             )
         elif state != USER_OP_LANDED:
+            if _now() - started > USER_OP_RESOLUTION_TIMEOUT:
+                self._fail_source_steps(run, MESSAGE_AWAITING_CONFIRMATION)
+                return
             for step in steps:
                 self._mark_slow(step)
 

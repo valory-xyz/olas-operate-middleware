@@ -71,6 +71,12 @@ PLACEHOLDER_SIGNATURE = (
 BUNDLER_TIMEOUT = 30
 RECEIPT_TIMEOUT = 300
 RECEIPT_POLL_INTERVAL = 3.0
+USER_OPERATION_EVENT_TOPIC = Web3.to_hex(
+    Web3.keccak(
+        text="UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)"
+    )
+)
+LOG_BLOCK_CHUNK_SIZE = 5000
 
 _ENTRYPOINT_ABI = [
     {
@@ -173,6 +179,8 @@ class PreparedUserOperation:
     user_op_hash: str
     authorization_nonce: t.Optional[int]
     nonce: int
+    # The UserOp cannot be included before this block.
+    block_number: int
 
 
 @dataclass
@@ -462,6 +470,7 @@ class GasAbstractedSender:
         The hash is known before submission, so a caller can persist it first
         and reconcile after a crash instead of resending.
         """
+        block_number = self._w3(chain).eth.block_number
         user_op, delegated, authorization_nonce = self.build_user_operation(
             chain, calls
         )
@@ -472,6 +481,7 @@ class GasAbstractedSender:
             user_op_hash="0x" + op_hash.hex(),
             authorization_nonce=authorization_nonce,
             nonce=int(user_op["nonce"], 16),
+            block_number=block_number,
         )
 
     def submit(self, chain: Chain, prepared: PreparedUserOperation) -> str:
@@ -510,18 +520,47 @@ class GasAbstractedSender:
         """Look up a previously submitted UserOperation (restart reconciliation)."""
         return self._bundler(chain, "eth_getUserOperationReceipt", [user_op_hash])
 
-    def user_op_pending(self, chain: Chain, user_op_hash: str, nonce: int) -> bool:
-        """Whether a UserOperation with no receipt may still be included.
-
-        It cannot once its EntryPoint nonce has been used, or once the bundler
-        it was sent to no longer knows it.
-        """
+    def user_op_nonce_used(self, chain: Chain, nonce: int) -> bool:
+        """Whether the EntryPoint nonce of a UserOperation has been used."""
         entrypoint = self._w3(chain).eth.contract(
             address=ERC4337_ENTRYPOINT, abi=_ENTRYPOINT_ABI
         )
-        if entrypoint.functions.getNonce(self.wallet.address, 0).call() > nonce:
-            return False
+        return entrypoint.functions.getNonce(self.wallet.address, 0).call() > nonce
+
+    def user_op_known(self, chain: Chain, user_op_hash: str) -> bool:
+        """Whether the bundler it was sent to still knows a UserOperation."""
         return (
             self._bundler(chain, "eth_getUserOperationByHash", [user_op_hash])
             is not None
         )
+
+    def find_user_op_event(
+        self, chain: Chain, user_op_hash: str, from_block: int
+    ) -> t.Optional[t.Dict]:
+        """Find a UserOperation's EntryPoint event over RPC, as a bundler-style receipt.
+
+        For when the bundler has no receipt, e.g. because it only searches
+        recent blocks.
+        """
+        w3 = self._w3(chain)
+        latest = w3.eth.block_number
+        for start in range(from_block, latest + 1, LOG_BLOCK_CHUNK_SIZE):
+            logs = w3.eth.get_logs(
+                {
+                    "address": ERC4337_ENTRYPOINT,
+                    "topics": [USER_OPERATION_EVENT_TOPIC, user_op_hash],
+                    "fromBlock": start,
+                    "toBlock": min(start + LOG_BLOCK_CHUNK_SIZE - 1, latest),
+                }
+            )
+            if logs:
+                # Data: nonce, success, actualGasCost, actualGasUsed.
+                data = bytes(logs[0]["data"])
+                return {
+                    "userOpHash": user_op_hash,
+                    "success": bool(int.from_bytes(data[32:64], "big")),
+                    "receipt": {
+                        "transactionHash": Web3.to_hex(logs[0]["transactionHash"])
+                    },
+                }
+        return None

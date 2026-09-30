@@ -44,6 +44,8 @@ from operate.funding_run.manager import (
     FundingRunNotFoundError,
     MESSAGE_AWAITING_CONFIRMATION,
     MESSAGE_MONITOR_FAILED,
+    MESSAGE_QUOTE_FAILED,
+    MESSAGE_TRANSFER_FAILED,
     RUN_JOB_INTERVAL,
     SLOW_STEP_MIN_SECONDS,
     STEP_BRIDGE,
@@ -51,6 +53,7 @@ from operate.funding_run.manager import (
     STEP_NATIVE,
     STEP_RECEIVE,
     STEP_SAFE,
+    USER_OP_RESOLUTION_TIMEOUT,
 )
 from operate.funding_run.models import (
     FundingRun,
@@ -280,11 +283,17 @@ class Env:
         self.service_manager = service_manager
         self.sender = MagicMock()
         self.sender.prepare_batch.return_value = PreparedUserOperation(
-            user_op={}, user_op_hash="0x" + "0f" * 32, authorization_nonce=3, nonce=4
+            user_op={},
+            user_op_hash="0x" + "0f" * 32,
+            authorization_nonce=3,
+            nonce=4,
+            block_number=100,
         )
         self.sender.wait_for_tx_hash.return_value = "0x" + "1a" * 32
         self.sender.get_user_op_receipt.return_value = None
-        self.sender.user_op_pending.return_value = True
+        self.sender.user_op_known.return_value = True
+        self.sender.user_op_nonce_used.return_value = False
+        self.sender.find_user_op_event.return_value = None
         self.sender.tx_hash_of.side_effect = GasAbstractedSender.tx_hash_of
         self.delegated = True
         self.sender.delegation_of.side_effect = lambda chain: (
@@ -296,13 +305,14 @@ class Env:
             return "0x" + "c1" * 32
 
         self.wallet.clear_delegation.side_effect = _clear
+        self.logger = MagicMock()
         self.manager = FundingRunManager(
             path=tmp_path / "funding_runs",
             wallet_manager=wallet_manager,
             bridge_manager=t.cast(t.Any, self.bridge),
             funding_manager=self.funding_manager,
             service_manager=lambda: service_manager,
-            logger=MagicMock(),
+            logger=self.logger,
             gas_abstracted_sender=lambda wallet: self.sender,
         )
 
@@ -320,6 +330,11 @@ class Env:
             if run.status == status:
                 return run
         raise AssertionError(f"{run.id} stuck in {run.status}: {run.steps}")
+
+
+def _logged(env: Env, detail: str) -> bool:
+    """Whether the manager logged `detail`; user-facing messages never carry it."""
+    return any(detail in str(call) for call in env.logger.method_calls)
 
 
 @pytest.fixture(autouse=True)
@@ -531,7 +546,8 @@ class TestQuote:
         run = _deposit_run(env)
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == "no route"
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+        assert _logged(env, "no route")
 
 
 # ---------------------------------------------------------------------------
@@ -948,8 +964,11 @@ class TestExecution:
         record.assert_not_called()
         assert run.status == FundingRunStatus.FAILED
         assert run.error is not None
-        assert run.error["step_id"] == STEP_BRIDGE
-        assert "AA33 reverted" in run.error["message"]
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": "Couldn't bridge to Polygon",
+        }
+        assert _logged(env, "AA33 reverted")
         assert run.source_tx_hash is None
         assert all(r.execution_data is None for r in run.source_requests)
 
@@ -969,7 +988,7 @@ class TestExecution:
         assert run.status == FundingRunStatus.PROCESSING
         assert run.error is None
         assert run.step(STEP_BRIDGE).status == FundingStepStatus.PROCESSING
-        env.sender.user_op_pending.assert_not_called()
+        env.sender.user_op_known.assert_not_called()
 
         env.sender.get_user_op_receipt.side_effect = None
         env.sender.get_user_op_receipt.return_value = {
@@ -993,7 +1012,7 @@ class TestExecution:
         env.manager.tick()
         run = env.reload(run)
         assert run.status == FundingRunStatus.PROCESSING
-        env.sender.user_op_pending.assert_not_called()
+        env.sender.user_op_known.assert_not_called()
 
         later = int(time.time()) + max(RECEIPT_TIMEOUT, SLOW_STEP_MIN_SECONDS) + 60
         with patch(f"{MODULE}._now", return_value=later):
@@ -1001,9 +1020,10 @@ class TestExecution:
         run = env.reload(run)
         assert run.status == FundingRunStatus.PROCESSING
         assert run.step(STEP_BRIDGE).is_slow is True
-        env.sender.user_op_pending.assert_called_with(Chain.BASE, "0x" + "0f" * 32, 4)
+        env.sender.user_op_known.assert_called_with(Chain.BASE, "0x" + "0f" * 32)
+        env.sender.user_op_nonce_used.assert_called_with(Chain.BASE, 4)
 
-        env.sender.user_op_pending.return_value = False
+        env.sender.user_op_known.return_value = False
         with patch(f"{MODULE}._now", return_value=later):
             env.manager.tick()
 
@@ -1011,8 +1031,90 @@ class TestExecution:
         assert run.status == FundingRunStatus.FAILED
         assert run.error == {
             "step_id": STEP_BRIDGE,
-            "message": f"UserOperation {run.user_op_hash} was not included.",
+            "message": "Couldn't bridge to Polygon",
         }
+        assert _logged(env, f"UserOperation {run.user_op_hash} was not included.")
+
+    def test_used_nonce_without_receipt_is_recorded_from_the_entrypoint_event(
+        self, tmp_path: Path
+    ) -> None:
+        """A used nonce whose bundler receipt is missing is found in the EntryPoint logs."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.wait_for_tx_hash.side_effect = GasAbstractionError("timed out")
+        env.manager.tick()
+        env.sender.user_op_known.return_value = False
+        env.sender.user_op_nonce_used.return_value = True
+        env.sender.find_user_op_event.return_value = {
+            "success": True,
+            "receipt": {"transactionHash": "0x" + "7a" * 32},
+        }
+
+        later = int(time.time()) + RECEIPT_TIMEOUT + 60
+        with patch(f"{MODULE}._now", return_value=later):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.source_tx_hash == "0x" + "7a" * 32
+        env.sender.find_user_op_event.assert_called_once_with(
+            Chain.BASE, "0x" + "0f" * 32, 100
+        )
+
+    def test_used_nonce_without_any_record_keeps_waiting(self, tmp_path: Path) -> None:
+        """A used nonce with no receipt and no event is unknown, never dropped."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.wait_for_tx_hash.side_effect = GasAbstractionError("timed out")
+        env.manager.tick()
+        env.sender.user_op_known.return_value = False
+        env.sender.user_op_nonce_used.return_value = True
+
+        later = int(time.time()) + RECEIPT_TIMEOUT + 60
+        with patch(f"{MODULE}._now", return_value=later):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.error is None
+        assert run.user_op_hash == "0x" + "0f" * 32
+
+    @pytest.mark.parametrize("lookup_error", [False, True])
+    def test_unresolved_user_op_fails_after_the_bound_and_retry_keeps_it(
+        self, tmp_path: Path, lookup_error: bool
+    ) -> None:
+        """A UserOp still pending or unknown past the bound gives the user a retry."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.wait_for_tx_hash.side_effect = GasAbstractionError("timed out")
+        env.manager.tick()
+        if lookup_error:
+            env.sender.get_user_op_receipt.side_effect = GasAbstractionError("503")
+
+        start = t.cast(int, env.reload(run).step(STEP_BRIDGE).started_at)
+        with patch(f"{MODULE}._now", return_value=start + USER_OP_RESOLUTION_TIMEOUT):
+            env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.PROCESSING
+
+        with patch(
+            f"{MODULE}._now", return_value=start + USER_OP_RESOLUTION_TIMEOUT + 1
+        ):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": MESSAGE_AWAITING_CONFIRMATION,
+        }
+        quoted = len(env.bridge.quoted)
+
+        run = env.manager.retry(run.id)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.user_op_hash == "0x" + "0f" * 32
+        assert len(env.bridge.quoted) == quoted
+        env.sender.prepare_batch.assert_called_once()
 
     def test_unexpected_source_leg_error_fails_the_run(self, tmp_path: Path) -> None:
         """A non-GasAbstractionError from preparing the UserOp is a visible failure."""
@@ -1024,7 +1126,11 @@ class TestExecution:
 
         run = env.reload(run)
         assert run.status == FundingRunStatus.FAILED
-        assert run.error == {"step_id": STEP_BRIDGE, "message": "rpc unreachable"}
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": "Couldn't bridge to Polygon",
+        }
+        assert _logged(env, "rpc unreachable")
 
     def test_unexpected_safe_step_error_fails_the_run(self, tmp_path: Path) -> None:
         """An exception from the hidden Safe step surfaces on the last visible step."""
@@ -1040,8 +1146,9 @@ class TestExecution:
         assert run.step(STEP_SAFE).status == FundingStepStatus.FAILED
         assert run.error == {
             "step_id": f"swap:{POLYGON_PUSD}",
-            "message": "rpc unreachable",
+            "message": MESSAGE_TRANSFER_FAILED,
         }
+        assert _logged(env, "rpc unreachable")
 
     def test_interrupted_native_send_is_not_resent(self, tmp_path: Path) -> None:
         """A native-source request marked as sending but unrecorded fails, not resends."""
@@ -1058,7 +1165,7 @@ class TestExecution:
         assert run.status == FundingRunStatus.FAILED
         assert run.error == {
             "step_id": STEP_BRIDGE,
-            "message": "Interrupted before the transfer was confirmed.",
+            "message": "Couldn't bridge to Polygon",
         }
 
     def test_retry_after_interrupted_native_send_resends_it_once(
@@ -1106,10 +1213,7 @@ class TestExecution:
         run.store()
         env.manager.tick()
         run = env.reload(run)
-        assert run.error == {
-            "step_id": swap_id,
-            "message": "Interrupted before the swap was confirmed.",
-        }
+        assert run.error == {"step_id": swap_id, "message": "Couldn't get OLAS"}
         quoted = len(env.bridge.quoted)
 
         run = env.manager.retry(run.id)
@@ -1161,7 +1265,7 @@ class TestExecution:
         _all_succeed(env)
         env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_FAILED
         run = env.tick_until(run, FundingRunStatus.FAILED)
-        assert run.error["step_id"] == STEP_NATIVE  # type: ignore[index]
+        assert run.error == {"step_id": STEP_NATIVE, "message": "Couldn't get POL"}
 
         env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_DONE
         quoted_before = len(env.bridge.quoted)
@@ -1237,8 +1341,9 @@ class TestExecution:
         assert run.step(STEP_SAFE).status == FundingStepStatus.FAILED
         assert run.error == {
             "step_id": f"swap:{POLYGON_PUSD}",
-            "message": "Failed to create Safe.",
+            "message": MESSAGE_TRANSFER_FAILED,
         }
+        assert _logged(env, "Failed to create Safe.")
 
     def test_clear_delegation_failure_keeps_run_completed(self, tmp_path: Path) -> None:
         """Clearing failures never fail the run and are retried in the background."""
@@ -1410,7 +1515,8 @@ class TestEdgeCases:
         run = _deposit_run(env)
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == "no source route"
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+        assert _logged(env, "no source route")
         assert run.required_amount is None
         assert run.source_requests == []
         assert env.reload(run).status == FundingRunStatus.QUOTE_FAILED
@@ -1467,7 +1573,8 @@ class TestEdgeCases:
             run = _deposit_run(env)
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == "Unable to retrieve gas pricing on polygon."
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+        assert _logged(env, "Unable to retrieve gas pricing on polygon.")
         assert run.required_amount is None
         assert env.reload(run).status == FundingRunStatus.QUOTE_FAILED
 
@@ -1496,7 +1603,8 @@ class TestEdgeCases:
 
         run = env.reload(run)
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == "cannot build txs"
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+        assert _logged(env, "cannot build txs")
         assert run.required_amount is None
         assert run.steps == []
 
@@ -1513,8 +1621,8 @@ class TestEdgeCases:
             run = _deposit_run(env)
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message is not None
-        assert run.quote_message.startswith("No ")
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+        assert _logged(env, "No 0x")
 
     def test_busy_lock_is_a_conflict(self, tmp_path: Path) -> None:
         """A mutation that cannot take the run lock in time is refused with a 409."""
@@ -1612,7 +1720,11 @@ class TestExecutionEdgeCases:
 
         run = env.reload(run)
         assert run.status == FundingRunStatus.FAILED
-        assert run.error == {"step_id": STEP_BRIDGE, "message": "paymaster refused"}
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": "Couldn't bridge to Polygon",
+        }
+        assert _logged(env, "paymaster refused")
         assert run.user_op_hash is None
         env.sender.submit.assert_not_called()
 
@@ -1631,13 +1743,14 @@ class TestExecutionEdgeCases:
         assert run.status == FundingRunStatus.FAILED
         assert run.error == {
             "step_id": STEP_BRIDGE,
-            "message": "Bundler eth_sendUserOperation error -32602: USDC below cap",
+            "message": "Couldn't bridge to Polygon",
         }
+        assert _logged(env, "USDC below cap")
         env.sender.wait_for_tx_hash.assert_not_called()
         old_ids = {r.id for r in run.source_requests}
         assert len(old_ids) == 3  # carrier, native, clearing reserve
 
-        env.sender.user_op_pending.return_value = False
+        env.sender.user_op_known.return_value = False
         quoted = len(env.bridge.quoted)
         run = env.manager.retry(run.id)
 
@@ -1694,19 +1807,20 @@ class TestExecutionEdgeCases:
         env.sender.prepare_batch.assert_called_once()
         env.sender.submit.assert_called_once()
 
-    def test_retry_records_a_user_op_included_between_lookups(
+    def test_retry_records_a_user_op_found_in_the_entrypoint_logs(
         self, tmp_path: Path
     ) -> None:
-        """No receipt, then a used nonce, then a receipt: it landed, nothing is re-quoted."""
+        """No receipt but a used nonce and an EntryPoint event: it landed, nothing is re-quoted."""
         env = Env(tmp_path)
         run = _funded(env)
         env.sender.submit.side_effect = GasAbstractionError("Bundler 503")
         env.manager.tick()
-        env.sender.user_op_pending.return_value = False
-        env.sender.get_user_op_receipt.side_effect = [
-            None,
-            {"success": True, "receipt": {"transactionHash": "0x" + "6f" * 32}},
-        ]
+        env.sender.user_op_known.return_value = False
+        env.sender.user_op_nonce_used.return_value = True
+        env.sender.find_user_op_event.return_value = {
+            "success": True,
+            "receipt": {"transactionHash": "0x" + "6f" * 32},
+        }
         quoted = len(env.bridge.quoted)
 
         run = env.manager.retry(run.id)
@@ -1724,7 +1838,10 @@ class TestExecutionEdgeCases:
         env.manager.tick()
         run = env.reload(run)
         assert run.status == FundingRunStatus.FAILED
-        assert run.error == {"step_id": STEP_BRIDGE, "message": "AA33"}
+        assert run.error == {
+            "step_id": STEP_BRIDGE,
+            "message": "Couldn't bridge to Polygon",
+        }
         env.sender.get_user_op_receipt.return_value = {
             "success": False,
             "reason": "AA33",
@@ -1736,8 +1853,9 @@ class TestExecutionEdgeCases:
 
         assert run.status == FundingRunStatus.PROCESSING
         assert run.user_op_hash is None
+        assert run.user_op_block is None
         assert len(env.bridge.quoted) == quoted + 3
-        env.sender.user_op_pending.assert_not_called()
+        env.sender.user_op_known.assert_not_called()
 
     def test_retry_resets_failed_safe_step(self, tmp_path: Path) -> None:
         """Retry after a Safe failure re-runs only the Safe step."""
@@ -1778,10 +1896,7 @@ class TestExecutionEdgeCases:
         run = env.reload(run)
         assert env.bridge.executed == []
         assert run.status == FundingRunStatus.FAILED
-        assert run.error == {
-            "step_id": swap_id,
-            "message": "Interrupted before the swap was confirmed.",
-        }
+        assert run.error == {"step_id": swap_id, "message": "Couldn't get OLAS"}
 
     def test_stale_swap_quote_is_refreshed_before_sending(self, tmp_path: Path) -> None:
         """A swap whose quote expired is re-quoted, then sent."""
@@ -1832,7 +1947,11 @@ class TestExecutionEdgeCases:
         run = env.reload(run)
         assert env.bridge.executed == []
         assert run.status == FundingRunStatus.FAILED
-        assert run.error == {"step_id": f"swap:{POLYGON_OLAS}", "message": message}
+        assert run.error == {
+            "step_id": f"swap:{POLYGON_OLAS}",
+            "message": "Couldn't get OLAS",
+        }
+        assert _logged(env, message)
 
     def test_clearing_waits_for_its_reserve_request(self, tmp_path: Path) -> None:
         """Clearing is deferred while the source-chain reserve swap is unsettled."""
@@ -1907,8 +2026,9 @@ class TestBackgroundLoop:
 
         run = env.reload(run)
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == MESSAGE_MONITOR_FAILED
-        assert env.manager.run_json(run)["quote_message"] == MESSAGE_MONITOR_FAILED
+        assert env.manager.run_json(run)["quote_message"] == MESSAGE_QUOTE_FAILED
+        assert _logged(env, MESSAGE_MONITOR_FAILED)
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
 
         env.wallet.get_balance.side_effect = (
             lambda chain, asset=NATIVE, from_safe=True: 0

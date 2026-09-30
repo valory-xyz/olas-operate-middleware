@@ -146,6 +146,8 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     user_op_hash: t.Optional[str] = None
     # EntryPoint nonce of user_op_hash: once used, that UserOp can never land.
     user_op_nonce: t.Optional[int] = None
+    # Block the UserOp was built at: its EntryPoint event cannot be earlier.
+    user_op_block: t.Optional[int] = None
     source_tx_hash: t.Optional[str] = None
     # Stored before a native-source request is sent: if the process stops
     # mid-send, the request is reported as interrupted instead of resent.
