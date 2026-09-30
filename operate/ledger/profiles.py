@@ -401,7 +401,7 @@ FUNDING_SOURCES: t.Dict[Chain, t.List[str]] = {
     Chain.ROBINHOOD: [ZERO_ADDRESS],
 }
 
-# Pearl Mini contract set for gas-abstracted funding (verified on-chain).
+# Contract set for gas-abstracted funding (verified on-chain).
 EIP7702_DELEGATE = "0xe6Cae83BdE06E4c305530e199D7217f42808555B"  # Simple7702Account
 ERC4337_ENTRYPOINT = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"  # v0.8
 _CIRCLE_PAYMASTER_V08 = "0x0578cFB241215b77442a541325d6A4E6dFE700Ec"
