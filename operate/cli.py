@@ -2206,7 +2206,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.delete("/api/funding_run/{run_id}")
     async def _cancel_funding_run(run_id: str) -> JSONResponse:
-        """Cancel a run that has not started processing."""
+        """Cancel a waiting run, or a FAILED one with nothing in flight."""
         return await _funding_run_action(
             run_id, lambda manager, rid: manager.cancel(rid)
         )

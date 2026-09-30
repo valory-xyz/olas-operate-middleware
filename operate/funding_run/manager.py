@@ -227,13 +227,18 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if pointer.active_run_id == run.id:
             pointer.active_run_id = None
         pointer.last_run_id = run.id
-        if (
-            status == FundingRunStatus.COMPLETED
-            and self._has_step(run, STEP_CLEAR_DELEGATION)
-            and run.id not in pointer.pending_clear_run_ids
-        ):
-            pointer.pending_clear_run_ids.append(run.id)
         pointer.store()
+        if status == FundingRunStatus.COMPLETED and self._has_step(
+            run, STEP_CLEAR_DELEGATION
+        ):
+            self._queue_clear(run)
+
+    def _queue_clear(self, run: FundingRun) -> None:
+        """Have the background loop clear the run's source-chain delegation."""
+        pointer = self._pointer()
+        if run.id not in pointer.pending_clear_run_ids:
+            pointer.pending_clear_run_ids.append(run.id)
+            pointer.store()
 
     def active_run(self) -> t.Optional[FundingRun]:
         """The single non-terminal run, else a run completed moments ago."""
@@ -453,15 +458,54 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         return BigInt(0)
 
     def cancel(self, run_id: str) -> FundingRun:
-        """Cancel a run that has not started processing."""
+        """Cancel a run that is waiting, or FAILED with nothing still in flight.
+
+        A FAILED run whose step keeps failing would otherwise block every
+        later run.
+        """
         with self._locked():
             run = self.load(run_id)
             self._require(
-                run, FundingRunStatus.AWAITING_DEPOSIT, FundingRunStatus.QUOTE_FAILED
+                run,
+                FundingRunStatus.AWAITING_DEPOSIT,
+                FundingRunStatus.QUOTE_FAILED,
+                FundingRunStatus.FAILED,
             )
-            # Received funds stay in the Master EOA and count toward the next quote.
+            failed = run.status == FundingRunStatus.FAILED
+            if failed and self._in_flight(run):
+                raise FundingRunConflictError(
+                    f"Funding run {run.id} still has a transfer in flight."
+                )
+            # Funds stay in the Master EOA, on whichever chain the run left
+            # them, and count toward the next quote.
             self._finish(run, FundingRunStatus.CANCELLED)
+            if failed and self._has_step(run, STEP_CLEAR_DELEGATION):
+                # The source leg may have delegated the Master EOA.
+                self._queue_clear(run)
             return run
+
+    def _in_flight(self, run: FundingRun) -> bool:
+        """Whether a FAILED run may still deliver funds somewhere."""
+        if run.user_op_hash and not run.source_tx_hash:
+            try:
+                state = self._user_op_state(run, check_dropped=True)
+            except UserOperationReverted:
+                state = USER_OP_DROPPED  # included, but delivered nothing
+            if state in (USER_OP_PENDING, USER_OP_UNKNOWN):
+                return True
+        steps = [s for s in run.steps if s.kind != FundingStepKind.CLEAR_DELEGATION]
+        for step in steps:
+            self._recheck(run, step)
+        requests = [r for s in steps for r in run.requests_of(s)]
+        return self._unconfirmed(requests) or any(
+            r.execution_data is not None
+            and r.status
+            not in (
+                ProviderRequestStatus.EXECUTION_DONE,
+                ProviderRequestStatus.EXECUTION_FAILED,
+            )
+            for r in requests
+        )
 
     def refresh_quote(self, run_id: str) -> FundingRun:
         """Re-quote a run that is still waiting for its deposit."""
@@ -1319,9 +1363,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 self._track(run, step)
                 # The clearing gas is still being swapped in on the source
                 # chain. A failed swap does not stop the attempt: the Master
-                # EOA may hold native anyway.
+                # EOA may hold native anyway. Nor does one never sent, from a
+                # FAILED run that was cancelled.
                 if any(
-                    r.status
+                    r.execution_data is not None
+                    and r.status
                     not in (
                         ProviderRequestStatus.EXECUTION_DONE,
                         ProviderRequestStatus.EXECUTION_FAILED,

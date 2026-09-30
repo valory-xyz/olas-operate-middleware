@@ -1425,6 +1425,99 @@ class TestLifecycle:
         with pytest.raises(FundingRunConflictError):
             env.manager.cancel(run.id)
 
+    def test_cancel_failed_run_frees_the_slot_and_clears_delegation(
+        self, tmp_path: Path
+    ) -> None:
+        """A step that keeps failing no longer blocks every later run."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_FAILED
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+
+        run = env.manager.cancel(run.id)
+
+        assert run.status == FundingRunStatus.CANCELLED
+        assert env.manager.active_run() is None
+        env.manager.tick()
+        env.wallet.clear_delegation.assert_called_once_with(Chain.BASE)
+        assert env.reload(run).delegation_cleared is True
+        assert _deposit_run(env).status == FundingRunStatus.AWAITING_DEPOSIT
+
+    @pytest.mark.parametrize("reverted", [False, True])
+    def test_cancel_failed_run_with_undelivered_user_op_does_not_wait_on_it(
+        self, tmp_path: Path, reverted: bool
+    ) -> None:
+        """A dropped or reverted source leg never sent the clearing reserve; clearing still settles."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.submit.side_effect = GasAbstractionError("Bundler 503")
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.FAILED
+        if reverted:
+            # Included: the authorization applied even though the calls reverted.
+            env.sender.get_user_op_receipt.return_value = {
+                "success": False,
+                "reason": "AA33",
+                "receipt": {"transactionHash": "0x" + "3c" * 32},
+            }
+        else:
+            env.sender.user_op_known.return_value = False
+            env.delegated = False
+
+        env.manager.cancel(run.id)
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.CANCELLED
+        assert run.step(STEP_CLEAR_DELEGATION).status == FundingStepStatus.DONE
+        assert env.wallet.clear_delegation.call_count == int(reverted)
+        # pylint: disable-next=protected-access
+        assert env.manager._pointer().pending_clear_run_ids == []
+
+    def test_cancel_failed_run_refuses_while_a_user_op_may_land(
+        self, tmp_path: Path
+    ) -> None:
+        """A UserOp the bundler still lists may yet move the deposit."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.sender.submit.side_effect = GasAbstractionError("Bundler 503")
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.FAILED
+
+        with pytest.raises(FundingRunConflictError):
+            env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.FAILED
+
+    def test_cancel_failed_run_refuses_while_a_request_is_pending(
+        self, tmp_path: Path
+    ) -> None:
+        """The bridge failed but the native request is still being filled."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        env.bridge.outcomes[POLYGON_USDC] = ProviderRequestStatus.EXECUTION_FAILED
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        assert run.step(STEP_NATIVE).status == FundingStepStatus.PROCESSING
+
+        with pytest.raises(FundingRunConflictError):
+            env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.FAILED
+
+    def test_cancel_failed_run_refuses_an_unconfirmed_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """A deposit that mined but the bridge never confirmed may still deliver."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_FAILED
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        env.bridge.unconfirmed.add(NATIVE)
+
+        with pytest.raises(FundingRunConflictError):
+            env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.FAILED
+
     def test_unknown_run_is_not_found(self, tmp_path: Path) -> None:
         """Unknown or malformed ids are 404s."""
         env = Env(tmp_path)
