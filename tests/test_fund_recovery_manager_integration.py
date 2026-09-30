@@ -23,12 +23,23 @@ import typing as t
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
-from operate.ledger.profiles import DUST, ERC20_TOKENS_BY_CHAIN_ID, OLAS, STAKING
+from operate.ledger.profiles import (
+    CONTRACTS,
+    DUST,
+    ERC20_TOKENS_BY_CHAIN_ID,
+    OLAS,
+    STAKING,
+)
 from operate.operate_types import Chain, LedgerType, OnChainState
-from operate.services.fund_recovery_manager import FundRecoveryManager
+from operate.services.fund_recovery_manager import (
+    FundRecoveryManager,
+    SUBGRAPH_URLS,
+    _get_master_safes_from_contracts,
+)
 from operate.services.protocol import StakingManager
 from operate.utils.gnosis import get_asset_balance
 
@@ -67,6 +78,8 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
         Note: One external call is patched because Tenderly virtual forks are
         not indexed by public APIs:
         - _fetch_services_from_subgraph: The subgraph doesn't index fork services.
+          The on-chain mint-log sweep is checked separately against that mock,
+          started at the fork's pre-deploy block instead of the registry's deployment.
 
         This test:
         1. Deploys the service on-chain.
@@ -97,6 +110,11 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
                 service_config_id = svc.service_config_id
                 break
         assert service_config_id is not None, "Trader service not found in test_env"
+
+        sweep_start_blocks = {
+            chain: get_default_ledger_api(chain).api.eth.block_number
+            for chain in SERVICE_CHAINS
+        }
 
         # ── Step 4: Deploy service on-chain ────────────────────────────────────
         LOGGER.info("Deploying Trader service on-chain...")
@@ -160,6 +178,32 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
                 if subgraph_url == url:
                     return known_service_ids.get(chain.id, [])
             return []
+
+        # The mint-log sweep must discover exactly what the subgraph path does.
+        for chain in SERVICE_CHAINS:
+            discovery_kwargs = dict(
+                chain=chain,
+                ledger_api=get_default_ledger_api(chain),
+                service_registry_address=CONTRACTS[chain]["service_registry"],
+                eoa_address=wallet.address,
+                subgraph_url=SUBGRAPH_URLS[chain],
+            )
+            with patch.dict(
+                f"{_RECOVERY_MODULE}.SERVICE_REGISTRY_START_BLOCKS", sweep_start_blocks
+            ):
+                with patch(
+                    f"{_RECOVERY_MODULE}._fetch_services_from_subgraph",
+                    _mock_fetch_subgraph,
+                ):
+                    from_subgraph = _get_master_safes_from_contracts(**discovery_kwargs)
+                with patch(
+                    f"{_RECOVERY_MODULE}._fetch_services_from_subgraph",
+                    side_effect=requests.ConnectionError("subgraph unreachable"),
+                ):
+                    from_sweep = _get_master_safes_from_contracts(**discovery_kwargs)
+            expected = {wallet.safes[chain]: known_service_ids[chain.id]}
+            assert from_subgraph == expected, f"subgraph discovery on {chain}"
+            assert from_sweep == expected, f"mint-log sweep on {chain}"
 
         # ── Step 6: Record pre-execute balances ───────────────────────────────
         # Capture native + ERC-20 balances for destination, EOA, master safe,
