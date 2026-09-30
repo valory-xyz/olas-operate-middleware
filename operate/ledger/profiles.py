@@ -491,6 +491,31 @@ def get_asset_name(chain: Chain, asset_address: str) -> str:
     return asset_address
 
 
+def get_asset_symbol(chain: Chain, asset_address: str) -> t.Optional[str]:
+    """Get token symbol, read on-chain for tokens `get_asset_name` does not know.
+
+    None when the token has no readable symbol.
+    """
+    name = get_asset_name(chain, asset_address)
+    if name != asset_address:
+        return name
+    try:
+        return _get_erc20_symbol(chain, asset_address) or None
+    except Exception:  # pylint: disable=broad-except
+        # Not an ERC-20, a non-string symbol() or an RPC error. Failures are
+        # not cached, so a transient one is retried on the next call.
+        return None
+
+
+@cache
+def _get_erc20_symbol(chain: Chain, asset_address: str) -> str:
+    erc20_token = registry_contracts.erc20.get_instance(
+        ledger_api=get_default_ledger_api(chain),
+        contract_address=asset_address,
+    )
+    return erc20_token.functions.symbol().call()
+
+
 @cache
 def get_asset_decimals(chain: Chain, asset_address: str) -> int:
     """Get token decimals."""
