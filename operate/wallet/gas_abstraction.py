@@ -392,6 +392,29 @@ class GasAbstractedSender:
 
     # --- sending -----------------------------------------------------------
 
+    @staticmethod
+    def _fees(w3: Web3, chain: Chain) -> t.Tuple[int, int]:
+        """Fees for a UserOperation: (maxFeePerGas, maxPriorityFeePerGas)."""
+        pricing = get_default_ledger_api(chain).try_get_gas_pricing() or {}
+        base_fee = int(w3.eth.get_block("latest")["baseFeePerGas"])
+        # Candide rejects fees below ~90% of eth_gasPrice, which includes the
+        # node's suggested tip: the strategy can tip 1 wei on quiet L2s.
+        priority = int(
+            max(
+                int(pricing.get("maxPriorityFeePerGas", 0)),
+                int(w3.eth.max_priority_fee),
+            )
+            * GAS_PRICE_MULTIPLIER
+        )
+        max_fee = max(
+            int(
+                int(pricing.get("maxFeePerGas", pricing.get("gasPrice", 0)))
+                * GAS_PRICE_MULTIPLIER
+            ),
+            2 * base_fee + priority,
+        )
+        return max_fee, priority
+
     def build_user_operation(  # pylint: disable=too-many-locals
         self, chain: Chain, calls: t.List[Call]
     ) -> t.Tuple[t.Dict[str, t.Any], bool, t.Optional[int]]:
@@ -407,14 +430,7 @@ class GasAbstractedSender:
         sender = self.wallet.address
         delegated = self.delegation_of(chain) == EIP7702_DELEGATE
         entrypoint = w3.eth.contract(address=ERC4337_ENTRYPOINT, abi=_ENTRYPOINT_ABI)
-        gas_pricing = get_default_ledger_api(chain).try_get_gas_pricing() or {}
-        max_fee = int(
-            gas_pricing.get("maxFeePerGas", gas_pricing.get("gasPrice", 0))
-            * GAS_PRICE_MULTIPLIER
-        )
-        max_priority_fee = int(
-            gas_pricing.get("maxPriorityFeePerGas", max_fee) * GAS_PRICE_MULTIPLIER
-        )
+        max_fee, max_priority_fee = self._fees(w3, chain)
 
         permit_signature = self.wallet.sign_typed_data(self.permit_typed_data(chain))
         user_op: t.Dict[str, t.Any] = {

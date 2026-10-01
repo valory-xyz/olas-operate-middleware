@@ -241,6 +241,50 @@ class TestPackUserOperation:
         assert packed[7] == b""
 
 
+class TestFees:
+    """UserOperation fees clear the bundler's floor of ~90% of eth_gasPrice."""
+
+    @staticmethod
+    def _fees(pricing: t.Dict, base_fee: int, node_tip: int) -> t.Tuple[int, int]:
+        w3 = MagicMock()
+        w3.eth.get_block.return_value = {"baseFeePerGas": base_fee}
+        w3.eth.max_priority_fee = node_tip
+        ledger_api = MagicMock()
+        ledger_api.try_get_gas_pricing.return_value = pricing
+        with patch(f"{MODULE}.get_default_ledger_api", return_value=ledger_api):
+            return GasAbstractedSender._fees(  # pylint: disable=protected-access
+                w3, Chain.OPTIMISM
+            )
+
+    def test_quiet_l2_tip_is_raised_to_the_node_tip(self) -> None:
+        """Optimism QA case: the strategy tipped 1 wei and Candide wanted 914021."""
+        max_fee, priority = self._fees(
+            {"maxFeePerGas": 31_387, "maxPriorityFeePerGas": 1},
+            base_fee=15_578,
+            node_tip=1_000_000,
+        )
+
+        assert priority == 1_200_000
+        assert max_fee == 2 * 15_578 + 1_200_000
+        assert min(max_fee, priority + 15_578) >= 914_021
+
+    def test_strategy_values_win_when_higher(self) -> None:
+        """A busy chain keeps the strategy's fees."""
+        max_fee, priority = self._fees(
+            {"maxFeePerGas": 400, "maxPriorityFeePerGas": 50},
+            base_fee=100,
+            node_tip=10,
+        )
+
+        assert (max_fee, priority) == (480, 60)
+
+    def test_legacy_pricing_never_tips_above_the_max_fee(self) -> None:
+        """With only gasPrice, the tip comes from the node, not from the max fee."""
+        max_fee, priority = self._fees({"gasPrice": 50}, base_fee=10, node_tip=5)
+
+        assert (max_fee, priority) == (60, 6)
+
+
 class TestSendBatch:
     """End-to-end UserOperation build/sign/submit with mocked RPCs."""
 
