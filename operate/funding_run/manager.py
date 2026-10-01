@@ -1531,6 +1531,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     else "master_safe"
                 ),
             },
+            "service_config_id": run.service_config_id,
             "quote": quote,
             "quote_message": run.quote_message,
             "to_receive": [

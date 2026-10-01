@@ -550,6 +550,23 @@ class TestQuote:
             n_assets=2, with_safe=True, eoa_native=POLYGON_RESERVE
         )
 
+    def test_run_json_names_the_onboarded_service(self, tmp_path: Path) -> None:
+        """An onboard run reports its service; other modes report none."""
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+
+        onboard = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+        assert env.manager.run_json(onboard)["service_config_id"] == "sc-1"
+
+        deposit = _deposit_run(env)
+        assert env.manager.run_json(deposit)["service_config_id"] is None
+
     def test_quote_failure_sets_quote_failed(self, tmp_path: Path) -> None:
         """A failed Relay quote leaves the run in QUOTE_FAILED with a message."""
         env = Env(tmp_path)

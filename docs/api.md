@@ -2898,6 +2898,7 @@ If every net target is already met, the run is created directly as `COMPLETED` w
   "status": "AWAITING_DEPOSIT",
   "source": { "chain": "base", "token": "0x8335...", "symbol": "USDC", "decimals": 6, "deposit_address": "0x<MasterEOA>" },
   "destination": { "chain": "polygon", "wallet": "master_safe" },
+  "service_config_id": "sc-...",
   "quote": { "required_amount": "15000000", "received_amount": "4000000", "outstanding_amount": "11000000", "eta_seconds": 180, "quoted_at": 1790592071, "next_refresh_at": 1790592251 },
   "quote_message": null,
   "to_receive": [ { "token": "0x0000...", "symbol": "POL", "amount": "6000000000000000000" } ],
@@ -2917,6 +2918,7 @@ If every net target is already met, the run is created directly as `COMPLETED` w
 - `quote` is `null` until a quote succeeded; `quote_message` is `"Couldn't get a quote"` while `QUOTE_FAILED` (the provider detail is logged, not returned), or `"<SYMBOL> can't be delivered to <Chain> yet"` when a target token has no route at all (`FUNDING_RUN_UNROUTABLE`: OLAS on Gnosis and Mode). Such a run is never quoted. The quote is refreshed every `next_refresh_at`; once `outstanding_amount` reaches 0 the run re-quotes once more and moves to `PROCESSING`, after which the selection can no longer change.
 - Step kinds: `RECEIVE` (the deposit arriving at the Master EOA), `BRIDGE` (the carrier moved to the destination chain; for a native source it is the only source-leg step), `NATIVE` (destination native for fees), one `SWAP` per remaining target token, then the hidden `SAFE_AND_TRANSFER` (`onboard`/`deposit` only) and `CLEAR_DELEGATION` (USDC sources only). `is_slow` flags a step running well past its ETA.
 - `to_receive` is the **net** delivery: the shortfall after existing balances (`onboard`, `signer_gas`) or the entered amounts (`deposit`); it can be empty. A token outside the known token maps gets its `symbol` from its on-chain ERC-20 `symbol()`, or `null` when that cannot be read.
+- `service_config_id` is the service an `onboard` run funds, so the app can tell one agent's run from another's; `null` for `deposit` and `signer_gas`.
 - `destination.wallet` is `master_safe` for `onboard`/`deposit` and `master_eoa` for `signer_gas`.
 - `error` is `{"step_id", "message"}` when `FAILED`. `message` is user-facing copy, never raw provider or RPC text (that is logged): `"Couldn't bridge to <Chain>"` (`BRIDGE`), `"Couldn't get <SYMBOL>"` (`NATIVE`, `SWAP`), `"Couldn't finish the transfer"` (anything else, or a `SWAP` whose token symbol cannot be read), or `"The transfer was sent but the bridge has not confirmed it yet. Try again in a few minutes."` when the outcome is not known yet. A hidden Safe/transfer failure is reported against the last visible step, with `"Couldn't finish the transfer"`. `CLEAR_DELEGATION` never sets `error` and never blocks `COMPLETED`.
 
