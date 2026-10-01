@@ -36,7 +36,7 @@ class FundingRunMode(str, enum.Enum):
     """What the run's target is."""
 
     ONBOARD = "onboard"  # the service's net shortfall
-    DEPOSIT = "deposit"  # user-entered target balances for the Pearl Wallet
+    DEPOSIT = "deposit"  # user-entered amounts to add to the Pearl Wallet
     SIGNER_GAS = "signer_gas"  # the Master EOA native reserve
 
     def __str__(self) -> str:

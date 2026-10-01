@@ -374,9 +374,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         service_config_id: t.Optional[str],
         deposit_amounts: t.Optional[t.Dict[str, t.Any]],
     ) -> t.Tuple[t.Dict[str, int], t.Dict[str, int], t.Set[str]]:
-        """Gross targets per mode, and net targets = shortfall against holdings.
+        """Gross targets per mode, and the net targets to deliver.
 
-        Also returns the tokens whose holdings that netting counted.
+        Also returns the tokens whose holdings were netted.
         """
         if mode == FundingRunMode.ONBOARD:
             service_manager = self.service_manager()
@@ -393,13 +393,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return targets, targets, set(targets)
 
         if mode == FundingRunMode.DEPOSIT:
+            # Amounts to add: funds already held are never used.
             gross = self._deposit_targets(destination, deposit_amounts)
-            held = self.funding_manager.held_balances(destination, gross.keys())
-            net = {
-                token: max(0, amount - held.get(token, 0))
-                for token, amount in gross.items()
-            }
-            return gross, net, set(gross)
+            return gross, dict(gross), set()
 
         reserve = int(DEFAULT_EOA_TOPUPS[destination][NATIVE])
         balance = int(self._wallet().get_balance(destination, NATIVE, from_safe=False))
@@ -409,7 +405,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _deposit_targets(
         destination: Chain, deposit_amounts: t.Any
     ) -> t.Dict[str, int]:
-        """Validate the user's deposit_amounts into per-token target balances."""
+        """Validate the user's deposit_amounts into per-token amounts to add."""
         if not isinstance(deposit_amounts, dict):
             raise FundingRunError("'deposit_amounts' must be an object.")
         try:
@@ -440,9 +436,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     ) -> t.Optional[BigInt]:
         """Source-token balance that must not count as received.
 
-        Only same-chain runs need one: there the targets were netted against
-        the very balance "received" is measured on, so counting both would
-        credit the same funds twice.
+        Only same-chain runs need one: "received" is measured on the wallet's
+        own balance, which either was netted against the targets already or,
+        in deposit mode, must not pay for the deposit.
         """
         if run.source_chain != run.destination_chain:
             return None
@@ -450,7 +446,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         balance = int(
             self._wallet().get_balance(source, run.source_token, from_safe=False)
         )
-        if run.source_token.lower() in {token.lower() for token in netted}:
+        if run.mode == FundingRunMode.DEPOSIT or run.source_token.lower() in {
+            token.lower() for token in netted
+        }:
             return BigInt(balance)
         if run.source_token == NATIVE:
             # The reserve is never a deposit; the quote asks for its shortfall.

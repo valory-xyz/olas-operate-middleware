@@ -275,7 +275,6 @@ class Env:
         self.bridge = FakeBridge()
         self.funding_manager = MagicMock()
         self.funding_manager.master_eoa_lock = threading.Lock()
-        self.funding_manager.held_balances.return_value = {}
         self.service = MagicMock()
         self.service.home_chain = "polygon"
         service_manager = MagicMock()
@@ -481,13 +480,10 @@ class TestQuote:
         assert _required(run) == required
         assert int(run.received_amount) == POLYGON_RESERVE
 
-    def test_same_chain_netted_balance_is_not_also_received(
-        self, tmp_path: Path
-    ) -> None:
-        """USDC already netted against the target is not counted again as received."""
+    def test_same_chain_deposit_ignores_held_balance(self, tmp_path: Path) -> None:
+        """A deposit adds its amounts: USDC already held neither nets nor pays for it."""
         env = Env(tmp_path)
         env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50
-        env.funding_manager.held_balances.return_value = {POLYGON_USDC: 50}
 
         run = _deposit_run(
             env,
@@ -495,7 +491,7 @@ class TestQuote:
             source_token=POLYGON_USDC,
             amounts={POLYGON_USDC: 100},
         )
-        assert run.net_targets == {POLYGON_USDC: 50}
+        assert run.net_targets == {POLYGON_USDC: 100}
         assert int(run.received_amount) == 0
 
         env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50 + _required(run) - 1
@@ -506,14 +502,30 @@ class TestQuote:
         env.manager.tick()
         assert env.reload(run).status == FundingRunStatus.PROCESSING
 
-    def test_same_chain_unnetted_balance_counts_as_received(
-        self, tmp_path: Path
-    ) -> None:
-        """Same-chain source funds no target counted still count toward the quote."""
+    def test_same_chain_deposit_ignores_held_source_token(self, tmp_path: Path) -> None:
+        """Held USDC does not pay for a deposit of other tokens either."""
         env = Env(tmp_path)
         env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
 
         run = _deposit_run(env, source_chain="polygon", source_token=POLYGON_USDC)
+
+        assert int(run.received_amount) == 0
+
+    def test_same_chain_onboard_unnetted_balance_counts_as_received(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: same-chain source funds no target counted still count."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=POLYGON_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
 
         assert int(run.received_amount) == 30
 
@@ -556,32 +568,28 @@ class TestQuote:
 
 
 class TestTargets:
-    """deposit / signer_gas / onboard target netting."""
+    """deposit / signer_gas / onboard targets."""
 
-    def test_deposit_target_below_balance_drops_out(self, tmp_path: Path) -> None:
-        """A token already held above its target is not requested."""
+    def test_deposit_amounts_are_added_not_netted(self, tmp_path: Path) -> None:
+        """Every entered amount is delivered, whatever the wallet already holds."""
         env = Env(tmp_path)
-        env.funding_manager.held_balances.return_value = {
-            POLYGON_OLAS: 50,
-            POLYGON_PUSD: 4,
-        }
+        env.balances[(Chain.POLYGON, POLYGON_OLAS)] = 50
 
         run = _deposit_run(env)
 
-        assert run.net_targets == {POLYGON_PUSD: 6}
+        assert (
+            run.gross_targets == run.net_targets == {POLYGON_OLAS: 40, POLYGON_PUSD: 10}
+        )
         assert [s.token for s in run.steps if s.kind == FundingStepKind.SWAP] == [
-            POLYGON_PUSD
+            POLYGON_OLAS,
+            POLYGON_PUSD,
         ]
 
     def test_all_zero_targets_complete_immediately(self, tmp_path: Path) -> None:
-        """Nothing missing: COMPLETED with an empty plan and to_receive."""
+        """Nothing to add: COMPLETED with an empty plan and to_receive."""
         env = Env(tmp_path)
-        env.funding_manager.held_balances.return_value = {
-            POLYGON_OLAS: 50,
-            POLYGON_PUSD: 50,
-        }
 
-        run = _deposit_run(env)
+        run = _deposit_run(env, amounts={POLYGON_OLAS: 0, POLYGON_PUSD: 0})
         body = env.manager.run_json(run)
 
         assert run.status == FundingRunStatus.COMPLETED
@@ -792,7 +800,6 @@ class TestMonitor:
         env = Env(tmp_path)
         run = _deposit_run(env)
         env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
-        env.funding_manager.held_balances.return_value = {}
         # The final quote sees a bigger target (price moved).
         original = env.manager._quote  # pylint: disable=protected-access
 
@@ -1614,7 +1621,26 @@ class TestEdgeCases:
     def test_same_chain_native_source_baseline_is_the_reserve(
         self, tmp_path: Path
     ) -> None:
-        """Native held on the destination up to the reserve is not a deposit; above it is."""
+        """Onboarding: native held up to the reserve is not a deposit; above it is."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE + 500
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 40}
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        assert run.receive_baseline == POLYGON_RESERVE
+        assert int(run.received_amount) == 500
+
+    def test_same_chain_deposit_baseline_is_the_full_balance(
+        self, tmp_path: Path
+    ) -> None:
+        """Deposit: no native already held counts, not even above the reserve."""
         env = Env(tmp_path)
         env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE + 500
 
@@ -1625,8 +1651,8 @@ class TestEdgeCases:
             amounts={POLYGON_OLAS: 40},
         )
 
-        assert run.receive_baseline == POLYGON_RESERVE
-        assert int(run.received_amount) == 500
+        assert run.receive_baseline == POLYGON_RESERVE + 500
+        assert int(run.received_amount) == 0
 
     def test_cross_chain_native_source_keeps_source_reserve_when_safe_exists(
         self, tmp_path: Path

@@ -135,9 +135,9 @@ end up; quoting, monitoring and execution are shared:
   Master EOA reserve (and, before the Safe exists, the larger
   `DEFAULT_EOA_TOPUPS_WITHOUT_SAFE` that pays for creating it), so the quote
   adds only transfer gas. Ends in the Master Safe.
-- `deposit`: user-entered **target balances** for the Pearl Wallet, netted
-  against the Master Safe plus the Master EOA balance above its reserve
-  (`FundingManager.held_balances`). Ends in the Master Safe.
+- `deposit`: user-entered **amounts to add** to the Pearl Wallet. Funds it
+  already holds are never netted or counted as received. Ends in the Master
+  Safe.
 - `signer_gas`: the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`). Ends in
   the Master EOA; there is no Safe step.
 

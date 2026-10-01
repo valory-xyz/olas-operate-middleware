@@ -1300,27 +1300,6 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 targets[asset] += int(amount)
         return dict(targets)
 
-    def held_balances(self, chain: Chain, assets: t.Iterable[str]) -> t.Dict[str, int]:
-        """What the Pearl Wallet on `chain` holds towards a funding target.
-
-        Master Safe balance plus the Master EOA balance above its
-        DEFAULT_EOA_TOPUPS reserve, so funds sent to either count.
-        """
-        ledger_api = get_default_ledger_api(chain)
-        master_eoa = self._resolve_master_eoa(chain)
-        master_safe = self._resolve_master_safe(chain)
-        held: t.Dict[str, int] = {}
-        for asset in assets:
-            eoa_balance = get_asset_balance(ledger_api, asset, master_eoa, False)
-            reserve = DEFAULT_EOA_TOPUPS[chain].get(asset, 0)
-            safe_balance = (
-                get_asset_balance(ledger_api, asset, master_safe, False)
-                if master_safe != MASTER_SAFE_PLACEHOLDER
-                else 0
-            )
-            held[asset] = int(safe_balance) + max(int(eoa_balance) - reserve, 0)
-        return held
-
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
         self.fund_chain_amounts(service.get_initial_funding_amounts())

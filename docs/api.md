@@ -2883,7 +2883,7 @@ Create a run, or replace a run that is still `AWAITING_DEPOSIT` / `QUOTE_FAILED`
 
 - `mode`:
   - `onboard`: the target is the service's net shortfall on its home chain. Requires `service_config_id`; `destination.chain` must be the service's home chain.
-  - `deposit`: requires `deposit_amounts` (`{"<token>": "<amount>"}`), the **target balances** the Pearl Wallet should end up with on `destination.chain`, not amounts to add. `service_config_id` is ignored.
+  - `deposit`: requires `deposit_amounts` (`{"<token>": "<amount>"}`), the **amounts to add** to the Pearl Wallet on `destination.chain`; what it already holds is not netted. `service_config_id` is ignored.
   - `signer_gas`: tops up the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`) on `destination.chain`; the same value as `prefill_amount_wei` in `INSUFFICIENT_SIGNER_GAS` errors.
 - `backup_owner` is used only if the Master Safe has to be created.
 
@@ -2916,7 +2916,7 @@ If every net target is already met, the run is created directly as `COMPLETED` w
 - Run `status` ∈ `AWAITING_DEPOSIT | QUOTE_FAILED | PROCESSING | FAILED | COMPLETED | CANCELLED`; step `status` ∈ `PENDING | PROCESSING | DONE | FAILED`.
 - `quote` is `null` until a quote succeeded; `quote_message` is `"Couldn't get a quote"` while `QUOTE_FAILED` (the provider detail is logged, not returned). The quote is refreshed every `next_refresh_at`; once `outstanding_amount` reaches 0 the run re-quotes once more and moves to `PROCESSING`, after which the selection can no longer change.
 - Step kinds: `RECEIVE` (the deposit arriving at the Master EOA), `BRIDGE` (the carrier moved to the destination chain; for a native source it is the only source-leg step), `NATIVE` (destination native for fees), one `SWAP` per remaining target token, then the hidden `SAFE_AND_TRANSFER` (`onboard`/`deposit` only) and `CLEAR_DELEGATION` (USDC sources only). `is_slow` flags a step running well past its ETA.
-- `to_receive` is the **net** delivery (what the user gains after existing balances); it can be empty. A token outside the known token maps gets its `symbol` from its on-chain ERC-20 `symbol()`, or `null` when that cannot be read.
+- `to_receive` is the **net** delivery: the shortfall after existing balances (`onboard`, `signer_gas`) or the entered amounts (`deposit`); it can be empty. A token outside the known token maps gets its `symbol` from its on-chain ERC-20 `symbol()`, or `null` when that cannot be read.
 - `destination.wallet` is `master_safe` for `onboard`/`deposit` and `master_eoa` for `signer_gas`.
 - `error` is `{"step_id", "message"}` when `FAILED`. `message` is user-facing copy, never raw provider or RPC text (that is logged): `"Couldn't bridge to <Chain>"` (`BRIDGE`), `"Couldn't get <SYMBOL>"` (`NATIVE`, `SWAP`), `"Couldn't finish the transfer"` (anything else, or a `SWAP` whose token symbol cannot be read), or `"The transfer was sent but the bridge has not confirmed it yet. Try again in a few minutes."` when the outcome is not known yet. A hidden Safe/transfer failure is reported against the last visible step, with `"Couldn't finish the transfer"`. `CLEAR_DELEGATION` never sets `error` and never blocks `COMPLETED`.
 
