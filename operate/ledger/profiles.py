@@ -402,9 +402,8 @@ FUNDING_SOURCES: t.Dict[Chain, t.List[str]] = {
 }
 
 #: Destination chain -> tokens a funding run cannot deliver: Relay has no
-#: route into them, from any source.
+#: route into them, from any source, and no Balancer pool is configured.
 FUNDING_RUN_UNROUTABLE: t.Dict[Chain, t.List[str]] = {
-    Chain.GNOSIS: [OLAS[Chain.GNOSIS]],
     Chain.MODE: [OLAS[Chain.MODE]],
 }
 

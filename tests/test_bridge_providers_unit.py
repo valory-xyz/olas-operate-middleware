@@ -1947,6 +1947,20 @@ class TestNativeBridgeProviderAdditional:
         assert req.quote_data.eta == 0
         assert req.quote_data.message is not None
 
+    def test_native_provider_quote_uses_bridge_eta(self) -> None:
+        """NativeBridgeProvider.quote() with an amount uses the adaptor's ETA."""
+        provider = _make_native_provider()
+        req = _make_request(
+            provider_id="native-ethereum-to-gnosis",
+            status=ProviderRequestStatus.CREATED,
+            amount=5,
+        )
+        provider.quote(req)
+        assert req.status == ProviderRequestStatus.QUOTE_DONE
+        assert req.quote_data is not None
+        assert req.quote_data.eta == provider.bridge_contract_adaptor.bridge_eta
+        assert req.quote_data.message is None
+
     def test_optimism_find_bridge_finalized_tx_receipt_none(self) -> None:
         """OptimismContractAdaptor: NativeBridgeProvider._update_execution_status returns UNKNOWN when receipt is None."""
         provider = _make_native_provider(adaptor=_make_optimism_adaptor())

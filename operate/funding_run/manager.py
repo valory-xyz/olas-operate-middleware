@@ -778,9 +778,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         native_needed = targets.pop(NATIVE, 0)
         carrier_needed = targets.pop(carrier, 0) if carrier != NATIVE else 0
 
-        # (a) Destination swaps carrier -> target token.
+        # (a) Destination swaps into each target token.
         swap_params = [
-            self._params(destination, carrier, destination, target, amount, eoa)
+            self._params(
+                destination,
+                self.bridge_manager.swap_source_token(destination, carrier, target),
+                destination,
+                target,
+                amount,
+                eoa,
+            )
             for target, amount in targets.items()
         ]
         swaps = (
@@ -792,7 +799,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return
         for request in swaps:
             native_needed += self._source_amount(request, NATIVE)
-            if carrier != NATIVE:
+            if request.params["from"]["token"] != NATIVE:
                 carrier_needed += self._source_amount(request, carrier)
         # requirements() marks a request whose txs cannot be built as failed.
         if self._quote_failed(run, swaps):

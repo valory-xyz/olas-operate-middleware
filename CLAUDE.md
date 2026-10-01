@@ -231,7 +231,7 @@ operate daemon
 
 **Bridge Management (`operate/bridge/`)**
 - `bridge_manager.py`: Orchestrates cross-chain token transfers; `quote_requests` quotes without touching the cached Transak/bridge bundle
-- `providers/`: Relay, Mayan and native bridge implementations. Relay status is tracked by the quote's `requestId` via `GET /intents/status/v3`
+- `providers/`: Relay, Mayan, native bridge and Balancer implementations. Balancer (`balancer_provider.py`) does same-chain swaps through pools listed in `BALANCER_POOLS`, e.g. xDAI -> OLAS on Gnosis, which Relay cannot route. Relay status is tracked by the quote's `requestId` via `GET /intents/status/v3`
 
 **Funding Run (`operate/funding_run/`)**
 - `manager.py`: `FundingRunManager`, a persisted, resumable state machine turning one deposit (chosen chain + token, sent to the Master EOA) into the destination tokens: quote → receive → source leg → swaps → Safe create + transfer → EIP-7702 delegation clearing. Modes `onboard`, `deposit`, `signer_gas`; one run at a time; advanced by `run_job()` scheduled after login

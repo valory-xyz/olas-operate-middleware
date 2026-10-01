@@ -30,6 +30,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from operate.bridge.bridge_manager import BridgeManager
 from operate.bridge.providers.provider import (
     ExecutionData,
     ProviderRequest,
@@ -53,6 +54,7 @@ from operate.funding_run.manager import (
     STEP_NATIVE,
     STEP_RECEIVE,
     STEP_SAFE,
+    SWAP_STEP_PREFIX,
     USER_OP_RESOLUTION_TIMEOUT,
 )
 from operate.funding_run.models import (
@@ -92,6 +94,9 @@ POLYGON_PUSD = PUSD[Chain.POLYGON]
 NATIVE = ZERO_ADDRESS
 GAS = 7  # native gas per quoted request, in wei, on every chain
 POLYGON_RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][NATIVE])
+GNOSIS_RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.GNOSIS][NATIVE])
+GNOSIS_USDC = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
+GNOSIS_USDC_E = "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0"
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +247,8 @@ class FakeBridge:
         """Single provider."""
         return self.provider
 
+    swap_source_token = staticmethod(BridgeManager.swap_source_token)
+
     def execute_request(self, request: ProviderRequest) -> None:
         """Execute through the provider."""
         self.provider.execute(request)
@@ -352,6 +359,20 @@ def _required(run: FundingRun) -> int:
     return int(run.required_amount)
 
 
+def _gnosis_legs(run: FundingRun) -> t.Dict[str, int]:
+    """Amount per token the source leg delivers to Gnosis."""
+    return {
+        r.params["to"]["token"]: r.params["to"]["amount"]
+        for r in run.source_requests
+        if r.params["to"]["chain"] == "gnosis"
+    }
+
+
+def _gnosis_overhead(n_assets: int) -> int:
+    """Safe-step gas without a Safe plus the full Gnosis reserve, at gas price 1."""
+    return 100_000 * (n_assets + 1) + 1_000_000 + GNOSIS_RESERVE
+
+
 def _overhead(n_assets: int, with_safe: bool = False, eoa_native: int = 0) -> int:
     gas = 100_000 * (n_assets + 1) + (0 if with_safe else 1_000_000)
     return gas * 1 + max(0, POLYGON_RESERVE - eoa_native)
@@ -362,12 +383,13 @@ def _deposit_run(
     source_chain: str = "base",
     source_token: str = BASE_USDC,
     amounts: t.Optional[t.Dict[str, int]] = None,
+    destination_chain: str = "polygon",
 ) -> FundingRun:
     return env.manager.create_run(
         mode="deposit",
         source_chain=source_chain,
         source_token=source_token,
-        destination_chain="polygon",
+        destination_chain=destination_chain,
         deposit_amounts=amounts or {POLYGON_OLAS: 40, POLYGON_PUSD: 10},
     )
 
@@ -581,21 +603,133 @@ class TestQuote:
     def test_unroutable_target_fails_the_quote_without_asking_relay(
         self, tmp_path: Path
     ) -> None:
-        """OLAS on Gnosis has no route: QUOTE_FAILED names it, and nothing is quoted."""
+        """OLAS on Mode has no route: QUOTE_FAILED names it, and nothing is quoted."""
         env = Env(tmp_path)
 
         run = env.manager.create_run(
             mode="deposit",
             source_chain="base",
             source_token=BASE_USDC,
-            destination_chain="gnosis",
-            deposit_amounts={OLAS[Chain.GNOSIS]: 10},
+            destination_chain="mode",
+            deposit_amounts={OLAS[Chain.MODE]: 10},
         )
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == "OLAS can't be delivered to Gnosis yet"
+        assert run.quote_message == "OLAS can't be delivered to Mode yet"
         assert env.bridge.quoted == []
         assert _logged(env, "No route into")
+
+    def test_gnosis_olas_is_bought_with_native_not_the_carrier(
+        self, tmp_path: Path
+    ) -> None:
+        """The Balancer OLAS pool takes xDAI: the source leg delivers xDAI only."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(
+            env, destination_chain="gnosis", amounts={OLAS[Chain.GNOSIS]: 10}
+        )
+
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+        (swap,) = run.swap_requests
+        assert swap.params["from"]["token"] == NATIVE
+        assert swap.params["to"]["token"] == OLAS[Chain.GNOSIS]
+        assert list(_gnosis_legs(run)) == [NATIVE]
+        assert [
+            r.params["to"]["chain"]
+            for r in run.source_requests
+            if r.params["to"]["chain"] != "gnosis"
+        ] == ["base"]
+        assert [
+            s.kind
+            for s in run.steps
+            if s.kind in (FundingStepKind.BRIDGE, FundingStepKind.NATIVE)
+        ] == [FundingStepKind.NATIVE]
+
+    def test_gnosis_native_leg_covers_the_olas_swap(self, tmp_path: Path) -> None:
+        """The bridged xDAI pays the swap's value and gas plus the Safe step."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(
+            env, destination_chain="gnosis", amounts={OLAS[Chain.GNOSIS]: 10}
+        )
+
+        assert _gnosis_legs(run) == {NATIVE: 10 + GAS + _gnosis_overhead(n_assets=2)}
+
+    def test_gnosis_mixed_targets_split_native_and_carrier(
+        self, tmp_path: Path
+    ) -> None:
+        """OLAS comes from native, USDC.e from the carrier; neither pays for the other."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(
+            env,
+            destination_chain="gnosis",
+            amounts={OLAS[Chain.GNOSIS]: 10, GNOSIS_USDC_E: 5},
+        )
+
+        sources = {
+            r.params["to"]["token"]: r.params["from"]["token"]
+            for r in run.swap_requests
+        }
+        assert sources == {OLAS[Chain.GNOSIS]: NATIVE, GNOSIS_USDC_E: GNOSIS_USDC}
+        assert _gnosis_legs(run) == {
+            GNOSIS_USDC: 5,
+            NATIVE: 10 + 2 * GAS + _gnosis_overhead(n_assets=3),
+        }
+
+    def test_gnosis_native_source_needs_no_source_leg(self, tmp_path: Path) -> None:
+        """Gnosis xDAI is sent straight to the swap: no bridge request."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(
+            env,
+            source_chain="gnosis",
+            source_token=NATIVE,
+            destination_chain="gnosis",
+            amounts={OLAS[Chain.GNOSIS]: 10},
+        )
+
+        assert run.source_requests == []
+        (swap,) = run.swap_requests
+        assert swap.params["from"]["token"] == NATIVE
+        assert _required(run) == 10 + GAS + _gnosis_overhead(n_assets=2)
+
+    def test_gnosis_onboard_buys_olas_with_native(self, tmp_path: Path) -> None:
+        """Onboarding a Gnosis staker routes OLAS through the native pool too."""
+        env = Env(tmp_path)
+        env.service.home_chain = "gnosis"
+        env.funding_manager.destination_targets.return_value = {OLAS[Chain.GNOSIS]: 10}
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="gnosis",
+            service_config_id="sc-1",
+        )
+
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+        (swap,) = run.swap_requests
+        assert swap.params["from"]["token"] == NATIVE
+        # Onboarding adds only transfer gas: the reserve is in the targets.
+        assert _gnosis_legs(run) == {NATIVE: 10 + GAS + 100_000 * 3}
+
+    def test_gnosis_olas_run_completes(self, tmp_path: Path) -> None:
+        """The OLAS swap runs after the native leg and the run completes."""
+        env = Env(tmp_path)
+        run = _deposit_run(
+            env, destination_chain="gnosis", amounts={OLAS[Chain.GNOSIS]: 10}
+        )
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        for token in (NATIVE, OLAS[Chain.GNOSIS]):
+            env.bridge.outcomes[token] = ProviderRequestStatus.EXECUTION_DONE
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert env.bridge.executed == [OLAS[Chain.GNOSIS]]
+        assert run.step(f"{SWAP_STEP_PREFIX}{OLAS[Chain.GNOSIS]}").status == (
+            FundingStepStatus.DONE
+        )
 
 
 # ---------------------------------------------------------------------------

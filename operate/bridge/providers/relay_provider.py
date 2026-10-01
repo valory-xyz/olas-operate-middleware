@@ -31,7 +31,6 @@ import requests
 
 from operate.bridge.providers.provider import (
     DEFAULT_MAX_QUOTE_RETRIES,
-    MESSAGE_EXECUTION_FAILED,
     MESSAGE_QUOTE_ZERO,
     Provider,
     ProviderRequest,
@@ -165,21 +164,7 @@ class RelayProvider(Provider):
         self, provider_request: ProviderRequest
     ) -> None:
         """Update the request with the quote."""
-        self._validate(provider_request)
-
-        if provider_request.status not in (
-            ProviderRequestStatus.CREATED,
-            ProviderRequestStatus.QUOTE_DONE,
-            ProviderRequestStatus.QUOTE_FAILED,
-        ):
-            raise RuntimeError(
-                f"Cannot quote request {provider_request.id} with status {provider_request.status}."
-            )
-
-        if provider_request.execution_data:
-            raise RuntimeError(
-                f"Cannot quote request {provider_request.id}: execution already present."
-            )
+        self._check_quotable(provider_request)
 
         from_chain = provider_request.params["from"]["chain"]
         from_address = provider_request.params["from"]["address"]
@@ -191,15 +176,7 @@ class RelayProvider(Provider):
 
         if to_amount == 0:
             self.logger.info(f"[RELAY PROVIDER] {MESSAGE_QUOTE_ZERO}")
-            quote_data = QuoteData(
-                eta=0,
-                elapsed_time=0,
-                message=MESSAGE_QUOTE_ZERO,
-                provider_data=None,
-                timestamp=int(time.time()),
-            )
-            provider_request.quote_data = quote_data
-            provider_request.status = ProviderRequestStatus.QUOTE_DONE
+            self._set_zero_quote(provider_request)
             return
 
         url = RELAY_QUOTE_URL
@@ -289,49 +266,43 @@ class RelayProvider(Provider):
                 self.logger.warning(
                     f"[RELAY PROVIDER] Timeout request on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
-                quote_data = QuoteData(
-                    eta=None,
-                    elapsed_time=time.time() - start,
-                    message=str(e),
-                    provider_data={
+                quote_data = self._failed_quote_data(
+                    start,
+                    str(e),
+                    {
                         "attempts": attempt,
                         "response": None,
                         "response_status": HTTPStatus.GATEWAY_TIMEOUT,
                     },
-                    timestamp=int(time.time()),
                 )
             except requests.HTTPError as e:
                 response_json = response.json()
                 self.logger.warning(
                     f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {response_json}."
                 )
-                quote_data = QuoteData(
-                    eta=None,
-                    elapsed_time=time.time() - start,
-                    message=response_json.get("message") or str(e),
-                    provider_data={
+                quote_data = self._failed_quote_data(
+                    start,
+                    response_json.get("message") or str(e),
+                    {
                         "attempts": attempt,
                         "response": response_json,
                         "response_status": getattr(
                             response, "status_code", HTTPStatus.BAD_GATEWAY
                         ),
                     },
-                    timestamp=int(time.time()),
                 )
             except Exception as e:  # pylint:disable=broad-except
                 self.logger.warning(
                     f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
-                quote_data = QuoteData(
-                    eta=None,
-                    elapsed_time=time.time() - start,
-                    message=str(e),
-                    provider_data={
+                quote_data = self._failed_quote_data(
+                    start,
+                    str(e),
+                    {
                         "attempts": attempt,
                         "response": None,
                         "response_status": HTTPStatus.INTERNAL_SERVER_ERROR,
                     },
-                    timestamp=int(time.time()),
                 )
             if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
                 self.logger.error(
@@ -393,26 +364,10 @@ class RelayProvider(Provider):
         self, provider_request: ProviderRequest
     ) -> None:
         """Update the execution status."""
-
-        if provider_request.status not in (
-            ProviderRequestStatus.EXECUTION_PENDING,
-            ProviderRequestStatus.EXECUTION_UNKNOWN,
-        ):
+        pending = self._begin_status_update(provider_request)
+        if pending is None:
             return
-
-        execution_data = provider_request.execution_data
-        if not execution_data:
-            raise RuntimeError(
-                f"Cannot update request {provider_request.id}: execution data not present."
-            )
-
-        from_tx_hash = execution_data.from_tx_hash
-        if not from_tx_hash:
-            execution_data.message = (
-                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
-            )
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
-            return
+        execution_data, from_tx_hash = pending
 
         request_id = self._get_request_id(provider_request)
         if not request_id:

@@ -31,6 +31,11 @@ from typing import cast
 from deepdiff import DeepDiff
 from web3 import Web3
 
+from operate.bridge.providers.balancer_provider import (
+    BALANCER_POOLS,
+    BalancerProvider,
+    has_native_pool,
+)
 from operate.bridge.providers.mayan_provider import MAYAN_CHAIN_NAMES, MayanProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
@@ -56,6 +61,7 @@ BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
 RELAY_PROVIDER_ID = "relay-provider"
 MAYAN_PROVIDER_ID = "mayan-provider"
+BALANCER_PROVIDER_ID = "balancer-provider"
 
 # Chains Mayan cannot route to or from
 MAYAN_EXCLUDED_CHAINS: t.Set[str] = {
@@ -108,6 +114,10 @@ NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
 # Routes are defined as the tuples (from_chain, from_token, to_chain, to_token)
 PREFERRED_ROUTES = {
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
+    **{
+        (chain, ZERO_ADDRESS, chain, token_out): BALANCER_PROVIDER_ID
+        for chain, token_out in BALANCER_POOLS
+    },
 }
 
 
@@ -230,6 +240,11 @@ class BridgeManager:
             wallet_manager=wallet_manager,
             logger=logger,
         )
+        self._providers[BALANCER_PROVIDER_ID] = BalancerProvider(
+            provider_id=BALANCER_PROVIDER_ID,
+            wallet_manager=wallet_manager,
+            logger=logger,
+        )
 
         # Clear any cached bundle that references a provider removed in a prior version
         # to prevent KeyError on execute_bundle after upgrade.
@@ -257,6 +272,11 @@ class BridgeManager:
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
         self.data.store()
+
+    @staticmethod
+    def swap_source_token(chain: Chain, carrier: str, target: str) -> str:
+        """Token to swap into `target` on `chain`: native where only a native pool can."""
+        return ZERO_ADDRESS if has_native_pool(chain, target) else carrier
 
     def _build_provider_chain(self, params: t.Dict) -> t.List[str]:
         """Build an ordered list of provider IDs for a given route.

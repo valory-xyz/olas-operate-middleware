@@ -143,7 +143,8 @@ end up; quoting, monitoring and execution are shared:
 
 ### Flow
 1. **Quote**, walking backwards from the net targets: destination swaps from
-   a carrier token (USDC when the source is USDC, otherwise native), then a
+   a carrier token (USDC when the source is USDC, otherwise native; native
+   for targets only a native Balancer pool holds, such as OLAS on Gnosis), then a
    source leg that delivers the carrier plus destination native for every
    later step, so only the source leg ever needs gas abstraction.
 2. **Receive**: the user sends the quoted amount to the Master EOA on the

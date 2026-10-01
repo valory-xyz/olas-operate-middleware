@@ -238,6 +238,68 @@ class Provider(ABC):
         to_chain = provider_request.params["to"]["chain"]
         return get_default_ledger_api(Chain(to_chain))
 
+    def _check_quotable(self, provider_request: ProviderRequest) -> None:
+        """Raise unless the request can be (re-)quoted."""
+        self._validate(provider_request)
+        if provider_request.status not in (
+            ProviderRequestStatus.CREATED,
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
+        ):
+            raise RuntimeError(
+                f"Cannot quote request {provider_request.id} with status {provider_request.status}."
+            )
+        if provider_request.execution_data:
+            raise RuntimeError(
+                f"Cannot quote request {provider_request.id}: execution already present."
+            )
+
+    @staticmethod
+    def _set_zero_quote(provider_request: ProviderRequest) -> None:
+        provider_request.quote_data = QuoteData(
+            eta=0,
+            elapsed_time=0,
+            message=MESSAGE_QUOTE_ZERO,
+            provider_data=None,
+            timestamp=int(time.time()),
+        )
+        provider_request.status = ProviderRequestStatus.QUOTE_DONE
+
+    @staticmethod
+    def _failed_quote_data(
+        start: float, message: str, provider_data: t.Optional[t.Dict] = None
+    ) -> QuoteData:
+        return QuoteData(
+            eta=None,
+            elapsed_time=time.time() - start,
+            message=message,
+            provider_data=provider_data,
+            timestamp=int(time.time()),
+        )
+
+    @staticmethod
+    def _begin_status_update(
+        provider_request: ProviderRequest,
+    ) -> t.Optional[t.Tuple[ExecutionData, str]]:
+        """Execution data and tx hash of a request awaiting its outcome; marks a hashless one failed."""
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+        ):
+            return None
+        execution_data = provider_request.execution_data
+        if not execution_data:
+            raise RuntimeError(
+                f"Cannot update request {provider_request.id}: execution data not present."
+            )
+        if not execution_data.from_tx_hash:
+            execution_data.message = (
+                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return None
+        return execution_data, execution_data.from_tx_hash
+
     @abstractmethod
     def quote(self, provider_request: ProviderRequest) -> None:
         """Update the request with the quote."""
@@ -412,30 +474,10 @@ class Provider(ABC):
 
         if provider_request.status in (ProviderRequestStatus.QUOTE_FAILED,):
             self.logger.info(f"[PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}.")
-            provider_request.execution_data = ExecutionData(
-                elapsed_time=0,
-                message=f"{MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}",
-                timestamp=int(time.time()),
-                from_tx_hash=None,
-                to_tx_hash=None,
-                provider_data=None,
-            )
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            self._fail_unsent(provider_request, MESSAGE_EXECUTION_FAILED_QUOTE_FAILED)
             return
 
-        if provider_request.status not in (ProviderRequestStatus.QUOTE_DONE,):
-            raise RuntimeError(
-                f"Cannot execute request {provider_request.id} with status {provider_request.status}."
-            )
-        if not provider_request.quote_data:
-            raise RuntimeError(
-                f"Cannot execute request {provider_request.id}: quote data not present."
-            )
-        if provider_request.execution_data:
-            raise RuntimeError(
-                f"Cannot execute request {provider_request.id}: execution data already present."
-            )
-
+        self._check_executable(provider_request)
         txs = self._get_txs(provider_request)
 
         if not txs:
@@ -451,6 +493,13 @@ class Provider(ABC):
                 provider_data=None,
             )
             provider_request.status = ProviderRequestStatus.EXECUTION_DONE
+            return
+
+        reason = self._precheck(  # pylint: disable=assignment-from-none
+            provider_request, txs
+        )
+        if reason is not None:
+            self._fail_unsent(provider_request, f"{MESSAGE_EXECUTION_FAILED} {reason}")
             return
 
         unsettled_tx_hash: t.Optional[str] = None
@@ -536,6 +585,39 @@ class Provider(ABC):
                 provider_data=None,
             )
             provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+    @staticmethod
+    def _check_executable(provider_request: ProviderRequest) -> None:
+        if provider_request.status not in (ProviderRequestStatus.QUOTE_DONE,):
+            raise RuntimeError(
+                f"Cannot execute request {provider_request.id} with status {provider_request.status}."
+            )
+        if not provider_request.quote_data:
+            raise RuntimeError(
+                f"Cannot execute request {provider_request.id}: quote data not present."
+            )
+        if provider_request.execution_data:
+            raise RuntimeError(
+                f"Cannot execute request {provider_request.id}: execution data already present."
+            )
+
+    @staticmethod
+    def _fail_unsent(provider_request: ProviderRequest, message: str) -> None:
+        provider_request.execution_data = ExecutionData(
+            elapsed_time=0,
+            message=message,
+            timestamp=int(time.time()),
+            from_tx_hash=None,
+            to_tx_hash=None,
+            provider_data=None,
+        )
+        provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+    def _precheck(  # pylint: disable=unused-argument
+        self, provider_request: ProviderRequest, txs: t.List[t.Tuple[str, t.Dict]]
+    ) -> t.Optional[str]:
+        """Why the transactions must not be sent, or None to send them."""
+        return None
 
     @abstractmethod
     def _update_execution_status(self, provider_request: ProviderRequest) -> None:
