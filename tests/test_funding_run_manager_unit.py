@@ -561,6 +561,25 @@ class TestQuote:
         assert run.quote_message == MESSAGE_QUOTE_FAILED
         assert _logged(env, "no route")
 
+    def test_unroutable_target_fails_the_quote_without_asking_relay(
+        self, tmp_path: Path
+    ) -> None:
+        """OLAS on Gnosis has no route: QUOTE_FAILED names it, and nothing is quoted."""
+        env = Env(tmp_path)
+
+        run = env.manager.create_run(
+            mode="deposit",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="gnosis",
+            deposit_amounts={OLAS[Chain.GNOSIS]: 10},
+        )
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == "OLAS can't be delivered to Gnosis yet"
+        assert env.bridge.quoted == []
+        assert _logged(env, "No route into")
+
 
 # ---------------------------------------------------------------------------
 # Targets per mode

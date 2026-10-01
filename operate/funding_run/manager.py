@@ -65,6 +65,7 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
     ERC20_TOKENS,
     EXPLORER_URL,
+    FUNDING_RUN_UNROUTABLE,
     FUNDING_SOURCES,
     GAS_ABSTRACTION_USDC_CAP,
     USDC,
@@ -152,9 +153,19 @@ class FundingRunConflictError(RuntimeError):
 class _QuoteError(RuntimeError):
     """A quote cannot be trusted; the run goes to QUOTE_FAILED."""
 
+    def __init__(self, detail: str, message: str = MESSAGE_QUOTE_FAILED) -> None:
+        """Keep the logged detail apart from the user-facing message."""
+        super().__init__(detail, message)
+        self.detail = detail
+        self.message = message
+
 
 def _now() -> int:
     return int(time.time())
+
+
+def _chain_name(chain: Chain) -> str:
+    return chain.value.replace("_", " ").title()
 
 
 class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-many-public-methods
@@ -739,7 +750,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         try:
             self._quote_plan(run)
         except _QuoteError as e:
-            self._set_quote_failed(run, str(e))
+            self._set_quote_failed(run, e.detail, e.message)
 
     def _quote_plan(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         self, run: FundingRun
@@ -754,6 +765,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         carrier = carrier or NATIVE
 
         targets = {k: int(v) for k, v in run.net_targets.items() if int(v) > 0}
+        unroutable = {
+            address.lower() for address in FUNDING_RUN_UNROUTABLE.get(destination, [])
+        }
+        for target in targets:
+            if target.lower() in unroutable:
+                raise _QuoteError(
+                    f"No route into {target} on {destination.value}.",
+                    f"{get_asset_name(destination, target)} can't be delivered "
+                    f"to {_chain_name(destination)} yet",
+                )
         native_needed = targets.pop(NATIVE, 0)
         carrier_needed = targets.pop(carrier, 0) if carrier != NATIVE else 0
 
@@ -890,10 +911,12 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         )
         return True
 
-    def _set_quote_failed(self, run: FundingRun, detail: str) -> None:
+    def _set_quote_failed(
+        self, run: FundingRun, detail: str, message: str = MESSAGE_QUOTE_FAILED
+    ) -> None:
         run.status = FundingRunStatus.QUOTE_FAILED
         run.quoted_at = _now()
-        run.quote_message = MESSAGE_QUOTE_FAILED
+        run.quote_message = message
         self.logger.warning(f"[FUNDING RUN] Quote failed for {run.id}: {detail}")
 
     def _plan_steps(
@@ -1051,7 +1074,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return MESSAGE_AWAITING_CONFIRMATION
         destination = Chain(run.destination_chain)
         if step.kind == FundingStepKind.BRIDGE:
-            return f"Couldn't bridge to {destination.value.replace('_', ' ').title()}"
+            return f"Couldn't bridge to {_chain_name(destination)}"
         if step.kind in (FundingStepKind.NATIVE, FundingStepKind.SWAP):
             symbol = get_asset_symbol(destination, t.cast(str, step.token))
             if symbol:
