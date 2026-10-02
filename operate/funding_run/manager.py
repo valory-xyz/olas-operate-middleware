@@ -318,6 +318,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 raise FundingRunConflictError(
                     f"Funding run {current.id} is {current.status}."
                 )
+            if current and self._has_received_deposit(current):
+                raise FundingRunConflictError(
+                    f"Funding run {current.id} has already received funds."
+                )
 
             gross, net, netted = self._targets(
                 run_mode, destination, service_config_id, deposit_amounts
@@ -480,6 +484,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 FundingRunStatus.QUOTE_FAILED,
                 FundingRunStatus.FAILED,
             )
+            if self._has_received_deposit(run):
+                raise FundingRunConflictError(
+                    f"Funding run {run.id} has already received funds."
+                )
             failed = run.status == FundingRunStatus.FAILED
             if failed and self._in_flight(run):
                 raise FundingRunConflictError(
@@ -492,6 +500,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 # The source leg may have delegated the Master EOA.
                 self._queue_clear(run)
             return run
+
+    def _has_received_deposit(self, run: FundingRun) -> bool:
+        """Whether a waiting run holds funds: it must finish, not be dropped.
+
+        Read live, not from the last tick, so a deposit that just landed counts.
+        """
+        return run.status in (
+            FundingRunStatus.AWAITING_DEPOSIT,
+            FundingRunStatus.QUOTE_FAILED,
+        ) and self._received(run) > 0
 
     def _in_flight(self, run: FundingRun) -> bool:
         """Whether a FAILED run may still deliver funds somewhere."""

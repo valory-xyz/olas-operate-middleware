@@ -1580,6 +1580,20 @@ class TestLifecycle:
         assert env.reload(first).status == FundingRunStatus.CANCELLED
         assert env.manager.active_run().id == second.id  # type: ignore[union-attr]
 
+    def test_waiting_run_that_received_funds_is_kept(self, tmp_path: Path) -> None:
+        """Neither cancel nor a new run drops a waiting run once funds arrive."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.balances[(Chain.BASE, BASE_USDC)] = 1
+
+        with pytest.raises(FundingRunConflictError):
+            env.manager.cancel(run.id)
+        with pytest.raises(FundingRunConflictError):
+            _deposit_run(env, source_token=NATIVE)
+
+        assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+        assert env.manager.active_run().id == run.id  # type: ignore[union-attr]
+
     def test_create_while_processing_conflicts(self, tmp_path: Path) -> None:
         """One run at a time, whatever the UI does."""
         env = Env(tmp_path)
