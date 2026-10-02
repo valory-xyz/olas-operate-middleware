@@ -506,10 +506,14 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
         Read live, not from the last tick, so a deposit that just landed counts.
         """
-        return run.status in (
-            FundingRunStatus.AWAITING_DEPOSIT,
-            FundingRunStatus.QUOTE_FAILED,
-        ) and self._received(run) > 0
+        return (
+            run.status
+            in (
+                FundingRunStatus.AWAITING_DEPOSIT,
+                FundingRunStatus.QUOTE_FAILED,
+            )
+            and self._received(run) > 0
+        )
 
     def _in_flight(self, run: FundingRun) -> bool:
         """Whether a FAILED run may still deliver funds somewhere."""
