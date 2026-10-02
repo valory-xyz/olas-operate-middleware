@@ -901,11 +901,15 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             return
 
         # (c) Required = source-leg inputs + direct amounts + gas allowance.
-        required = direct + sum(self._source_amount(r, token) for r in source_requests)
+        amounts = {r.id: self._source_amount(r, token) for r in source_requests}
+        required = direct + sum(amounts.values())
         if self._quote_failed(run, source_requests):
             return
         if gas_abstracted and source_requests:
-            required += GAS_ABSTRACTION_USDC_CAP[source]
+            run.usdc_gas_cap = BigInt(
+                self._usdc_gas_cap(source, source_requests, amounts)
+            )
+            required += run.usdc_gas_cap
 
         run.source_requests = list(source_requests)
         run.swap_requests = list(swaps)
@@ -921,6 +925,35 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         run.received_amount = BigInt(self._received(run))
         if run.status == FundingRunStatus.QUOTE_FAILED:
             run.status = FundingRunStatus.AWAITING_DEPOSIT
+
+    def _usdc_gas_cap(
+        self,
+        source: Chain,
+        source_requests: t.List[ProviderRequest],
+        amounts: t.Dict[str, int],
+    ) -> int:
+        """Cap for the paymaster's pre-charge, priced by the leg's own source-chain native quote."""
+        priced = next(
+            (
+                r
+                for r in source_requests
+                if r.params["to"]["chain"] == source.value
+                and r.params["to"]["token"] == NATIVE
+            ),
+            None,
+        )
+        if priced is None:
+            return GAS_ABSTRACTION_USDC_CAP[source]
+        try:
+            return self._sender_factory(self._wallet()).usdc_gas_cap(
+                source,
+                usdc_amount=amounts[priced.id],
+                native_amount=int(priced.params["to"]["amount"]),
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            raise _QuoteError(
+                f"Unable to size the USDC gas cap on {source.value}: {e}"
+            ) from e
 
     def _quote_failed(self, run: FundingRun, requests: t.List[ProviderRequest]) -> bool:
         failed = [r for r in requests if r.status == ProviderRequestStatus.QUOTE_FAILED]
@@ -1241,7 +1274,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             for _, tx in self.bridge_manager.provider_for(request).get_txs(request)
         ]
         try:
-            prepared = sender.prepare_batch(source, calls)
+            prepared = sender.prepare_batch(source, calls, run.usdc_gas_cap)
         except GasAbstractionError as e:
             self._fail_source_steps(run, str(e))
             return

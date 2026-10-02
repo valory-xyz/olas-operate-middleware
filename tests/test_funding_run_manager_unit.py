@@ -296,6 +296,9 @@ class Env:
             nonce=4,
             block_number=100,
         )
+        self.sender.usdc_gas_cap.side_effect = (
+            lambda chain, usdc_amount, native_amount: GAS_ABSTRACTION_USDC_CAP[chain]
+        )
         self.sender.wait_for_tx_hash.return_value = "0x" + "1a" * 32
         self.sender.get_user_op_receipt.return_value = None
         self.sender.user_op_known.return_value = True
@@ -416,6 +419,9 @@ class TestQuote:
         assert run.required_amount == (
             50 + native + clear + GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
         )
+        env.sender.usdc_gas_cap.assert_called_with(
+            Chain.BASE, usdc_amount=clear, native_amount=clear
+        )
         kinds = [s.kind for s in run.steps]
         assert kinds == [
             FundingStepKind.RECEIVE,
@@ -473,6 +479,116 @@ class TestQuote:
         # carrier POL: swaps need 40+GAS and 10+GAS native.
         native = 50 + 2 * GAS + _overhead(n_assets=3)
         assert run.required_amount == native + GAS
+
+    def test_usdc_gas_cap_is_quoted_stored_and_used_for_the_permit(
+        self, tmp_path: Path
+    ) -> None:
+        """The cap sized at quote time is what the deposit and the permit carry."""
+        env = Env(tmp_path)
+        env.sender.usdc_gas_cap.side_effect = None
+        env.sender.usdc_gas_cap.return_value = 2_500_000
+        floor_run = _required(_deposit_run(Env(tmp_path / "floor")))
+
+        run = _deposit_run(env)
+
+        floor = GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
+        assert _required(run) == floor_run - floor + 2_500_000
+        assert env.reload(run).usdc_gas_cap == 2_500_000
+
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.PROCESSING
+
+        restarted = Env(tmp_path)
+        restarted.manager.tick()
+
+        assert restarted.sender.prepare_batch.call_args.args[2] == 2_500_000
+
+    def test_usdc_gas_cap_follows_the_final_requote(self, tmp_path: Path) -> None:
+        """A cap that grew by the final quote sends the run back to waiting for it."""
+        env = Env(tmp_path)
+        caps = [1_000_000]
+        env.sender.usdc_gas_cap.side_effect = lambda *_, **__: caps[0]
+        run = _deposit_run(env)
+        first = _required(run)
+
+        caps[0] = 3_000_000
+        env.balances[(Chain.BASE, BASE_USDC)] = first
+        env.manager.tick()
+        run = env.reload(run)
+
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+        assert run.usdc_gas_cap == 3_000_000
+        assert _required(run) == first + 2_000_000
+
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        env.manager.tick()
+        env.manager.tick()
+
+        assert env.reload(run).status == FundingRunStatus.PROCESSING
+        assert env.sender.prepare_batch.call_args.args[2] == 3_000_000
+
+    def test_run_quoted_before_the_sized_cap_sends_without_one(
+        self, tmp_path: Path
+    ) -> None:
+        """A run stored without a cap lets the sender fall back to the static one."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        assert run.status == FundingRunStatus.PROCESSING
+        stored = json.loads(run.path.read_text(encoding="utf-8"))
+        del stored["usdc_gas_cap"]
+        run.path.write_text(json.dumps(stored), encoding="utf-8")
+
+        env.manager.tick()
+
+        assert env.sender.prepare_batch.call_args.args[2] is None
+
+    def test_native_source_has_no_usdc_gas_cap(self, tmp_path: Path) -> None:
+        """A source that pays its own gas reserves no USDC for it."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(env, source_token=NATIVE)
+
+        assert run.usdc_gas_cap is None
+        env.sender.usdc_gas_cap.assert_not_called()
+
+    def test_failure_to_size_the_cap_fails_the_quote(self, tmp_path: Path) -> None:
+        """Fees that cannot be read are a failed quote, not an unhandled error."""
+        env = Env(tmp_path)
+        env.sender.usdc_gas_cap.side_effect = RuntimeError("rpc down")
+
+        run = _deposit_run(env)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+        assert _logged(env, "Unable to size the USDC gas cap")
+
+    def test_same_chain_usdc_cap_is_priced_by_the_native_request(
+        self, tmp_path: Path
+    ) -> None:
+        """Without a clearing request, the source-chain native leg gives the price."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(env, source_chain="polygon", source_token=POLYGON_USDC)
+
+        native = run.step(STEP_NATIVE).amount
+        env.sender.usdc_gas_cap.assert_called_with(
+            Chain.POLYGON, usdc_amount=native, native_amount=native
+        )
+
+    def test_usdc_gas_cap_falls_back_to_the_floor_without_a_native_quote(
+        self, tmp_path: Path
+    ) -> None:
+        """No source-chain native request, no price: the static floor is used."""
+        env = Env(tmp_path)
+
+        with patch.dict(
+            "operate.funding_run.manager.CLEAR_DELEGATION_GAS_RESERVE", clear=True
+        ):
+            run = _deposit_run(env)
+
+        env.sender.usdc_gas_cap.assert_not_called()
+        assert run.usdc_gas_cap == GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
 
     def test_existing_source_balance_nets_the_quote_but_is_not_a_deposit(
         self, tmp_path: Path
@@ -1101,8 +1217,9 @@ class TestExecution:
         run = env.tick_until(run, FundingRunStatus.COMPLETED)
 
         env.sender.prepare_batch.assert_called_once()
-        (chain, calls), _ = env.sender.prepare_batch.call_args
+        (chain, calls, cap), _ = env.sender.prepare_batch.call_args
         assert chain == Chain.BASE
+        assert cap == GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
         # Carrier, native, then the clearing reserve, each request's own tx.
         assert [
             (r.params["to"]["chain"], r.params["to"]["token"]) for r in source_requests

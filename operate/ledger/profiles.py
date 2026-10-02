@@ -421,10 +421,8 @@ CIRCLE_PAYMASTER: t.Dict[Chain, str] = {
     Chain.ARBITRUM_ONE: _CIRCLE_PAYMASTER_V08,
 }
 BUNDLER_URL_TEMPLATE = "https://api.candide.dev/public/v3/{chain_id}"
-#: EIP-2612 permit value granted to the paymaster per operation, in USDC base
-#: units. The paymaster prefunds the UserOp's maximum cost from it, so it must
-#: cover the gas limits (about 700k gas) at the 1.2x fee multiplier: $10 on
-#: Ethereum covers a max fee of about 3.5 gwei at $4,000/ETH; $1 on the rest.
+#: Floor of the USDC the paymaster may pre-charge per operation, in base units;
+#: `GasAbstractedSender.usdc_gas_cap` sizes the actual cap from live fees.
 GAS_ABSTRACTION_USDC_CAP: t.Dict[Chain, int] = {
     Chain.ETHEREUM: 10_000_000,
     Chain.BASE: 1_000_000,

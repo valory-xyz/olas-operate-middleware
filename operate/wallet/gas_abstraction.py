@@ -58,6 +58,9 @@ CIRCLE_PAYMASTER_PERMIT_MODE = 0
 # Values from Circle's Paymaster v0.8 integration guide.
 PAYMASTER_VERIFICATION_GAS_LIMIT = 200_000
 PAYMASTER_POST_OP_GAS_LIMIT = 35_000
+# Gas the bundler's estimation makes the paymaster pre-charge for, and the fee margin.
+PRECHARGE_GAS = 11_000_000
+PRECHARGE_MARGIN_BPS = 15_000
 # Extra verification gas for the first (delegating) operation, as in
 # Candide's abstractionkit for 7702 accounts.
 EIP7702_VERIFICATION_GAS_BUFFER = 55_000
@@ -237,20 +240,20 @@ class GasAbstractedSender:
         return Web3.to_checksum_address(code[len(DELEGATION_PREFIX) :])
 
     @staticmethod
-    def paymaster_data(chain: Chain, permit_signature: str) -> str:
+    def paymaster_data(chain: Chain, permit_signature: str, usdc_cap: int) -> str:
         """Circle Paymaster v0.8 `paymasterData` in permit mode."""
         return (
             "0x"
             + (
                 CIRCLE_PAYMASTER_PERMIT_MODE.to_bytes(1, "big")
                 + bytes.fromhex(USDC[chain][2:])
-                + GAS_ABSTRACTION_USDC_CAP[chain].to_bytes(32, "big")
+                + usdc_cap.to_bytes(32, "big")
                 + bytes.fromhex(permit_signature[2:])
             ).hex()
         )
 
-    def permit_typed_data(self, chain: Chain) -> t.Dict[str, t.Any]:
-        """EIP-2612 permit letting the paymaster take up to the USDC gas cap."""
+    def permit_typed_data(self, chain: Chain, usdc_cap: int) -> t.Dict[str, t.Any]:
+        """EIP-2612 permit letting the paymaster take up to `usdc_cap`."""
         w3 = self._w3(chain)
         token = w3.eth.contract(address=USDC[chain], abi=_EIP2612_ABI)
         return {
@@ -279,7 +282,7 @@ class GasAbstractedSender:
             "message": {
                 "owner": self.wallet.address,
                 "spender": CIRCLE_PAYMASTER[chain],
-                "value": GAS_ABSTRACTION_USDC_CAP[chain],
+                "value": usdc_cap,
                 "nonce": token.functions.nonces(self.wallet.address).call(),
                 "deadline": PERMIT_DEADLINE,
             },
@@ -415,8 +418,22 @@ class GasAbstractedSender:
         )
         return max_fee, priority
 
+    def usdc_gas_cap(
+        self, chain: Chain, *, usdc_amount: int, native_amount: int
+    ) -> int:
+        """USDC the paymaster may pre-charge, at a price of `usdc_amount` per `native_amount`."""
+        max_fee, _ = self._fees(self._w3(chain), chain)
+        cap = (
+            PRECHARGE_GAS
+            * max_fee
+            * usdc_amount
+            * PRECHARGE_MARGIN_BPS
+            // (native_amount * 10_000)
+        )
+        return max(GAS_ABSTRACTION_USDC_CAP[chain], cap)
+
     def build_user_operation(  # pylint: disable=too-many-locals
-        self, chain: Chain, calls: t.List[Call]
+        self, chain: Chain, calls: t.List[Call], usdc_cap: int
     ) -> t.Tuple[t.Dict[str, t.Any], bool, t.Optional[int]]:
         """Build an unsigned, gas-estimated UserOperation.
 
@@ -432,7 +449,9 @@ class GasAbstractedSender:
         entrypoint = w3.eth.contract(address=ERC4337_ENTRYPOINT, abi=_ENTRYPOINT_ABI)
         max_fee, max_priority_fee = self._fees(w3, chain)
 
-        permit_signature = self.wallet.sign_typed_data(self.permit_typed_data(chain))
+        permit_signature = self.wallet.sign_typed_data(
+            self.permit_typed_data(chain, usdc_cap)
+        )
         user_op: t.Dict[str, t.Any] = {
             "sender": sender,
             "nonce": _hex(entrypoint.functions.getNonce(sender, 0).call()),
@@ -447,7 +466,7 @@ class GasAbstractedSender:
             "paymaster": CIRCLE_PAYMASTER[chain],
             "paymasterVerificationGasLimit": _hex(PAYMASTER_VERIFICATION_GAS_LIMIT),
             "paymasterPostOpGasLimit": _hex(PAYMASTER_POST_OP_GAS_LIMIT),
-            "paymasterData": self.paymaster_data(chain, permit_signature),
+            "paymasterData": self.paymaster_data(chain, permit_signature, usdc_cap),
             "signature": PLACEHOLDER_SIGNATURE,
         }
 
@@ -480,15 +499,19 @@ class GasAbstractedSender:
         user_op["preVerificationGas"] = estimate["preVerificationGas"]
         return user_op, delegated, authorization_nonce
 
-    def prepare_batch(self, chain: Chain, calls: t.List[Call]) -> PreparedUserOperation:
+    def prepare_batch(
+        self, chain: Chain, calls: t.List[Call], usdc_cap: t.Optional[int] = None
+    ) -> PreparedUserOperation:
         """Build and sign `calls` as one UserOperation, without sending it.
 
         The hash is known before submission, so a caller can persist it first
         and reconcile after a crash instead of resending.
         """
         block_number = self._w3(chain).eth.block_number
+        # A run quoted before the cap was sized per run reserved the static one.
+        cap = GAS_ABSTRACTION_USDC_CAP[chain] if usdc_cap is None else int(usdc_cap)
         user_op, delegated, authorization_nonce = self.build_user_operation(
-            chain, calls
+            chain, calls, cap
         )
         op_hash = self.user_op_hash(chain, user_op, delegated)
         user_op["signature"] = self.wallet.unsafe_sign_hash(op_hash)

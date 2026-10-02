@@ -146,6 +146,8 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     steps: t.List[FundingRunStep] = field(default_factory=list)
     error: t.Optional[t.Dict[str, str]] = None
     user_op_hash: t.Optional[str] = None
+    # USDC gas cap the quote reserved; the source-leg permit grants the same.
+    usdc_gas_cap: t.Optional[BigInt] = None
     # EntryPoint nonce of user_op_hash: once used, that UserOp can never land.
     user_op_nonce: t.Optional[int] = None
     # Block the UserOp was built at: its EntryPoint event cannot be earlier.

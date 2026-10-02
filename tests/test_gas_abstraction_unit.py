@@ -74,6 +74,12 @@ def _sender(tmp_path: Path) -> t.Tuple[GasAbstractedSender, t.Any]:
     )
 
 
+def _permit_cap(prepared: t.Any) -> int:
+    """The permit amount in paymasterData: after the mode byte and the token."""
+    data = bytes.fromhex(prepared.user_op["paymasterData"][2:])
+    return int.from_bytes(data[21:53], "big")
+
+
 def _bundler_response(
     result: t.Any = None, error: t.Optional[t.Dict] = None
 ) -> MagicMock:
@@ -141,12 +147,14 @@ class TestPaymasterData:
     """Circle Paymaster v0.8 permit-mode paymasterData."""
 
     @pytest.mark.parametrize(
-        ("chain", "cap"), [(Chain.BASE, 1_000_000), (Chain.ETHEREUM, 10_000_000)]
+        ("chain", "cap"), [(Chain.BASE, 1_000_000), (Chain.ARBITRUM_ONE, 2_345_678)]
     )
     def test_layout_and_cap(self, chain: Chain, cap: int) -> None:
-        """Layout: mode byte, token, the chain's permit amount, permit signature."""
+        """Layout: mode byte, token, the permit amount, permit signature."""
         signature = "0x" + "11" * 65
-        data = bytes.fromhex(GasAbstractedSender.paymaster_data(chain, signature)[2:])
+        data = bytes.fromhex(
+            GasAbstractedSender.paymaster_data(chain, signature, cap)[2:]
+        )
 
         assert data[0] == 0
         assert "0x" + data[1:21].hex() == USDC[chain].lower()
@@ -162,7 +170,7 @@ class TestPermitTypedData:
     """The EIP-2612 permit signed for the paymaster."""
 
     def test_domain_spender_value_and_deadline(self, tmp_path: Path) -> None:
-        """Domain is the chain's USDC; the permit caps the paymaster at $1."""
+        """Domain is the chain's USDC; the permit caps the paymaster at the given amount."""
         sender, account = _sender(tmp_path)
         w3 = MagicMock()
         token = w3.eth.contract.return_value
@@ -171,7 +179,7 @@ class TestPermitTypedData:
         token.functions.nonces.return_value.call.return_value = 4
 
         with patch.object(GasAbstractedSender, "_w3", return_value=w3):
-            typed = sender.permit_typed_data(Chain.BASE)
+            typed = sender.permit_typed_data(Chain.BASE, 1_500_000)
 
         assert typed["domain"] == {
             "name": "USD Coin",
@@ -182,7 +190,7 @@ class TestPermitTypedData:
         assert typed["message"] == {
             "owner": account.address,
             "spender": CIRCLE_PAYMASTER[Chain.BASE],
-            "value": 1_000_000,
+            "value": 1_500_000,
             "nonce": 4,
             "deadline": PERMIT_DEADLINE,
         }
@@ -283,6 +291,36 @@ class TestFees:
         max_fee, priority = self._fees({"gasPrice": 50}, base_fee=10, node_tip=5)
 
         assert (max_fee, priority) == (60, 6)
+
+
+class TestUsdcGasCap:
+    """The cap covers the bundler's estimation pre-charge at live fees."""
+
+    @staticmethod
+    def _cap(tmp_path: Path, max_fee: int, usdc: int, native: int) -> int:
+        sender, _ = _sender(tmp_path)
+        with (
+            patch.object(GasAbstractedSender, "_w3"),
+            patch.object(GasAbstractedSender, "_fees", return_value=(max_fee, 1)),
+        ):
+            return sender.usdc_gas_cap(
+                Chain.ARBITRUM_ONE, usdc_amount=usdc, native_amount=native
+            )
+
+    def test_arbitrum_qa_case_clears_the_measured_precharge(
+        self, tmp_path: Path
+    ) -> None:
+        """At 0.048 gwei and 0.0587 USDC per 0.00002 ETH the paymaster took 1.355 USDC."""
+        cap = self._cap(tmp_path, 48_000_000, 58_700, 20_000_000_000_000)
+
+        assert cap == 2_324_520
+        assert 1_355_000 * 3 // 2 < cap < 3_000_000
+
+    def test_cheap_gas_keeps_the_floor(self, tmp_path: Path) -> None:
+        """A chain whose pre-charge is below the floor still gets the floor."""
+        cap = self._cap(tmp_path, 1_200_000, 55_500, 20_000_000_000_000)
+
+        assert cap == GAS_ABSTRACTION_USDC_CAP[Chain.ARBITRUM_ONE]
 
 
 class TestSendBatch:
@@ -437,7 +475,7 @@ class TestSendBatch:
         """Gnosis/Robinhood never build a UserOperation."""
         sender, _ = _sender(tmp_path)
         with pytest.raises(GasAbstractionError, match="No Circle Paymaster"):
-            sender.build_user_operation(Chain.GNOSIS, [])
+            sender.build_user_operation(Chain.GNOSIS, [], 1_000_000)
 
 
 class TestBundlerErrors:
@@ -548,8 +586,15 @@ class TestPrepareBatch:
         ):
             mock_permit.return_value = {}
             prepared = sender.prepare_batch(Chain.BASE, [])
+            capped = sender.prepare_batch(Chain.BASE, [], 2_500_000)
 
-        assert methods == ["eth_estimateUserOperationGas"]
+        assert [c.args for c in mock_permit.call_args_list] == [
+            (Chain.BASE, GAS_ABSTRACTION_USDC_CAP[Chain.BASE]),
+            (Chain.BASE, 2_500_000),
+        ]
+        assert _permit_cap(prepared) == GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
+        assert _permit_cap(capped) == 2_500_000
+        assert methods == ["eth_estimateUserOperationGas"] * 2
         assert prepared.user_op_hash == USER_OP_HASH
         assert prepared.authorization_nonce == 1
         assert prepared.nonce == 7

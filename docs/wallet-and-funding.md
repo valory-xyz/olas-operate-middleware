@@ -180,9 +180,13 @@ The source leg is one ERC-4337 UserOperation (`GasAbstractedSender`):
 - the Master EOA signs an **EIP-7702 authorization** delegating its own
   address to `Simple7702Account`, bound to the source chain id (never 0,
   which would be valid on every chain);
-- an **EIP-2612 permit** lets the Circle Paymaster take at most
-  `GAS_ABSTRACTION_USDC_CAP[chain]` of USDC for gas ($10 on Ethereum, $1.00
-  elsewhere); unused allowance is not spent;
+- an **EIP-2612 permit** lets the Circle Paymaster take at most the run's
+  `usdc_gas_cap` of USDC for gas; unused allowance is not spent. The cap is
+  sized at quote time (`GasAbstractedSender.usdc_gas_cap`): the gas the
+  bundler's estimation makes the paymaster pre-charge for, at the live max fee
+  and the USDC price of source-chain native taken from the leg's own quote,
+  plus a margin, and never below `GAS_ABSTRACTION_USDC_CAP[chain]`. It is
+  part of the quoted deposit;
 - the UserOperation is signed over the EntryPoint's hash and submitted to
   Candide's public bundler.
 
