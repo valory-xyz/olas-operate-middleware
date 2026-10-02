@@ -152,8 +152,11 @@ end up; quoting, monitoring and execution are shared:
    current Master EOA balance, so partial deposits and restarts need no
    bookkeeping. When the source chain is the destination chain, the targets
    were already netted against that same balance, so only its growth above
-   the balance at run creation counts. On full receipt the run re-quotes once
-   more and freezes.
+   the balance at run creation counts. Source-token funds the Master EOA held
+   before the run count toward the quote but are not a deposit
+   (`prior_received`): once a deposit arrives, a waiting run can no longer be
+   cancelled or replaced. On full receipt the run re-quotes once more and
+   freezes.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
    the Master EOA reserve moves to the Master Safe), then, for USDC sources,
    **delegation clearing**.

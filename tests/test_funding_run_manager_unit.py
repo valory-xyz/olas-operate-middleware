@@ -20,6 +20,7 @@
 """Unit tests for operate/funding_run/manager.py (providers, chain and bundler faked)."""
 
 import asyncio
+import json
 import threading
 import time
 import typing as t
@@ -473,16 +474,89 @@ class TestQuote:
         native = 50 + 2 * GAS + _overhead(n_assets=3)
         assert run.required_amount == native + GAS
 
-    def test_existing_source_balance_counts_as_received(self, tmp_path: Path) -> None:
-        """USDC already in the Master EOA on the source chain nets the quote."""
+    def test_existing_source_balance_nets_the_quote_but_is_not_a_deposit(
+        self, tmp_path: Path
+    ) -> None:
+        """USDC already in the Master EOA lowers what is asked, and is not "received"."""
         env = Env(tmp_path)
         env.balances[(Chain.BASE, BASE_USDC)] = 1_000
 
         run = _deposit_run(env)
         body = env.manager.run_json(run)
 
-        assert body["quote"]["received_amount"] == "1000"
-        assert int(body["quote"]["outstanding_amount"]) == _required(run) - 1000
+        assert int(run.received_amount) == run.prior_received == 1_000
+        to_send = str(_required(run) - 1_000)
+        assert body["quote"]["required_amount"] == to_send
+        assert body["quote"]["received_amount"] == "0"
+        assert body["quote"]["outstanding_amount"] == to_send
+        assert body["steps"][0]["kind"] == "RECEIVE"
+        assert body["steps"][0]["amount"] == to_send
+
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_005
+        env.manager.tick()
+        body = env.manager.run_json(env.reload(run))
+
+        assert body["quote"]["received_amount"] == "5"
+        assert body["quote"]["outstanding_amount"] == str(_required(run) - 1_005)
+
+    def test_run_covered_by_funds_already_held_asks_for_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """Enough leftover USDC: nothing to send, and the next tick starts processing."""
+        env = Env(tmp_path)
+        env.balances[(Chain.BASE, BASE_USDC)] = 10**30
+
+        run = _deposit_run(env)
+        body = env.manager.run_json(run)
+
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+        assert body["quote"]["required_amount"] == "0"
+        assert body["quote"]["received_amount"] == "0"
+        assert body["quote"]["outstanding_amount"] == "0"
+
+        env.manager.tick()
+        run = env.reload(run)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.step(STEP_RECEIVE).status == FundingStepStatus.DONE
+        assert env.manager.run_json(run)["steps"][0]["amount"] == "0"
+
+    def test_funds_held_then_spent_are_never_reported_as_received(
+        self, tmp_path: Path
+    ) -> None:
+        """A balance below what the run held at creation shows nothing received."""
+        env = Env(tmp_path)
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_000
+        run = _deposit_run(env)
+
+        env.balances[(Chain.BASE, BASE_USDC)] = 400
+        env.manager.tick()
+        body = env.manager.run_json(env.reload(run))
+
+        assert body["quote"]["received_amount"] == "0"
+        assert body["quote"]["outstanding_amount"] == str(_required(run) - 400)
+        env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.CANCELLED
+
+    def test_quote_failed_run_keeps_its_received_amount_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        """A deposit on a run whose re-quote failed shows up on the next tick."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.bridge.fail_quote = True
+        run.quoted_at = 0
+        run.store()
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.QUOTE_FAILED
+
+        env.balances[(Chain.BASE, BASE_USDC)] = 5
+        env.manager.tick()
+        run = env.reload(run)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert int(run.received_amount) == 5
+        assert env.manager.run_json(run)["quote"]["received_amount"] == "5"
 
     def test_same_chain_native_partial_deposit_is_not_double_counted(
         self, tmp_path: Path
@@ -1580,19 +1654,160 @@ class TestLifecycle:
         assert env.reload(first).status == FundingRunStatus.CANCELLED
         assert env.manager.active_run().id == second.id  # type: ignore[union-attr]
 
-    def test_waiting_run_that_received_funds_is_kept(self, tmp_path: Path) -> None:
-        """Neither cancel nor a new run drops a waiting run once funds arrive."""
+    @pytest.mark.parametrize("fail_quote", [False, True])
+    def test_waiting_run_that_received_a_deposit_is_kept(
+        self, tmp_path: Path, fail_quote: bool
+    ) -> None:
+        """Neither cancel nor a new run drops a waiting run once a deposit arrives."""
         env = Env(tmp_path)
+        env.bridge.fail_quote = fail_quote
         run = _deposit_run(env)
+        status = (
+            FundingRunStatus.QUOTE_FAILED
+            if fail_quote
+            else FundingRunStatus.AWAITING_DEPOSIT
+        )
+        assert run.status == status
+        # No tick since the deposit: the stored amount is stale.
         env.balances[(Chain.BASE, BASE_USDC)] = 1
+        assert int(env.reload(run).received_amount) == 0
 
+        with pytest.raises(FundingRunConflictError, match="received a deposit"):
+            env.manager.cancel(run.id)
+        with pytest.raises(FundingRunConflictError, match="received a deposit"):
+            _deposit_run(env, source_token=NATIVE)
+
+        kept = env.reload(run)
+        assert kept.status == status
+        assert int(kept.received_amount) == 1
+        assert env.manager.active_run().id == run.id  # type: ignore[union-attr]
+
+    def test_funds_held_before_the_run_do_not_lock_it(self, tmp_path: Path) -> None:
+        """Leftover source funds are not a deposit: the run can be replaced or cancelled."""
+        env = Env(tmp_path)
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_000
+        first = _deposit_run(env)
+
+        second = _deposit_run(env, amounts={POLYGON_OLAS: 1})
+        assert env.reload(first).status == FundingRunStatus.CANCELLED
+
+        env.manager.cancel(second.id)
+        assert env.reload(second).status == FundingRunStatus.CANCELLED
+
+    def test_same_chain_run_is_kept_only_above_its_baseline(
+        self, tmp_path: Path
+    ) -> None:
+        """Same-chain funds held before the run are not a deposit; growth is."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50
+        run = _deposit_run(env, source_chain="polygon", source_token=POLYGON_USDC)
+        assert run.prior_received == 0
+
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 60
         with pytest.raises(FundingRunConflictError):
             env.manager.cancel(run.id)
+
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 50
+        env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.CANCELLED
+
+    def test_run_stored_without_prior_received_counts_any_funds(
+        self, tmp_path: Path
+    ) -> None:
+        """A run persisted before the field existed keeps the stricter rule."""
+        env = Env(tmp_path)
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_000
+        run = _deposit_run(env)
+        stored = json.loads(run.path.read_text(encoding="utf-8"))
+        del stored["prior_received"]
+        run.path.write_text(json.dumps(stored), encoding="utf-8")
+
+        assert env.manager.load(run.id).prior_received is None
         with pytest.raises(FundingRunConflictError):
-            _deposit_run(env, source_token=NATIVE)
+            env.manager.cancel(run.id)
+
+    def test_prior_received_survives_a_reload(self, tmp_path: Path) -> None:
+        """The amount held at creation is persisted exactly, beyond 2**53."""
+        env = Env(tmp_path)
+        held = 2**70 + 1
+        env.balances[(Chain.BASE, BASE_USDC)] = held
+
+        run = _deposit_run(env)
+
+        assert env.manager.load(run.id).prior_received == held
+
+    def test_replace_is_refused_when_the_balance_cannot_be_read(
+        self, tmp_path: Path
+    ) -> None:
+        """A new run does not replace one whose deposit cannot be ruled out."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.wallet.get_balance.side_effect = RuntimeError("rpc down")
+
+        with pytest.raises(RuntimeError, match="rpc down"):
+            _deposit_run(env, amounts={POLYGON_OLAS: 1})
 
         assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
         assert env.manager.active_run().id == run.id  # type: ignore[union-attr]
+
+    def test_funds_held_before_a_failed_quote_do_not_lock_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """What the run held is recorded even when its first quote fails."""
+        env = Env(tmp_path)
+        env.bridge.fail_quote = True
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_000
+        run = _deposit_run(env)
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.prior_received == 1_000
+
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_005
+        with pytest.raises(FundingRunConflictError):
+            env.manager.cancel(run.id)
+
+        env.balances[(Chain.BASE, BASE_USDC)] = 1_000
+        env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.CANCELLED
+
+    def test_native_source_reserve_is_not_a_deposit(self, tmp_path: Path) -> None:
+        """With a Safe on the source chain, only native above the reserve is a deposit."""
+        env = Env(tmp_path, safes={Chain.BASE: SAFE})
+        reserve = int(DEFAULT_EOA_TOPUPS[Chain.BASE][NATIVE])
+        env.balances[(Chain.BASE, NATIVE)] = reserve
+        run = _deposit_run(env, source_token=NATIVE)
+        assert run.prior_received == 0
+
+        env.balances[(Chain.BASE, NATIVE)] = reserve + 1
+        with pytest.raises(FundingRunConflictError):
+            env.manager.cancel(run.id)
+
+        env.balances[(Chain.BASE, NATIVE)] = reserve
+        env.manager.cancel(run.id)
+        assert env.reload(run).status == FundingRunStatus.CANCELLED
+
+    def test_cancel_is_refused_when_the_balance_cannot_be_read(
+        self, tmp_path: Path
+    ) -> None:
+        """Without a balance, a deposit cannot be ruled out: the run is kept."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.wallet.get_balance.side_effect = RuntimeError("rpc down")
+
+        with pytest.raises(RuntimeError, match="rpc down"):
+            env.manager.cancel(run.id)
+
+        assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+
+    def test_failed_run_is_cancelled_whatever_it_holds(self, tmp_path: Path) -> None:
+        """The deposit guard is for waiting runs: a FAILED run keeps its own check."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_FAILED
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        assert env.balances[(Chain.BASE, BASE_USDC)] > 0
+
+        assert env.manager.cancel(run.id).status == FundingRunStatus.CANCELLED
 
     def test_create_while_processing_conflicts(self, tmp_path: Path) -> None:
         """One run at a time, whatever the UI does."""

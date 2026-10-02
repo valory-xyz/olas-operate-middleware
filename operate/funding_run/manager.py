@@ -318,10 +318,8 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 raise FundingRunConflictError(
                     f"Funding run {current.id} is {current.status}."
                 )
-            if current and self._has_received_deposit(current):
-                raise FundingRunConflictError(
-                    f"Funding run {current.id} has already received funds."
-                )
+            if current:
+                self._require_no_deposit(current)
 
             gross, net, netted = self._targets(
                 run_mode, destination, service_config_id, deposit_amounts
@@ -356,6 +354,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 return run
 
             run.receive_baseline = self._receive_baseline(run, netted)
+            run.prior_received = BigInt(self._received(run))
             self._quote(run)
             self._store(run)
             self._set_active(run)
@@ -484,10 +483,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 FundingRunStatus.QUOTE_FAILED,
                 FundingRunStatus.FAILED,
             )
-            if self._has_received_deposit(run):
-                raise FundingRunConflictError(
-                    f"Funding run {run.id} has already received funds."
-                )
+            self._require_no_deposit(run)
             failed = run.status == FundingRunStatus.FAILED
             if failed and self._in_flight(run):
                 raise FundingRunConflictError(
@@ -501,18 +497,21 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 self._queue_clear(run)
             return run
 
-    def _has_received_deposit(self, run: FundingRun) -> bool:
-        """Whether a waiting run holds funds: it must finish, not be dropped.
-
-        Read live, not from the last tick, so a deposit that just landed counts.
-        """
-        return (
-            run.status
-            in (
-                FundingRunStatus.AWAITING_DEPOSIT,
-                FundingRunStatus.QUOTE_FAILED,
-            )
-            and self._received(run) > 0
+    def _require_no_deposit(self, run: FundingRun) -> None:
+        """Refuse to drop a waiting run that received a deposit, read live."""
+        if run.status not in (
+            FundingRunStatus.AWAITING_DEPOSIT,
+            FundingRunStatus.QUOTE_FAILED,
+        ):
+            return
+        received = self._received(run)
+        if received <= int(run.prior_received or 0):
+            return
+        # Stored so /active shows the deposit before the next tick.
+        run.received_amount = BigInt(received)
+        self._store(run)
+        raise FundingRunConflictError(
+            f"Funding run {run.id} has already received a deposit."
         )
 
     def _in_flight(self, run: FundingRun) -> bool:
@@ -1041,13 +1040,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             run.quoted_at is None
             or _now() > run.quoted_at + DEFAULT_BUNDLE_VALIDITY_PERIOD
         )
+        run.received_amount = BigInt(self._received(run))
         if run.status == FundingRunStatus.QUOTE_FAILED:
             if stale:
                 self._quote(run)
-                self._store(run)
+            self._store(run)
             return
 
-        run.received_amount = BigInt(self._received(run))
         if stale:
             self._quote(run)
         if self._deposit_covered(run):
@@ -1525,17 +1524,26 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
     # --- API representation ----------------------------------------------------
 
+    @staticmethod
+    def _step_amount(step: FundingRunStep, prior: int) -> t.Optional[str]:
+        if step.amount is None:
+            return None
+        if step.kind == FundingStepKind.RECEIVE:
+            return str(max(0, int(step.amount) - prior))
+        return str(step.amount)
+
     def run_json(self, run: FundingRun) -> t.Dict[str, t.Any]:
         """The run object returned by every /api/funding_run route."""
         source = Chain(run.source_chain)
         destination = Chain(run.destination_chain)
         required = run.required_amount
         received = int(run.received_amount)
+        prior = int(run.prior_received or 0)
         quote = None
         if required is not None and run.quoted_at is not None:
             quote = {
-                "required_amount": str(required),
-                "received_amount": str(received),
+                "required_amount": str(max(0, int(required) - prior)),
+                "received_amount": str(max(0, received - prior)),
                 "outstanding_amount": str(max(0, int(required) - received)),
                 "eta_seconds": run.eta_seconds,
                 "quoted_at": run.quoted_at,
@@ -1577,7 +1585,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     "kind": step.kind.value,
                     "status": step.status.value,
                     "token": step.token,
-                    "amount": str(step.amount) if step.amount is not None else None,
+                    "amount": self._step_amount(step, prior),
                     "tx_hash": step.tx_hash,
                     "explorer_link": step.explorer_link,
                     "started_at": step.started_at,

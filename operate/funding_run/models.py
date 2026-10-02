@@ -138,6 +138,8 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     # Same-chain runs only: the Master EOA source-token balance at creation
     # that the targets already netted. Only growth above it is "received".
     receive_baseline: t.Optional[BigInt] = None
+    # Received at creation, from funds already held: quoted against, not a deposit.
+    prior_received: t.Optional[BigInt] = None
     eta_seconds: t.Optional[int] = None
     quoted_at: t.Optional[int] = None
     quote_message: t.Optional[str] = None
