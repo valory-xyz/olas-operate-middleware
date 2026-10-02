@@ -31,6 +31,11 @@ from typing import cast
 from deepdiff import DeepDiff
 from web3 import Web3
 
+from operate.bridge.providers.balancer_provider import (
+    BALANCER_POOLS,
+    BalancerProvider,
+    has_native_pool,
+)
 from operate.bridge.providers.mayan_provider import MAYAN_CHAIN_NAMES, MayanProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
@@ -56,6 +61,7 @@ BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
 RELAY_PROVIDER_ID = "relay-provider"
 MAYAN_PROVIDER_ID = "mayan-provider"
+BALANCER_PROVIDER_ID = "balancer-provider"
 
 # Chains Mayan cannot route to or from
 MAYAN_EXCLUDED_CHAINS: t.Set[str] = {
@@ -108,6 +114,10 @@ NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
 # Routes are defined as the tuples (from_chain, from_token, to_chain, to_token)
 PREFERRED_ROUTES = {
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
+    **{
+        (chain, ZERO_ADDRESS, chain, token_out): BALANCER_PROVIDER_ID
+        for chain, token_out in BALANCER_POOLS
+    },
 }
 
 
@@ -230,6 +240,11 @@ class BridgeManager:
             wallet_manager=wallet_manager,
             logger=logger,
         )
+        self._providers[BALANCER_PROVIDER_ID] = BalancerProvider(
+            provider_id=BALANCER_PROVIDER_ID,
+            wallet_manager=wallet_manager,
+            logger=logger,
+        )
 
         # Clear any cached bundle that references a provider removed in a prior version
         # to prevent KeyError on execute_bundle after upgrade.
@@ -257,6 +272,11 @@ class BridgeManager:
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
         self.data.store()
+
+    @staticmethod
+    def swap_source_token(chain: Chain, carrier: str, target: str) -> str:
+        """Token to swap into `target` on `chain`: native where only a native pool can."""
+        return ZERO_ADDRESS if has_native_pool(chain, target) else carrier
 
     def _build_provider_chain(self, params: t.Dict) -> t.List[str]:
         """Build an ordered list of provider IDs for a given route.
@@ -327,32 +347,58 @@ class BridgeManager:
             self._store_data()
 
         if not bundle or create_new_bundle:
-            self.logger.info("[BRIDGE MANAGER] Creating new bridge request bundle.")
-
-            provider_requests = []
-            for params in requests_params:
-                provider_chain = self._build_provider_chain(params)
-                primary_id = provider_chain[0]
-                fallback_ids = provider_chain[1:] if len(provider_chain) > 1 else None
-
-                request = self._providers[primary_id].create_request(
-                    params=params,
-                    fallback_provider_ids=fallback_ids,
-                )
-                provider_requests.append(request)
-
-            bundle = ProviderRequestBundle(
-                id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
-                requests_params=requests_params,
-                provider_requests=provider_requests,
-                timestamp=now,
-            )
-
+            bundle = self._create_quoted_bundle(requests_params)
             self.data.last_requested_bundle = bundle
-            self.quote_bundle(bundle)
             self._store_data()
 
         return bundle
+
+    def quote_requests(self, requests_params: t.List[t.Dict]) -> ProviderRequestBundle:
+        """Create and quote a bundle without caching it.
+
+        Unlike ``bridge_refill_requirements``, this never touches
+        ``last_requested_bundle``, so callers with their own persistence (the
+        funding run) do not overwrite a bundle the Transak/bridge flow is
+        waiting to execute.
+        """
+        self._sanitize(requests_params)
+        self._raise_if_invalid(requests_params)
+        return self._create_quoted_bundle(requests_params)
+
+    def _create_quoted_bundle(
+        self, requests_params: t.List[t.Dict]
+    ) -> ProviderRequestBundle:
+        """Create a bundle for already-sanitized params and quote it."""
+        self.logger.info("[BRIDGE MANAGER] Creating new bridge request bundle.")
+
+        provider_requests = []
+        for params in requests_params:
+            provider_chain = self._build_provider_chain(params)
+            primary_id = provider_chain[0]
+            fallback_ids = provider_chain[1:] if len(provider_chain) > 1 else None
+
+            request = self._providers[primary_id].create_request(
+                params=params,
+                fallback_provider_ids=fallback_ids,
+            )
+            provider_requests.append(request)
+
+        bundle = ProviderRequestBundle(
+            id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
+            requests_params=requests_params,
+            provider_requests=provider_requests,
+            timestamp=int(time.time()),
+        )
+        self.quote_bundle(bundle)
+        return bundle
+
+    def provider_for(self, request: ProviderRequest) -> Provider:
+        """Get the provider that owns a request."""
+        return self._providers[request.provider_id]
+
+    def execute_request(self, request: ProviderRequest) -> None:
+        """Execute a single quoted request outside any cached bundle."""
+        self.provider_for(request).execute(request)
 
     def _sanitize(self, requests_params: t.List) -> None:
         """Sanitize quote requests."""

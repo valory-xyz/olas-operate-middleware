@@ -118,6 +118,97 @@ Two durable properties follow from this model:
   individual transactions, so mixed operations consist of one batched
   Safe transaction plus individual EOA transactions for any remainder.
 
+## Funding run
+
+A funding run lets the user fund Pearl with **one** transfer of a token they
+already hold, on a chain they choose, instead of sending the exact token to
+the exact address on the exact chain twice (Master EOA and Master Safe).
+It lives in `operate/funding_run/` and is exposed under `/api/funding_run`
+(see [api.md](api.md#funding-run)).
+
+### Modes
+The three modes differ only in how the target is produced and where funds
+end up; quoting, monitoring and execution are shared:
+
+- `onboard`: the service's net shortfall on its home chain, from
+  `FundingManager.destination_targets`. That shortfall already includes the
+  Master EOA reserve (and, before the Safe exists, the larger
+  `DEFAULT_EOA_TOPUPS_WITHOUT_SAFE` that pays for creating it), so the quote
+  adds only transfer gas. Ends in the Master Safe.
+- `deposit`: user-entered **amounts to add** to the Pearl Wallet. Funds it
+  already holds are never netted or counted as received. Ends in the Master
+  Safe.
+- `signer_gas`: the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`). Ends in
+  the Master EOA; there is no Safe step.
+
+### Flow
+1. **Quote**, walking backwards from the net targets: destination swaps from
+   a carrier token (USDC when the source is USDC, otherwise native; native
+   for targets only a native Balancer pool holds, such as OLAS on Gnosis), then a
+   source leg that delivers the carrier plus destination native for every
+   later step, so only the source leg ever needs gas abstraction.
+2. **Receive**: the user sends the quoted amount to the Master EOA on the
+   source chain, in one transfer or several. "Received" is derived from the
+   current Master EOA balance, so partial deposits and restarts need no
+   bookkeeping. When the source chain is the destination chain, the targets
+   were already netted against that same balance, so only its growth above
+   the balance at run creation counts. Source-token funds the Master EOA held
+   before the run count toward the quote but are not a deposit
+   (`prior_received`): once a deposit arrives, a waiting run can no longer be
+   cancelled or replaced. On full receipt the run re-quotes once more and
+   freezes.
+3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
+   the Master EOA reserve moves to the Master Safe), then, for USDC sources,
+   **delegation clearing**.
+
+Routing reuses the bridge providers through `BridgeManager.quote_requests`,
+which never touches the Transak/bridge flow's cached bundle. One run exists at
+a time. The run is persisted in `funding_runs/<id>.json` (with
+`funding_runs/active.json` pointing at the live one), and every transition is
+stored before its side effect: after a restart a step with a recorded UserOp
+hash, tx hash or Relay `requestId` is reconciled, never blindly resent, and a
+retry re-quotes only failed requests. A `FAILED` run with nothing in flight
+can be cancelled instead, leaving its funds in the Master EOA. While a run moves Master EOA funds it
+holds `FundingManager.master_eoa_lock`, so the periodic funding job cannot
+spend them mid-run.
+
+### Gas abstraction and custody
+A USDC source on a chain with a Circle Paymaster (`CIRCLE_PAYMASTER`:
+Ethereum, Base, Optimism, Polygon, Arbitrum) works from a zero native balance.
+The source leg is one ERC-4337 UserOperation (`GasAbstractedSender`):
+
+- the Master EOA signs an **EIP-7702 authorization** delegating its own
+  address to `Simple7702Account`, bound to the source chain id (never 0,
+  which would be valid on every chain);
+- an **EIP-2612 permit** lets the Circle Paymaster take at most the run's
+  `usdc_gas_cap` of USDC for gas; unused allowance is not spent. The cap is
+  sized at quote time (`GasAbstractedSender.usdc_gas_cap`): the gas the
+  bundler's estimation makes the paymaster pre-charge for, at the live max fee
+  and the USDC price of source-chain native taken from the leg's own quote,
+  plus a margin, and never below `GAS_ABSTRACTION_USDC_CAP[chain]`. It is
+  part of the quoted deposit;
+- the UserOperation is signed over the EntryPoint's hash and submitted to
+  Candide's public bundler.
+
+All three signatures come from the Master EOA key inside the wallet class,
+with no user prompt. Custody properties:
+
+- Master Safe ownership and backup-wallet recovery are unaffected: Safe
+  checks owner signatures with `ecrecover`, independent of code at the owner
+  address.
+- The recovery phrase path is unaffected: the key is unchanged and can always
+  re-delegate or clear the delegation.
+- The delegation lasts only for the run. It would persist on-chain until
+  replaced, so the run ends with a self-sponsored type-4 transaction
+  delegating to `address(0)`, paid with source-chain native the source leg
+  reserves for it (`CLEAR_DELEGATION_GAS_RESERVE`). Clearing never fails the
+  run; it is retried in the background and at start-up until the Master EOA
+  has no code. While live, `Simple7702Account` accepts calls only from itself
+  or the EntryPoint, and only with the Master EOA's own signature.
+
+Chains without a Circle Paymaster (Gnosis, Robinhood) accept native sources
+only, which pay their own gas.
+
 ## Health and funding relationship
 
 Funding is related to service health, but it is not identical to it.

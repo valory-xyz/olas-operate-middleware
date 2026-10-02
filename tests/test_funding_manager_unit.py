@@ -19,6 +19,7 @@
 
 """Unit tests for operate/services/funding_manager.py – no blockchain required."""
 
+import typing as t
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1459,3 +1460,78 @@ class TestGetSafeWithdrawableBalanceInvalidToken:
         assert invalid_token not in result["withdrawable_amounts"]
         assert result["withdrawable_amounts"][ZERO_ADDRESS] == "1000"
         mgr.logger.warning.assert_called_once()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# destination_targets (funding run)
+# ---------------------------------------------------------------------------
+
+
+class TestDestinationTargets:
+    """FundingManager.destination_targets folds home-chain refill requirements."""
+
+    def test_sums_master_safe_and_master_eoa_entries(self) -> None:
+        """Placeholders and real addresses fold into one target per token."""
+        manager = _make_manager()
+        service = MagicMock()
+        service.home_chain = "polygon"
+        requirements = {
+            "polygon": {
+                MASTER_SAFE_PLACEHOLDER: {ZERO_ADDRESS: 5, ERC20_TOKEN: 7},
+                MASTER_EOA_PLACEHOLDER: {ZERO_ADDRESS: 3},
+            },
+            "gnosis": {SAFE_ADDR: {ZERO_ADDRESS: 100}},
+        }
+        with patch.object(
+            manager,
+            "funding_requirements",
+            return_value={"refill_requirements": requirements},
+        ):
+            targets = manager.destination_targets(service)
+
+        assert targets == {ZERO_ADDRESS: 8, ERC20_TOKEN: 7}
+
+    def test_zero_requirements_are_kept(self) -> None:
+        """Covered tokens stay as zero entries: their balances were netted."""
+        manager = _make_manager()
+        service = MagicMock()
+        service.home_chain = "polygon"
+        with patch.object(
+            manager,
+            "funding_requirements",
+            return_value={
+                "refill_requirements": {"polygon": {SAFE_ADDR: {ZERO_ADDRESS: 0}}}
+            },
+        ):
+            assert manager.destination_targets(service) == {ZERO_ADDRESS: 0}
+
+
+class TestMasterEoaLock:
+    """fund_master_eoa and fund_service wait for a funding run's lock."""
+
+    def test_fund_master_eoa_holds_lock(self) -> None:
+        """The hourly Master EOA top-up runs under master_eoa_lock."""
+        manager = _make_manager()
+        seen: t.List[bool] = []
+        with patch.object(
+            manager,
+            "_fund_master_eoa",
+            side_effect=lambda: seen.append(manager.master_eoa_lock.locked()),
+        ):
+            manager.fund_master_eoa()
+        assert seen == [True]
+        assert not manager.master_eoa_lock.locked()
+
+    def test_fund_service_holds_lock(self) -> None:
+        """Service funding transfers run under master_eoa_lock."""
+        manager = _make_manager()
+        service = MagicMock()
+        service.service_config_id = "sc-1"
+        seen: t.List[bool] = []
+        with patch.object(
+            manager,
+            "fund_chain_amounts",
+            side_effect=lambda *_a, **_k: seen.append(manager.master_eoa_lock.locked()),
+        ):
+            manager.fund_service(service, ChainAmounts())
+        assert seen == [True]

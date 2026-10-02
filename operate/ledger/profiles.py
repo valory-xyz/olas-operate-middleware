@@ -389,6 +389,56 @@ DEFAULT_RECOVERY_TOPUPS = {
 
 DEFAULT_EOA_THRESHOLD = 0.5
 
+#: Source chain -> tokens a funding run accepts deposits in (v1 matrix).
+#: USDC sources are gas-abstracted only where CIRCLE_PAYMASTER has an entry.
+FUNDING_SOURCES: t.Dict[Chain, t.List[str]] = {
+    Chain.ETHEREUM: [ZERO_ADDRESS, USDC[Chain.ETHEREUM]],
+    Chain.BASE: [ZERO_ADDRESS, USDC[Chain.BASE]],
+    Chain.OPTIMISM: [ZERO_ADDRESS, USDC[Chain.OPTIMISM]],
+    Chain.POLYGON: [ZERO_ADDRESS, USDC[Chain.POLYGON]],
+    Chain.ARBITRUM_ONE: [ZERO_ADDRESS, USDC[Chain.ARBITRUM_ONE]],
+    Chain.GNOSIS: [ZERO_ADDRESS],
+    Chain.ROBINHOOD: [ZERO_ADDRESS],
+}
+
+#: Destination chain -> tokens a funding run cannot deliver: Relay has no
+#: route into them, from any source, and no Balancer pool is configured.
+FUNDING_RUN_UNROUTABLE: t.Dict[Chain, t.List[str]] = {
+    Chain.MODE: [OLAS[Chain.MODE]],
+}
+
+# Contract set for gas-abstracted funding (verified on-chain).
+EIP7702_DELEGATE = "0xe6Cae83BdE06E4c305530e199D7217f42808555B"  # Simple7702Account
+ERC4337_ENTRYPOINT = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"  # v0.8
+_CIRCLE_PAYMASTER_V08 = "0x0578cFB241215b77442a541325d6A4E6dFE700Ec"
+#: Chains where Circle Paymaster v0.8 is deployed. Absence of a chain here is
+#: the single switch that keeps a USDC source from being gas-abstracted.
+CIRCLE_PAYMASTER: t.Dict[Chain, str] = {
+    Chain.ETHEREUM: _CIRCLE_PAYMASTER_V08,
+    Chain.BASE: _CIRCLE_PAYMASTER_V08,
+    Chain.OPTIMISM: _CIRCLE_PAYMASTER_V08,
+    Chain.POLYGON: _CIRCLE_PAYMASTER_V08,
+    Chain.ARBITRUM_ONE: _CIRCLE_PAYMASTER_V08,
+}
+BUNDLER_URL_TEMPLATE = "https://api.candide.dev/public/v3/{chain_id}"
+#: Floor of the USDC the paymaster may pre-charge per operation, in base units;
+#: `GasAbstractedSender.usdc_gas_cap` sizes the actual cap from live fees.
+GAS_ABSTRACTION_USDC_CAP: t.Dict[Chain, int] = {
+    Chain.ETHEREUM: 10_000_000,
+    Chain.BASE: 1_000_000,
+    Chain.OPTIMISM: 1_000_000,
+    Chain.POLYGON: 1_000_000,
+    Chain.ARBITRUM_ONE: 1_000_000,
+}
+#: Source-chain native reserved for the self-sponsored delegation-clearing tx.
+CLEAR_DELEGATION_GAS_RESERVE: t.Dict[Chain, int] = {
+    Chain.ETHEREUM: 500_000_000_000_000,
+    Chain.BASE: 20_000_000_000_000,
+    Chain.OPTIMISM: 20_000_000_000_000,
+    Chain.POLYGON: 20_000_000_000_000_000,
+    Chain.ARBITRUM_ONE: 20_000_000_000_000,
+}
+
 EXPLORER_URL = {
     Chain.ARBITRUM_ONE: {
         "tx": "https://arbiscan.io/tx/{tx_hash}",
@@ -443,6 +493,31 @@ def get_asset_name(chain: Chain, asset_address: str) -> str:
             return symbol
 
     return asset_address
+
+
+def get_asset_symbol(chain: Chain, asset_address: str) -> t.Optional[str]:
+    """Get token symbol, read on-chain for tokens `get_asset_name` does not know.
+
+    None when the token has no readable symbol.
+    """
+    name = get_asset_name(chain, asset_address)
+    if name != asset_address:
+        return name
+    try:
+        return _get_erc20_symbol(chain, asset_address) or None
+    except Exception:  # pylint: disable=broad-except
+        # Not an ERC-20, a non-string symbol() or an RPC error. Failures are
+        # not cached, so a transient one is retried on the next call.
+        return None
+
+
+@cache
+def _get_erc20_symbol(chain: Chain, asset_address: str) -> str:
+    erc20_token = registry_contracts.erc20.get_instance(
+        ledger_api=get_default_ledger_api(chain),
+        contract_address=asset_address,
+    )
+    return erc20_token.functions.symbol().call()
 
 
 @cache

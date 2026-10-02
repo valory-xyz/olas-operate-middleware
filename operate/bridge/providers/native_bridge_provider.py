@@ -31,7 +31,6 @@ from eth_typing import BlockIdentifier
 from web3 import Web3
 
 from operate.bridge.providers.provider import (
-    MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_ETA,
     MESSAGE_EXECUTION_FAILED_REVERTED,
     MESSAGE_QUOTE_ZERO,
@@ -469,39 +468,20 @@ class NativeBridgeProvider(Provider):
 
     def quote(self, provider_request: ProviderRequest) -> None:
         """Update the request with the quote."""
-        self._validate(provider_request)
+        self._check_quotable(provider_request)
 
-        if provider_request.status not in (
-            ProviderRequestStatus.CREATED,
-            ProviderRequestStatus.QUOTE_DONE,
-            ProviderRequestStatus.QUOTE_FAILED,
-        ):
-            raise RuntimeError(
-                f"Cannot quote request {provider_request.id} with status {provider_request.status}."
-            )
-
-        if provider_request.execution_data:
-            raise RuntimeError(
-                f"Cannot quote request {provider_request.id}: execution already present."
-            )
-
-        to_amount = provider_request.params["to"]["amount"]
-        bridge_eta = self.bridge_contract_adaptor.bridge_eta
-
-        message = None
-        if to_amount == 0:
+        if provider_request.params["to"]["amount"] == 0:
             self.logger.info(f"[NATIVE BRIDGE PROVIDER] {MESSAGE_QUOTE_ZERO}")
-            bridge_eta = 0
-            message = MESSAGE_QUOTE_ZERO
+            self._set_zero_quote(provider_request)
+            return
 
-        quote_data = QuoteData(
-            eta=bridge_eta,
+        provider_request.quote_data = QuoteData(
+            eta=self.bridge_contract_adaptor.bridge_eta,
             elapsed_time=0,
-            message=message,
+            message=None,
             provider_data=None,
             timestamp=int(time.time()),
         )
-        provider_request.quote_data = quote_data
         provider_request.status = ProviderRequestStatus.QUOTE_DONE
 
     def _get_approve_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
@@ -581,30 +561,14 @@ class NativeBridgeProvider(Provider):
         self, provider_request: ProviderRequest
     ) -> None:
         """Update the execution status."""
-
-        if provider_request.status not in (
-            ProviderRequestStatus.EXECUTION_PENDING,
-            ProviderRequestStatus.EXECUTION_UNKNOWN,
-        ):
+        pending = self._begin_status_update(provider_request)
+        if pending is None:
             return
+        execution_data, from_tx_hash = pending
 
         self.logger.info(
             f"[NATIVE BRIDGE PROVIDER] Updating execution status for request {provider_request.id}."
         )
-
-        execution_data = provider_request.execution_data
-        if not execution_data:
-            raise RuntimeError(
-                f"Cannot update {provider_request.id}: execution data not present."
-            )
-
-        from_tx_hash = execution_data.from_tx_hash
-        if not from_tx_hash:
-            execution_data.message = (
-                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
-            )
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
-            return
 
         bridge_eta = self.bridge_contract_adaptor.bridge_eta
 

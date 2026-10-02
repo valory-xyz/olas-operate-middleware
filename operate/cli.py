@@ -21,7 +21,6 @@
 
 import asyncio
 import atexit
-import enum
 import multiprocessing
 import os
 import shutil
@@ -57,17 +56,12 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     AGENT_RUNNER_PREFIX,
     DEPLOYMENT_DIR,
+    FUNDING_RUNS_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
     MSG_INVALID_MNEMONIC,
     MSG_INVALID_PASSWORD,
     MSG_NEW_PASSWORD_MISSING,
-    MSG_SAFE_CREATED_TRANSFER_COMPLETED,
-    MSG_SAFE_CREATED_TRANSFER_FAILED,
-    MSG_SAFE_CREATION_FAILED,
-    MSG_SAFE_EXISTS_AND_FUNDED,
-    MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
-    MSG_SAFE_EXISTS_TRANSFER_FAILED,
     OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
@@ -75,14 +69,15 @@ from operate.constants import (
     VERSION_FILE,
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
-    ZERO_ADDRESS,
+)
+from operate.funding_run.manager import (
+    FundingRunConflictError,
+    FundingRunError,
+    FundingRunManager,
+    FundingRunNotFoundError,
 )
 from operate.keys import KeysManager
-from operate.ledger.profiles import (
-    DEFAULT_EOA_TOPUPS,
-    DEFAULT_NEW_SAFE_FUNDS,
-    ERC20_TOKENS,
-)
+from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
 from operate.operate_types import (
     Chain,
@@ -108,8 +103,7 @@ from operate.services.funding_manager import FundingInProgressError, FundingMana
 from operate.services.health_checker import HealthChecker
 from operate.services.service import Service
 from operate.settings import Settings
-from operate.utils import subtract_dicts
-from operate.utils.gnosis import Transfer, get_assets_balances
+from operate.utils.gnosis import Transfer
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
@@ -196,21 +190,6 @@ class ValidatedServiceRoute(APIRoute):
         return custom_handler
 
 
-class CreateSafeStatus(str, enum.Enum):
-    """ProviderRequestStatus"""
-
-    SAFE_CREATED_TRANSFER_COMPLETED = "SAFE_CREATED_TRANSFER_COMPLETED"
-    SAFE_CREATED_TRANSFER_FAILED = "SAFE_CREATED_TRANSFER_FAILED"
-    SAFE_EXISTS_TRANSFER_COMPLETED = "SAFE_EXISTS_TRANSFER_COMPLETED"
-    SAFE_EXISTS_TRANSFER_FAILED = "SAFE_EXISTS_TRANSFER_FAILED"
-    SAFE_CREATION_FAILED = "SAFE_CREATION_FAILED"
-    SAFE_EXISTS_ALREADY_FUNDED = "SAFE_EXISTS_ALREADY_FUNDED"
-
-    def __str__(self) -> str:
-        """__str__"""
-        return self.value
-
-
 class OperateApp:  # pylint: disable=too-many-instance-attributes
     """Operate app."""
 
@@ -245,6 +224,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             wallet_manager=self._wallet_manager,
             logger=logger,
         )
+        self._funding_run_manager: t.Optional[FundingRunManager] = None
 
         self._migration_manager = MigrationManager(self._path, logger)
         self._migration_manager.migrate_user_account()
@@ -479,6 +459,24 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         )
         return manager
 
+    @property
+    def funding_run_manager(self) -> FundingRunManager:
+        """Load the funding run manager.
+
+        Cached, unlike `bridge_manager`: it owns the lock that serialises
+        run mutations between API handlers and the background job.
+        """
+        if self._funding_run_manager is None:
+            self._funding_run_manager = FundingRunManager(
+                path=self._path / FUNDING_RUNS_DIR,
+                wallet_manager=self.wallet_manager,
+                bridge_manager=self.bridge_manager,
+                funding_manager=self.funding_manager,
+                service_manager=self.service_manager,
+                logger=logger,
+            )
+        return self._funding_run_manager
+
     def setup(self) -> None:
         """Make the root directory."""
         self._path.mkdir(exist_ok=True)
@@ -511,6 +509,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     operate = OperateApp(home=home)
 
     funding_job: t.Optional[asyncio.Task] = None
+    funding_run_job: t.Optional[asyncio.Task] = None
     maintenance_task: t.Optional[asyncio.Task] = None
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails, logger=logger
@@ -565,6 +564,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         else:
             logger.info("Funding job cancellation failed")
 
+    def cancel_funding_run_job() -> None:
+        """Cancel the funding run job."""
+        nonlocal funding_run_job
+        if funding_run_job is not None:
+            funding_run_job.cancel()
+            funding_run_job = None
+
     def post_login_schedule() -> None:
         """Schedule that runs right after login."""
         # service_maintenance never raises; failures are logged inside.
@@ -573,6 +579,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         nonlocal maintenance_task
         maintenance_task = asyncio.get_running_loop().create_task(
             run_in_executor(operate.service_manager().service_maintenance)
+        )
+        # Signing needs the keystore, so the run only advances once logged in.
+        nonlocal funding_run_job
+        cancel_funding_run_job()
+        funding_run_job = asyncio.get_running_loop().create_task(
+            operate.funding_run_manager.run_job()
         )
 
     def recover_stale_deployment_statuses() -> None:
@@ -663,6 +675,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         with suppress(Exception):
             cancel_funding_job()
+
+        with suppress(Exception):
+            cancel_funding_run_job()
 
         with suppress(Exception):
             await watchdog.stop()
@@ -1066,125 +1081,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         wallet = manager.load(ledger_type=ledger_type)
-        ledger_api = wallet.ledger_api(chain=chain)
-
-        # 1. Ensure Safe exists (create if missing)
-        safe_address = None
-        create_tx = None
-
-        if wallet.safes is None or chain not in wallet.safes:
-            backup_owner = data.get("backup_owner")
-            if backup_owner:
-                backup_owner = ledger_api.api.to_checksum_address(backup_owner)
-
-            try:
-                create_tx = wallet.create_safe(
-                    chain=chain,
-                    backup_owner=backup_owner,
-                )
-                # After creation the safe should be in wallet.safes
-                wallet = manager.load(ledger_type=ledger_type)  # reload
-                safe_address = wallet.safes[chain]
-            except Exception as e:  # pylint: disable=broad-except
-                logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
-                return JSONResponse(
-                    content={
-                        "status": CreateSafeStatus.SAFE_CREATION_FAILED,
-                        "safe": None,
-                        "create_tx": None,
-                        "transfer_txs": {},
-                        "transfer_errors": {},
-                        "message": MSG_SAFE_CREATION_FAILED,
-                    },
-                    status_code=HTTPStatus.OK,
-                )
-        else:
-            safe_address = wallet.safes[chain]
-            logger.info(f"Safe already exists: {safe_address}")
-
-        # 2. Determine what should be transferred
-        # A default nonzero balance might be required on the Safe after creation.
-        # This is possibly required to estimate gas in protocol transactions.
         transfer_excess_assets = (
             str(data.get("transfer_excess_assets", "false")).lower() == "true"
         )
-
-        if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {
-                token[chain] for token in ERC20_TOKENS.values() if chain in token
-            }
-            master_eoa_balances = get_assets_balances(
-                ledger_api=ledger_api,
-                addresses={wallet.address},
-                asset_addresses=asset_addresses,
-                raise_on_invalid_address=False,
-            )[wallet.address]
-            initial_funds = subtract_dicts(
-                master_eoa_balances, DEFAULT_EOA_TOPUPS[chain]
-            )
-        else:
-            initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
-            safe_balances = get_assets_balances(
-                ledger_api=ledger_api,
-                addresses={safe_address},
-                asset_addresses=set(initial_funds.keys()) | {ZERO_ADDRESS},
-                raise_on_invalid_address=False,
-            )[safe_address]
-            initial_funds = subtract_dicts(initial_funds, safe_balances)
-
-        logger.info(f"_create_safe Computed {initial_funds=}")
-
-        transfer_txs = {}
-        transfer_errors = {}
-        for asset, amount in initial_funds.items():
-            try:
-                if amount <= 0:
-                    continue
-
-                logger.info(
-                    f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
-                )
-                tx_hash = wallet.transfer(
-                    to=safe_address,
-                    amount=int(amount),
-                    chain=chain,
-                    asset=asset,
-                    from_safe=False,
-                )
-                transfer_txs[asset] = tx_hash
-            except Exception as e:  # pylint: disable=broad-except
-                logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
-                transfer_errors[asset] = str(e)
-
-        if create_tx:
-            if transfer_errors:
-                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
-                message = MSG_SAFE_CREATED_TRANSFER_FAILED
-            else:  # If there are no transfer_txs, it means the Safe is sufficiently funded.
-                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
-                message = MSG_SAFE_CREATED_TRANSFER_COMPLETED
-        elif transfer_txs:
-            if transfer_errors:
-                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED
-                message = MSG_SAFE_EXISTS_TRANSFER_FAILED
-            else:
-                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
-                message = MSG_SAFE_EXISTS_TRANSFER_COMPLETED
-        else:  # No create_tx and no transfer_txs means the Safe already exists and is sufficiently funded.
-            status = CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
-            message = MSG_SAFE_EXISTS_AND_FUNDED
-
-        return JSONResponse(
-            content={
-                "status": status,
-                "safe": safe_address,
-                "create_tx": create_tx,
-                "transfer_txs": transfer_txs,
-                "transfer_errors": transfer_errors,
-                "message": message,
-            },
-            status_code=HTTPStatus.OK,
+        result = wallet.create_safe_and_transfer_excess(
+            chain=chain,
+            backup_owner=data.get("backup_owner"),
+            initial_funds=(
+                None
+                if transfer_excess_assets
+                else data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
+            ),
         )
+        return JSONResponse(content=result, status_code=HTTPStatus.OK)
 
     @app.put("/api/wallet/safe")
     async def _update_safe(  # pylint: disable=too-many-return-statements
@@ -2115,21 +2024,27 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
+        safe_id = validated_safe_id(service_config_id)
+
         try:
             data = await request.json()
-            service_manager.fund_service(
-                service_config_id=service_config_id,
-                amounts=ChainAmounts(
-                    {
-                        chain_str: {
-                            address: {
-                                asset: int(amount) for asset, amount in assets.items()
-                            }
-                            for address, assets in addresses.items()
+            amounts = ChainAmounts(
+                {
+                    chain_str: {
+                        address: {
+                            asset: int(amount) for asset, amount in assets.items()
                         }
-                        for chain_str, addresses in data.items()
+                        for address, assets in addresses.items()
                     }
-                ),
+                    for chain_str, addresses in data.items()
+                }
+            )
+            # Off the event loop: funding waits on the Master EOA lock, which a
+            # funding run can hold for a whole source leg.
+            await run_in_executor(
+                lambda: service_manager.fund_service(
+                    service_config_id=safe_id, amounts=amounts
+                )
             )
         except ValueError as e:
             logger.error(
@@ -2171,6 +2086,129 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(
             content={"error": None, "message": "Funded from Master Safe successfully"}
+        )
+
+    def _funding_run_error(e: Exception) -> JSONResponse:
+        """Map funding run errors onto the documented status codes.
+
+        The body carries a fixed message per status: exception text can
+        embed provider or RPC detail, so it goes to the log only.
+        """
+        for error_type, status, message in (
+            (FundingRunError, HTTPStatus.BAD_REQUEST, "Invalid funding run request."),
+            (FundingRunNotFoundError, HTTPStatus.NOT_FOUND, "Funding run not found."),
+            (
+                FundingRunConflictError,
+                HTTPStatus.CONFLICT,
+                "Funding run conflicts with the current run state.",
+            ),
+        ):
+            if isinstance(e, error_type):
+                logger.warning(f"Funding run request refused ({status}): {e}")
+                return JSONResponse(content={"error": message}, status_code=status)
+        logger.error(f"Funding run error: {e}\n{traceback.format_exc()}")
+        return JSONResponse(
+            content={"error": "Funding run failed. Please check the logs."},
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
+
+    @app.get("/api/funding_run/sources")
+    async def _funding_run_sources(request: Request) -> JSONResponse:
+        """Chains and tokens a funding run accepts deposits in."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        return JSONResponse(content={"sources": FundingRunManager.sources()})
+
+    @app.post("/api/funding_run")
+    async def _create_funding_run(request: Request) -> JSONResponse:
+        """Create a funding run, or replace one still awaiting its deposit."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        invalid_request = JSONResponse(
+            content={"error": "Invalid funding run request."},
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+        try:
+            data = await request.json()
+        except ValueError:
+            return invalid_request
+        if not isinstance(data, dict):
+            return invalid_request
+        source = data.get("source") or {}
+        destination = data.get("destination") or {}
+        if not isinstance(source, dict) or not isinstance(destination, dict):
+            return invalid_request
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            funding_run = manager.create_run(
+                mode=str(data.get("mode")),
+                source_chain=str(source.get("chain")),
+                source_token=str(source.get("token")),
+                destination_chain=str(destination.get("chain")),
+                service_config_id=data.get("service_config_id"),
+                deposit_amounts=data.get("deposit_amounts"),
+                backup_owner=data.get("backup_owner"),
+            )
+            return JSONResponse(content=manager.run_json(funding_run))
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
+    @app.get("/api/funding_run/active")
+    async def _active_funding_run(request: Request) -> JSONResponse:
+        """The live run, a run completed moments ago, or null."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            funding_run = manager.active_run()
+            return JSONResponse(
+                content=manager.run_json(funding_run) if funding_run else None
+            )
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
+    async def _funding_run_action(
+        run_id: str, action: t.Callable[[FundingRunManager, str], t.Any]
+    ) -> JSONResponse:
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            return JSONResponse(content=manager.run_json(action(manager, run_id)))
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
+    @app.post("/api/funding_run/{run_id}/refresh_quote")
+    async def _refresh_funding_run_quote(run_id: str) -> JSONResponse:
+        """Re-quote a run awaiting its deposit."""
+        return await _funding_run_action(
+            run_id, lambda manager, rid: manager.refresh_quote(rid)
+        )
+
+    @app.post("/api/funding_run/{run_id}/retry")
+    async def _retry_funding_run(run_id: str) -> JSONResponse:
+        """Resume a failed run at its failed step."""
+        return await _funding_run_action(
+            run_id, lambda manager, rid: manager.retry(rid)
+        )
+
+    @app.delete("/api/funding_run/{run_id}")
+    async def _cancel_funding_run(run_id: str) -> JSONResponse:
+        """Cancel a waiting run, or a FAILED one with nothing in flight."""
+        return await _funding_run_action(
+            run_id, lambda manager, rid: manager.cancel(rid)
         )
 
     @app.post("/api/bridge/bridge_refill_requirements")

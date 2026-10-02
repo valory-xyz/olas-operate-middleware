@@ -57,6 +57,7 @@ from operate.ledger.profiles import (
     format_asset_amount,
     get_asset_decimals,
     get_asset_name,
+    get_asset_symbol,
     get_staking_contract,
     uses_decoupled_activity,
 )
@@ -115,6 +116,56 @@ class TestGetAssetName:
         unknown = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
         result = get_asset_name(Chain.GNOSIS, unknown)
         assert result == unknown
+
+
+class TestGetAssetSymbol:
+    """Tests for get_asset_symbol function."""
+
+    def test_known_token_uses_static_name_without_rpc(self) -> None:
+        """A token in the known maps is named without an on-chain call."""
+        with patch.object(registry_contracts.erc20, "get_instance") as get_instance:
+            assert get_asset_symbol(Chain.ETHEREUM, OLAS[Chain.ETHEREUM]) == "OLAS"
+        get_instance.assert_not_called()
+
+    def test_unknown_token_reads_symbol_on_chain_once(self) -> None:
+        """An unknown token's symbol() is read on-chain and cached."""
+        mock_instance = MagicMock()
+        mock_instance.functions.symbol.return_value.call.return_value = "FOO"
+        fake_erc20 = "0xFAKEERC20TOKENADDRESS0000000000000000101"
+
+        with patch.object(
+            registry_contracts.erc20, "get_instance", return_value=mock_instance
+        ) as get_instance:
+            assert get_asset_symbol(Chain.GNOSIS, fake_erc20) == "FOO"
+            assert get_asset_symbol(Chain.GNOSIS, fake_erc20) == "FOO"
+
+        get_instance.assert_called_once()
+
+    def test_unreadable_symbol_returns_none_and_is_retried(self) -> None:
+        """A failed read yields None and is not cached."""
+        mock_instance = MagicMock()
+        mock_instance.functions.symbol.return_value.call.side_effect = [
+            ValueError("execution reverted"),
+            "BAR",
+        ]
+        fake_erc20 = "0xFAKEERC20TOKENADDRESS0000000000000000102"
+
+        with patch.object(
+            registry_contracts.erc20, "get_instance", return_value=mock_instance
+        ):
+            assert get_asset_symbol(Chain.GNOSIS, fake_erc20) is None
+            assert get_asset_symbol(Chain.GNOSIS, fake_erc20) == "BAR"
+
+    def test_empty_symbol_returns_none(self) -> None:
+        """An empty on-chain symbol is treated as unreadable."""
+        mock_instance = MagicMock()
+        mock_instance.functions.symbol.return_value.call.return_value = ""
+        fake_erc20 = "0xFAKEERC20TOKENADDRESS0000000000000000103"
+
+        with patch.object(
+            registry_contracts.erc20, "get_instance", return_value=mock_instance
+        ):
+            assert get_asset_symbol(Chain.GNOSIS, fake_erc20) is None
 
 
 class TestGetAssetDecimals:

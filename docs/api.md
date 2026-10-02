@@ -2653,15 +2653,24 @@ Get bridge refill requirements for cross-chain transactions.
 {
   "bridge_requests": [
     {
-      "source_chain": "ethereum",
-      "target_chain": "gnosis",
-      "amount": "1000000000000000000",
-      "asset": "0x0000000000000000000000000000000000000000"
+      "from": {
+        "chain": "ethereum",
+        "address": "0x<Master EOA or Master Safe>",
+        "token": "0x0000000000000000000000000000000000000000"
+      },
+      "to": {
+        "chain": "gnosis",
+        "address": "0x...",
+        "token": "0x0000000000000000000000000000000000000000",
+        "amount": "1000000000000000000"
+      }
     }
   ],
   "force_update": false
 }
 ```
+
+`from.address` must be the Master EOA or the Master Safe on `from.chain`.
 
 **Response (Success - 200):**
 
@@ -2830,6 +2839,109 @@ Individual bridge request status:
   "error": "Failed to get bridge status. Please check the logs."
 }
 ```
+
+## Funding Run
+
+A funding run turns **one** user transfer of a supported token on a supported chain into the tokens Pearl needs on the destination chain. The user sends to the Master EOA on the source chain (`source.deposit_address`); Pearl then bridges, swaps, creates the Master Safe if missing and moves the funds into it. USDC sources on Ethereum, Base, Optimism, Polygon and Arbitrum work from a zero native balance (EIP-7702 + ERC-4337, gas paid in USDC through Circle Paymaster). See [wallet-and-funding.md](wallet-and-funding.md#funding-run).
+
+All routes return `401` (`{"error": "User not logged in."}`) when not logged in. Amounts are integer strings in base units; token `0x0000000000000000000000000000000000000000` is the chain's native token. The middleware returns kinds, tokens and amounts only; all user-facing copy is the app's.
+
+### `GET /api/funding_run/sources`
+
+The v1 source matrix (chain → accepted source tokens).
+
+```json
+{
+  "sources": {
+    "ethereum": ["0x0000000000000000000000000000000000000000", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"],
+    "base": ["0x0000000000000000000000000000000000000000", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],
+    "optimism": ["0x0000000000000000000000000000000000000000", "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"],
+    "polygon": ["0x0000000000000000000000000000000000000000", "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"],
+    "arbitrum_one": ["0x0000000000000000000000000000000000000000", "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"],
+    "gnosis": ["0x0000000000000000000000000000000000000000"],
+    "robinhood": ["0x0000000000000000000000000000000000000000"]
+  }
+}
+```
+
+### `POST /api/funding_run`
+
+Create a run, or replace a run that is still `AWAITING_DEPOSIT` / `QUOTE_FAILED` and has received no deposit (this is how the app's "Change" works).
+
+**Request Body:**
+
+```json
+{
+  "mode": "onboard",
+  "source": { "chain": "base", "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+  "destination": { "chain": "polygon" },
+  "service_config_id": "sc-...",
+  "deposit_amounts": null,
+  "backup_owner": "0x..."
+}
+```
+
+- `mode`:
+  - `onboard`: the target is the service's net shortfall on its home chain. Requires `service_config_id`; `destination.chain` must be the service's home chain.
+  - `deposit`: requires `deposit_amounts` (`{"<token>": "<amount>"}`), the **amounts to add** to the Pearl Wallet on `destination.chain`; what it already holds is not netted. `service_config_id` is ignored.
+  - `signer_gas`: tops up the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`) on `destination.chain`; the same value as `prefill_amount_wei` in `INSUFFICIENT_SIGNER_GAS` errors.
+- `backup_owner` is used only if the Master Safe has to be created.
+
+If every net target is already met, the run is created directly as `COMPLETED` with empty `steps` and `to_receive`.
+
+**Response (Success - 200):** the run object, which every run route returns:
+
+```json
+{
+  "id": "fr-3f2a...",
+  "mode": "onboard",
+  "status": "AWAITING_DEPOSIT",
+  "source": { "chain": "base", "token": "0x8335...", "symbol": "USDC", "decimals": 6, "deposit_address": "0x<MasterEOA>" },
+  "destination": { "chain": "polygon", "wallet": "master_safe" },
+  "service_config_id": "sc-...",
+  "quote": { "required_amount": "15000000", "received_amount": "4000000", "outstanding_amount": "11000000", "eta_seconds": 180, "quoted_at": 1790592071, "next_refresh_at": 1790592251 },
+  "quote_message": null,
+  "to_receive": [ { "token": "0x0000...", "symbol": "POL", "amount": "6000000000000000000" } ],
+  "steps": [
+    { "id": "receive", "kind": "RECEIVE", "status": "PENDING", "token": "0x8335...", "amount": "15000000", "tx_hash": null, "explorer_link": null, "started_at": null, "finished_at": null, "is_slow": false, "visible": true },
+    { "id": "bridge", "kind": "BRIDGE", "status": "PENDING", "...": "..." },
+    { "id": "native", "kind": "NATIVE", "status": "PENDING", "...": "..." },
+    { "id": "swap:0xFEF5...", "kind": "SWAP", "status": "PENDING", "...": "..." },
+    { "id": "safe", "kind": "SAFE_AND_TRANSFER", "status": "PENDING", "visible": false, "...": "..." },
+    { "id": "clear_delegation", "kind": "CLEAR_DELEGATION", "status": "PENDING", "visible": false, "...": "..." }
+  ],
+  "error": null
+}
+```
+
+- Run `status` ∈ `AWAITING_DEPOSIT | QUOTE_FAILED | PROCESSING | FAILED | COMPLETED | CANCELLED`; step `status` ∈ `PENDING | PROCESSING | DONE | FAILED`.
+- `quote.required_amount` is what the user is asked to send for this run and `quote.received_amount` what they have sent; `outstanding_amount` is the difference. Source-token funds the Master EOA already held when the run was created lower `required_amount` and are never counted in `received_amount`, so `received_amount > 0` means a deposit arrived. The `RECEIVE` step's `amount` equals `required_amount`.
+- `quote` is `null` until a quote succeeded; `quote_message` is `"Couldn't get a quote"` while `QUOTE_FAILED` (the provider detail is logged, not returned), or `"<SYMBOL> can't be delivered to <Chain> yet"` when a target token has no route at all (`FUNDING_RUN_UNROUTABLE`: OLAS on Mode). Such a run is never quoted. The quote is refreshed every `next_refresh_at`; once `outstanding_amount` reaches 0 the run re-quotes once more and moves to `PROCESSING`, after which the selection can no longer change.
+- Step kinds: `RECEIVE` (the deposit arriving at the Master EOA), `BRIDGE` (the carrier moved to the destination chain; for a native source it is the only source-leg step), `NATIVE` (destination native for fees), one `SWAP` per remaining target token, then the hidden `SAFE_AND_TRANSFER` (`onboard`/`deposit` only) and `CLEAR_DELEGATION` (USDC sources only). `is_slow` flags a step running well past its ETA.
+- `to_receive` is the **net** delivery: the shortfall after existing balances (`onboard`, `signer_gas`) or the entered amounts (`deposit`); it can be empty. A token outside the known token maps gets its `symbol` from its on-chain ERC-20 `symbol()`, or `null` when that cannot be read.
+- `service_config_id` is the service an `onboard` run funds, so the app can tell one agent's run from another's; `null` for `deposit` and `signer_gas`.
+- `destination.wallet` is `master_safe` for `onboard`/`deposit` and `master_eoa` for `signer_gas`.
+- `error` is `{"step_id", "message"}` when `FAILED`. `message` is user-facing copy, never raw provider or RPC text (that is logged): `"Couldn't bridge to <Chain>"` (`BRIDGE`), `"Couldn't get <SYMBOL>"` (`NATIVE`, `SWAP`), `"Couldn't finish the transfer"` (anything else, or a `SWAP` whose token symbol cannot be read), or `"The transfer was sent but the bridge has not confirmed it yet. Try again in a few minutes."` when the outcome is not known yet. A hidden Safe/transfer failure is reported against the last visible step, with `"Couldn't finish the transfer"`. `CLEAR_DELEGATION` never sets `error` and never blocks `COMPLETED`.
+
+**Errors:** `400` a malformed body, an unsupported source chain/token, a missing `deposit_amounts`/`service_config_id`, a `deposit_amounts` token the Pearl Wallet does not hold on that chain, or an `onboard` destination that is not the service home chain; `409` while another run is `PROCESSING`/`FAILED`, or is waiting and has received a deposit. Every refusal carries one fixed `error` message per status (`"Invalid funding run request."`, `"Funding run not found."`, `"Funding run conflicts with the current run state."`); the detail is logged, not returned.
+
+### `GET /api/funding_run/active`
+
+The run object of the single non-terminal run. If there is none, the run that completed in the last 5 minutes (so the app can show the success modal after a restart); otherwise `null`. The app polls this route.
+
+### `POST /api/funding_run/{id}/refresh_quote`
+
+Re-quote now. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. No request body.
+
+### `POST /api/funding_run/{id}/retry`
+
+Resume a `FAILED` run at its failed step. A step whose on-chain effect has landed meanwhile (e.g. the Relay fill later succeeded) is reconciled instead of resent; only failed requests are re-quoted. A source-leg UserOperation that may still be included, or may already have been (the bundler still lists it; its EntryPoint nonce is used but neither the bundler nor the EntryPoint `UserOperationEvent` logs show it yet; or the lookup failed), is waited for again rather than replaced. One that stays unresolved for 30 minutes fails the run with the "not confirmed yet" message, so the user can retry.
+
+### `DELETE /api/funding_run/{id}`
+
+Cancel. Valid in `AWAITING_DEPOSIT` / `QUOTE_FAILED` until a deposit arrives, and in `FAILED` once nothing is still in flight, so a step that keeps failing does not block every later run. A waiting run is `409` once it has received a deposit; the balance is read at cancel time, so a deposit that landed after the app's last poll is not cancelled away, and a balance that cannot be read fails the request. A `FAILED` run is `409` while its source-leg UserOperation may still land, a sent request is still pending, or a failed request may still deliver (the cases where `retry` shows the "not confirmed yet" message). Funds stay in the Master EOA, on whichever chain the run left them, and count toward the next quote. Cancelling a `FAILED` USDC-source run queues the background delegation clearing.
+
+**Errors (run routes):** `404` unknown run id; `409` wrong state for the action.
 
 ## Store Management
 

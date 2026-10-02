@@ -51,6 +51,7 @@ MAYAN_EXPLORER_URL = "https://explorer.mayan.finance/tx"
 
 MAYAN_FORWARDER_ADDRESS = "0x337685fdaB40D39bd02028545a4FfA7D287cC3E2"
 MAYAN_SLIPPAGE_BUFFER = 0.02  # 200 bps over-delivery buffer
+MAYAN_TERMINAL_FAILURE_STATUSES = ("REFUNDED", "FAILED")
 
 # Wormhole chain IDs for EVM chains
 WORMHOLE_CHAIN_IDS: t.Dict[str, int] = {
@@ -104,6 +105,10 @@ MAYAN_DEFAULT_GAS: t.Dict[Chain, t.Dict[str, int]] = {
 }
 
 _ABI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "contracts"
+
+
+def _terminal_failure_message(client_status: str) -> str:
+    return f"{MESSAGE_EXECUTION_FAILED} Mayan status: {client_status}"
 
 
 def _load_abi(contract_dir: str, contract_name: str) -> t.List[t.Dict]:
@@ -186,23 +191,7 @@ class MayanProvider(Provider):
         2. Scale: compute amountIn_final with slippage buffer, re-quote, and
            verify over-delivery against the requested to_amount.
         """
-        self._validate(provider_request)
-
-        if provider_request.status not in (
-            ProviderRequestStatus.CREATED,
-            ProviderRequestStatus.QUOTE_DONE,
-            ProviderRequestStatus.QUOTE_FAILED,
-        ):
-            raise RuntimeError(
-                f"Cannot quote request {provider_request.id} "
-                f"with status {provider_request.status}."
-            )
-
-        if provider_request.execution_data:
-            raise RuntimeError(
-                f"Cannot quote request {provider_request.id}: "
-                "execution already present."
-            )
+        self._check_quotable(provider_request)
 
         from_chain = provider_request.params["from"]["chain"]
         from_token = provider_request.params["from"]["token"]
@@ -212,15 +201,7 @@ class MayanProvider(Provider):
 
         if to_amount == 0:
             self.logger.info(f"[MAYAN PROVIDER] {MESSAGE_QUOTE_ZERO}")
-            quote_data = QuoteData(
-                eta=0,
-                elapsed_time=0,
-                message=MESSAGE_QUOTE_ZERO,
-                provider_data=None,
-                timestamp=int(time.time()),
-            )
-            provider_request.quote_data = quote_data
-            provider_request.status = ProviderRequestStatus.QUOTE_DONE
+            self._set_zero_quote(provider_request)
             return
 
         from_chain_name = MAYAN_CHAIN_NAMES.get(from_chain)
@@ -1167,26 +1148,10 @@ class MayanProvider(Provider):
 
     def _update_execution_status(self, provider_request: ProviderRequest) -> None:
         """Poll the Mayan Explorer API for execution status."""
-        if provider_request.status not in (
-            ProviderRequestStatus.EXECUTION_PENDING,
-            ProviderRequestStatus.EXECUTION_UNKNOWN,
-        ):
+        pending = self._begin_status_update(provider_request)
+        if pending is None:
             return
-
-        execution_data = provider_request.execution_data
-        if not execution_data:
-            raise RuntimeError(
-                f"Cannot update request {provider_request.id}: "
-                "execution data not present."
-            )
-
-        from_tx_hash = execution_data.from_tx_hash
-        if not from_tx_hash:
-            execution_data.message = (
-                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
-            )
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
-            return
+        execution_data, from_tx_hash = pending
 
         try:
             url = f"{MAYAN_EXPLORER_API_URL}/{from_tx_hash}"
@@ -1224,10 +1189,8 @@ class MayanProvider(Provider):
 
                 provider_request.status = ProviderRequestStatus.EXECUTION_DONE
 
-            elif client_status in ("REFUNDED", "FAILED"):
-                execution_data.message = (
-                    f"{MESSAGE_EXECUTION_FAILED} Mayan status: {client_status}"
-                )
+            elif client_status in MAYAN_TERMINAL_FAILURE_STATUSES:
+                execution_data.message = _terminal_failure_message(client_status)
                 provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
             elif client_status in ("INPROGRESS", "PENDING", ""):
@@ -1253,6 +1216,14 @@ class MayanProvider(Provider):
             provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
             if self._bridge_tx_likely_failed(provider_request):
                 provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+
+    def _reported_terminal_failure(self, provider_request: ProviderRequest) -> bool:
+        """Whether Mayan answered REFUNDED or FAILED for the request."""
+        execution_data = provider_request.execution_data
+        return execution_data is not None and execution_data.message in {
+            _terminal_failure_message(status)
+            for status in MAYAN_TERMINAL_FAILURE_STATUSES
+        }
 
     def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the Mayan Explorer link for a transaction."""

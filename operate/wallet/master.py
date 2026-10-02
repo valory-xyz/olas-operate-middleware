@@ -19,7 +19,9 @@
 
 """Master key implementation"""
 
+import enum
 import json
+import traceback
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,9 +33,17 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 from cryptography.fernet import InvalidToken
+from eth_account.datastructures import SignedSetCodeAuthorization
+from eth_account.signers.local import LocalAccount
 from web3 import Account, Web3
 
 from operate.constants import (
+    MSG_SAFE_CREATED_TRANSFER_COMPLETED,
+    MSG_SAFE_CREATED_TRANSFER_FAILED,
+    MSG_SAFE_CREATION_FAILED,
+    MSG_SAFE_EXISTS_AND_FUNDED,
+    MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
+    MSG_SAFE_EXISTS_TRANSFER_FAILED,
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
@@ -51,6 +61,7 @@ from operate.ledger import (
 )
 from operate.ledger.profiles import (
     CONTRACTS,
+    DEFAULT_EOA_TOPUPS,
     DUST,
     ERC20_TOKENS,
     format_asset_amount,
@@ -58,7 +69,7 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.serialization import BigInt
-from operate.utils import create_backup
+from operate.utils import create_backup, subtract_dicts
 from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     BatchResult,
@@ -70,6 +81,7 @@ from operate.utils.gnosis import (
     estimate_transfer_tx_fee,
     gas_fees_spent_in_tx,
     get_asset_balance,
+    get_assets_balances,
     get_owners,
     remove_owner,
     swap_owner,
@@ -81,6 +93,32 @@ from operate.utils.gnosis import (
 )
 
 logger = setup_logger(name="master_wallet")
+
+
+class CreateSafeStatus(str, enum.Enum):
+    """Outcome of creating (or reusing) a Master Safe and funding it."""
+
+    SAFE_CREATED_TRANSFER_COMPLETED = "SAFE_CREATED_TRANSFER_COMPLETED"
+    SAFE_CREATED_TRANSFER_FAILED = "SAFE_CREATED_TRANSFER_FAILED"
+    SAFE_EXISTS_TRANSFER_COMPLETED = "SAFE_EXISTS_TRANSFER_COMPLETED"
+    SAFE_EXISTS_TRANSFER_FAILED = "SAFE_EXISTS_TRANSFER_FAILED"
+    SAFE_CREATION_FAILED = "SAFE_CREATION_FAILED"
+    SAFE_EXISTS_ALREADY_FUNDED = "SAFE_EXISTS_ALREADY_FUNDED"
+
+    def __str__(self) -> str:
+        """__str__"""
+        return self.value
+
+
+class CreateSafeResult(t.TypedDict):
+    """What `create_safe_and_transfer_excess` returns (the POST /api/wallet/safe body)."""
+
+    status: CreateSafeStatus
+    safe: t.Optional[str]
+    create_tx: t.Optional[str]
+    transfer_txs: t.Dict[str, str]
+    transfer_errors: t.Dict[str, str]
+    message: str
 
 
 class MasterWallet(LocalResource):
@@ -1197,6 +1235,187 @@ class EthereumMasterWallet(
             )
 
         return tx_hash
+
+    def create_safe_and_transfer_excess(  # pylint: disable=too-many-locals
+        self,
+        chain: Chain,
+        backup_owner: t.Optional[str] = None,
+        initial_funds: t.Optional[t.Dict[str, int]] = None,
+    ) -> CreateSafeResult:
+        """Ensure the Master Safe exists on `chain`, then fund it from the Master EOA.
+
+        With `initial_funds` unset, every Master EOA asset above
+        DEFAULT_EOA_TOPUPS moves to the Safe. Otherwise the Safe is topped up
+        to `initial_funds`.
+        """
+        ledger_api = self.ledger_api(chain=chain)
+        create_tx = None
+
+        if self.safes is None or chain not in self.safes:
+            if backup_owner:
+                backup_owner = ledger_api.api.to_checksum_address(backup_owner)
+            try:
+                create_tx = self.create_safe(chain=chain, backup_owner=backup_owner)
+            except Exception as e:  # pylint: disable=broad-except
+                logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
+                return {
+                    "status": CreateSafeStatus.SAFE_CREATION_FAILED,
+                    "safe": None,
+                    "create_tx": None,
+                    "transfer_txs": {},
+                    "transfer_errors": {},
+                    "message": MSG_SAFE_CREATION_FAILED,
+                }
+        safe_address = self.safes[chain]
+
+        # A default nonzero balance might be required on the Safe after creation.
+        # This is possibly required to estimate gas in protocol transactions.
+        if initial_funds is None:
+            asset_addresses = {ZERO_ADDRESS} | {
+                token[chain] for token in ERC20_TOKENS.values() if chain in token
+            }
+            master_eoa_balances = get_assets_balances(
+                ledger_api=ledger_api,
+                addresses={self.address},
+                asset_addresses=asset_addresses,
+                raise_on_invalid_address=False,
+            )[self.address]
+            funds = subtract_dicts(master_eoa_balances, DEFAULT_EOA_TOPUPS[chain])
+        else:
+            safe_balances = get_assets_balances(
+                ledger_api=ledger_api,
+                addresses={safe_address},
+                asset_addresses=set(initial_funds.keys()) | {ZERO_ADDRESS},
+                raise_on_invalid_address=False,
+            )[safe_address]
+            funds = subtract_dicts(initial_funds, safe_balances)
+
+        transfer_txs: t.Dict[str, str] = {}
+        transfer_errors: t.Dict[str, str] = {}
+        for asset, amount in funds.items():
+            if amount <= 0:
+                continue
+            try:
+                transfer_txs[asset] = self.transfer(
+                    to=safe_address,
+                    amount=int(amount),
+                    chain=chain,
+                    asset=asset,
+                    from_safe=False,
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
+                transfer_errors[asset] = str(e)
+
+        if create_tx:
+            if transfer_errors:
+                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
+                message = MSG_SAFE_CREATED_TRANSFER_FAILED
+            else:  # If there are no transfer_txs, the Safe is sufficiently funded.
+                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
+                message = MSG_SAFE_CREATED_TRANSFER_COMPLETED
+        elif transfer_txs:
+            if transfer_errors:
+                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED
+                message = MSG_SAFE_EXISTS_TRANSFER_FAILED
+            else:
+                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
+                message = MSG_SAFE_EXISTS_TRANSFER_COMPLETED
+        else:
+            status = CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
+            message = MSG_SAFE_EXISTS_AND_FUNDED
+
+        return {
+            "status": status,
+            "safe": safe_address,
+            "create_tx": create_tx,
+            "transfer_txs": transfer_txs,
+            "transfer_errors": transfer_errors,
+            "message": message,
+        }
+
+    @property
+    def _account(self) -> LocalAccount:
+        """The Master EOA signer; key access stays inside the wallet class."""
+        return t.cast(LocalAccount, self.crypto.entity)
+
+    def sign_typed_data(self, full_message: t.Dict[str, t.Any]) -> str:
+        """Sign EIP-712 typed data with the Master EOA key."""
+        return self._account.sign_typed_data(
+            full_message=full_message
+        ).signature.to_0x_hex()
+
+    def sign_authorization(
+        self, chain: Chain, address: str, nonce: int
+    ) -> SignedSetCodeAuthorization:
+        """Sign an EIP-7702 authorization bound to `chain`.
+
+        Never chain id 0: such an authorization is valid on every chain,
+        including the user's operating chains.
+        """
+        if not chain.id:
+            raise ValueError("EIP-7702 authorizations must be bound to a chain id.")
+        return self._account.sign_authorization(
+            {"chainId": chain.id, "address": address, "nonce": nonce}
+        )
+
+    def unsafe_sign_hash(self, message_hash: bytes) -> str:
+        """Sign a raw 32-byte hash with no EIP-191 prefix.
+
+        Only for hashes whose verifier recovers without a prefix, such as
+        the ERC-4337 userOpHash checked by Simple7702Account.
+        """
+        return self._account.unsafe_sign_hash(message_hash).signature.to_0x_hex()
+
+    def clear_delegation(self, chain: Chain) -> str:
+        """Reset the Master EOA's EIP-7702 delegation on `chain` to no code.
+
+        Sent as a self-sponsored type-4 transaction: an empty self-call whose
+        authorization (nonce = tx nonce + 1) points at address(0). It cannot
+        be a UserOperation, because the authorization is applied before
+        execution and the account would have no code left to validate it.
+        """
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain))
+
+        def _build_tx() -> t.Dict:
+            # TxSettler calls this again after nonce errors, so the
+            # authorization is re-signed against the fresh nonce each time.
+            # Gas is left to TxSettler, which estimates with the real `from`:
+            # a fallback sender would estimate a different transaction.
+            nonce = ledger_api.api.eth.get_transaction_count(self.address)
+            authorization = self.sign_authorization(
+                chain=chain, address=ZERO_ADDRESS, nonce=nonce + 1
+            )
+            return {
+                "chainId": chain.id,
+                "from": self.address,
+                "to": self.address,
+                "value": 0,
+                "data": "0x",
+                "nonce": nonce,
+                "authorizationList": [authorization],
+            }
+
+        with wrap_gas_spike_as_insufficient_funds(
+            chain.value,
+            f"EIP-7702 delegation clearing on {chain.name}",
+            ledger_api=ledger_api,
+            signer_address=self.address,
+        ):
+            return (
+                TxSettler(
+                    ledger_api=ledger_api,
+                    crypto=self.crypto,
+                    chain_type=chain,
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=_build_tx,
+                )
+                .transact()
+                .settle()
+                .tx_hash
+            )
 
     def update_backup_owner(
         self,

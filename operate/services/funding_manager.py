@@ -111,6 +111,9 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         self.logger = logger
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
         self._lock = threading.Lock()
+        # Held by a funding run while it moves Master EOA funds, so the
+        # funding job cannot spend them mid-run.
+        self.master_eoa_lock = threading.Lock()
         self._withdrawal_locks: KeyedLocks[t.Tuple[str, str]] = KeyedLocks()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
@@ -1055,6 +1058,10 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
 
     def fund_master_eoa(self) -> None:
         """Fund Master EOA"""
+        with self.master_eoa_lock:
+            self._fund_master_eoa()
+
+    def _fund_master_eoa(self) -> None:
         if not self.wallet_manager.exists(LedgerType.ETHEREUM):
             self.logger.warning(
                 "[FUNDING MANAGER] Cannot fund Master EOA: No Ethereum wallet available."
@@ -1278,6 +1285,21 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             "agent_funding_in_progress": funding_in_progress,
         }
 
+    def destination_targets(self, service: Service) -> t.Dict[str, int]:
+        """Per-token net shortfall on the service's home chain.
+
+        Folds the Master Safe and Master EOA entries of `refill_requirements`
+        (placeholders included, so it also works before the Safe exists) into
+        one target per token. Already net of balances. A zero entry marks a
+        token whose balances were netted and already cover it.
+        """
+        refill_requirements = self.funding_requirements(service)["refill_requirements"]
+        targets: t.Dict[str, int] = defaultdict(int)
+        for assets in refill_requirements.get(service.home_chain, {}).values():
+            for asset, amount in assets.items():
+                targets[asset] += int(amount)
+        return dict(targets)
+
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
         self.fund_chain_amounts(service.get_initial_funding_amounts())
@@ -1367,7 +1389,8 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts, require_all=True)
+            with self.master_eoa_lock:
+                self.fund_chain_amounts(amounts, require_all=True)
         finally:
             # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:
