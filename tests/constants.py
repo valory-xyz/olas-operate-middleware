@@ -24,7 +24,6 @@ from pathlib import Path
 
 from aea.helpers.logging import setup_logger
 
-from operate.ledger import DEFAULT_RPCS
 from operate.operate_types import Chain
 
 LOGGER = setup_logger(name="operate-test")
@@ -36,36 +35,4 @@ RUNNING_IN_CI = (
     or os.getenv("CI", "").lower() == "true"
 )
 
-ARBITRUM_ONE_TESTNET_RPC = os.environ.get(
-    "ARBITRUM_ONE_TESTNET_RPC", DEFAULT_RPCS[Chain.ARBITRUM_ONE]
-)
-BASE_TESTNET_RPC = os.environ.get("BASE_TESTNET_RPC", DEFAULT_RPCS[Chain.BASE])
-CELO_TESTNET_RPC = os.environ.get("CELO_TESTNET_RPC", DEFAULT_RPCS[Chain.CELO])
-ETHEREUM_TESTNET_RPC = os.environ.get(
-    "ETHEREUM_TESTNET_RPC", DEFAULT_RPCS[Chain.ETHEREUM]
-)
-GNOSIS_TESTNET_RPC = os.environ.get("GNOSIS_TESTNET_RPC", DEFAULT_RPCS[Chain.GNOSIS])
-MODE_TESTNET_RPC = os.environ.get("MODE_TESTNET_RPC", DEFAULT_RPCS[Chain.MODE])
-OPTIMISM_TESTNET_RPC = os.environ.get(
-    "OPTIMISM_TESTNET_RPC", DEFAULT_RPCS[Chain.OPTIMISM]
-)
-POLYGON_TESTNET_RPC = os.environ.get("POLYGON_TESTNET_RPC", DEFAULT_RPCS[Chain.POLYGON])
-ROBINHOOD_TESTNET_RPC = os.environ.get(
-    "ROBINHOOD_TESTNET_RPC", DEFAULT_RPCS[Chain.ROBINHOOD]
-)
-SOLANA_TESTNET_RPC = os.environ.get("SOLANA_TESTNET_RPC", DEFAULT_RPCS[Chain.SOLANA])
-
-
-TESTNET_RPCS = {
-    Chain.ARBITRUM_ONE: ARBITRUM_ONE_TESTNET_RPC,
-    Chain.BASE: BASE_TESTNET_RPC,
-    Chain.CELO: CELO_TESTNET_RPC,
-    Chain.ETHEREUM: ETHEREUM_TESTNET_RPC,
-    Chain.GNOSIS: GNOSIS_TESTNET_RPC,
-    Chain.MODE: MODE_TESTNET_RPC,
-    Chain.OPTIMISM: OPTIMISM_TESTNET_RPC,
-    Chain.POLYGON: POLYGON_TESTNET_RPC,
-    Chain.ROBINHOOD: ROBINHOOD_TESTNET_RPC,
-    Chain.SOLANA: SOLANA_TESTNET_RPC,
-}
 CHAINS_TO_TEST = [Chain.GNOSIS, Chain.OPTIMISM]

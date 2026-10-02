@@ -6,7 +6,7 @@ docs; this file documents only what's specific to operate-middleware.
 
 ## Test Organization
 
-### Unit Tests (1,956 tests, ~2 minutes)
+### Unit Tests (2,711 tests, ~2 minutes)
 
 Fast tests with no external dependencies. Run with:
 
@@ -14,18 +14,21 @@ Fast tests with no external dependencies. Run with:
 uv run tox -e unit-tests
 ```
 
-### Integration Tests (300 tests, slow)
+### Integration Tests (329 tests, slow)
 
-Tests requiring testnet RPC endpoints. **Run selectively** — full
-suite takes 7-10 minutes and burns Tenderly quota.
+Three kinds, all marked `integration`. **Run selectively.**
+
+| Kind | Needs | Examples |
+|---|---|---|
+| Fork tests (`OnFork`) | Docker | funding, Safe creation, staking, recovery |
+| Live read-only tests | network | bridge quotes, staking config checks, IPFS |
+| Cassette replays (`vcr`) | nothing | bridge execution status |
+
+Mainnet RPCs come from the usual `*_RPC` env vars (`GNOSIS_RPC`,
+`BASE_RPC`, `OPTIMISM_RPC`, `ETHEREUM_RPC`, `POLYGON_RPC`), falling
+back to the public defaults in `operate/ledger/__init__.py`.
 
 ```bash
-export BASE_TESTNET_RPC="https://..."
-export ETHEREUM_TESTNET_RPC="https://..."
-export GNOSIS_TESTNET_RPC="https://..."
-export OPTIMISM_TESTNET_RPC="https://..."
-export POLYGON_TESTNET_RPC="https://..."
-
 uv run tox -e integration-tests -- path/to/test -v
 ```
 
@@ -38,6 +41,25 @@ export PYTEST_XDIST_WORKERS=2
 uv run tox -e integration-tests -- path/to/test -v
 ```
 
+### Fork tests (Anvil in Docker)
+
+Tests inheriting `OnFork` (in [tests/conftest.py](tests/conftest.py))
+send real transactions to local Anvil forks of mainnet. Docker is the
+only requirement: pytest starts one container per chain on first use
+(image pinned as `ANVIL_IMAGE` in [tests/forks.py](tests/forks.py)),
+per xdist worker, and removes them at session end.
+
+- Each test starts from a fresh fork of the latest upstream block, so
+  balances and time warps never leak between tests. Archive RPCs are
+  not needed.
+- Use `fork_add_balance`, `fork_set_native_balance` and
+  `fork_increase_time` to set up state.
+- A chain the test never looks up is not forked, and never falls
+  through to the live RPC.
+- Containers carry the label `operate-test-fork`
+  (`docker ps --filter label=operate-test-fork`).
+- In CI they run on Linux only.
+
 ### Recorded HTTP tests (pytest-recording)
 
 Some tests replay previously recorded HTTP responses via
@@ -48,15 +70,25 @@ upstream API actually changes.
 
 **Tests that use VCR cassettes today:**
 
-| Test | What's recorded |
+| Test | Cassettes |
 |---|---|
-| `TestNativeBridgeProvider::test_find_block_before_timestamp` | 11 cassettes — Base RPC JSON-RPC requests |
-| `TestProvider::test_update_execution_status_failure_then_success` | 18 cassettes — Relay API + Optimism Tenderly RPC |
+| `TestNativeBridgeProvider::test_find_block_before_timestamp` | 11 |
+| `TestProvider::test_bridge_zero` | 2 |
+| `TestProvider::test_update_execution_status` | 17 |
+| `TestProvider::test_update_execution_status_failure_then_success` | 17 |
+| `TestBridgeManager::test_correct_providers_native` | 7 |
 
 **Cassette matching strategy** (configured in [tests/conftest.py](tests/conftest.py)):
-`method, scheme, host, port, path, query, body`. Body-matching is
-critical for JSON-RPC where every request hits the same URL and
-differs only in payload.
+`method`, `rpc_uri`, `rpc_body`. JSON-RPC requests match on the chain
+inferred from the URL plus method and params; everything else matches
+on exact URI and body. A request with no match fails the replay.
+
+**Keeping requests reproducible:**
+
+- Create the wallet with `CASSETTE_WALLET_MNEMONIC`, not a random one;
+  its address is part of the recorded JSON-RPC params.
+- `vcr`-marked tests automatically get sequential bridge request ids,
+  a fresh ledger-API cache and no Chainlist RPC enrichment.
 
 **Re-recording cassettes:**
 
@@ -64,10 +96,20 @@ differs only in payload.
 # Delete old cassette(s) first
 rm tests/cassettes/test_bridge_providers/<TestClass>.<test_name>*
 
-# Re-record
-uv run pytest tests/test_bridge_providers.py::<TestClass>::<test_name> \
+# Re-record, one case at a time to stay under CoinGecko rate limits
+uv run pytest -p no:pytest_anchorpy -m integration \
+  tests/test_bridge_providers.py::<TestClass>::<test_name> \
   --record-mode=once -v
+
+# Verify offline
+uv run pytest -p no:pytest_anchorpy -m integration \
+  tests/test_bridge_providers.py::<TestClass>::<test_name> \
+  --block-network --record-mode=none -v
 ```
+
+RPC URLs are stored verbatim, so record only with keyless `*_RPC`
+URLs. Check that the recording run passed: a rate-limited response
+gets recorded and replayed as a skip.
 
 For VCR fundamentals (record modes, filter_headers, parameterised
 tests), see the [VCR.py docs](https://vcrpy.readthedocs.io/) — we
@@ -118,30 +160,18 @@ uv run pytest -m "not integration"
 
 ## Integration tests still rely on live networks
 
-Integration tests in `test_services_manage.py`,
-`test_services_funding.py`, `test_wallet_master.py`, and
-`test_bridge_providers.py` make real RPC calls to Tenderly testnets.
-This is intentional for end-to-end validation but means slow runs,
-RPC env vars required, and rate-limit pressure on Tenderly.
-
-To conserve Tenderly quota, tests inheriting from `OnTestnet` (in
-`tests/conftest.py`) are skipped on Windows and macOS **in CI**:
-
-```python
-pytestmark = pytest.mark.skipif(
-    RUNNING_IN_CI and system() != "Linux",
-    reason="To avoid exhausting tenderly limits.",
-)
-```
-
-Locally they run on every platform.
+Fork tests read mainnet state through the upstream RPC, and the live
+read-only tests call third-party services directly (Relay, Mayan,
+CoinGecko, IPFS, GitHub). Both are slow and can fail on upstream
+outages or rate limits; only the cassette replays are offline.
 
 ## CI Strategy
 
 - **Linter checks** — run first, must pass.
 - **Unit tests** — 3 OS × 5 Python versions (3.10–3.14), must pass.
 - **Coverage** — Ubuntu × 3.14 with `--cov-fail-under=100`, must pass.
-- **Integration tests** — 3 OS × Python 3.14, must pass.
+- **Integration tests** — 3 OS × Python 3.14, must pass. Fork tests
+  run on the Linux runner only.
 
 See [.github/workflows/common_checks.yml](.github/workflows/common_checks.yml)
 for the exact job matrix.

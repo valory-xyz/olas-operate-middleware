@@ -53,7 +53,7 @@ from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_asset_balance, get_assets_balances
 from operate.wallet.master import CreateSafeStatus, EthereumMasterWallet
 
-from tests.conftest import OnTestnet, random_mnemonic, tenderly_add_balance
+from tests.conftest import OnFork, fork_add_balance, random_mnemonic
 
 
 @pytest.fixture
@@ -390,7 +390,7 @@ def test_get_private_key(
 
 
 @pytest.mark.integration
-class TestWalletCreateSafe(OnTestnet):
+class TestWalletCreateSafe(OnFork):
     """Tests for wallet-related endpoints."""
 
     def _assert_safe_balances(
@@ -453,19 +453,19 @@ class TestWalletCreateSafe(OnTestnet):
         amount_olas = 100 * 10**18
         amount_usdc = 200 * 10**6
 
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_native),
             token=ZERO_ADDRESS,
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_olas),
             token=OLAS[chain],
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_usdc),
@@ -525,19 +525,19 @@ class TestWalletCreateSafe(OnTestnet):
         amount_olas = 300 * 10**18
         amount_usdc = 600 * 10**6
 
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_native),
             token=ZERO_ADDRESS,
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_olas),
             token=OLAS[chain],
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_usdc),
@@ -607,19 +607,19 @@ class TestWalletCreateSafe(OnTestnet):
         amount_olas = 300 * 10**18
         amount_usdc = 600 * 10**6
 
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_native),
             token=ZERO_ADDRESS,
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_olas),
             token=OLAS[chain],
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_usdc),
@@ -705,19 +705,19 @@ class TestWalletCreateSafe(OnTestnet):
         amount_olas = 300 * 10**18
         amount_usdc = 600 * 10**6
 
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_native),
             token=ZERO_ADDRESS,
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_olas),
             token=OLAS[chain],
         )
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain,
             recipient=master_eoa,
             amount=int(amount_usdc),

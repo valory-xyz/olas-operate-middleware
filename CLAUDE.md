@@ -127,7 +127,7 @@ uv run tox -p -e flake8 -e pylint && uv run tox -p -e black-check -e isort-check
 1. Make changes and run focused unit tests with `uv run tox -e unit-tests -- tests/test_my_module.py -v`
 2. Run `uv run tox -e unit-tests` before considering the change complete
 3. Run the full lint/type/security suite before committing or opening a PR
-4. Run `uv run tox -e integration-tests -- tests/test_x.py::test_function_name -v` only for RPC-dependent behavior when testnet env vars are available
+4. Run `uv run tox -e integration-tests -- tests/test_x.py::test_function_name -v` only for RPC-dependent behavior; fork tests need Docker
 
 ### Environment Setup
 ```bash
@@ -156,7 +156,7 @@ For detailed coverage and gap analysis, see [TESTING.md](TESTING.md).
 # Recommended local suite
 uv run tox -e unit-tests
 
-# Integration tests (requires testnet RPC env vars)
+# Integration tests (network; fork tests also need Docker)
 uv run tox -e integration-tests
 
 # All tests
@@ -171,7 +171,7 @@ uv run tox -e unit-tests -- tests/test_services_service.py::test_function_name -
 - Prefer `uv run tox -e unit-tests` locally for the standard unit/integration suites; use direct `pytest` when following documented repository workflows that require it (for example, VCR cassette recording/replay)
 - Unit tests run without network/RPC dependencies
 - Integration tests are marked with `@pytest.mark.integration` and are slow; run selectively
-- For transaction-related code changes that modify or add a blockchain transaction flow, run or add a Tenderly-backed integration test for the new flow when `.env` RPC/test credentials are available
+- For transaction-related code changes that modify or add a blockchain transaction flow, run or add a fork-backed integration test (`OnFork`, see TESTING.md) for the new flow when Docker is available
 - Before committing a new transaction-flow integration test, check whether the flow is already covered by existing integration tests and only commit a new test when coverage does not already exist
 - If you cannot run the required integration coverage, report the reason back to a human
 

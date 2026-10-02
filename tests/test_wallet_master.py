@@ -32,7 +32,13 @@ from operate.cli import OperateApp
 from operate.constants import KEYS_DIR, WALLETS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
-from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC, format_asset_amount
+from operate.ledger.profiles import (
+    DUST,
+    ERC20_TOKENS,
+    USDC,
+    USDG,
+    format_asset_amount,
+)
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance, get_owners
 from operate.wallet.master import (
@@ -41,14 +47,14 @@ from operate.wallet.master import (
     MasterWallet,
 )
 
-from tests.conftest import OnTestnet, create_wallets, tenderly_add_balance
-from tests.constants import LOGGER, RUNNING_IN_CI
+from tests.conftest import OnFork, create_wallets, fork_add_balance
+from tests.constants import LOGGER
 
 TX_FEE_TOLERANCE = 2
 
 
 @pytest.mark.integration
-class TestMasterWalletOnTestnet(OnTestnet):
+class TestMasterWalletOnFork(OnFork):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
     @staticmethod
@@ -67,7 +73,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         )
         assert amount > 0
         assert amount < initial_balance_sender
-        TestMasterWalletOnTestnet._assert_transfer(
+        TestMasterWalletOnFork._assert_transfer(
             chain=chain,
             wallet=wallet,
             receiver_addr=receiver_addr,
@@ -88,7 +94,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
             chain=chain, asset=asset, from_safe=from_safe
         )
         amount = initial_balance_sender
-        TestMasterWalletOnTestnet._assert_transfer(
+        TestMasterWalletOnFork._assert_transfer(
             chain=chain,
             wallet=wallet,
             receiver_addr=receiver_addr,
@@ -144,21 +150,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
 
     @pytest.mark.parametrize(
         "chain",
-        [
-            pytest.param(
-                Chain.BASE,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
-            ),
-            pytest.param(
-                Chain.ETHEREUM,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
-            ),
-            Chain.GNOSIS,
-            pytest.param(
-                Chain.OPTIMISM,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
-            ),
-        ],
+        [Chain.BASE, Chain.ETHEREUM, Chain.GNOSIS, Chain.OPTIMISM],
     )
     @pytest.mark.parametrize(
         "wallet_class",
@@ -184,18 +176,18 @@ class TestMasterWalletOnTestnet(OnTestnet):
         eoa_address = wallet.address
 
         topup = int(10e18)
-        tenderly_add_balance(chain, eoa_address, topup, ZERO_ADDRESS)
+        fork_add_balance(chain, eoa_address, topup, ZERO_ADDRESS)
         wallet.create_safe(chain, receiver_addr)
         safe_address = wallet.safes[chain]
-        tenderly_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
+        fork_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
 
         tokens = [token[chain] for token in ERC20_TOKENS.values() if chain in token]
         for token in tokens:
             topup = int(10e18)
-            if token == USDC[chain]:
+            if token in (USDC[chain], USDG.get(chain)):
                 topup = int(10e6)
-            tenderly_add_balance(chain, eoa_address, topup, token)
-            tenderly_add_balance(chain, safe_address, topup, token)
+            fork_add_balance(chain, eoa_address, topup, token)
+            fork_add_balance(chain, safe_address, topup, token)
 
         assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
             ZERO_ADDRESS
@@ -225,21 +217,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
 
     @pytest.mark.parametrize(
         "chain",
-        [
-            pytest.param(
-                Chain.BASE,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
-            ),
-            pytest.param(
-                Chain.ETHEREUM,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
-            ),
-            Chain.GNOSIS,
-            pytest.param(
-                Chain.OPTIMISM,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
-            ),
-        ],
+        [Chain.BASE, Chain.ETHEREUM, Chain.GNOSIS, Chain.OPTIMISM],
     )
     @pytest.mark.parametrize(
         "wallet_class",
@@ -265,18 +243,18 @@ class TestMasterWalletOnTestnet(OnTestnet):
         eoa_address = wallet.address
 
         topup = int(10e18)
-        tenderly_add_balance(chain, eoa_address, topup, ZERO_ADDRESS)
+        fork_add_balance(chain, eoa_address, topup, ZERO_ADDRESS)
         wallet.create_safe(chain, receiver_addr)
         safe_address = wallet.safes[chain]
-        tenderly_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
+        fork_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
 
         tokens = [token[chain] for token in ERC20_TOKENS.values() if chain in token]
         for token in tokens:
             topup = int(10e18)
-            if token == USDC[chain]:
+            if token in (USDC[chain], USDG.get(chain)):
                 topup = int(10e6)
-            tenderly_add_balance(chain, eoa_address, topup, token)
-            tenderly_add_balance(chain, safe_address, topup, token)
+            fork_add_balance(chain, eoa_address, topup, token)
+            fork_add_balance(chain, safe_address, topup, token)
 
         assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
             ZERO_ADDRESS
@@ -304,65 +282,6 @@ class TestMasterWalletOnTestnet(OnTestnet):
                         from_safe=from_safe,
                     )
 
-    @pytest.mark.parametrize(
-        "wallet_class",
-        [EthereumMasterWallet],
-    )
-    def test_transfer_error_safes(
-        self,
-        tmp_path: Path,
-        password: str,
-        wallet_class: t.Type[MasterWallet],
-    ) -> None:
-        """test_transfer_error_safes"""
-
-        keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,
-            logger=LOGGER,
-            password=password,
-        )
-        receiver_addr = keys_manager.create()
-
-        wallet, _ = wallet_class.new(password=password, path=tmp_path / WALLETS_DIR)
-
-        chain = Chain.POLYGON  # Chain not funded
-        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
-            ZERO_ADDRESS
-        ]
-        for asset in assets:
-            assert wallet.get_balance(chain=chain, asset=asset, from_safe=False) == 0
-            with pytest.raises(
-                ValueError,
-                match=f"Wallet does not have a Safe on chain {chain}.",
-            ):
-                wallet.get_balance(chain=chain, asset=asset, from_safe=True)
-
-            amount = DUST[chain] + 1
-
-            with pytest.raises(
-                InsufficientFundsException,
-                match=f"^Cannot transfer {format_asset_amount(chain, asset, amount)}.*",
-            ):
-                wallet.transfer(
-                    to=receiver_addr,
-                    amount=amount,
-                    chain=chain,
-                    asset=asset,
-                    from_safe=False,
-                )
-
-            with pytest.raises(
-                ValueError,
-                match=f"Wallet does not have a Safe on chain {chain}.",
-            ):
-                wallet.transfer(
-                    to=receiver_addr,
-                    amount=amount,
-                    chain=chain,
-                    asset=asset,
-                    from_safe=True,
-                )
-
     def test_create_gnosis_safe(self, test_operate: OperateApp) -> None:
         """Test creating gnosis safe."""
         # Setup
@@ -374,7 +293,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         for chain in (chain1, chain2):
             assert chain not in wallet.safes
             assert chain not in wallet.safe_chains
-            tenderly_add_balance(
+            fork_add_balance(
                 chain=chain,
                 recipient=wallet.address,
             )

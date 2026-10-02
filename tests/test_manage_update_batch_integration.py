@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Integration test for the combined update mega-batch on Tenderly.
+"""Integration test for the combined update mega-batch on a fork.
 
 Verifies that updating an already DEPLOYED + STAKED service folds the teardown
 (unstake -> terminate -> unbond -> recover_access) and the re-deploy
@@ -39,10 +39,10 @@ from operate.operate_types import Chain, LedgerType, OnChainState
 from operate.services.protocol import StakingState
 
 from tests.conftest import (
-    OnTestnet,
+    OnFork,
     OperateTestEnv,
-    tenderly_add_balance,
-    tenderly_increase_time,
+    fork_add_balance,
+    fork_increase_time,
 )
 from tests.constants import LOGGER
 
@@ -59,8 +59,8 @@ _TARGET_PROGRAM_CANDIDATES = [
 ]
 
 
-class TestCombinedUpdateBatchIntegration(OnTestnet):
-    """Combined update mega-batch against a live Tenderly fork."""
+class TestCombinedUpdateBatchIntegration(OnFork):
+    """Combined update mega-batch against a fork."""
 
     @pytest.mark.integration
     def test_update_migrates_staking_program_via_combined_batch(
@@ -120,7 +120,7 @@ class TestCombinedUpdateBatchIntegration(OnTestnet):
         )
 
         # ── Pick a different target program with free slots + live rewards ───
-        tenderly_increase_time(SERVICE_CHAIN)  # clear staking lock for unstake
+        fork_increase_time(SERVICE_CHAIN)  # clear staking lock for unstake
         target_program = None
         target_contract = None
         for candidate in _TARGET_PROGRAM_CANDIDATES:
@@ -139,9 +139,7 @@ class TestCombinedUpdateBatchIntegration(OnTestnet):
         )
 
         # ── Prepare the update: top up OLAS, switch program, change metadata ─
-        tenderly_add_balance(
-            SERVICE_CHAIN, master_safe, _OLAS_TOPUP, OLAS[SERVICE_CHAIN]
-        )
+        fork_add_balance(SERVICE_CHAIN, master_safe, _OLAS_TOPUP, OLAS[SERVICE_CHAIN])
         chain_data.user_params.staking_program_id = target_program
         service.description = service.description + " (updated)"
         service.store()

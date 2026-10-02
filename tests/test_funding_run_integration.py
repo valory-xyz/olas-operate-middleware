@@ -17,10 +17,10 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Tenderly-backed integration tests for the funding run.
+"""Fork-backed integration tests for the funding run.
 
 Relay fills and Relay status happen off-fork, so cross-chain legs and
-Relay-routed swaps cannot complete on a Tenderly fork, and the ERC-4337 +
+Relay-routed swaps cannot complete on a fork, and the ERC-4337 +
 Circle Paymaster leg needs a real bundler. Those are verified by a manual
 mainnet run (see the PR). What runs here is every on-chain step Pearl
 itself signs: the same-chain run through Safe creation and transfer, and
@@ -42,12 +42,12 @@ from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.gas_abstraction import GasAbstractedSender
 
-from tests.conftest import OnTestnet, tenderly_add_balance
+from tests.conftest import OnFork, fork_add_balance
 
 
 @pytest.mark.integration
-class TestFundingRunOnFork(OnTestnet):
-    """Funding run steps Pearl signs itself, on Tenderly forks."""
+class TestFundingRunOnFork(OnFork):
+    """Funding run steps Pearl signs itself, on forks."""
 
     def test_same_chain_native_deposit_creates_safe_and_transfers(
         self, test_operate: OperateApp
@@ -71,7 +71,7 @@ class TestFundingRunOnFork(OnTestnet):
         assert run.status == FundingRunStatus.AWAITING_DEPOSIT
         assert [s.id for s in run.steps] == ["receive", "safe"]
 
-        tenderly_add_balance(chain, wallet.address, int(run.required_amount))
+        fork_add_balance(chain, wallet.address, int(run.required_amount))
         for _ in range(10):
             manager.tick()
             run = manager.load(run.id)
@@ -93,7 +93,7 @@ class TestFundingRunOnFork(OnTestnet):
         chain = Chain.BASE
         test_operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
         wallet = test_operate.wallet_manager.load(LedgerType.ETHEREUM)
-        tenderly_add_balance(chain, wallet.address, 10**17)
+        fork_add_balance(chain, wallet.address, 10**17)
         w3 = get_default_ledger_api(chain).api
         account = wallet.crypto.entity
 
