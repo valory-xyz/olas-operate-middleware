@@ -27,12 +27,12 @@ from operate.ledger.profiles import DUST
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import drain_eoa
 
-from tests.conftest import OnTestnet, tenderly_add_balance
+from tests.conftest import OnFork, fork_add_balance
 from tests.constants import CHAINS_TO_TEST
 
 
 @pytest.mark.integration
-class TestGnosisUtils(OnTestnet):
+class TestGnosisUtils(OnFork):
     """Tests for Gnosis utils."""
 
     @pytest.mark.parametrize("chain", CHAINS_TO_TEST)
@@ -43,7 +43,7 @@ class TestGnosisUtils(OnTestnet):
 
         test_balance = 10**18
         ledger_api = wallet.ledger_api(chain)
-        tenderly_add_balance(chain, wallet.address, test_balance)
+        fork_add_balance(chain, wallet.address, test_balance)
         assert test_balance > DUST[chain]
         assert ledger_api.get_balance(wallet.address) == test_balance
 

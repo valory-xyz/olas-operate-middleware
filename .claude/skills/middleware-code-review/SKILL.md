@@ -24,7 +24,7 @@ Before committing, Claude must complete all of the following:
    - no obvious dead code, duplicate instruction drift, or invalid workflow guidance was introduced,
    - `.claude/**`, `CLAUDE.md`, `docs/**`, and related workflow/docs remain consistent with actual repo behavior,
    - the pre-commit git hook is set using `git config core.hooksPath .githooks`,
-   - transaction-flow changes include Tenderly-backed integration tests,
+   - transaction-flow changes include fork-backed integration tests,
    - security-sensitive changes do not leave obvious validation, input-handling, or secret-management gaps,
    - newly added and other relevant unit/integration tests have been run locally and passed,
    - if a PR already exists, all review comments are addressed, resolved, or replied to before commit.

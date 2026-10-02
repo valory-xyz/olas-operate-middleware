@@ -57,6 +57,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 
+from tests.conftest import CASSETTE_WALLET_MNEMONIC
 from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
 COINGECKO_PLATFORM_IDS = {
@@ -542,12 +543,7 @@ class TestBridgeManager:
             (Chain.BASE, NativeBridgeProvider, OptimismContractAdaptor),
             (Chain.CELO, RelayProvider, None),
             (Chain.GNOSIS, RelayProvider, None),
-            pytest.param(
-                Chain.MODE,
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                marks=pytest.mark.xfail(reason="MODE chain unstable"),
-            ),
+            (Chain.MODE, NativeBridgeProvider, OptimismContractAdaptor),
             (Chain.OPTIMISM, NativeBridgeProvider, OptimismContractAdaptor),
             (Chain.POLYGON, RelayProvider, None),
         ],
@@ -734,7 +730,9 @@ class TestBridgeManager:
         operate.setup()
         operate.create_user_account(password=password)
         operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+        operate.wallet_manager.import_from_mnemonic(
+            LedgerType.ETHEREUM, CASSETTE_WALLET_MNEMONIC
+        )
         bridge_manager = operate.bridge_manager
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address

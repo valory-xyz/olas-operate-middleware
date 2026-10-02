@@ -104,8 +104,6 @@ jobs:
           fail_ci_if_error: false
 
   integration-tests:
-    # TODO: Tenderly subscription is being cancelled; move this coverage into unit tests or a local fork chain.
-    if: false
     continue-on-error: False
     needs:
       - linter_checks
@@ -125,12 +123,7 @@ jobs:
       GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
       MODE_RPC: ${{ secrets.MODE_RPC }}
       OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
-      BASE_TESTNET_RPC: ${{ secrets.BASE_TESTNET_RPC }}
-      ETHEREUM_TESTNET_RPC: ${{ secrets.ETHEREUM_TESTNET_RPC }}
-      GNOSIS_TESTNET_RPC: ${{ secrets.GNOSIS_TESTNET_RPC }}
-      MODE_TESTNET_RPC: ${{ secrets.MODE_TESTNET_RPC }}
-      OPTIMISM_TESTNET_RPC: ${{ secrets.OPTIMISM_TESTNET_RPC }}
-      POLYGON_TESTNET_RPC: ${{ secrets.POLYGON_TESTNET_RPC }}
+      POLYGON_RPC: ${{ secrets.POLYGON_RPC }}
 
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +133,10 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.11.15"
+
+      - name: Pull the Anvil image for fork tests
+        if: runner.os == 'Linux'
+        run: docker pull "$(sed -n 's/^ANVIL_IMAGE = "\(.*\)"$/\1/p' tests/forks.py)"
 
       - name: Run integration tests
         env:
@@ -156,6 +153,7 @@ jobs:
       - linter_checks
       - unit-tests
       - coverage
+      - integration-tests
     if: always()
     runs-on: ubuntu-latest
     steps:
