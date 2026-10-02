@@ -385,6 +385,12 @@ class OnFork:
             "aea_ledger_ethereum.rpc_rotation.enrich_rpc_urls",
             lambda rpc_urls, **_: rpc_urls,
         )
+        # The tip estimated from upstream fee history jumps by orders of magnitude
+        # between a quote and the transactions it budgets for.
+        monkeypatch.setattr(
+            "aea_ledger_ethereum.ethereum.estimate_priority_fee",
+            lambda *_, min_allowed_tip, **__: min_allowed_tip,
+        )
 
 
 @dataclass
