@@ -27,20 +27,19 @@ package without needing to import them (pytest will automatically discover them)
 See https://docs.pytest.org/en/stable/reference/fixtures.html
 """
 
-import json
-import os
+import itertools
 import random
-import re
 import string
 import tempfile
 import typing as t
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from platform import system
+from types import SimpleNamespace
 from typing import Generator
 
 import pytest
-import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from web3 import Web3
@@ -65,7 +64,9 @@ from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import CHAINS_TO_TEST, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import CHAINS_TO_TEST, OPERATE_TEST, RUNNING_IN_CI
+from tests.forks import AnvilForks, json_rpc
+from tests.vcr_matchers import MATCH_ON, rpc_body, rpc_uri
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -196,76 +197,39 @@ def reencrypt_key(
     key.store()
 
 
-def tenderly_add_balance(
+def fork_add_balance(
     chain: Chain,
     recipient: str,
     amount: int = 1000 * (10**18),
     token: str = ZERO_ADDRESS,
 ) -> None:
-    """tenderly_add_balance"""
+    """Add native or ERC-20 balance to an address on the chain's fork."""
     rpc = get_default_rpc(chain)
-    headers = {"Content-Type": "application/json"}
-
     if token == ZERO_ADDRESS:
-        data = {
-            "jsonrpc": "2.0",
-            "method": "tenderly_addBalance",
-            "params": [recipient, hex(amount)],
-            "id": "1",
-        }
-    else:
-        current_balance = get_asset_balance(
-            ledger_api=get_default_ledger_api(chain),
-            address=recipient,
-            asset_address=token,
-            raise_on_invalid_address=False,
-        )
-        data = {
-            "jsonrpc": "2.0",
-            "method": "tenderly_setErc20Balance",
-            "params": [token, recipient, hex(amount + current_balance)],
-            "id": "1",
-        }
-
-    response = requests.post(
-        url=rpc, headers=headers, data=json.dumps(data), timeout=60
+        balance = int(json_rpc(rpc, "eth_getBalance", recipient, "latest"), 16)
+        json_rpc(rpc, "anvil_setBalance", recipient, hex(balance + amount))
+        return
+    balance = get_asset_balance(
+        ledger_api=get_default_ledger_api(chain),
+        address=recipient,
+        asset_address=token,
+        raise_on_invalid_address=False,
     )
-    response.raise_for_status()
+    json_rpc(rpc, "anvil_dealERC20", recipient, token, hex(balance + amount))
 
 
-def tenderly_set_native_balance(chain: Chain, recipient: str, amount: int) -> None:
-    """Set the native balance of an address to an exact amount via Tenderly."""
-    rpc = get_default_rpc(chain)
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "jsonrpc": "2.0",
-        "method": "tenderly_setBalance",
-        "params": [[recipient], hex(amount)],
-        "id": "1",
-    }
-    response = requests.post(
-        url=rpc, headers=headers, data=json.dumps(data), timeout=60
-    )
-    response.raise_for_status()
+def fork_set_native_balance(chain: Chain, recipient: str, amount: int) -> None:
+    """Set the native balance of an address on the chain's fork."""
+    json_rpc(get_default_rpc(chain), "anvil_setBalance", recipient, hex(amount))
 
 
-def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
-    """tenderly_increase_time"""
-    rpc = get_default_rpc(chain)
-    headers = {"Content-Type": "application/json"}
-
+def fork_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
+    """Move the clock of the chain's fork forward."""
     if time <= 0:
         return
-
-    data = {
-        "jsonrpc": "2.0",
-        "method": "evm_increaseTime",
-        "params": [hex(time)],
-        "id": "1",
-    }
-
-    response = requests.post(rpc, headers=headers, data=json.dumps(data), timeout=30)
-    response.raise_for_status()
+    rpc = get_default_rpc(chain)
+    json_rpc(rpc, "evm_increaseTime", hex(time))
+    json_rpc(rpc, "evm_mine")
 
 
 @pytest.fixture(autouse=True)
@@ -283,116 +247,7 @@ def password() -> str:
 
 
 def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-def]
-    """Configure VCR with custom matchers for host-agnostic JSON-RPC cassette replay."""
-    chain_keywords = {
-        "arbitrum": ["arbitrum", "arb"],
-        "base": ["base"],
-        "celo": ["celo"],
-        "ethereum": ["ethereum", "eth-mainnet", "eth"],
-        "gnosis": ["gnosis", "xdai"],
-        "mode": ["mode"],
-        "optimism": ["optimism", "op-mainnet", "op"],
-        "polygon": ["polygon", "matic"],
-        "solana": ["solana"],
-    }
-
-    def _infer_chain_from_uri(uri: str) -> str:
-        """Infer chain label from RPC URI for stable cassette matching."""
-        uri_lower = uri.lower()
-        for chain_name, keywords in chain_keywords.items():
-            if any(keyword in uri_lower for keyword in keywords):
-                return chain_name
-        return "unknown"
-
-    def _body_to_json(body: t.Any) -> t.Any:
-        """Decode request body into json when possible."""
-        if isinstance(body, bytes):
-            body_str = body.decode("utf-8", errors="ignore")
-        else:
-            body_str = str(body)
-
-        if not body_str:
-            return None
-
-        try:
-            return json.loads(body_str)
-        except (TypeError, json.JSONDecodeError):
-            return None
-
-    def _is_json_rpc_request(request: t.Any) -> bool:
-        """Whether the request is a JSON-RPC request."""
-        body_json = _body_to_json(getattr(request, "body", b""))
-        return isinstance(body_json, dict) and body_json.get("jsonrpc") == "2.0"
-
-    # Pattern for EVM addresses (0x followed by exactly 40 hex characters).
-    # Used to normalise bridge-API request bodies before cassette matching so
-    # that cassettes recorded with one wallet address replay correctly when a
-    # different (randomly generated) wallet address is used in the test.
-    _evm_addr_re = re.compile(rb"0x[0-9a-fA-F]{40}")
-    _evm_addr_placeholder = b"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-
-    def _normalise_evm_addresses(body: bytes) -> bytes:
-        """Replace all EVM addresses in *body* with a fixed placeholder."""
-        return _evm_addr_re.sub(_evm_addr_placeholder, body)
-
-    def rpc_body(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
-        """Match JSON-RPC bodies while ignoring volatile request id field."""
-        body_1 = _body_to_json(getattr(request_1, "body", b""))
-        body_2 = _body_to_json(getattr(request_2, "body", b""))
-
-        if isinstance(body_1, dict) and isinstance(body_2, dict):
-            is_rpc_1 = body_1.get("jsonrpc") == "2.0"
-            is_rpc_2 = body_2.get("jsonrpc") == "2.0"
-
-            if is_rpc_1 and is_rpc_2:
-                method_match = body_1.get("method") == body_2.get("method")
-                params_match = body_1.get("params") == body_2.get("params")
-                match = method_match and params_match
-                message = (
-                    "JSON-RPC method/params match"
-                    if match
-                    else "JSON-RPC method/params mismatch"
-                )
-                return match, message
-
-        # For non-JSON-RPC requests (e.g. bridge/relay API calls) normalise
-        # EVM addresses before comparing so cassettes recorded with one wallet
-        # address still match when replayed with a different wallet address.
-        body_raw_1 = _normalise_evm_addresses(getattr(request_1, "body", b"") or b"")
-        body_raw_2 = _normalise_evm_addresses(getattr(request_2, "body", b"") or b"")
-        match = body_raw_1 == body_raw_2
-        message = "Body match" if match else "Body mismatch"
-        return match, message
-
-    def rpc_uri(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
-        """Match JSON-RPC requests across different RPC hosts/providers."""
-        req1_is_rpc = _is_json_rpc_request(request_1)
-        req2_is_rpc = _is_json_rpc_request(request_2)
-
-        if req1_is_rpc and req2_is_rpc:
-            chain_1 = _infer_chain_from_uri(getattr(request_1, "uri", ""))
-            chain_2 = _infer_chain_from_uri(getattr(request_2, "uri", ""))
-
-            # Unknown: likely new cassette being recorded - match for safety
-            if "unknown" in (chain_1, chain_2):
-                return True, "RPC request with unknown chain"
-
-            match = chain_1 == chain_2
-            message = (
-                f"Chain match: {chain_1}"
-                if match
-                else f"Chain mismatch: {chain_1} != {chain_2}"
-            )
-            return match, message
-
-        # Non-RPC: strict URI match
-        uri1 = getattr(request_1, "uri", "")
-        uri2 = getattr(request_2, "uri", "")
-        match = uri1 == uri2
-        message = "URI match" if match else f"URI mismatch: {uri1} != {uri2}"
-        return match, message
-
-    # Register the custom matcher with this VCR instance
+    """Register the cassette matchers."""
     vcr.matchers["rpc_uri"] = rpc_uri
     vcr.matchers["rpc_body"] = rpc_body
 
@@ -400,9 +255,34 @@ def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-
 @pytest.fixture(scope="module")
 def vcr_config() -> t.Dict[str, t.Any]:
     """VCR configuration for deterministic JSON-RPC request matching."""
-    return {
-        "match_on": ["method", "rpc_uri", "query", "rpc_body"],
-    }
+    return {"match_on": MATCH_ON}
+
+
+# Unfunded throwaway wallet, so the requests of cassette-backed tests are reproducible.
+CASSETTE_WALLET_MNEMONIC = (
+    "agent service test key never own real token only play bridge quote"
+)
+
+
+@pytest.fixture(autouse=True)
+def _reproducible_cassette_requests(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Remove what makes the requests of cassette-backed tests vary between runs."""
+    if request.node.get_closest_marker("vcr") is None:
+        return
+    # Chainlist fallback RPCs vary per run, and cached ledger APIs may carry them.
+    monkeypatch.setattr(
+        "aea_ledger_ethereum.rpc_rotation.enrich_rpc_urls",
+        lambda rpc_urls, **_: rpc_urls,
+    )
+    monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
+    # Native bridge calldata embeds the hash of the otherwise random request id.
+    request_ids = itertools.count()
+    monkeypatch.setattr(
+        "operate.bridge.providers.provider.uuid",
+        SimpleNamespace(uuid4=lambda: uuid.UUID(int=next(request_ids))),
+    )
 
 
 @pytest.fixture
@@ -412,32 +292,45 @@ def temp_keys_dir() -> Generator[Path, None, None]:
         yield Path(temp_dir)
 
 
-class OnTestnet:
-    """TestOnTestnet"""
+@pytest.fixture(scope="session")
+def anvil_forks() -> Generator[AnvilForks, None, None]:
+    """Anvil forks of this pytest process, started on demand."""
+    forks = AnvilForks()
+    yield forks
+    forks.stop()
 
-    # TODO: Remove this skip after optimizing tenderly usage
+
+class OnFork:
+    """Tests that send transactions, run against local Anvil forks."""
+
     pytestmark = [
         pytest.mark.skipif(
             RUNNING_IN_CI and system() != "Linux",
-            reason="To avoid exhausting tenderly limits.",
+            reason="Fork tests run on Linux only in CI.",
         ),
         pytest.mark.flaky(reruns=3, reruns_delay=15),
     ]
 
     @pytest.fixture(autouse=True)
-    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        required_envs = [
-            "BASE_TESTNET_RPC",
-            "ETHEREUM_TESTNET_RPC",
-            "GNOSIS_TESTNET_RPC",
-            "OPTIMISM_TESTNET_RPC",
-            "POLYGON_TESTNET_RPC",
-        ]
-        missing = [var for var in required_envs if os.environ.get(var) is None]
-        if missing:
-            pytest.fail(f"Missing required environment variables: {', '.join(missing)}")
-        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
+    def _patch_rpcs(
+        self, monkeypatch: pytest.MonkeyPatch, anvil_forks: AnvilForks
+    ) -> None:
+        anvil_forks.isolate()
+        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", anvil_forks)
         monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
+        # The agent env lists every chain's RPC; that must not fork them all.
+        monkeypatch.setattr("operate.services.manage.get_default_rpc", anvil_forks.peek)
+        # Chainlist fallback RPCs are live chains a failing fork call would rotate to.
+        monkeypatch.setattr(
+            "aea_ledger_ethereum.rpc_rotation.enrich_rpc_urls",
+            lambda rpc_urls, **_: rpc_urls,
+        )
+        # The tip estimated from upstream fee history jumps by orders of magnitude
+        # between a quote and the transactions it budgets for.
+        monkeypatch.setattr(
+            "aea_ledger_ethereum.ethereum.estimate_priority_fee",
+            lambda *_, min_allowed_tip, **__: min_allowed_tip,
+        )
 
 
 @dataclass
@@ -788,17 +681,17 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
             ledger_type = chain.ledger_type
             if ledger_type in ledger_types:
                 wallet = wallet_manager.load(ledger_type=ledger_type)
-                tenderly_add_balance(chain, wallet.address)
-                tenderly_add_balance(chain, backup_owner)
+                fork_add_balance(chain, wallet.address)
+                fork_add_balance(chain, backup_owner)
                 wallet.create_safe(
                     chain=chain,
                     backup_owner=backup_owner,
                 )
-                tenderly_add_balance(chain, wallet.safes[chain])
-                tenderly_add_balance(
+                fork_add_balance(chain, wallet.safes[chain])
+                fork_add_balance(
                     chain=chain, recipient=wallet.safes[chain], token=OLAS[chain]
                 )
-                tenderly_add_balance(
+                fork_add_balance(
                     chain=chain,
                     recipient=wallet.safes[chain],
                     token=USDC[chain],

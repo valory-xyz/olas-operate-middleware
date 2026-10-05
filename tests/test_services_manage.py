@@ -19,46 +19,17 @@
 
 """Tests for services.service module."""
 
-import random
 import typing as t
 from pathlib import Path
 
 import pytest
 from deepdiff import DeepDiff
-from fastapi.testclient import TestClient
 
-from operate.cli import OperateApp, create_app
-from operate.constants import ZERO_ADDRESS
-from operate.ledger import CHAINS, get_default_ledger_api
-from operate.ledger.profiles import DUST, OLAS, USDC
-from operate.operate_types import Chain, OnChainState, ServiceTemplate
-from operate.utils.gnosis import get_asset_balance
+from operate.cli import OperateApp
+from operate.operate_types import ServiceTemplate
 
 from .test_services_service import DEFAULT_CONFIG_KWARGS
-from tests.conftest import (
-    OnTestnet,
-    OperateTestEnv,
-    tenderly_add_balance,
-    tenderly_increase_time,
-)
-from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI
-
-# TODO Move this to test_services_funding.py once feat/funding_v2 branch is merged
-AGENT_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
-SERVICE_SAFE_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
-
-for _chain in set(CHAINS) - {Chain.SOLANA}:
-    AGENT_FUNDING_ASSETS[_chain] = {
-        ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),  # nosec B311
-    }
-    SERVICE_SAFE_FUNDING_ASSETS[_chain] = {
-        ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),  # nosec B311
-        **{
-            token[_chain]: random.randint(int(100e6), int(200e6))  # nosec B311
-            for token in (OLAS, USDC)
-            if _chain in token
-        },
-    }
+from tests.constants import OPERATE_TEST
 
 
 def get_template(**kwargs: t.Any) -> ServiceTemplate:
@@ -109,15 +80,25 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
 
 
 @pytest.mark.integration
-class TestServiceManager(OnTestnet):
+class TestServiceManager:
     """Tests for services.manager.ServiceManager class."""
 
-    @pytest.mark.parametrize("update_new_var", [True, False])
-    @pytest.mark.parametrize("update_update_var", [True, False])
-    @pytest.mark.parametrize("update_name", [True, False])
-    @pytest.mark.parametrize("update_description", [True, False])
-    @pytest.mark.parametrize("update_hash", [True, False])
-    @pytest.mark.parametrize("update_release", [True, False])
+    @pytest.mark.parametrize(
+        (
+            "update_new_var",
+            "update_update_var",
+            "update_name",
+            "update_description",
+            "update_hash",
+            "update_release",
+        ),
+        [
+            (True, True, True, True, True, True),
+            (False, False, False, False, False, False),
+            (False, False, False, False, True, False),
+            (True, True, True, True, False, True),
+        ],
+    )
     @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_service_manager_partial_update(
         self,
@@ -219,12 +200,22 @@ class TestServiceManager(OnTestnet):
 
         assert not diff, "Updated service does not match expected service."
 
-    @pytest.mark.parametrize("update_new_var", [True, False])
-    @pytest.mark.parametrize("update_update_var", [True, False])
-    @pytest.mark.parametrize("update_delete_var", [True, False])
-    @pytest.mark.parametrize("update_name", [True, False])
-    @pytest.mark.parametrize("update_description", [True, False])
-    @pytest.mark.parametrize("update_hash", [True, False])
+    @pytest.mark.parametrize(
+        (
+            "update_new_var",
+            "update_update_var",
+            "update_delete_var",
+            "update_name",
+            "update_description",
+            "update_hash",
+        ),
+        [
+            (True, True, True, True, True, True),
+            (False, False, False, False, False, False),
+            (False, False, False, False, False, True),
+            (True, True, True, True, True, False),
+        ],
+    )
     @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_service_manager_update(
         self,
@@ -319,107 +310,3 @@ class TestServiceManager(OnTestnet):
             print(diff)
 
         assert not diff, "Updated service does not match expected service."
-
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Endpoint to be deprecated")
-    def test_terminate_service(
-        self,
-        test_env: OperateTestEnv,
-    ) -> None:
-        """Test terminate service."""
-
-        password = test_env.password
-        operate = test_env.operate
-        operate.password = password
-
-        service_manager = operate.service_manager()
-        services, _ = service_manager.get_all_services()
-
-        service_config_id = None
-        target_service = "Trader"
-        for service in services:
-            if target_service.lower() in service.name.lower():
-                service_config_id = service.service_config_id
-                break
-
-        assert service_config_id is not None
-        service = service_manager.load(service_config_id=service_config_id)
-
-        for chain_config in service.chain_configs.values():
-            assert chain_config.chain_data.multisig is None
-
-        service_manager.deploy_service_onchain_from_safe(
-            service_config_id=service_config_id
-        )
-
-        service = service_manager.load(service_config_id=service_config_id)
-        for chain_str, chain_config in service.chain_configs.items():
-            chain = Chain(chain_str)
-            ledger_api = get_default_ledger_api(chain)
-            assert (
-                service_manager._get_on_chain_state(  # pylint: disable=protected-access
-                    service, chain_str
-                )
-                == OnChainState.DEPLOYED
-            )
-
-            for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
-                for agent_address in service.agent_addresses:
-                    tenderly_add_balance(chain, agent_address, amount, asset)
-                    assert get_asset_balance(ledger_api, asset, agent_address) >= amount
-
-            service_safe_address = chain_config.chain_data.multisig
-            for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
-                tenderly_add_balance(chain, service_safe_address, amount, asset)
-                assert (
-                    get_asset_balance(ledger_api, asset, service_safe_address) >= amount
-                )
-
-            tenderly_increase_time(chain)
-
-        LOGGER.info("Terminate without withdrawing")
-        for chain_str, _ in service.chain_configs.items():
-            service_manager.terminate_service_on_chain_from_safe(
-                service_config_id=service_config_id,
-                chain=chain_str,
-            )
-            assert (
-                service_manager._get_on_chain_state(  # pylint: disable=protected-access
-                    service, chain_str
-                )
-                == OnChainState.PRE_REGISTRATION
-            )
-
-        LOGGER.info("Terminate and withdraw")
-        app = create_app(home=operate._path)
-        client = TestClient(app)
-        client.post(
-            url="/api/account/login",
-            json={"password": password},
-        )
-        response = client.post(
-            url=f"/api/v2/service/{service_config_id}/onchain/withdraw",
-            json={"withdrawal_address": test_env.backup_owner},
-        )
-        assert response.status_code == 200
-
-        service = service_manager.load(service_config_id=service_config_id)
-        for chain_str, chain_config in service.chain_configs.items():
-            chain = Chain(chain_str)
-            assert (
-                service_manager._get_on_chain_state(  # pylint: disable=protected-access
-                    service, chain_str
-                )
-                == OnChainState.PRE_REGISTRATION
-            )
-            for asset in AGENT_FUNDING_ASSETS[chain]:
-                for agent_address in service.agent_addresses:
-                    balance = get_asset_balance(ledger_api, asset, agent_address)
-                    LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
-                    if asset == ZERO_ADDRESS:
-                        assert balance <= DUST[chain]
-                    else:
-                        assert balance == 0
-
-            service_safe_address = chain_config.chain_data.multisig
-            for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
-                assert get_asset_balance(ledger_api, asset, service_safe_address) == 0

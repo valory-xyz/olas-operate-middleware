@@ -21,7 +21,7 @@
 
 `ServiceManager.reconcile_staking_for_restart` is a new caller of the on-chain
 staking flow, reached from the health checker's restart loop rather than from a
-user-initiated deploy. These tests drive it directly against a Tenderly fork —
+user-initiated deploy. These tests drive it directly against a fork —
 not through the health-check loop, which would make them wall-clock bound.
 
 The two sub-cases the middleware must tell apart are both exercised:
@@ -49,7 +49,7 @@ from operate.operate_types import (
 )
 from operate.services.protocol import StakingState
 
-from tests.conftest import OnTestnet, OperateTestEnv, tenderly_increase_time
+from tests.conftest import OnFork, OperateTestEnv, fork_increase_time
 from tests.constants import LOGGER
 
 SERVICE_CHAIN = Chain.GNOSIS
@@ -166,7 +166,7 @@ def _evict(
     params = _staking_params(ledger_api, staking_contract)
     warped = 0
     for _ in range(MAX_CHECKPOINTS):
-        tenderly_increase_time(SERVICE_CHAIN, params["liveness_period"] + 1)
+        fork_increase_time(SERVICE_CHAIN, params["liveness_period"] + 1)
         warped += params["liveness_period"] + 1
         _send_checkpoint(service_manager, staking_contract)
         if (
@@ -182,8 +182,8 @@ def _evict(
     )
 
 
-class TestHealthCheckerRestakeIntegration(OnTestnet):
-    """The reconciliation the health checker runs, against a live Tenderly fork."""
+class TestHealthCheckerRestakeIntegration(OnFork):
+    """The reconciliation the health checker runs, against a fork."""
 
     @pytest.mark.integration
     def test_reconciles_an_eviction_it_can_clear(
@@ -204,7 +204,7 @@ class TestHealthCheckerRestakeIntegration(OnTestnet):
 
         _evict(service_manager, sftxb, token_id, staking_contract, ledger_api)
         # Default warp is minStakingDuration + 1, so unstaking becomes possible.
-        tenderly_increase_time(SERVICE_CHAIN)
+        fork_increase_time(SERVICE_CHAIN)
 
         outcome = service_manager.reconcile_staking_for_restart(
             service_config_id=service_config_id
@@ -251,11 +251,8 @@ class TestHealthCheckerRestakeIntegration(OnTestnet):
             f"locked: {params}"
         )
 
-        # Every write in the staking flow is broadcast by the master EOA, and
-        # this test's EOA is created fresh by the fixture, so its transaction
-        # count is a counter only this test advances. The block number is not:
-        # the integration suite runs under xdist against one shared Tenderly
-        # testnet per chain, so other workers' transactions move it too.
+        # Every write in the staking flow is broadcast by the master EOA, so its
+        # transaction count tells whether anything was sent.
         master_eoa = service_manager.wallet_manager.load(LedgerType.ETHEREUM).address
         nonce_before = ledger_api.api.eth.get_transaction_count(master_eoa)
         outcome = service_manager.reconcile_staking_for_restart(

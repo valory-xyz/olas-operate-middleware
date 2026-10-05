@@ -62,12 +62,12 @@ from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import InsufficientFundsException
 
 from tests.conftest import (
-    OnTestnet,
+    OnFork,
     OperateTestEnv,
     _get_service_template_trader,
-    tenderly_add_balance,
-    tenderly_increase_time,
-    tenderly_set_native_balance,
+    fork_add_balance,
+    fork_increase_time,
+    fork_set_native_balance,
 )
 from tests.constants import LOGGER, OPERATE_TEST
 
@@ -89,7 +89,7 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
 
 
 @pytest.mark.integration
-class TestFunding(OnTestnet):
+class TestFunding(OnFork):
     """Tests for services.funding."""
 
     def test_master_eoa_fund(
@@ -163,7 +163,7 @@ class TestFunding(OnTestnet):
                 assert mock_transfer.call_count == 0
 
             # Master safe has enough funds
-            tenderly_add_balance(
+            fork_add_balance(
                 chain=chain,
                 recipient=wallet.safes[chain],
                 token=ZERO_ADDRESS,
@@ -230,17 +230,17 @@ class TestFunding(OnTestnet):
 
             for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
                 for agent_address in service.agent_addresses:
-                    tenderly_add_balance(chain, agent_address, amount, asset)
+                    fork_add_balance(chain, agent_address, amount, asset)
                     assert get_asset_balance(ledger_api, asset, agent_address) >= amount
 
             service_safe_address = chain_config.chain_data.multisig
             for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
-                tenderly_add_balance(chain, service_safe_address, amount, asset)
+                fork_add_balance(chain, service_safe_address, amount, asset)
                 assert (
                     get_asset_balance(ledger_api, asset, service_safe_address) >= amount
                 )
 
-            tenderly_increase_time(chain)
+            fork_increase_time(chain)
 
         LOGGER.info("Terminate without withdrawing")
         for chain_str, _ in service.chain_configs.items():
@@ -280,20 +280,20 @@ class TestFunding(OnTestnet):
         # "ERC20 balance + dust native" state and call drain_agents_eoas
         # directly — bypasses the API's terminate_service_on_chain_from_safe
         # leg (already executed above) and exercises the pre-check on real
-        # Tenderly state. The HTTP wrapping into INSUFFICIENT_SIGNER_GAS is
+        # fork state. The HTTP wrapping into INSUFFICIENT_SIGNER_GAS is
         # covered by tests/test_funding_manager_unit2.py.
         precheck_chain_str = next(iter(service.chain_configs))
         precheck_chain = Chain(precheck_chain_str)
         precheck_ledger_api = get_default_ledger_api(precheck_chain)
         precheck_olas_amount = random.randint(int(100e6), int(200e6))  # nosec B311
         for agent_address in service.agent_addresses:
-            tenderly_add_balance(
+            fork_add_balance(
                 precheck_chain,
                 agent_address,
                 precheck_olas_amount,
                 OLAS[precheck_chain],
             )
-            tenderly_set_native_balance(precheck_chain, agent_address, 1)
+            fork_set_native_balance(precheck_chain, agent_address, 1)
             assert (
                 get_asset_balance(
                     precheck_ledger_api, OLAS[precheck_chain], agent_address
@@ -326,7 +326,7 @@ class TestFunding(OnTestnet):
                 >= precheck_olas_amount
             )
             # Restore native gas so the happy-path withdraw below can proceed.
-            tenderly_add_balance(
+            fork_add_balance(
                 precheck_chain,
                 agent_address,
                 AGENT_FUNDING_ASSETS[precheck_chain][ZERO_ADDRESS],
@@ -557,8 +557,8 @@ class TestFunding(OnTestnet):
         master_safe = wallet.safes[chain]
 
         # Test 1 - Withdraw token from Safe partially
-        tenderly_add_balance(chain, master_eoa, topup, asset)
-        tenderly_add_balance(chain, master_safe, topup, asset)
+        fork_add_balance(chain, master_eoa, topup, asset)
+        fork_add_balance(chain, master_safe, topup, asset)
         master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
         master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
         assert master_eoa_balance > 0
@@ -587,8 +587,8 @@ class TestFunding(OnTestnet):
         assert get_asset_balance(ledger_api, asset, master_eoa) == master_eoa_balance
 
         # Test 2 - Withdraw all token from Safe
-        tenderly_add_balance(chain, master_eoa, topup, asset)
-        tenderly_add_balance(chain, master_safe, topup, asset)
+        fork_add_balance(chain, master_eoa, topup, asset)
+        fork_add_balance(chain, master_safe, topup, asset)
         master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
         master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
         assert master_eoa_balance > 0
@@ -612,8 +612,8 @@ class TestFunding(OnTestnet):
         assert get_asset_balance(ledger_api, asset, master_eoa) == master_eoa_balance
 
         # Test 3 - Withdraw all token from Safe and EOA
-        tenderly_add_balance(chain, master_eoa, topup, asset)
-        tenderly_add_balance(chain, master_safe, topup, asset)
+        fork_add_balance(chain, master_eoa, topup, asset)
+        fork_add_balance(chain, master_safe, topup, asset)
         master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
         master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
         assert master_eoa_balance > 0
@@ -637,8 +637,8 @@ class TestFunding(OnTestnet):
         assert get_asset_balance(ledger_api, asset, master_eoa) == 0
 
         # Test 4 - Withdraw all native from Safe and EOA
-        tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
-        tenderly_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
+        fork_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
+        fork_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
         master_eoa_balance_native = get_asset_balance(
             ledger_api, ZERO_ADDRESS, master_eoa
         )
@@ -684,10 +684,10 @@ class TestFunding(OnTestnet):
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
 
         # Test 5 - Withdraw all native and asset from Safe and EOA
-        tenderly_add_balance(chain, master_eoa, topup, asset)
-        tenderly_add_balance(chain, master_safe, topup, asset)
-        tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
-        tenderly_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
+        fork_add_balance(chain, master_eoa, topup, asset)
+        fork_add_balance(chain, master_safe, topup, asset)
+        fork_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
+        fork_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
         master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
         master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
         master_eoa_balance_native = get_asset_balance(
@@ -903,7 +903,7 @@ class TestFunding(OnTestnet):
                 for asset, amount in master_eoa_assets.items():
                     amount = int(amount)
                     # The sum of requirements for Master EOA and Master Safe is transferred to Master EOA.
-                    tenderly_add_balance(
+                    fork_add_balance(
                         chain=Chain(chain_str),
                         recipient=master_eoa,
                         token=asset,
@@ -1143,7 +1143,7 @@ class TestFunding(OnTestnet):
             assert not diff, diff
 
         # User funds the Master Safe with exactly the amount requested by the agent
-        tenderly_add_balance(
+        fork_add_balance(
             chain=chain1,
             recipient=master_safes[chain1],
             token=ZERO_ADDRESS,

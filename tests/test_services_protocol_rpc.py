@@ -11,8 +11,6 @@ This is a critical bug fix to ensure users can configure custom RPC providers
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from operate.operate_types import Chain
 from operate.services.protocol import StakingManager
 
@@ -123,23 +121,3 @@ class TestOnChainManagerCustomRPC:
         mock_staking_manager_class.assert_called_with(
             chain=Chain.GNOSIS, rpc=custom_rpc
         )
-
-
-@pytest.mark.integration
-class TestRPCIntegrationWithFundingManager:
-    """Integration test to verify funding manager uses correct RPC for staking operations."""
-
-    def test_funding_manager_staking_operations_use_service_rpc(
-        self, tmp_path: object
-    ) -> None:
-        """
-        Test that FundingManager creates StakingManager with service's custom RPC.
-
-        This is an integration test that verifies the full flow:
-        1. Service has custom RPC in chain_configs
-        2. FundingManager computes asset requirements
-        3. StakingManager is created with the service's custom RPC
-        """
-        # This test will be implemented after the fix
-        # For now, it serves as documentation of expected behavior
-        pytest.skip("Integration test to be implemented after fix")

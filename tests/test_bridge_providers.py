@@ -58,7 +58,7 @@ from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.serialization import BigInt
 
-from tests.conftest import OnTestnet
+from tests.conftest import CASSETTE_WALLET_MNEMONIC
 from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
@@ -559,7 +559,7 @@ def get_transfer_amount(
 
 
 @pytest.mark.integration
-class TestNativeBridgeProvider(OnTestnet):
+class TestNativeBridgeProvider:
     """Tests for bridge.providers.NativeBridgeProvider class."""
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
@@ -773,7 +773,7 @@ class TestNativeBridgeProvider(OnTestnet):
 
 
 @pytest.mark.integration
-class TestProvider(OnTestnet):
+class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
     @pytest.mark.skipif(
@@ -801,7 +801,9 @@ class TestProvider(OnTestnet):
         operate.setup()
         operate.create_user_account(password=password)
         operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+        operate.wallet_manager.import_from_mnemonic(
+            LedgerType.ETHEREUM, CASSETTE_WALLET_MNEMONIC
+        )
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
         params = {
@@ -1347,7 +1349,9 @@ class TestProvider(OnTestnet):
         operate.setup()
         operate.create_user_account(password=password)
         operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+        operate.wallet_manager.import_from_mnemonic(
+            LedgerType.ETHEREUM, CASSETTE_WALLET_MNEMONIC
+        )
 
         if contract_adaptor_class is not None:
             from_chain = params["from"]["chain"]
@@ -1456,7 +1460,9 @@ class TestProvider(OnTestnet):
         operate.setup()
         operate.create_user_account(password=password)
         operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+        operate.wallet_manager.import_from_mnemonic(
+            LedgerType.ETHEREUM, CASSETTE_WALLET_MNEMONIC
+        )
 
         if contract_adaptor_class is not None:
             from_chain = params["from"]["chain"]
@@ -1539,7 +1545,7 @@ class TestProvider(OnTestnet):
 
 
 @pytest.mark.integration
-class TestRelayProviderUsdcRoutes(OnTestnet):
+class TestRelayProviderUsdcRoutes:
     """Integration tests for RelayProvider on USDC token-pair routes.
 
     These routes were previously served by LiFi as the preferred provider.

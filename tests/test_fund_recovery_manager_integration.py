@@ -44,10 +44,10 @@ from operate.services.protocol import StakingManager
 from operate.utils.gnosis import get_asset_balance
 
 from tests.conftest import (
-    OnTestnet,
+    OnFork,
     OperateTestEnv,
-    tenderly_add_balance,
-    tenderly_increase_time,
+    fork_add_balance,
+    fork_increase_time,
 )
 from tests.constants import LOGGER
 
@@ -63,8 +63,8 @@ _FUND_AMOUNT = int(1e18)
 _RECOVERY_MODULE = "operate.services.fund_recovery_manager"
 
 
-class TestFundRecoveryManagerIntegration(OnTestnet):
-    """Integration tests for FundRecoveryManager against live Tenderly forks."""
+class TestFundRecoveryManagerIntegration(OnFork):
+    """Integration tests for FundRecoveryManager against forks."""
 
     @pytest.mark.integration
     @pytest.mark.flaky(reruns=2)
@@ -75,8 +75,8 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
         - Funded Master EOA + Master Safe on Gnosis and Optimism
         - A Trader service created (not yet deployed) — gnosis chain only
 
-        Note: One external call is patched because Tenderly virtual forks are
-        not indexed by public APIs:
+        Note: One external call is patched because forks are not indexed by
+        public APIs:
         - _fetch_services_from_subgraph: The subgraph doesn't index fork services.
           The on-chain mint-log sweep is checked separately against that mock,
           started at the fork's pre-deploy block instead of the registry's deployment.
@@ -148,7 +148,7 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
 
             # Fund each agent address with native
             for agent_address in service.agent_addresses:
-                tenderly_add_balance(chain, agent_address, _FUND_AMOUNT, ZERO_ADDRESS)
+                fork_add_balance(chain, agent_address, _FUND_AMOUNT, ZERO_ADDRESS)
                 LOGGER.info(
                     "Funded agent %s on %s: %s wei",
                     agent_address,
@@ -159,18 +159,18 @@ class TestFundRecoveryManagerIntegration(OnTestnet):
             # Fund service safe with native + OLAS
             service_safe = chain_config.chain_data.multisig
             assert service_safe is not None, f"Service safe not set for {chain}"
-            tenderly_add_balance(chain, service_safe, _FUND_AMOUNT, ZERO_ADDRESS)
-            tenderly_add_balance(chain, service_safe, _FUND_AMOUNT, OLAS[chain])
+            fork_add_balance(chain, service_safe, _FUND_AMOUNT, ZERO_ADDRESS)
+            fork_add_balance(chain, service_safe, _FUND_AMOUNT, OLAS[chain])
             LOGGER.info("Funded service safe %s on %s", service_safe, chain)
 
             # Advance time to clear staking lock periods
-            tenderly_increase_time(chain)
+            fork_increase_time(chain)
 
         def _mock_fetch_subgraph(url: str, eoa_address: str) -> t.List[int]:
-            """Return known on-chain service IDs for Tenderly fork testing.
+            """Return known on-chain service IDs for fork testing.
 
-            The real Gnosis subgraph doesn't index services minted on a Tenderly
-            virtual fork.  We look up the chain by matching the subgraph URL.
+            The real Gnosis subgraph doesn't index services minted on a fork.
+            We look up the chain by matching the subgraph URL.
             """
             from operate.services.fund_recovery_manager import SUBGRAPH_URLS
 

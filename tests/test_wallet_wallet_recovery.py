@@ -47,16 +47,16 @@ from operate.wallet.wallet_recovery_manager import (
 )
 
 from tests.conftest import (
-    OnTestnet,
+    OnFork,
     OperateTestEnv,
-    tenderly_add_balance,
-    tenderly_increase_time,
+    fork_add_balance,
+    fork_increase_time,
 )
 from tests.constants import OPERATE_TEST
 
 
 @pytest.mark.integration
-class TestWalletRecovery(OnTestnet):
+class TestWalletRecovery(OnFork):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
     @staticmethod
@@ -89,11 +89,9 @@ class TestWalletRecovery(OnTestnet):
             service = operate.service_manager().load(service_config_id)
             for chain_str in service.chain_configs.keys():
                 chain = Chain(chain_str)
-                tenderly_increase_time(chain)
+                fork_increase_time(chain)
                 for address in new_addresses.values():
-                    tenderly_add_balance(
-                        chain=chain, recipient=address, token=ZERO_ADDRESS
-                    )
+                    fork_add_balance(chain=chain, recipient=address, token=ZERO_ADDRESS)
 
             operate.service_manager().deploy_service_onchain_from_safe(
                 service_config_id
@@ -938,7 +936,7 @@ class TestWalletRecovery(OnTestnet):
                 for chain_str in chains_str_1:
                     chain = Chain(chain_str)
                     ledger_api = get_default_ledger_api(chain)
-                    tenderly_add_balance(chain, backup_owner2)
+                    fork_add_balance(chain, backup_owner2)
                     for safe in item["current_wallet"]["safes"][chain_str].keys():
                         swap_owner(
                             ledger_api=ledger_api,
