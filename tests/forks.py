@@ -20,6 +20,7 @@
 """Local Anvil forks of the mainnet chains, one Docker container per chain."""
 
 import contextlib
+import logging
 import os
 import shutil
 import socket
@@ -29,20 +30,32 @@ import threading
 import time
 import typing as t
 import uuid
+from pathlib import Path
 from platform import system
 from urllib.parse import urlsplit
 
+import pytest
 import requests
 
-from operate.ledger import DEFAULT_RPCS
 from operate.operate_types import Chain
 
-ANVIL_IMAGE = "ghcr.io/foundry-rs/foundry:v1.5.1"
+ANVIL_IMAGE = Path(__file__).with_name("ANVIL_IMAGE").read_text("utf-8").strip()
 START_TIMEOUT = 180
 START_ATTEMPTS = 3
 
+_LOGGER = logging.getLogger(__name__)
+
+
+def upstream_env_var(chain: Chain) -> str:
+    """Name of the env var holding the chain's upstream RPC."""
+    return f"{chain.value.upper()}_RPC"
+
+
+# No public-RPC fallback: a rate-limited fork fails in ways that look like Anvil.
 UPSTREAM_RPCS = {
-    chain: rpc for chain, rpc in DEFAULT_RPCS.items() if chain != Chain.SOLANA
+    chain: os.environ[upstream_env_var(chain)]
+    for chain in Chain
+    if chain != Chain.SOLANA and os.environ.get(upstream_env_var(chain))
 }
 
 # The container exits when Anvil does, and closing stdin stops Anvil, so a killed
@@ -77,6 +90,18 @@ def json_rpc(url: str, method: str, *params: t.Any, timeout: int = 60) -> t.Any:
     if "error" in body:
         raise RuntimeError(f"{method} failed: {body['error']}")
     return body.get("result")
+
+
+def redact(text: str, upstream: str) -> str:
+    """Hide the upstream RPC URL, which may carry a key, in Anvil's output."""
+    parts = urlsplit(upstream)
+    secrets = {upstream, parts.netloc, parts.path.strip("/"), parts.query}
+    secrets.update(parts.path.split("/"))
+    secrets.update(part for pair in parts.query.split("&") for part in pair.split("="))
+    for secret in sorted(secrets, key=len, reverse=True):
+        if len(secret) >= 8:
+            text = text.replace(secret, "<upstream rpc>")
+    return text
 
 
 class AnvilFork:
@@ -150,12 +175,19 @@ class AnvilFork:
 
     def _wait_until_ready(self) -> None:
         deadline = time.monotonic() + START_TIMEOUT
+        last_error: t.Optional[Exception] = None
         while time.monotonic() < deadline:
             if self._process.poll() is not None:
                 raise AnvilExited(self._failure("exited"))
             try:
                 chain_id = int(json_rpc(self.url, "eth_chainId", timeout=5), 16)
-            except (requests.RequestException, RuntimeError, TypeError, ValueError):
+            except (
+                requests.RequestException,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as e:
+                last_error = e
                 time.sleep(0.2)
                 continue
             if chain_id != self.chain.id:
@@ -164,21 +196,17 @@ class AnvilFork:
                     f"expected {self.chain.id}: check its upstream RPC."
                 )
             return
-        raise RuntimeError(self._failure("did not start"))
+        raise RuntimeError(
+            self._failure(f"did not start within {START_TIMEOUT}s")
+            + f"\nlast readiness error: {redact(repr(last_error), self._upstream)}"
+        )
 
     def _failure(self, what: str) -> str:
         self._output.seek(0)
         output = self._output.read().decode(errors="replace")
-        upstream = urlsplit(self._upstream)
-        for secret in (
-            self._upstream,
-            upstream.netloc,
-            upstream.path.strip("/"),
-            upstream.query,
-        ):
-            if len(secret) >= 8:
-                output = output.replace(secret, "<upstream rpc>")
-        return f"Anvil fork of {self.chain.value} {what}:\n{output}"
+        return f"Anvil fork of {self.chain.value} {what}:\n" + redact(
+            output, self._upstream
+        )
 
     def refork(self) -> None:
         """Drop all state and fork again from the latest upstream block."""
@@ -186,17 +214,26 @@ class AnvilFork:
 
     def stop(self) -> None:
         """Remove the container and its volumes."""
-        subprocess.run(  # nosec B603, B607
+        removal = subprocess.run(  # nosec B603, B607
             ["docker", "rm", "--force", "--volumes", self._name],
             capture_output=True,
+            text=True,
             check=False,
         )
+        if removal.returncode and "No such container" not in removal.stderr:
+            _LOGGER.warning(
+                "docker rm %s exited with %s: %s",
+                self._name,
+                removal.returncode,
+                removal.stderr.strip(),
+            )
         try:
             if self._process.stdin is not None:
                 self._process.stdin.close()
             try:
                 self._process.wait(timeout=60)
             except subprocess.TimeoutExpired:
+                _LOGGER.warning("docker run %s did not exit; killing it", self._name)
                 self._process.kill()
                 self._process.wait()
         finally:
@@ -215,7 +252,12 @@ class AnvilForks:
     def __getitem__(self, chain: Chain) -> str:
         """Fork RPC URL of the chain, with clean state for the current test."""
         if chain not in UPSTREAM_RPCS:
-            raise KeyError(f"No fork is available for {chain.value}.")
+            if chain == Chain.SOLANA:
+                raise KeyError(f"No fork is available for {chain.value}.")
+            pytest.skip(
+                f"{upstream_env_var(chain)} is not set, so {chain.value} cannot "
+                "be forked."
+            )
         with self._lock:
             if chain not in self._clean:
                 self._forks[chain] = self._clean_fork(chain)
@@ -228,7 +270,12 @@ class AnvilForks:
             try:
                 fork.refork()
                 return fork
-            except (requests.RequestException, RuntimeError):
+            except (requests.RequestException, RuntimeError) as error:
+                _LOGGER.warning(
+                    "The fork of %s did not re-fork (%s); starting a new container",
+                    chain.value,
+                    redact(repr(error), UPSTREAM_RPCS[chain]),
+                )
                 with contextlib.suppress(Exception):
                     fork.stop()
         return AnvilFork(chain, UPSTREAM_RPCS[chain])
@@ -259,4 +306,6 @@ class AnvilForks:
             self._forks.clear()
             self._clean.clear()
         if errors:
-            raise errors[0]
+            raise RuntimeError(
+                "; ".join(f"{type(e).__name__}: {e}" for e in errors)
+            ) from errors[0]

@@ -136,7 +136,7 @@ jobs:
 
       - name: Pull the Anvil image for fork tests
         if: runner.os == 'Linux'
-        run: docker pull "$(sed -n 's/^ANVIL_IMAGE = "\(.*\)"$/\1/p' tests/forks.py)"
+        run: docker pull "$(cat tests/ANVIL_IMAGE)"
 
       - name: Run integration tests
         env:

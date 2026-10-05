@@ -25,8 +25,9 @@ Three kinds, all marked `integration`. **Run selectively.**
 | Cassette replays (`vcr`) | nothing | bridge execution status |
 
 Mainnet RPCs come from the usual `*_RPC` env vars (`GNOSIS_RPC`,
-`BASE_RPC`, `OPTIMISM_RPC`, `ETHEREUM_RPC`, `POLYGON_RPC`), falling
-back to the public defaults in `operate/ledger/__init__.py`.
+`BASE_RPC`, `OPTIMISM_RPC`, `ETHEREUM_RPC`, `POLYGON_RPC`,
+`ROBINHOOD_RPC`). Live tests fall back to the public defaults in
+`operate/ledger/__init__.py`; fork tests do not, see below.
 
 ```bash
 uv run tox -e integration-tests -- path/to/test -v
@@ -46,7 +47,7 @@ uv run tox -e integration-tests -- path/to/test -v
 Tests inheriting `OnFork` (in [tests/conftest.py](tests/conftest.py))
 send real transactions to local Anvil forks of mainnet. Docker is the
 only requirement: pytest starts one container per chain on first use
-(image pinned as `ANVIL_IMAGE` in [tests/forks.py](tests/forks.py)),
+(image pinned in [tests/ANVIL_IMAGE](tests/ANVIL_IMAGE)),
 per xdist worker, and removes them at session end.
 
 - Each test starts from a fresh fork of the latest upstream block, so
@@ -56,6 +57,9 @@ per xdist worker, and removes them at session end.
   `fork_increase_time` to set up state.
 - A chain the test never looks up is not forked, and never falls
   through to the live RPC.
+- A chain whose `*_RPC` variable is unset is not forked either: the
+  test skips, naming the variable. Public RPCs rate-limit forks in
+  ways that look like Anvil failures.
 - Containers carry the label `operate-test-fork`
   (`docker ps --filter label=operate-test-fork`).
 - In CI they run on Linux only.

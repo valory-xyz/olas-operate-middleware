@@ -28,9 +28,7 @@ See https://docs.pytest.org/en/stable/reference/fixtures.html
 """
 
 import itertools
-import json
 import random
-import re
 import string
 import tempfile
 import typing as t
@@ -68,6 +66,7 @@ from operate.wallet.master import MasterWalletManager
 
 from tests.constants import CHAINS_TO_TEST, OPERATE_TEST, RUNNING_IN_CI
 from tests.forks import AnvilForks, json_rpc
+from tests.vcr_matchers import MATCH_ON, rpc_body, rpc_uri
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -248,64 +247,7 @@ def password() -> str:
 
 
 def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-def]
-    """Register cassette matchers that ignore the RPC host but check what is requested."""
-    chain_keywords = {
-        "arbitrum": ["arbitrum", "arb"],
-        "base": ["base"],
-        "celo": ["celo"],
-        "ethereum": ["ethereum", "eth-mainnet", "eth"],
-        "gnosis": ["gnosis", "xdai"],
-        "mode": ["mode"],
-        "optimism": ["optimism", "op-mainnet", "op"],
-        "polygon": ["polygon", "matic"],
-        "solana": ["solana"],
-    }
-
-    def _infer_chain_from_uri(uri: str) -> t.Optional[str]:
-        """Infer the chain an RPC URI serves."""
-        uri_lower = uri.lower()
-        for chain_name, keywords in chain_keywords.items():
-            if any(keyword in uri_lower for keyword in keywords):
-                return chain_name
-        return None
-
-    def _rpc_calls(request: t.Any) -> t.Optional[t.List[t.Tuple[t.Any, t.Any]]]:
-        """(method, params) of each JSON-RPC call in the body, None if not JSON-RPC."""
-        try:
-            payload = json.loads(request.body)
-        except (TypeError, ValueError):
-            return None
-        calls = payload if isinstance(payload, list) else [payload]
-        if not calls or not all(
-            isinstance(call, dict) and call.get("jsonrpc") == "2.0" for call in calls
-        ):
-            return None
-        return [(call.get("method"), call.get("params")) for call in calls]
-
-    evm_address = re.compile(rb"0x[0-9a-fA-F]{40}")
-
-    def _lowercase_evm_addresses(body: t.Optional[bytes]) -> bytes:
-        """Make the comparison insensitive to address checksum casing."""
-        return evm_address.sub(lambda match: match.group().lower(), body or b"")
-
-    def rpc_uri(request_1: t.Any, request_2: t.Any) -> bool:
-        """JSON-RPC requests match on chain, any other request on the exact URI."""
-        if _rpc_calls(request_1) is not None and _rpc_calls(request_2) is not None:
-            chain_1 = _infer_chain_from_uri(request_1.uri)
-            chain_2 = _infer_chain_from_uri(request_2.uri)
-            if chain_1 is not None and chain_2 is not None:
-                return chain_1 == chain_2
-        return request_1.uri == request_2.uri
-
-    def rpc_body(request_1: t.Any, request_2: t.Any) -> bool:
-        """JSON-RPC requests match on method and params, any other on the body."""
-        calls_1, calls_2 = _rpc_calls(request_1), _rpc_calls(request_2)
-        if calls_1 is not None and calls_2 is not None:
-            return calls_1 == calls_2
-        return _lowercase_evm_addresses(request_1.body) == _lowercase_evm_addresses(
-            request_2.body
-        )
-
+    """Register the cassette matchers."""
     vcr.matchers["rpc_uri"] = rpc_uri
     vcr.matchers["rpc_body"] = rpc_body
 
@@ -313,9 +255,7 @@ def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-
 @pytest.fixture(scope="module")
 def vcr_config() -> t.Dict[str, t.Any]:
     """VCR configuration for deterministic JSON-RPC request matching."""
-    return {
-        "match_on": ["method", "rpc_uri", "rpc_body"],
-    }
+    return {"match_on": MATCH_ON}
 
 
 # Unfunded throwaway wallet, so the requests of cassette-backed tests are reproducible.

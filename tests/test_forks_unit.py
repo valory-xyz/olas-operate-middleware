@@ -26,7 +26,7 @@ import pytest
 
 from operate.operate_types import Chain
 
-from tests.forks import AnvilForks
+from tests.forks import AnvilForks, redact
 
 
 def _fork(chain: Chain, _upstream: str) -> MagicMock:
@@ -98,9 +98,18 @@ class TestAnvilForks:
         assert forks.peek(Chain.GNOSIS) == unforked
 
     def test_unsupported_chain_raises(self, anvil_fork: MagicMock) -> None:
-        """A chain without an upstream is never forked."""
+        """A chain that cannot be forked is an error, not a skip."""
         with pytest.raises(KeyError, match="No fork is available for solana"):
             _ = AnvilForks()[Chain.SOLANA]
+        anvil_fork.assert_not_called()
+
+    def test_unset_upstream_skips(
+        self, anvil_fork: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without its RPC variable a chain is not forked from a public RPC."""
+        monkeypatch.setattr("tests.forks.UPSTREAM_RPCS", {})
+        with pytest.raises(pytest.skip.Exception, match="GNOSIS_RPC is not set"):
+            _ = AnvilForks()[Chain.GNOSIS]
         anvil_fork.assert_not_called()
 
     def test_stop_removes_every_container(self, anvil_fork: MagicMock) -> None:
@@ -110,10 +119,34 @@ class TestAnvilForks:
         started = [_started(forks, Chain.GNOSIS), _started(forks, Chain.BASE)]
         started[0].stop.side_effect = RuntimeError("stuck")
 
-        with pytest.raises(RuntimeError, match="stuck"):
+        started[1].stop.side_effect = RuntimeError("also stuck")
+
+        with pytest.raises(RuntimeError, match="stuck.*also stuck"):
             forks.stop()
 
         assert anvil_fork.call_count == 2
         for fork in started:
             fork.stop.assert_called_once_with()
         assert forks.peek(Chain.GNOSIS) == "http://unforked-gnosis.invalid"
+
+
+class TestRedact:
+    """Tests for redact."""
+
+    def test_hides_every_part_of_the_upstream_url(self) -> None:
+        """The host, a keyed path and the query never reach the output."""
+        upstream = "https://rpc.example.com/v2/secretkey123?token=abcdefgh"
+        text = (
+            f"forking {upstream}\nretry https://rpc.example.com\n"
+            "path secretkey123 seen; query token=abcdefgh seen"
+        )
+
+        redacted = redact(text, upstream)
+
+        for secret in ("rpc.example.com", "secretkey123", "token=abcdefgh"):
+            assert secret not in redacted
+        assert "<upstream rpc>" in redacted
+
+    def test_leaves_short_parts_alone(self) -> None:
+        """Short path parts like 'rpc' are not scrubbed out of unrelated text."""
+        assert redact("rpc error", "https://node.example.com/rpc") == "rpc error"
