@@ -124,6 +124,7 @@ jobs:
       MODE_RPC: ${{ secrets.MODE_RPC }}
       OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
       POLYGON_RPC: ${{ secrets.POLYGON_RPC }}
+      ROBINHOOD_RPC: ${{ secrets.ROBINHOOD_RPC }}
 
     steps:
       - uses: actions/checkout@v4
