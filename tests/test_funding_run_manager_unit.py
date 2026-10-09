@@ -360,14 +360,14 @@ def _no_rpc() -> t.Iterator[None]:
 
 
 @pytest.fixture
-def buffered() -> None:
+def _buffered() -> None:
     """Opt a test into the real FUNDING_RUN_BUFFER_BPS."""
 
 
 @pytest.fixture(autouse=True)
 def _no_buffer(request: pytest.FixtureRequest) -> t.Iterator[None]:
-    """Keep quote arithmetic exact unless the test asks for `buffered`."""
-    if "buffered" in request.fixturenames:
+    """Keep quote arithmetic exact unless the test asks for `_buffered`."""
+    if "_buffered" in request.fixturenames:
         yield
         return
     with patch.dict(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", {"bridge": 0, "swap": 0}):
@@ -957,10 +957,9 @@ def _pusd_on_polygon(
 class TestExactPath:
     """Same token, same chain, single target: straight into the Master Safe."""
 
-    def test_required_token_deposits_exact_amount_to_safe(
-        self, tmp_path: Path, buffered: None
-    ) -> None:
-        """pUSD on Polygon: the Safe address, the exact amount, nothing to quote."""
+    @pytest.mark.usefixtures("_buffered")
+    def test_required_token_deposits_exact_amount_to_safe(self, tmp_path: Path) -> None:
+        """The pUSD on Polygon run: the Safe address, the exact amount, nothing to quote."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
 
         run = _pusd_on_polygon(env)
@@ -1024,9 +1023,8 @@ class TestExactPath:
         assert body["source"]["deposit_address"] == EOA
         assert STEP_SAFE in [s.id for s in run.steps]
 
-    def test_signer_gas_exact_run_keeps_the_master_eoa(
-        self, tmp_path: Path, buffered: None
-    ) -> None:
+    @pytest.mark.usefixtures("_buffered")
+    def test_signer_gas_exact_run_keeps_the_master_eoa(self, tmp_path: Path) -> None:
         """Fund Pearl Wallet: no buffer, but the top-up still lands on the Signer."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
 
@@ -1113,7 +1111,7 @@ class TestBuffer:
     """Quote + cumulative per-step buffer; the final check uses the raw quote."""
 
     @pytest.mark.parametrize(
-        "make_run,bps",
+        ("make_run", "bps"),
         [
             # Base USDC -> Polygon USDC: bridge legs only.
             (lambda env: _deposit_run(env, amounts={POLYGON_USDC: 50}), 100),
@@ -1132,10 +1130,10 @@ class TestBuffer:
         ],
         ids=["bridge", "swap", "bridge+swap"],
     )
+    @pytest.mark.usefixtures("_buffered")
     def test_required_includes_cumulative_buffer(
         self,
         tmp_path: Path,
-        buffered: None,
         make_run: t.Callable[[Env], FundingRun],
         bps: int,
     ) -> None:
@@ -1152,9 +1150,10 @@ class TestBuffer:
         assert body["quote"]["required_amount"] == str(_required(run))
         assert body["quote"]["exact"] is False
 
+    @pytest.mark.usefixtures("_buffered")
     @pytest.mark.parametrize("within", [True, False])
     def test_final_requote_rise_absorbed_by_buffer(
-        self, tmp_path: Path, buffered: None, within: bool
+        self, tmp_path: Path, within: bool
     ) -> None:
         """Sending the ask proceeds unless the raw quote rose past the buffer."""
         env = Env(tmp_path)
@@ -1187,7 +1186,8 @@ class TestBuffer:
 
         run = env.reload(run)
 
-        assert run.exact is None and run.buffer_amount is None
+        assert run.exact is None
+        assert run.buffer_amount is None
         assert env.manager.run_json(run)["quote"]["exact"] is False
         env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
         env.manager.tick()
@@ -2053,9 +2053,8 @@ def _overfunded(env: Env, extra: int, **kwargs: t.Any) -> FundingRun:
 class TestSweep:
     """Everything received beyond the raw quote reaches the destination as native."""
 
-    def test_surplus_resizes_native_leg_to_exact_input(
-        self, tmp_path: Path, buffered: None
-    ) -> None:
+    @pytest.mark.usefixtures("_buffered")
+    def test_surplus_resizes_native_leg_to_exact_input(self, tmp_path: Path) -> None:
         """Unused buffer + overpayment ride the native leg; the gas cap does not."""
         env = Env(tmp_path)
         run = _overfunded(env, extra=1_000)
