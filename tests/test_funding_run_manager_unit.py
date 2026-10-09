@@ -370,7 +370,8 @@ def _no_buffer(request: pytest.FixtureRequest) -> t.Iterator[None]:
     if "_buffered" in request.fixturenames:
         yield
         return
-    with patch.dict(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", {"bridge": 0, "swap": 0}):
+    no_buffer = {"bridge": 0, "swap": 0}
+    with patch(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", no_buffer, create=True):
         yield
 
 
@@ -1122,7 +1123,8 @@ class TestExactPath:
 
 def _raw_required(tmp_path: Path, make_run: t.Callable[[Env], FundingRun]) -> int:
     """Required amount of the same run without a buffer, minus the gas cap."""
-    with patch.dict(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", {"bridge": 0, "swap": 0}):
+    no_buffer = {"bridge": 0, "swap": 0}
+    with patch(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", no_buffer, create=True):
         run = make_run(Env(tmp_path / "raw"))
     return _required(run) - int(run.usdc_gas_cap or 0)
 
