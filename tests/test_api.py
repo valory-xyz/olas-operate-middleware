@@ -985,7 +985,12 @@ class TestFundingRunRoutes:
         wallet = mock.Mock(address="0x" + "a" * 40, safes={Chain.POLYGON: safe})
         wallet.get_balance.return_value = 0
         pusd = PUSD[Chain.POLYGON]
-        with mock.patch("operate.cli.FundingRunManager._wallet", return_value=wallet):
+        with (
+            mock.patch("operate.cli.FundingRunManager._wallet", return_value=wallet),
+            mock.patch(
+                "operate.funding_run.manager.get_asset_decimals", return_value=6
+            ),
+        ):
             response = client.post(
                 "/api/funding_run",
                 json={
