@@ -86,6 +86,13 @@ ON_CHAIN_INTERACT_TIMEOUT = 600.0
 ON_CHAIN_INTERACT_RETRIES = 60
 ON_CHAIN_INTERACT_SLEEP = 5.0
 BRIDGE_GAS_ESTIMATE_MULTIPLIER = 1.2
+# The node's estimate for the type-4 clearing tx can miss the L1 data cost
+# (Arbitrum), and repricing keeps the same estimate, so it never lands.
+CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER = 1.5
+# Clearing runs under the funding-run lock: keep the worst case (retries x
+# ON_CHAIN_INTERACT_SLEEP, then the receipt wait) under its 30 s LOCK_TIMEOUT.
+CLEAR_DELEGATION_RETRIES = 3
+CLEAR_DELEGATION_TIMEOUT = 10.0
 MIN_PASSWORD_LENGTH = 8
 DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS = 300  # Seconds to wait after an agent has been funded during which it will not be asked for fund requirements again
 
