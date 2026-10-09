@@ -120,7 +120,7 @@ class FakeProvider:
         """Source amounts: 1:1 in the from token, plus GAS native."""
         chain = request.params["from"]["chain"]
         token = request.params["from"]["token"]
-        amount = request.params["to"]["amount"]
+        amount = request.params["from"].get("amount", request.params["to"]["amount"])
         result = {NATIVE: GAS}
         result[token] = result.get(token, 0) + amount
         return {chain: {EOA: result}}
@@ -261,13 +261,14 @@ class Env:
     def __init__(self, tmp_path: Path, safes: t.Optional[t.Dict] = None) -> None:
         """Wire a manager to fakes under `tmp_path`."""
         self.balances: t.Dict[t.Tuple[Chain, str], int] = {}
+        self.safe_balances: t.Dict[t.Tuple[Chain, str], int] = {}
         self.wallet = MagicMock()
         self.wallet.address = EOA
         self.wallet.safes = safes if safes is not None else {}
         self.wallet.get_balance.side_effect = (
-            lambda chain, asset=NATIVE, from_safe=True: self.balances.get(
-                (chain, asset), 0
-            )
+            lambda chain, asset=NATIVE, from_safe=True: (
+                self.safe_balances if from_safe else self.balances
+            ).get((chain, asset), 0)
         )
         self.wallet.create_safe_and_transfer_excess.return_value = {
             "status": CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED,
@@ -355,6 +356,22 @@ def _no_rpc() -> t.Iterator[None]:
         patch(f"{MODULE}.get_default_ledger_api", return_value=ledger_api),
         patch(f"{MODULE}.get_asset_decimals", return_value=6),
     ):
+        yield
+
+
+@pytest.fixture
+def _buffered() -> None:
+    """Opt a test into the real FUNDING_RUN_BUFFER_BPS."""
+
+
+@pytest.fixture(autouse=True)
+def _no_buffer(request: pytest.FixtureRequest) -> t.Iterator[None]:
+    """Keep quote arithmetic exact unless the test asks for `_buffered`."""
+    if "_buffered" in request.fixturenames:
+        yield
+        return
+    no_buffer = {"bridge": 0, "swap": 0}
+    with patch(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", no_buffer, create=True):
         yield
 
 
@@ -920,6 +937,306 @@ class TestQuote:
         assert run.step(f"{SWAP_STEP_PREFIX}{OLAS[Chain.GNOSIS]}").status == (
             FundingStepStatus.DONE
         )
+
+
+# ---------------------------------------------------------------------------
+# Exact path: the single required token, funded as is
+# ---------------------------------------------------------------------------
+
+
+def _pusd_on_polygon(
+    env: Env, amounts: t.Optional[t.Dict[str, int]] = None
+) -> FundingRun:
+    return _deposit_run(
+        env,
+        source_chain="polygon",
+        source_token=POLYGON_PUSD.lower(),
+        amounts=amounts or {POLYGON_PUSD: 10},
+    )
+
+
+class TestExactPath:
+    """Same token, same chain, single target: straight into the Master Safe."""
+
+    @pytest.mark.usefixtures("_buffered")
+    def test_required_token_deposits_exact_amount_to_safe(self, tmp_path: Path) -> None:
+        """The pUSD on Polygon run: the Safe address, the exact amount, nothing to quote."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+
+        run = _pusd_on_polygon(env)
+        body = env.manager.run_json(run)
+
+        assert run.source_token == POLYGON_PUSD
+        assert body["source"]["deposit_address"] == SAFE
+        assert body["quote"]["exact"] is True
+        assert body["quote"]["required_amount"] == "10"
+        assert [s.id for s in run.steps] == [STEP_RECEIVE]
+        assert env.bridge.quoted == []
+
+    def test_completes_on_safe_receipt_without_transactions(
+        self, tmp_path: Path
+    ) -> None:
+        """Only growth of the Safe above its creation balance counts."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+        env.safe_balances[(Chain.POLYGON, POLYGON_PUSD)] = 5
+        run = _pusd_on_polygon(env)
+
+        env.balances[(Chain.POLYGON, POLYGON_PUSD)] = 10  # Master EOA: ignored
+        env.safe_balances[(Chain.POLYGON, POLYGON_PUSD)] = 14
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.AWAITING_DEPOSIT
+        assert env.manager.run_json(env.reload(run))["quote"]["received_amount"] == "9"
+
+        env.safe_balances[(Chain.POLYGON, POLYGON_PUSD)] = 15
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert [s.id for s in run.steps] == [STEP_RECEIVE]
+        assert env.bridge.executed == []
+        env.wallet.create_safe_and_transfer_excess.assert_not_called()
+        env.wallet.clear_delegation.assert_not_called()
+        assert (
+            env.manager._pointer().pending_clear_run_ids == []
+        )  # pylint: disable=protected-access
+
+    def test_onboard_single_requirement_is_exact(self, tmp_path: Path) -> None:
+        """A service needing only pUSD on Polygon is funded with pUSD into the Safe."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+        env.funding_manager.destination_targets.return_value = {
+            POLYGON_PUSD: 10,
+            NATIVE: 0,
+        }
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=POLYGON_PUSD,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        assert run.exact is True
+        assert run.required_amount == 10
+        assert env.manager.run_json(run)["source"]["deposit_address"] == SAFE
+
+    def test_listed_token_is_exact_too(self, tmp_path: Path) -> None:
+        """A single native target funded with native on its chain."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+
+        run = _deposit_run(
+            env, source_chain="polygon", source_token=NATIVE, amounts={NATIVE: 10}
+        )
+
+        assert run.exact is True
+        assert env.manager.run_json(run)["source"]["deposit_address"] == SAFE
+        assert run.required_amount == 10
+
+    def test_without_safe_follows_standard_flow(self, tmp_path: Path) -> None:
+        """No Master Safe on the chain: deposit to the Master EOA, as today."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(
+            env, source_chain="polygon", source_token=NATIVE, amounts={NATIVE: 10}
+        )
+        body = env.manager.run_json(run)
+
+        assert not run.exact
+        assert body["quote"]["exact"] is False
+        assert body["source"]["deposit_address"] == EOA
+        assert STEP_SAFE in [s.id for s in run.steps]
+
+    @pytest.mark.usefixtures("_buffered")
+    def test_signer_gas_exact_run_keeps_the_master_eoa(self, tmp_path: Path) -> None:
+        """Fund Pearl Wallet: no buffer, but the top-up still lands on the Signer."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+
+        run = env.manager.create_run(
+            mode="signer_gas",
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+        )
+
+        assert run.exact is True
+        assert run.required_amount == POLYGON_RESERVE
+        assert env.manager.run_json(run)["source"]["deposit_address"] == EOA
+        assert [s.id for s in run.steps] == [STEP_RECEIVE]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"amounts": {POLYGON_PUSD: 10, POLYGON_OLAS: 1}},
+            {"source_chain": "base"},
+            {"safes": {}},
+        ],
+        ids=["two-targets", "cross-chain", "no-safe"],
+    )
+    def test_unlisted_token_rejected_unless_exact(
+        self, tmp_path: Path, kwargs: t.Dict[str, t.Any]
+    ) -> None:
+        """The required-token source is only accepted where it needs no conversion."""
+        safes = {Chain.BASE: SAFE, Chain.POLYGON: SAFE}
+        env = Env(tmp_path, safes=kwargs.get("safes", safes))
+
+        with pytest.raises(FundingRunError, match="Unsupported funding source"):
+            env.manager.create_run(
+                mode="deposit",
+                source_chain=kwargs.get("source_chain", "polygon"),
+                source_token=POLYGON_PUSD,
+                destination_chain="polygon",
+                deposit_amounts=kwargs.get("amounts", {POLYGON_PUSD: 10}),
+            )
+
+    @pytest.mark.parametrize("token", [POLYGON_PUSD, "not-an-address"])
+    def test_unlisted_token_rejected_in_signer_gas(
+        self, tmp_path: Path, token: str
+    ) -> None:
+        """Signer gas only takes listed tokens; garbage never reaches the wallet."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+
+        with pytest.raises(FundingRunError, match="Unsupported funding source"):
+            env.manager.create_run(
+                mode="signer_gas",
+                source_chain="polygon",
+                source_token=token,
+                destination_chain="polygon",
+            )
+
+    def test_never_requoted(self, tmp_path: Path) -> None:
+        """Neither a stale quote nor POST /refresh_quote touches an exact run."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+        run = _pusd_on_polygon(env)
+        run.quoted_at = 1
+        run.store()
+
+        env.manager.tick()
+        refreshed = env.manager.refresh_quote(run.id)
+
+        assert env.reload(run).quoted_at == 1
+        assert refreshed.quoted_at == 1
+        assert env.bridge.quoted == []
+
+
+# ---------------------------------------------------------------------------
+# Buffer
+# ---------------------------------------------------------------------------
+
+
+def _raw_required(tmp_path: Path, make_run: t.Callable[[Env], FundingRun]) -> int:
+    """Required amount of the same run without a buffer, minus the gas cap."""
+    no_buffer = {"bridge": 0, "swap": 0}
+    with patch(f"{MODULE}.FUNDING_RUN_BUFFER_BPS", no_buffer, create=True):
+        run = make_run(Env(tmp_path / "raw"))
+    return _required(run) - int(run.usdc_gas_cap or 0)
+
+
+class TestBuffer:
+    """Quote + cumulative per-step buffer; the final check uses the raw quote."""
+
+    @pytest.mark.parametrize(
+        ("make_run", "bps"),
+        [
+            # Base USDC -> Polygon USDC: bridge legs only.
+            (lambda env: _deposit_run(env, amounts={POLYGON_USDC: 50}), 100),
+            # Polygon POL -> Polygon OLAS: a swap, no source leg.
+            (
+                lambda env: _deposit_run(
+                    env,
+                    source_chain="polygon",
+                    source_token=NATIVE,
+                    amounts={POLYGON_OLAS: 40},
+                ),
+                150,
+            ),
+            # Base USDC -> Polygon OLAS + pUSD: bridge and swaps.
+            (_deposit_run, 250),
+        ],
+        ids=["bridge", "swap", "bridge+swap"],
+    )
+    @pytest.mark.usefixtures("_buffered")
+    def test_required_includes_cumulative_buffer(
+        self,
+        tmp_path: Path,
+        make_run: t.Callable[[Env], FundingRun],
+        bps: int,
+    ) -> None:
+        """Each step kind present adds its bps; the gas cap is not buffered."""
+        raw = _raw_required(tmp_path, make_run)
+
+        run = make_run(Env(tmp_path))
+
+        buffer = -(-raw * bps // 10_000)
+        assert buffer > 0
+        assert run.buffer_amount == buffer
+        assert _required(run) == raw + buffer + int(run.usdc_gas_cap or 0)
+        body = Env(tmp_path).manager.run_json(run)
+        assert body["quote"]["required_amount"] == str(_required(run))
+        assert body["quote"]["exact"] is False
+
+    @pytest.mark.usefixtures("_buffered")
+    @pytest.mark.parametrize(
+        ("amount", "kinds", "swaps", "expected"),
+        [
+            (10_001, [FundingStepKind.BRIDGE], [], 101),  # 100.01 rounds up
+            (10_000, [FundingStepKind.NATIVE], [object()], 250),
+            (10_000, [FundingStepKind.CLEAR_DELEGATION], [], 0),
+        ],
+    )
+    def test_buffer_rounds_up_per_step_kind(
+        self, amount: int, kinds: t.List[FundingStepKind], swaps: t.List, expected: int
+    ) -> None:
+        """The clearing reserve leg alone is not a price-moving step."""
+        buffer = FundingRunManager._buffer(  # pylint: disable=protected-access
+            amount, kinds, swaps
+        )
+
+        assert buffer == expected
+
+    @pytest.mark.usefixtures("_buffered")
+    @pytest.mark.parametrize(
+        ("extra", "within"),
+        [(-1, True), (0, True), (1, False)],
+        ids=["below-buffer", "exactly-buffer", "past-buffer"],
+    )
+    def test_final_requote_rise_absorbed_by_buffer(
+        self, tmp_path: Path, extra: int, within: bool
+    ) -> None:
+        """Sending the ask proceeds unless the raw quote rose past the buffer."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        buffer = int(run.buffer_amount or 0)
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        rise = buffer + extra
+        original = env.manager._quote  # pylint: disable=protected-access
+
+        def _bigger(r: FundingRun) -> None:
+            r.net_targets[POLYGON_OLAS] = BigInt(r.net_targets[POLYGON_OLAS] + rise)
+            original(r)
+
+        with patch.object(env.manager, "_quote", side_effect=_bigger):
+            env.manager.tick()
+
+        run = env.reload(run)
+        expected = (
+            FundingRunStatus.PROCESSING if within else FundingRunStatus.AWAITING_DEPOSIT
+        )
+        assert run.status == expected
+
+    def test_old_run_without_buffer_fields_loads(self, tmp_path: Path) -> None:
+        """Runs stored before the update load as not exact and unbuffered."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        data = json.loads(run.path.read_text())
+        del data["exact"], data["buffer_amount"]
+        run.path.write_text(json.dumps(data))
+
+        run = env.reload(run)
+
+        assert run.exact is None
+        assert run.buffer_amount is None
+        assert env.manager.run_json(run)["quote"]["exact"] is False
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        env.manager.tick()
+        assert env.reload(run).status == FundingRunStatus.PROCESSING
 
 
 # ---------------------------------------------------------------------------
@@ -1752,6 +2069,246 @@ class TestExecution:
         env.tick_until(run, FundingRunStatus.COMPLETED)
         assert seen
         assert all(seen)
+
+
+# ---------------------------------------------------------------------------
+# Leftover sweep
+# ---------------------------------------------------------------------------
+
+
+def _native_leg(run: FundingRun) -> ProviderRequest:
+    (leg,) = [
+        r
+        for r in run.source_requests
+        if r.params["to"]["chain"] == run.destination_chain
+        and r.params["to"]["token"] == NATIVE
+    ]
+    return leg
+
+
+def _overfunded(env: Env, extra: int, **kwargs: t.Any) -> FundingRun:
+    run = _deposit_run(env, **kwargs)
+    env.balances[(Chain(run.source_chain), run.source_token)] = _required(run) + extra
+    env.manager.tick()
+    run = env.reload(run)
+    assert run.status == FundingRunStatus.PROCESSING
+    return run
+
+
+class TestSweep:
+    """Everything received beyond the raw quote reaches the destination as native."""
+
+    @pytest.mark.usefixtures("_buffered")
+    def test_surplus_resizes_native_leg_to_exact_input(self, tmp_path: Path) -> None:
+        """Unused buffer + overpayment ride the native leg; the gas cap does not."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        buffer = int(run.buffer_amount or 0)
+        leg = _native_leg(run)
+        carrier_id = next(
+            r.id for r in run.source_requests if r.params["to"]["token"] == POLYGON_USDC
+        )
+        _all_succeed(env)
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        swept = _native_leg(run)
+        assert swept.id != leg.id
+        assert swept.params["from"]["amount"] == (
+            leg.params["to"]["amount"] + buffer + 1_000
+        )
+        assert swept.params["to"]["amount"] == leg.params["to"]["amount"]
+        assert carrier_id in [r.id for r in run.source_requests]
+        (_, calls, cap), _ = env.sender.prepare_batch.call_args
+        assert cap == GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
+        assert len(calls) == len(run.source_requests)
+        assert run.step(STEP_NATIVE).request_ids == [swept.id]
+        env.wallet.create_safe_and_transfer_excess.assert_called_once()
+
+    def test_no_surplus_no_requote(self, tmp_path: Path) -> None:
+        """A deposit of exactly the raw quote is sent as quoted."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=0)
+        quoted = len(env.bridge.quoted)
+        _all_succeed(env)
+
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert len(env.bridge.quoted) == quoted
+        assert not any("amount" in p["from"] for p in env.bridge.quoted)
+
+    @pytest.mark.parametrize(
+        ("held", "deposited", "swept"),
+        [(50, 0, 0), (50, 30, 30), (-10, 100, 90)],
+        ids=["held-covers-run", "overpaid-on-top", "held-part-of-run"],
+    )
+    def test_funds_held_before_the_run_are_not_swept(
+        self, tmp_path: Path, held: int, deposited: int, swept: int
+    ) -> None:
+        """Held funds pay toward the raw quote; only the deposit's leftover is swept."""
+        env = Env(tmp_path)
+        raw = _required(_deposit_run(Env(tmp_path / "probe")))
+        env.balances[(Chain.BASE, BASE_USDC)] = raw + held
+
+        run = _deposit_run(env)
+        env.balances[(Chain.BASE, BASE_USDC)] += deposited
+        _all_succeed(env)
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        leg = _native_leg(run)
+        assert leg.params["from"].get("amount", leg.params["to"]["amount"]) == (
+            leg.params["to"]["amount"] + swept
+        )
+
+    @pytest.mark.usefixtures("_buffered")
+    def test_outstanding_is_zero_once_the_deposit_is_accepted(
+        self, tmp_path: Path
+    ) -> None:
+        """A final re-quote the buffer absorbs leaves nothing owed, though below the ask."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        original = env.manager._quote  # pylint: disable=protected-access
+
+        def _bigger(r: FundingRun) -> None:
+            r.net_targets[POLYGON_OLAS] = BigInt(r.net_targets[POLYGON_OLAS] + 1)
+            original(r)
+
+        with patch.object(env.manager, "_quote", side_effect=_bigger):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert int(run.received_amount) < _required(run)
+        assert env.manager.run_json(run)["quote"]["outstanding_amount"] == "0"
+
+    def test_restart_after_the_sweep_does_not_sweep_again(self, tmp_path: Path) -> None:
+        """A new manager sends the stored swept leg, without a second exact-input quote."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        env.sender.prepare_batch.side_effect = _Crash()
+        with pytest.raises(_Crash):
+            env.manager.tick()  # the process dies after the sweep re-quote
+        swept = _native_leg(env.reload(run))
+        assert swept.params["from"]["amount"] == swept.params["to"]["amount"] + 1_000
+
+        restarted = Env(tmp_path)
+        restarted.balances.update(env.balances)
+        restarted.manager.tick()
+
+        run = restarted.reload(run)
+        assert _native_leg(run).id == swept.id
+        assert restarted.bridge.quoted == []
+        (_, calls, _), _ = restarted.sender.prepare_batch.call_args
+        assert len(calls) == len(run.source_requests)
+
+    def test_no_sweep_once_part_of_the_source_leg_was_sent(
+        self, tmp_path: Path
+    ) -> None:
+        """Only an unsent source leg is resized: what was sent already spent its share."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        carrier = next(
+            r for r in run.source_requests if r.params["to"]["token"] == POLYGON_USDC
+        )
+        env.bridge.provider.execute(carrier)
+        run.store()
+        quoted = len(env.bridge.quoted)
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert len(env.bridge.quoted) == quoted
+        assert "amount" not in _native_leg(run).params["from"]
+
+    def test_native_source_sweeps_tx_value_only(self, tmp_path: Path) -> None:
+        """A native leg spends its tx value plus the surplus; its gas stays apart."""
+        env = Env(tmp_path)
+        run = _overfunded(
+            env, extra=100, source_token=NATIVE, amounts={POLYGON_OLAS: 40}
+        )
+        leg = _native_leg(run)
+        env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_DONE
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_DONE
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        swept = _native_leg(run)
+        value = _deposit_tx(leg)["value"]
+        assert swept.params["from"]["amount"] == value + 100
+        # Native bridges are 1:1 and send to.amount.
+        assert swept.params["to"]["amount"] == value + 100
+
+    def test_same_chain_native_source_needs_no_sweep(self, tmp_path: Path) -> None:
+        """The leftover already is destination native: the Safe step moves it."""
+        env = Env(tmp_path)
+        run = _overfunded(
+            env,
+            extra=100,
+            source_chain="polygon",
+            source_token=NATIVE,
+            amounts={POLYGON_OLAS: 40},
+        )
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_DONE
+
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert not any("amount" in p["from"] for p in env.bridge.quoted)
+
+    def test_failed_sweep_quote_sends_the_quoted_leg(self, tmp_path: Path) -> None:
+        """The requested tokens still arrive if the exact-input quote fails."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        leg = _native_leg(run)
+        env.bridge.fail_quote = True
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert _native_leg(run).id == leg.id
+        assert _native_leg(run).execution_data is not None
+        assert _logged(env, "not swept")
+
+    def test_retry_keeps_the_swept_amount(self, tmp_path: Path) -> None:
+        """A retried leg is re-quoted with the same from.amount, not swept twice."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        env.sender.prepare_batch.side_effect = GasAbstractionError("bundler down")
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        swept = _native_leg(run).params["from"]["amount"]
+
+        env.sender.prepare_batch.side_effect = None
+        env.manager.retry(run.id)
+        env.manager.tick()
+
+        assert _native_leg(env.reload(run)).params["from"]["amount"] == swept
+
+    def test_signer_gas_sweeps_into_existing_safe(self, tmp_path: Path) -> None:
+        """Fund Pearl Wallet keeps the Signer reserve and moves the rest to the Safe."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+
+        run = env.manager.create_run(
+            mode="signer_gas",
+            source_chain="base",
+            source_token=NATIVE,
+            destination_chain="polygon",
+        )
+        assert STEP_SAFE in [s.id for s in run.steps]
+        leg = _native_leg(run)
+        balance = _required(run) + 100
+        env.balances[(Chain.BASE, NATIVE)] = balance
+        env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_DONE
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        swept = _native_leg(run)
+        assert swept.params["from"]["amount"] == _deposit_tx(leg)["value"] + 100
+        sent = sum(_deposit_tx(r)["value"] for r in run.source_requests)
+        assert balance - sent == GAS * len(run.source_requests)  # only gas stays
+        env.wallet.create_safe_and_transfer_excess.assert_called_once_with(
+            chain=Chain.POLYGON, backup_owner=None
+        )
 
 
 # ---------------------------------------------------------------------------

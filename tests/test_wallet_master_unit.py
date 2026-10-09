@@ -30,7 +30,14 @@ from autonomy.chain.exceptions import ChainInteractionError
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 
-from operate.constants import MSG_SAFE_CREATED_TRANSFER_FAILED, ZERO_ADDRESS
+from operate.constants import (
+    CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER,
+    CLEAR_DELEGATION_RETRIES,
+    CLEAR_DELEGATION_TIMEOUT,
+    MSG_SAFE_CREATED_TRANSFER_FAILED,
+    ZERO_ADDRESS,
+)
+from operate.funding_run.manager import LOCK_TIMEOUT
 from operate.ledger.profiles import CONTRACTS, DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import BatchResult, Transfer
@@ -2960,7 +2967,10 @@ class TestClearDelegation:
 
     @staticmethod
     def _run(
-        wallet: EthereumMasterWallet, nonces: t.List[int], builds: int
+        wallet: EthereumMasterWallet,
+        nonces: t.List[int],
+        builds: int,
+        settler_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
     ) -> t.Tuple[str, t.List[t.Dict]]:
         ledger_api = MagicMock()
         ledger_api.api.eth.get_transaction_count.side_effect = nonces
@@ -2971,6 +2981,8 @@ class TestClearDelegation:
         settler.tx_hash = "0xclear"
 
         def _settler(**kwargs: t.Any) -> MagicMock:
+            if settler_kwargs is not None:
+                settler_kwargs.update(kwargs)
             # Emulate TxSettler discarding tx_dict after nonce errors.
             for _ in range(builds):
                 built.append(kwargs["tx_builder"]())
@@ -3013,3 +3025,25 @@ class TestClearDelegation:
         assert first["authorizationList"][0].nonce == 8
         assert second["nonce"] == 9
         assert second["authorizationList"][0].nonce == 10
+
+    def test_clear_uses_gas_margin_and_short_budget(self, tmp_path: Path) -> None:
+        """The clearing tx gets its own gas margin and retry budget, not the defaults."""
+        wallet, _ = _wallet_with_real_key(tmp_path)
+        kwargs: t.Dict[str, t.Any] = {}
+
+        self._run(wallet, nonces=[7], builds=1, settler_kwargs=kwargs)
+
+        assert kwargs["gas_estimate_multiplier"] == (
+            CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER
+        )
+        assert kwargs["retries"] == CLEAR_DELEGATION_RETRIES
+        assert kwargs["timeout"] == CLEAR_DELEGATION_TIMEOUT
+
+    def test_clear_retry_budget_fits_lock_timeout(self, tmp_path: Path) -> None:
+        """Worst-case send retries plus the receipt wait fit in LOCK_TIMEOUT."""
+        wallet, _ = _wallet_with_real_key(tmp_path)
+        kwargs: t.Dict[str, t.Any] = {}
+
+        self._run(wallet, nonces=[7], builds=1, settler_kwargs=kwargs)
+
+        assert kwargs["retries"] * kwargs["sleep"] + kwargs["timeout"] < LOCK_TIMEOUT

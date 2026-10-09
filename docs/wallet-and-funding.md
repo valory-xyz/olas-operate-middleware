@@ -139,27 +139,45 @@ end up; quoting, monitoring and execution are shared:
   already holds are never netted or counted as received. Ends in the Master
   Safe.
 - `signer_gas`: the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`). Ends in
-  the Master EOA; there is no Safe step.
+  the Master EOA, and a Safe is never created. On a cross-chain run, anything
+  above the reserve moves to the Master Safe when one exists on that chain; a
+  same-chain run is exact (below) and leaves an overpayment on the Master EOA.
 
 ### Flow
 1. **Quote**, walking backwards from the net targets: destination swaps from
    a carrier token (USDC when the source is USDC, otherwise native; native
    for targets only a native Balancer pool holds, such as OLAS on Gnosis), then a
    source leg that delivers the carrier plus destination native for every
-   later step, so only the source leg ever needs gas abstraction.
+   later step, so only the source leg ever needs gas abstraction. The amount
+   asked adds a buffer per step kind present (`FUNDING_RUN_BUFFER_BPS`), so
+   price movement before the final re-quote does not ask the user for more.
+   An **exact run** (a single net target funded with that token on its own
+   chain; for `onboard`/`deposit`, only with the Master Safe present) skips
+   all of this: the user sends exactly the target, and RECEIVE is its only
+   step. It goes straight to the Master Safe, except on a `signer_gas` run,
+   which deposits to the Master EOA.
 2. **Receive**: the user sends the quoted amount to the Master EOA on the
    source chain, in one transfer or several. "Received" is derived from the
    current Master EOA balance, so partial deposits and restarts need no
-   bookkeeping. When the source chain is the destination chain, the targets
-   were already netted against that same balance, so only its growth above
-   the balance at run creation counts. Source-token funds the Master EOA held
+   bookkeeping (the Master Safe balance on an exact `onboard`/`deposit`
+   run). When the source
+   chain is the destination chain, the targets were already netted against
+   that same balance, so only its growth above the balance at run creation
+   counts. Source-token funds the Master EOA held
    before the run count toward the quote but are not a deposit
    (`prior_received`): once a deposit arrives, a waiting run can no longer be
    cancelled or replaced. On full receipt the run re-quotes once more and
-   freezes.
+   freezes, unless the deposit no longer covers that fresh quote without its
+   buffer.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
    the Master EOA reserve moves to the Master Safe), then, for USDC sources,
-   **delegation clearing**.
+   **delegation clearing**. Before the source leg is sent, the request that
+   delivers destination native is re-quoted as exact-input (Relay
+   `EXACT_INPUT`) over its input plus whatever the deposit leaves beyond the
+   raw quote, so that leftover leaves the origin Master EOA with the run and
+   arrives as destination native. Funds held before the run only pay toward
+   the raw quote and are never swept. Only the unused part of the USDC gas
+   allowance, or of a native source's gas, stays behind.
 
 Routing reuses the bridge providers through `BridgeManager.quote_requests`,
 which never touches the Transak/bridge flow's cached bundle. One run exists at
@@ -201,9 +219,11 @@ with no user prompt. Custody properties:
 - The delegation lasts only for the run. It would persist on-chain until
   replaced, so the run ends with a self-sponsored type-4 transaction
   delegating to `address(0)`, paid with source-chain native the source leg
-  reserves for it (`CLEAR_DELEGATION_GAS_RESERVE`). Clearing never fails the
-  run; it is retried in the background and at start-up until the Master EOA
-  has no code. While live, `Simple7702Account` accepts calls only from itself
+  reserves for it (`CLEAR_DELEGATION_GAS_RESERVE`), with the gas margin and
+  short retry budget of `CLEAR_DELEGATION_*` in `operate/constants.py`.
+  Clearing never fails the run; it is retried in the background and at
+  start-up until the Master EOA has no code. While live, `Simple7702Account`
+  accepts calls only from itself
   or the EntryPoint, and only with the Master EOA's own signature.
 
 Chains without a Circle Paymaster (Gnosis, Robinhood) accept native sources

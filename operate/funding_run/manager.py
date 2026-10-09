@@ -31,6 +31,7 @@ UserOp hash, tx hash or Relay requestId is reconciled, never blindly resent.
 """
 
 import asyncio
+import copy
 import re
 import threading
 import time
@@ -65,6 +66,7 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
     ERC20_TOKENS,
     EXPLORER_URL,
+    FUNDING_RUN_BUFFER_BPS,
     FUNDING_RUN_UNROUTABLE,
     FUNDING_SOURCES,
     GAS_ABSTRACTION_USDC_CAP,
@@ -324,6 +326,14 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             gross, net, netted = self._targets(
                 run_mode, destination, service_config_id, deposit_amounts
             )
+            exact_token = self._exact_token(run_mode, source, destination, token, net)
+            if token not in FUNDING_SOURCES.get(source, []) and (
+                exact_token is None or run_mode == FundingRunMode.SIGNER_GAS
+            ):
+                raise FundingRunError(
+                    f"Unsupported funding source {source_token} on {source_chain}."
+                )
+            token = exact_token or token
             run = FundingRun(
                 path=Path(),
                 id=f"{FUNDING_RUN_PREFIX}{uuid.uuid4()}",
@@ -339,6 +349,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 backup_owner=backup_owner,
                 gross_targets={k: BigInt(v) for k, v in gross.items()},
                 net_targets={k: BigInt(v) for k, v in net.items() if v > 0},
+                exact=exact_token is not None,
             )
             run.path = self._run_path(run.id)
 
@@ -374,9 +385,12 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         allowed = FUNDING_SOURCES.get(source, [])
         token = next((a for a in allowed if a.lower() == source_token.lower()), None)
         if token is None:
-            raise FundingRunError(
-                f"Unsupported funding source {source_token} on {source_chain}."
-            )
+            # Accepted later only if it is the run's single required token.
+            if not isinstance(source_token, str) or not Web3.is_address(source_token):
+                raise FundingRunError(
+                    f"Unsupported funding source {source_token} on {source_chain}."
+                )
+            token = Web3.to_checksum_address(source_token)
         if destination not in DEFAULT_EOA_TOPUPS:
             raise FundingRunError(f"Unsupported destination chain {destination_chain}.")
         return run_mode, source, token, destination
@@ -445,6 +459,29 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             )
         return gross
 
+    def _exact_token(  # pylint: disable=too-many-arguments
+        self,
+        mode: FundingRunMode,
+        source: Chain,
+        destination: Chain,
+        token: str,
+        net: t.Dict[str, int],
+    ) -> t.Optional[str]:
+        """The single target the deposit already is, if nothing needs converting."""
+        targets = [k for k, v in net.items() if v > 0]
+        if source != destination or len(targets) != 1:
+            return None
+        if targets[0].lower() != token.lower():
+            return None
+        if mode == FundingRunMode.SIGNER_GAS or source in self._wallet().safes:
+            return targets[0]
+        return None
+
+    @staticmethod
+    def _deposits_to_safe(run: FundingRun) -> bool:
+        """Exact runs deposit straight into the Master Safe, bar signer gas."""
+        return bool(run.exact) and run.mode != FundingRunMode.SIGNER_GAS
+
     def _receive_baseline(
         self, run: FundingRun, netted: t.Set[str]
     ) -> t.Optional[BigInt]:
@@ -457,6 +494,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if run.source_chain != run.destination_chain:
             return None
         source = Chain(run.source_chain)
+        if self._deposits_to_safe(run):
+            return BigInt(
+                self._wallet().get_balance(source, run.source_token, from_safe=True)
+            )
         balance = int(
             self._wallet().get_balance(source, run.source_token, from_safe=False)
         )
@@ -544,6 +585,8 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             self._require(
                 run, FundingRunStatus.AWAITING_DEPOSIT, FundingRunStatus.QUOTE_FAILED
             )
+            if run.exact and run.status == FundingRunStatus.AWAITING_DEPOSIT:
+                return run  # exact runs are never re-quoted
             self._quote(run)
             self._store(run)
             return run
@@ -666,7 +709,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _reset_requests(self, run: FundingRun, old: t.List[ProviderRequest]) -> None:
         """Replace `old` requests with freshly quoted ones; others are untouched."""
         fresh = self.bridge_manager.quote_requests([dict(r.params) for r in old])
-        mapping = {o.id: n for o, n in zip(old, fresh.provider_requests)}
+        self._replace_requests(
+            run, {o.id: n for o, n in zip(old, fresh.provider_requests)}
+        )
+
+    def _replace_requests(
+        self, run: FundingRun, mapping: t.Dict[str, ProviderRequest]
+    ) -> None:
         run.source_requests = [mapping.get(r.id, r) for r in run.source_requests]
         run.swap_requests = [mapping.get(r.id, r) for r in run.swap_requests]
         for step in run.steps:
@@ -777,6 +826,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         self, run: FundingRun
     ) -> None:
         """Walk back from the net targets to one source-chain amount."""
+        if run.exact:
+            (amount,) = (int(v) for v in run.net_targets.values())
+            self._apply_quote(run, amount)
+            return
         source = Chain(run.source_chain)
         destination = Chain(run.destination_chain)
         token = run.source_token
@@ -900,31 +953,63 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if self._quote_failed(run, source_requests):
             return
 
-        # (c) Required = source-leg inputs + direct amounts + gas allowance.
+        # (c) Required = source-leg inputs + direct amounts + buffer + gas allowance.
         amounts = {r.id: self._source_amount(r, token) for r in source_requests}
         required = direct + sum(amounts.values())
         if self._quote_failed(run, source_requests):
             return
+        leg_kinds = [k for k, _ in leg]
+        buffer = self._buffer(required, leg_kinds, swaps)
+        required += buffer
         if gas_abstracted and source_requests:
             run.usdc_gas_cap = BigInt(
                 self._usdc_gas_cap(source, source_requests, amounts)
             )
             required += run.usdc_gas_cap
 
+        self._apply_quote(
+            run, required, buffer, leg_kinds, source_requests, swaps, gas_abstracted
+        )
+
+    def _apply_quote(  # pylint: disable=too-many-arguments
+        self,
+        run: FundingRun,
+        required: int,
+        buffer: int = 0,
+        leg_kinds: t.Sequence[FundingStepKind] = (),
+        source_requests: t.Sequence[ProviderRequest] = (),
+        swaps: t.Sequence[ProviderRequest] = (),
+        gas_abstracted: bool = False,
+    ) -> None:
         run.source_requests = list(source_requests)
         run.swap_requests = list(swaps)
         run.required_amount = BigInt(required)
+        run.buffer_amount = BigInt(buffer) if buffer else None
         run.quoted_at = _now()
         run.quote_message = None
         run.eta_seconds = max(
             [r.quote_data.eta or 0 for r in source_requests if r.quote_data] or [0]
         ) + sum(r.quote_data.eta or 0 for r in swaps if r.quote_data)
         run.steps = self._plan_steps(
-            run, [k for k, _ in leg], source_requests, swaps, gas_abstracted
+            run, list(leg_kinds), run.source_requests, run.swap_requests, gas_abstracted
         )
         run.received_amount = BigInt(self._received(run))
         if run.status == FundingRunStatus.QUOTE_FAILED:
             run.status = FundingRunStatus.AWAITING_DEPOSIT
+
+    @staticmethod
+    def _buffer(
+        amount: int,
+        leg_kinds: t.List[FundingStepKind],
+        swaps: t.List[ProviderRequest],
+    ) -> int:
+        """Room on `amount` for the worst-case price move of each step kind present."""
+        bps = 0
+        if any(kind in SOURCE_LEG_KINDS for kind in leg_kinds):
+            bps += FUNDING_RUN_BUFFER_BPS["bridge"]
+        if swaps:
+            bps += FUNDING_RUN_BUFFER_BPS["swap"]
+        return -(-amount * bps // 10_000)  # ceiling division, no float rounding
 
     def _usdc_gas_cap(
         self,
@@ -1029,7 +1114,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                     eta_seconds=request.quote_data.eta if request.quote_data else None,
                 )
             )
-        if run.mode != FundingRunMode.SIGNER_GAS:
+        if not run.exact and (
+            run.mode != FundingRunMode.SIGNER_GAS
+            # Signer gas never creates a Safe, but sweeps into an existing one.
+            or Chain(run.destination_chain) in self._wallet().safes
+        ):
             steps.append(
                 FundingRunStep(
                     id=STEP_SAFE,
@@ -1053,7 +1142,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     # --- monitoring ----------------------------------------------------------
 
     def _received(self, run: FundingRun) -> int:
-        """What the Master EOA holds of the source token on the source chain.
+        """What the deposit wallet holds of the source token on the source chain.
 
         Idempotent by construction: "received" is derived from the current
         balance (above the creation baseline for same-chain runs), so partial
@@ -1061,7 +1150,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         """
         source = Chain(run.source_chain)
         wallet = self._wallet()
-        balance = int(wallet.get_balance(source, run.source_token, from_safe=False))
+        balance = int(
+            wallet.get_balance(
+                source, run.source_token, from_safe=self._deposits_to_safe(run)
+            )
+        )
         if run.receive_baseline is not None:
             return max(0, balance - int(run.receive_baseline))
         if run.source_token == NATIVE and source in wallet.safes:
@@ -1080,13 +1173,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             self._store(run)
             return
 
-        if stale:
+        if stale and not run.exact:
             self._quote(run)
         if self._deposit_covered(run):
-            # Final quote against the funds actually held; a shortfall sends
-            # the run back to waiting with the new amount.
-            self._quote(run)
-            if self._deposit_covered(run):
+            if not run.exact:
+                # The buffer absorbs a rise; the raw quote decides.
+                self._quote(run)
+            if self._deposit_covered(run, raw=True):
                 receive = run.step(STEP_RECEIVE)
                 receive.status = FundingStepStatus.DONE
                 receive.started_at = receive.started_at or run.created_at
@@ -1098,12 +1191,18 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         self._store(run)
 
     @staticmethod
-    def _deposit_covered(run: FundingRun) -> bool:
-        return (
-            run.status == FundingRunStatus.AWAITING_DEPOSIT
-            and run.required_amount is not None
-            and run.received_amount >= run.required_amount
-        )
+    def _raw_required(run: FundingRun) -> int:
+        """The required amount without its buffer."""
+        return int(t.cast(BigInt, run.required_amount)) - int(run.buffer_amount or 0)
+
+    def _deposit_covered(self, run: FundingRun, raw: bool = False) -> bool:
+        if (
+            run.status != FundingRunStatus.AWAITING_DEPOSIT
+            or run.required_amount is None
+        ):
+            return False
+        required = self._raw_required(run) if raw else int(run.required_amount)
+        return run.received_amount >= required
 
     # --- execution -----------------------------------------------------------
 
@@ -1240,6 +1339,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 return
 
         if unsent:
+            if len(unsent) == len(run.source_requests):
+                self._sweep_leftover(run)
+                unsent = list(run.source_requests)
             unsent_ids = {r.id for r in unsent}
             for step in steps:
                 if unsent_ids & set(step.request_ids):
@@ -1260,6 +1362,52 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         for step in steps:
             self._track(run, step)
             self._mark_slow(step)
+
+    def _sweep_leftover(self, run: FundingRun) -> None:
+        """Have the leg delivering destination native spend everything received."""
+        destination = Chain(run.destination_chain)
+        token = run.source_token
+        leg = next(
+            (
+                r
+                for r in run.source_requests
+                if r.params["to"]["chain"] == destination.value
+                and r.params["to"]["token"] == NATIVE
+            ),
+            None,
+        )
+        # A leg that already carries from.amount was swept before a retry.
+        if leg is None or "amount" in leg.params["from"]:
+            return
+        received = self._received(run)
+        # Funds held before the run only ever pay for the raw quote.
+        surplus = min(
+            received - self._raw_required(run),
+            received - int(run.prior_received or 0),
+        )
+        if surplus <= 0:
+            return
+        params = copy.deepcopy(leg.params)
+        params["from"]["amount"] = self._leg_input(leg, token) + surplus
+        if token == NATIVE:
+            # A 1:1 native bridge sends to.amount; Relay ignores it on exact input.
+            params["to"]["amount"] = params["from"]["amount"]
+        (fresh,) = self.bridge_manager.quote_requests([params]).provider_requests
+        if fresh.status != ProviderRequestStatus.QUOTE_DONE:
+            # The requested tokens still arrive; the leftover stays behind.
+            self.logger.warning(
+                f"[FUNDING RUN] {run.id} leftover of {surplus} not swept: "
+                f"{fresh.quote_data.message if fresh.quote_data else 'quote failed'}"
+            )
+            return
+        self._replace_requests(run, {leg.id: fresh})
+
+    def _leg_input(self, request: ProviderRequest, token: str) -> int:
+        """Source-token amount a request spends, without the gas it pays."""
+        if token != NATIVE:
+            return self._source_amount(request, token)
+        txs = self.bridge_manager.provider_for(request).get_txs(request)
+        return sum(int(tx.get("value", 0)) for _, tx in txs)
 
     def _send_user_op(self, run: FundingRun, requests: t.List[ProviderRequest]) -> None:
         source = Chain(run.source_chain)
@@ -1572,15 +1720,23 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         required = run.required_amount
         received = int(run.received_amount)
         prior = int(run.prior_received or 0)
+        # Once the deposit is accepted, the unused buffer is no longer owed.
+        waiting = not any(
+            s.id == STEP_RECEIVE and s.status == FundingStepStatus.DONE
+            for s in run.steps
+        )
         quote = None
         if required is not None and run.quoted_at is not None:
             quote = {
                 "required_amount": str(max(0, int(required) - prior)),
                 "received_amount": str(max(0, received - prior)),
-                "outstanding_amount": str(max(0, int(required) - received)),
+                "outstanding_amount": str(
+                    max(0, int(required) - received) if waiting else 0
+                ),
                 "eta_seconds": run.eta_seconds,
                 "quoted_at": run.quoted_at,
                 "next_refresh_at": run.quoted_at + DEFAULT_BUNDLE_VALIDITY_PERIOD,
+                "exact": bool(run.exact),
             }
         return {
             "id": run.id,
@@ -1591,7 +1747,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 "token": run.source_token,
                 "symbol": get_asset_name(source, run.source_token),
                 "decimals": get_asset_decimals(source, run.source_token),
-                "deposit_address": self._wallet().address,
+                "deposit_address": (
+                    self._wallet().safes[source]
+                    if self._deposits_to_safe(run)
+                    else self._wallet().address
+                ),
             },
             "destination": {
                 "chain": destination.value,
