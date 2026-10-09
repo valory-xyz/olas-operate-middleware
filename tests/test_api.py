@@ -46,6 +46,7 @@ from operate.ledger.profiles import (
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
     OLAS,
+    PUSD,
     USDC,
 )
 from operate.operate_types import Chain, LedgerType
@@ -990,6 +991,13 @@ class TestFundingRunRoutes:
                 "source": {"chain": "gnosis", "token": USDC[Chain.GNOSIS]},
                 "destination": {"chain": "polygon"},
                 "deposit_amounts": {ZERO_ADDRESS: "1"},
+            },
+            {
+                # The required-token source needs a single required token.
+                "mode": "deposit",
+                "source": {"chain": "polygon", "token": PUSD[Chain.POLYGON]},
+                "destination": {"chain": "polygon"},
+                "deposit_amounts": {PUSD[Chain.POLYGON]: "1", ZERO_ADDRESS: "1"},
             },
             {
                 "mode": "deposit",
