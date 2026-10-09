@@ -977,6 +977,33 @@ class TestFundingRunRoutes:
             backup_owner=body.get("backup_owner"),
         )
 
+    def test_create_accepts_required_token_as_exact_safe_deposit(
+        self, client: TestClient
+    ) -> None:
+        """A single pUSD target on Polygon is funded with pUSD, straight into the Safe."""
+        safe = "0x" + "b" * 40
+        wallet = mock.Mock(address="0x" + "a" * 40, safes={Chain.POLYGON: safe})
+        wallet.get_balance.return_value = 0
+        pusd = PUSD[Chain.POLYGON]
+        with mock.patch("operate.cli.FundingRunManager._wallet", return_value=wallet):
+            response = client.post(
+                "/api/funding_run",
+                json={
+                    "mode": "deposit",
+                    "source": {"chain": "polygon", "token": pusd.lower()},
+                    "destination": {"chain": "polygon"},
+                    "deposit_amounts": {pusd: "10"},
+                },
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        body = response.json()
+        assert body["quote"]["exact"] is True
+        assert body["quote"]["required_amount"] == "10"
+        assert body["source"]["token"] == pusd
+        assert body["source"]["deposit_address"] == safe
+        assert [step["kind"] for step in body["steps"]] == ["RECEIVE"]
+
     @pytest.mark.parametrize(
         "body",
         [
