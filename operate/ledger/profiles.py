@@ -403,7 +403,7 @@ FUNDING_SOURCES: t.Dict[Chain, t.List[str]] = {
 
 #: Funding-run quote buffer per step kind present, in basis points of the
 #: amount asked: it absorbs price movement between the quote the user acts on
-#: and the final re-quote (~5 min). Any unused part is swept to the destination.
+#: and the final re-quote. Any unused part is swept to the destination.
 FUNDING_RUN_BUFFER_BPS: t.Dict[str, int] = {
     "bridge": 100,
     "swap": 150,

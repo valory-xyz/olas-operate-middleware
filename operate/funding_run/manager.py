@@ -1363,12 +1363,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             self._mark_slow(step)
 
     def _sweep_leftover(self, run: FundingRun) -> None:
-        """Have the leg delivering destination native spend everything received.
-
-        The leftover (unused buffer, favourable quote moves, overpayment)
-        then lands on the destination Master EOA, and the Safe step keeps its
-        gas reserve there and moves the rest to the Master Safe.
-        """
+        """Have the leg delivering destination native spend everything received."""
         destination = Chain(run.destination_chain)
         token = run.source_token
         if run.source_chain == run.destination_chain and token == NATIVE:

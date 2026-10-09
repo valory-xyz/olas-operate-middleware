@@ -997,6 +997,26 @@ class TestExactPath:
             env.manager._pointer().pending_clear_run_ids == []
         )  # pylint: disable=protected-access
 
+    def test_onboard_single_requirement_is_exact(self, tmp_path: Path) -> None:
+        """A service needing only pUSD on Polygon is funded with pUSD into the Safe."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+        env.funding_manager.destination_targets.return_value = {
+            POLYGON_PUSD: 10,
+            NATIVE: 0,
+        }
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=POLYGON_PUSD,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        assert run.exact is True
+        assert run.required_amount == 10
+        assert env.manager.run_json(run)["source"]["deposit_address"] == SAFE
+
     def test_listed_token_is_exact_too(self, tmp_path: Path) -> None:
         """A single native target funded with native on its chain."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
@@ -1149,6 +1169,25 @@ class TestBuffer:
         body = Env(tmp_path).manager.run_json(run)
         assert body["quote"]["required_amount"] == str(_required(run))
         assert body["quote"]["exact"] is False
+
+    @pytest.mark.usefixtures("_buffered")
+    @pytest.mark.parametrize(
+        ("amount", "kinds", "swaps", "expected"),
+        [
+            (10_001, [FundingStepKind.BRIDGE], [], 101),  # 100.01 rounds up
+            (10_000, [FundingStepKind.NATIVE], [object()], 250),
+            (10_000, [FundingStepKind.CLEAR_DELEGATION], [], 0),
+        ],
+    )
+    def test_buffer_rounds_up_per_step_kind(
+        self, amount: int, kinds: t.List[FundingStepKind], swaps: t.List, expected: int
+    ) -> None:
+        """The clearing reserve leg alone is not a price-moving step."""
+        buffer = FundingRunManager._buffer(  # pylint: disable=protected-access
+            amount, kinds, swaps
+        )
+
+        assert buffer == expected
 
     @pytest.mark.usefixtures("_buffered")
     @pytest.mark.parametrize("within", [True, False])

@@ -90,7 +90,7 @@ BRIDGE_GAS_ESTIMATE_MULTIPLIER = 1.2
 # (Arbitrum), and repricing keeps the same estimate, so it never lands.
 CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER = 1.5
 # Clearing runs under the funding-run lock: keep the worst case (retries x
-# ON_CHAIN_INTERACT_SLEEP, then the receipt wait) under its 30 s LOCK_TIMEOUT.
+# ON_CHAIN_INTERACT_SLEEP, then the receipt wait) under its LOCK_TIMEOUT.
 CLEAR_DELEGATION_RETRIES = 3
 CLEAR_DELEGATION_TIMEOUT = 10.0
 MIN_PASSWORD_LENGTH = 8
