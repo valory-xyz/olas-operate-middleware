@@ -1366,8 +1366,6 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         """Have the leg delivering destination native spend everything received."""
         destination = Chain(run.destination_chain)
         token = run.source_token
-        if run.source_chain == run.destination_chain and token == NATIVE:
-            return  # the leftover already is destination native
         leg = next(
             (
                 r
