@@ -5940,6 +5940,36 @@ class TestRelayIntentsStatusV3:
         payload = mock_post.call_args.kwargs["json"]
         assert payload.get("explicitDeposit", False) is explicit_deposit
 
+    @pytest.mark.parametrize("from_amount", [None, 777])
+    def test_from_amount_quotes_exact_input(self, from_amount: t.Optional[int]) -> None:
+        """`from.amount` switches the quote to EXACT_INPUT over that amount."""
+        provider = _make_relay_provider()
+        req = _make_request(provider_id="relay-provider", amount=1000)
+        if from_amount is not None:
+            req.params["from"]["amount"] = from_amount
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "steps": [{"id": "deposit", "items": [{"data": {"gas": 1}}]}],
+            "details": {"timeEstimate": 10},
+        }
+        mock_resp.status_code = 200
+
+        with patch(
+            "operate.bridge.providers.relay_provider.requests.post",
+            return_value=mock_resp,
+        ) as mock_post:
+            provider.quote(req)
+
+        payload = mock_post.call_args.kwargs["json"]
+        if from_amount is None:
+            assert payload["tradeType"] == "EXACT_OUTPUT"
+            assert payload["amount"] == "1000"
+            assert payload["enableTrueExactOutput"] is False
+        else:
+            assert payload["tradeType"] == "EXACT_INPUT"
+            assert payload["amount"] == "777"
+            assert "enableTrueExactOutput" not in payload
+
 
 # ---------------------------------------------------------------------------
 # TestProviderExternalExecution

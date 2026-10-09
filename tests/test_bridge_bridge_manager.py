@@ -952,6 +952,28 @@ class TestBuildProviderChain:
             assert name in MAYAN_EXCLUDED_CHAINS
         assert MAYAN_EXCLUDED_CHAINS.isdisjoint(MAYAN_CHAIN_NAMES)
 
+    def test_exact_input_has_no_mayan_fallback(self) -> None:
+        """Mayan quotes exact-output only, so exact-input requests skip it."""
+        mgr = _make_bare_manager()
+        params = _route_params(to_chain="base")
+        params["from"]["amount"] = 5
+
+        chain = mgr._build_provider_chain(params)
+
+        assert chain == [RELAY_PROVIDER_ID]
+
+    def test_sanitize_normalises_from_amount(self) -> None:
+        """An optional from.amount becomes an int like to.amount."""
+        mgr = _make_bare_manager()
+        params = _route_params()
+        params["from"]["amount"] = "5"
+        plain = _route_params()
+
+        mgr._sanitize([params, plain])
+
+        assert params["from"]["amount"] == 5
+        assert "amount" not in plain["from"]
+
     def test_robinhood_destination_has_no_mayan_fallback(self) -> None:
         """A Robinhood destination routes through Relay only."""
         mgr = _make_bare_manager()

@@ -288,8 +288,9 @@ class BridgeManager:
         1. PREFERRED_ROUTES overrides — single provider, no auto-Mayan
         2. Native bridge primary → [native_bridge, relay]
         3. Default → [relay]
-        4. If relay is in the chain and neither source nor destination is in
-           MAYAN_EXCLUDED_CHAINS → append mayan as last resort
+        4. If relay is in the chain, neither source nor destination is in
+           MAYAN_EXCLUDED_CHAINS and the request is not exact-input (Mayan
+           quotes exact-output only) → append mayan as last resort
         """
         route = (
             Chain(params["from"]["chain"]),
@@ -315,6 +316,7 @@ class BridgeManager:
         to_chain = params["to"]["chain"]
         if (
             RELAY_PROVIDER_ID in chain
+            and "amount" not in params["from"]
             and from_chain not in MAYAN_EXCLUDED_CHAINS
             and to_chain not in MAYAN_EXCLUDED_CHAINS
         ):
@@ -411,6 +413,8 @@ class BridgeManager:
             params["to"]["address"] = w3.to_checksum_address(params["to"]["address"])
             params["to"]["token"] = w3.to_checksum_address(params["to"]["token"])
             params["to"]["amount"] = int(params["to"]["amount"])
+            if "amount" in params["from"]:
+                params["from"]["amount"] = int(params["from"]["amount"])
 
     def _raise_if_invalid(self, requests_params: t.List) -> None:
         """Preprocess quote requests."""

@@ -173,8 +173,11 @@ class RelayProvider(Provider):
         to_address = provider_request.params["to"]["address"]
         to_token = provider_request.params["to"]["token"]
         to_amount = provider_request.params["to"]["amount"]
+        # Exact-input requests spend `from.amount` and take whatever it buys.
+        from_amount = provider_request.params["from"].get("amount")
+        amount = to_amount if from_amount is None else from_amount
 
-        if to_amount == 0:
+        if amount == 0:
             self.logger.info(f"[RELAY PROVIDER] {MESSAGE_QUOTE_ZERO}")
             self._set_zero_quote(provider_request)
             return
@@ -188,10 +191,13 @@ class RelayProvider(Provider):
             "destinationChainId": Chain(to_chain).id,
             "recipient": to_address,
             "destinationCurrency": to_token,
-            "amount": str(to_amount),
+            "amount": str(amount),
             "tradeType": "EXACT_OUTPUT",
             "enableTrueExactOutput": False,
         }
+        if from_amount is not None:
+            payload["tradeType"] = "EXACT_INPUT"
+            del payload["enableTrueExactOutput"]
         # Relay requires explicit deposits for 7702-delegated or zero-native
         # senders (e.g. a deposit submitted inside an ERC-4337 UserOperation).
         if provider_request.params.get("explicit_deposit"):

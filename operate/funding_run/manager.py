@@ -31,6 +31,7 @@ UserOp hash, tx hash or Relay requestId is reconciled, never blindly resent.
 """
 
 import asyncio
+import copy
 import re
 import threading
 import time
@@ -707,7 +708,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _reset_requests(self, run: FundingRun, old: t.List[ProviderRequest]) -> None:
         """Replace `old` requests with freshly quoted ones; others are untouched."""
         fresh = self.bridge_manager.quote_requests([dict(r.params) for r in old])
-        mapping = {o.id: n for o, n in zip(old, fresh.provider_requests)}
+        self._replace_requests(
+            run, {o.id: n for o, n in zip(old, fresh.provider_requests)}
+        )
+
+    def _replace_requests(
+        self, run: FundingRun, mapping: t.Dict[str, ProviderRequest]
+    ) -> None:
         run.source_requests = [mapping.get(r.id, r) for r in run.source_requests]
         run.swap_requests = [mapping.get(r.id, r) for r in run.swap_requests]
         for step in run.steps:
@@ -1331,6 +1338,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 return
 
         if unsent:
+            if len(unsent) == len(run.source_requests):
+                self._sweep_leftover(run)
+                unsent = list(run.source_requests)
             unsent_ids = {r.id for r in unsent}
             for step in steps:
                 if unsent_ids & set(step.request_ids):
@@ -1351,6 +1361,55 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         for step in steps:
             self._track(run, step)
             self._mark_slow(step)
+
+    def _sweep_leftover(self, run: FundingRun) -> None:
+        """Have the leg delivering destination native spend everything received.
+
+        The leftover (unused buffer, favourable quote moves, overpayment)
+        then lands on the destination Master EOA, and the Safe step keeps its
+        gas reserve there and moves the rest to the Master Safe.
+        """
+        destination = Chain(run.destination_chain)
+        token = run.source_token
+        if run.source_chain == run.destination_chain and token == NATIVE:
+            return  # the leftover already is destination native
+        leg = next(
+            (
+                r
+                for r in run.source_requests
+                if r.params["to"]["chain"] == destination.value
+                and r.params["to"]["token"] == NATIVE
+            ),
+            None,
+        )
+        # A leg that already carries from.amount was swept before a retry.
+        if leg is None or "amount" in leg.params["from"]:
+            return
+        raw = int(t.cast(BigInt, run.required_amount)) - int(run.buffer_amount or 0)
+        surplus = self._received(run) - raw
+        if surplus <= 0:
+            return
+        params = copy.deepcopy(leg.params)
+        params["from"]["amount"] = self._leg_input(leg, token) + surplus
+        if token == NATIVE:
+            # A 1:1 native bridge sends to.amount; Relay ignores it on exact input.
+            params["to"]["amount"] = params["from"]["amount"]
+        (fresh,) = self.bridge_manager.quote_requests([params]).provider_requests
+        if fresh.status != ProviderRequestStatus.QUOTE_DONE:
+            # The requested tokens still arrive; the leftover stays behind.
+            self.logger.warning(
+                f"[FUNDING RUN] {run.id} leftover of {surplus} not swept: "
+                f"{fresh.quote_data.message if fresh.quote_data else 'quote failed'}"
+            )
+            return
+        self._replace_requests(run, {leg.id: fresh})
+
+    def _leg_input(self, request: ProviderRequest, token: str) -> int:
+        """Source-token amount a request spends, without the gas it pays."""
+        if token != NATIVE:
+            return self._source_amount(request, token)
+        txs = self.bridge_manager.provider_for(request).get_txs(request)
+        return sum(int(tx.get("value", 0)) for _, tx in txs)
 
     def _send_user_op(self, run: FundingRun, requests: t.List[ProviderRequest]) -> None:
         source = Chain(run.source_chain)

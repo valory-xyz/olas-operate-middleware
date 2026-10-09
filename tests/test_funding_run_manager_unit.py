@@ -120,7 +120,7 @@ class FakeProvider:
         """Source amounts: 1:1 in the from token, plus GAS native."""
         chain = request.params["from"]["chain"]
         token = request.params["from"]["token"]
-        amount = request.params["to"]["amount"]
+        amount = request.params["from"].get("amount", request.params["to"]["amount"])
         result = {NATIVE: GAS}
         result[token] = result.get(token, 0) + amount
         return {chain: {EOA: result}}
@@ -2024,6 +2024,174 @@ class TestExecution:
         env.tick_until(run, FundingRunStatus.COMPLETED)
         assert seen
         assert all(seen)
+
+
+# ---------------------------------------------------------------------------
+# Leftover sweep
+# ---------------------------------------------------------------------------
+
+
+def _native_leg(run: FundingRun) -> ProviderRequest:
+    (leg,) = [
+        r
+        for r in run.source_requests
+        if r.params["to"]["chain"] == run.destination_chain
+        and r.params["to"]["token"] == NATIVE
+    ]
+    return leg
+
+
+def _overfunded(env: Env, extra: int, **kwargs: t.Any) -> FundingRun:
+    run = _deposit_run(env, **kwargs)
+    env.balances[(Chain(run.source_chain), run.source_token)] = _required(run) + extra
+    env.manager.tick()
+    run = env.reload(run)
+    assert run.status == FundingRunStatus.PROCESSING
+    return run
+
+
+class TestSweep:
+    """Everything received beyond the raw quote reaches the destination as native."""
+
+    def test_surplus_resizes_native_leg_to_exact_input(
+        self, tmp_path: Path, buffered: None
+    ) -> None:
+        """Unused buffer + overpayment ride the native leg; the gas cap does not."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        buffer = int(run.buffer_amount or 0)
+        leg = _native_leg(run)
+        carrier_id = next(
+            r.id for r in run.source_requests if r.params["to"]["token"] == POLYGON_USDC
+        )
+        _all_succeed(env)
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        swept = _native_leg(run)
+        assert swept.id != leg.id
+        assert swept.params["from"]["amount"] == (
+            leg.params["to"]["amount"] + buffer + 1_000
+        )
+        assert swept.params["to"]["amount"] == leg.params["to"]["amount"]
+        assert carrier_id in [r.id for r in run.source_requests]
+        (_, calls, cap), _ = env.sender.prepare_batch.call_args
+        assert cap == GAS_ABSTRACTION_USDC_CAP[Chain.BASE]
+        assert len(calls) == len(run.source_requests)
+        assert run.step(STEP_NATIVE).request_ids == [swept.id]
+        env.wallet.create_safe_and_transfer_excess.assert_called_once()
+
+    def test_no_surplus_no_requote(self, tmp_path: Path) -> None:
+        """A deposit of exactly the raw quote is sent as quoted."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=0)
+        quoted = len(env.bridge.quoted)
+        _all_succeed(env)
+
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert len(env.bridge.quoted) == quoted
+        assert not any("amount" in p["from"] for p in env.bridge.quoted)
+
+    def test_existing_master_eoa_funds_count_and_are_swept(
+        self, tmp_path: Path
+    ) -> None:
+        """Funds held before the run reduce the ask and leave with the run."""
+        env = Env(tmp_path)
+        probe = _deposit_run(Env(tmp_path / "probe"))
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(probe) + 50
+
+        run = _deposit_run(env)
+        assert env.manager.run_json(run)["quote"]["outstanding_amount"] == "0"
+        env.manager.tick()
+        _all_succeed(env)
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        leg = _native_leg(run)
+        assert leg.params["from"]["amount"] == leg.params["to"]["amount"] + 50
+
+    def test_native_source_sweeps_tx_value_only(self, tmp_path: Path) -> None:
+        """A native leg spends its tx value plus the surplus; its gas stays apart."""
+        env = Env(tmp_path)
+        run = _overfunded(
+            env, extra=100, source_token=NATIVE, amounts={POLYGON_OLAS: 40}
+        )
+        leg = _native_leg(run)
+        env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_DONE
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_DONE
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        swept = _native_leg(run)
+        value = _deposit_tx(leg)["value"]
+        assert swept.params["from"]["amount"] == value + 100
+        # Native bridges are 1:1 and send to.amount.
+        assert swept.params["to"]["amount"] == value + 100
+
+    def test_same_chain_native_source_needs_no_sweep(self, tmp_path: Path) -> None:
+        """The leftover already is destination native: the Safe step moves it."""
+        env = Env(tmp_path)
+        run = _overfunded(
+            env,
+            extra=100,
+            source_chain="polygon",
+            source_token=NATIVE,
+            amounts={POLYGON_OLAS: 40},
+        )
+        env.bridge.outcomes[POLYGON_OLAS] = ProviderRequestStatus.EXECUTION_DONE
+
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert not any("amount" in p["from"] for p in env.bridge.quoted)
+
+    def test_failed_sweep_quote_sends_the_quoted_leg(self, tmp_path: Path) -> None:
+        """The requested tokens still arrive if the exact-input quote fails."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        leg = _native_leg(run)
+        env.bridge.fail_quote = True
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert _native_leg(run).id == leg.id
+        assert _native_leg(run).execution_data is not None
+        assert _logged(env, "not swept")
+
+    def test_retry_keeps_the_swept_amount(self, tmp_path: Path) -> None:
+        """A retried leg is re-quoted with the same from.amount, not swept twice."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        env.sender.prepare_batch.side_effect = GasAbstractionError("bundler down")
+        env.manager.tick()
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.FAILED
+        swept = _native_leg(run).params["from"]["amount"]
+
+        env.sender.prepare_batch.side_effect = None
+        env.manager.retry(run.id)
+        env.manager.tick()
+
+        assert _native_leg(env.reload(run)).params["from"]["amount"] == swept
+
+    def test_signer_gas_sweeps_into_existing_safe(self, tmp_path: Path) -> None:
+        """Fund Pearl Wallet keeps the Signer reserve and moves the rest to the Safe."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+
+        run = env.manager.create_run(
+            mode="signer_gas",
+            source_chain="base",
+            source_token=NATIVE,
+            destination_chain="polygon",
+        )
+        assert STEP_SAFE in [s.id for s in run.steps]
+        env.balances[(Chain.BASE, NATIVE)] = _required(run) + 100
+        env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_DONE
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        env.wallet.create_safe_and_transfer_excess.assert_called_once_with(
+            chain=Chain.POLYGON, backup_owner=None
+        )
 
 
 # ---------------------------------------------------------------------------
