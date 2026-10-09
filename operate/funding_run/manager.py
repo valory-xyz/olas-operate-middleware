@@ -1379,7 +1379,12 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         # A leg that already carries from.amount was swept before a retry.
         if leg is None or "amount" in leg.params["from"]:
             return
-        surplus = self._received(run) - self._raw_required(run)
+        received = self._received(run)
+        # Funds held before the run only ever pay for the raw quote.
+        surplus = min(
+            received - self._raw_required(run),
+            received - int(run.prior_received or 0),
+        )
         if surplus <= 0:
             return
         params = copy.deepcopy(leg.params)
@@ -1715,12 +1720,19 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         required = run.required_amount
         received = int(run.received_amount)
         prior = int(run.prior_received or 0)
+        # Once the deposit is accepted, the unused buffer is no longer owed.
+        waiting = not any(
+            s.id == STEP_RECEIVE and s.status == FundingStepStatus.DONE
+            for s in run.steps
+        )
         quote = None
         if required is not None and run.quoted_at is not None:
             quote = {
                 "required_amount": str(max(0, int(required) - prior)),
                 "received_amount": str(max(0, received - prior)),
-                "outstanding_amount": str(max(0, int(required) - received)),
+                "outstanding_amount": str(
+                    max(0, int(required) - received) if waiting else 0
+                ),
                 "eta_seconds": run.eta_seconds,
                 "quoted_at": run.quoted_at,
                 "next_refresh_at": run.quoted_at + DEFAULT_BUNDLE_VALIDITY_PERIOD,

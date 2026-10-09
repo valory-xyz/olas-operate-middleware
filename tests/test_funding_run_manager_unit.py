@@ -1192,16 +1192,20 @@ class TestBuffer:
         assert buffer == expected
 
     @pytest.mark.usefixtures("_buffered")
-    @pytest.mark.parametrize("within", [True, False])
+    @pytest.mark.parametrize(
+        ("extra", "within"),
+        [(-1, True), (0, True), (1, False)],
+        ids=["below-buffer", "exactly-buffer", "past-buffer"],
+    )
     def test_final_requote_rise_absorbed_by_buffer(
-        self, tmp_path: Path, within: bool
+        self, tmp_path: Path, extra: int, within: bool
     ) -> None:
         """Sending the ask proceeds unless the raw quote rose past the buffer."""
         env = Env(tmp_path)
         run = _deposit_run(env)
         buffer = int(run.buffer_amount or 0)
         env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
-        rise = buffer // 2 if within else buffer + 1
+        rise = buffer + extra
         original = env.manager._quote  # pylint: disable=protected-access
 
         def _bigger(r: FundingRun) -> None:
@@ -2133,22 +2137,89 @@ class TestSweep:
         assert len(env.bridge.quoted) == quoted
         assert not any("amount" in p["from"] for p in env.bridge.quoted)
 
-    def test_existing_master_eoa_funds_count_and_are_swept(
-        self, tmp_path: Path
+    @pytest.mark.parametrize(
+        ("held", "deposited", "swept"),
+        [(50, 0, 0), (50, 30, 30), (-10, 100, 90)],
+        ids=["held-covers-run", "overpaid-on-top", "held-part-of-run"],
+    )
+    def test_funds_held_before_the_run_are_not_swept(
+        self, tmp_path: Path, held: int, deposited: int, swept: int
     ) -> None:
-        """Funds held before the run reduce the ask and leave with the run."""
+        """Held funds pay toward the raw quote; only the deposit's leftover is swept."""
         env = Env(tmp_path)
-        probe = _deposit_run(Env(tmp_path / "probe"))
-        env.balances[(Chain.BASE, BASE_USDC)] = _required(probe) + 50
+        raw = _required(_deposit_run(Env(tmp_path / "probe")))
+        env.balances[(Chain.BASE, BASE_USDC)] = raw + held
 
         run = _deposit_run(env)
-        assert env.manager.run_json(run)["quote"]["outstanding_amount"] == "0"
-        env.manager.tick()
+        env.balances[(Chain.BASE, BASE_USDC)] += deposited
         _all_succeed(env)
         run = env.tick_until(run, FundingRunStatus.COMPLETED)
 
         leg = _native_leg(run)
-        assert leg.params["from"]["amount"] == leg.params["to"]["amount"] + 50
+        assert leg.params["from"].get("amount", leg.params["to"]["amount"]) == (
+            leg.params["to"]["amount"] + swept
+        )
+
+    @pytest.mark.usefixtures("_buffered")
+    def test_outstanding_is_zero_once_the_deposit_is_accepted(
+        self, tmp_path: Path
+    ) -> None:
+        """A final re-quote the buffer absorbs leaves nothing owed, though below the ask."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        env.balances[(Chain.BASE, BASE_USDC)] = _required(run)
+        original = env.manager._quote  # pylint: disable=protected-access
+
+        def _bigger(r: FundingRun) -> None:
+            r.net_targets[POLYGON_OLAS] = BigInt(r.net_targets[POLYGON_OLAS] + 1)
+            original(r)
+
+        with patch.object(env.manager, "_quote", side_effect=_bigger):
+            env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert int(run.received_amount) < _required(run)
+        assert env.manager.run_json(run)["quote"]["outstanding_amount"] == "0"
+
+    def test_restart_after_the_sweep_does_not_sweep_again(self, tmp_path: Path) -> None:
+        """A new manager sends the stored swept leg, without a second exact-input quote."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        env.sender.prepare_batch.side_effect = _Crash()
+        with pytest.raises(_Crash):
+            env.manager.tick()  # the process dies after the sweep re-quote
+        swept = _native_leg(env.reload(run))
+        assert swept.params["from"]["amount"] == swept.params["to"]["amount"] + 1_000
+
+        restarted = Env(tmp_path)
+        restarted.balances.update(env.balances)
+        restarted.manager.tick()
+
+        run = restarted.reload(run)
+        assert _native_leg(run).id == swept.id
+        assert restarted.bridge.quoted == []
+        (_, calls, _), _ = restarted.sender.prepare_batch.call_args
+        assert len(calls) == len(run.source_requests)
+
+    def test_no_sweep_once_part_of_the_source_leg_was_sent(
+        self, tmp_path: Path
+    ) -> None:
+        """Only an unsent source leg is resized: what was sent already spent its share."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        carrier = next(
+            r for r in run.source_requests if r.params["to"]["token"] == POLYGON_USDC
+        )
+        env.bridge.provider.execute(carrier)
+        run.store()
+        quoted = len(env.bridge.quoted)
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert len(env.bridge.quoted) == quoted
+        assert "amount" not in _native_leg(run).params["from"]
 
     def test_native_source_sweeps_tx_value_only(self, tmp_path: Path) -> None:
         """A native leg spends its tx value plus the surplus; its gas stays apart."""
@@ -2225,10 +2296,16 @@ class TestSweep:
             destination_chain="polygon",
         )
         assert STEP_SAFE in [s.id for s in run.steps]
-        env.balances[(Chain.BASE, NATIVE)] = _required(run) + 100
+        leg = _native_leg(run)
+        balance = _required(run) + 100
+        env.balances[(Chain.BASE, NATIVE)] = balance
         env.bridge.outcomes[NATIVE] = ProviderRequestStatus.EXECUTION_DONE
-        env.tick_until(run, FundingRunStatus.COMPLETED)
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
 
+        swept = _native_leg(run)
+        assert swept.params["from"]["amount"] == _deposit_tx(leg)["value"] + 100
+        sent = sum(_deposit_tx(r)["value"] for r in run.source_requests)
+        assert balance - sent == GAS * len(run.source_requests)  # only gas stays
         env.wallet.create_safe_and_transfer_excess.assert_called_once_with(
             chain=Chain.POLYGON, backup_owner=None
         )
