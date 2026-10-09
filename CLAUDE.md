@@ -234,7 +234,7 @@ operate daemon
 - `providers/`: Relay, Mayan, native bridge and Balancer implementations. Balancer (`balancer_provider.py`) does same-chain swaps through pools listed in `BALANCER_POOLS`, e.g. xDAI -> OLAS on Gnosis, which Relay cannot route. Relay status is tracked by the quote's `requestId` via `GET /intents/status/v3`
 
 **Funding Run (`operate/funding_run/`)**
-- `manager.py`: `FundingRunManager`, a persisted, resumable state machine turning one deposit (chosen chain + token, sent to the Master EOA, or straight to the Master Safe on an exact run: single target funded as is) into the destination tokens: quote (+ buffer) → receive → source leg (leftover swept as destination native) → swaps → Safe create + transfer → EIP-7702 delegation clearing. Modes `onboard`, `deposit`, `signer_gas`; one run at a time; advanced by `run_job()` scheduled after login
+- `manager.py`: `FundingRunManager`, a persisted, resumable state machine turning one deposit (chosen chain + token; see `docs/wallet-and-funding.md#funding-run` for where it is sent) into the destination tokens: quote (+ buffer) → receive → source leg (leftover swept as destination native) → swaps → Safe create + transfer → EIP-7702 delegation clearing. Modes `onboard`, `deposit`, `signer_gas`; one run at a time; advanced by `run_job()` scheduled after login
 - `models.py`: `FundingRun` / `FundingRunStep` persisted under `funding_runs/` (`active.json` points at the live run)
 - `operate/wallet/gas_abstraction.py`: `GasAbstractedSender`, the USDC-paid ERC-4337 UserOperation sender (EIP-7702 to `Simple7702Account`, Circle Paymaster permit, Candide bundler) used for USDC source legs
 - See `docs/wallet-and-funding.md#funding-run` for the custody model and `docs/api.md#funding-run` for the routes
