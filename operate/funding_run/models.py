@@ -134,17 +134,12 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     source_requests: t.List[ProviderRequest] = field(default_factory=list)
     swap_requests: t.List[ProviderRequest] = field(default_factory=list)
     required_amount: t.Optional[BigInt] = None
-    # Part of required_amount that only absorbs price movement until the
-    # final re-quote; never set on exact runs.
+    # Part of required_amount that is buffer; see FUNDING_RUN_BUFFER_BPS.
     buffer_amount: t.Optional[BigInt] = None
-    # Single target funded with that token on its own chain: no bridge, swap,
-    # buffer or re-quote.
+    # See FundingRunManager._exact_token.
     exact: t.Optional[bool] = None
     received_amount: BigInt = field(default_factory=lambda: BigInt(0))
-    # Same-chain runs only: the source-token balance at creation of the
-    # wallet the deposit goes to (the Master Safe on exact runs, else the
-    # Master EOA) that the targets already netted. Only growth above it is
-    # "received".
+    # Same-chain runs: deposit-wallet balance at creation; only growth above it counts.
     receive_baseline: t.Optional[BigInt] = None
     # Received at creation, from funds already held: quoted against, not a deposit.
     prior_received: t.Optional[BigInt] = None

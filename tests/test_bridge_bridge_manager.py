@@ -953,7 +953,7 @@ class TestBuildProviderChain:
         assert MAYAN_EXCLUDED_CHAINS.isdisjoint(MAYAN_CHAIN_NAMES)
 
     def test_exact_input_has_no_mayan_fallback(self) -> None:
-        """Mayan quotes exact-output only, so exact-input requests skip it."""
+        """Exact-input requests get no Mayan fallback."""
         mgr = _make_bare_manager()
         params = _route_params(to_chain="base")
         params["from"]["amount"] = 5

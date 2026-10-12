@@ -2145,7 +2145,7 @@ class TestSweep:
     def test_funds_held_before_the_run_are_not_swept(
         self, tmp_path: Path, held: int, deposited: int, swept: int
     ) -> None:
-        """Held funds pay toward the raw quote; only the deposit's leftover is swept."""
+        """Funds held before the run are never swept."""
         env = Env(tmp_path)
         raw = _required(_deposit_run(Env(tmp_path / "probe")))
         env.balances[(Chain.BASE, BASE_USDC)] = raw + held
@@ -2236,7 +2236,6 @@ class TestSweep:
         swept = _native_leg(run)
         value = _deposit_tx(leg)["value"]
         assert swept.params["from"]["amount"] == value + 100
-        # Native bridges are 1:1 and send to.amount.
         assert swept.params["to"]["amount"] == value + 100
 
     def test_same_chain_native_source_needs_no_sweep(self, tmp_path: Path) -> None:
