@@ -228,6 +228,10 @@ class Provider(ABC):
             fallback_provider_ids=fallback_provider_ids,
         )
 
+    def min_output(self, provider_request: ProviderRequest) -> int:
+        """Least amount of the `to` token a quoted request delivers."""
+        return int(provider_request.params["to"]["amount"])
+
     def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
         from_chain = provider_request.params["from"]["chain"]

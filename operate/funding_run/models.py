@@ -133,6 +133,8 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     # reserve requests) and one swap per remaining target token.
     source_requests: t.List[ProviderRequest] = field(default_factory=list)
     swap_requests: t.List[ProviderRequest] = field(default_factory=list)
+    # to.amount of the swept native leg before the sweep; a retry quotes it again.
+    unswept_to_amount: t.Optional[BigInt] = None
     required_amount: t.Optional[BigInt] = None
     # Part of required_amount that is buffer; see FUNDING_RUN_BUFFER_BPS.
     buffer_amount: t.Optional[BigInt] = None

@@ -176,6 +176,10 @@ class TestProviderBase:
         provider = _ConcreteProvider()
         assert provider.description() == "_ConcreteProvider"
 
+    def test_min_output_is_the_requested_amount(self) -> None:
+        """Exact-output providers deliver to.amount."""
+        assert _ConcreteProvider().min_output(_make_request(amount=1000)) == 1000
+
     def test_validate_raises_on_wrong_provider_id(self) -> None:
         """_validate() raises ValueError when provider_id mismatches (line 158)."""
         provider = _ConcreteProvider(provider_id="my-provider")
@@ -821,6 +825,28 @@ class TestRelayProviderUnit:
         """description() returns Relay Protocol string (line 138)."""
         provider = _make_relay_provider()
         assert "Relay" in provider.description()
+
+    @pytest.mark.parametrize(
+        ("currency_out", "expected"),
+        [
+            ({"amount": "120", "minimumAmount": "110"}, 110),
+            ({"amount": "120"}, 120),
+            (None, 0),
+        ],
+        ids=["minimum", "amount-only", "unknown"],
+    )
+    def test_min_output_reads_the_quote(
+        self, currency_out: t.Optional[t.Dict], expected: int
+    ) -> None:
+        """The quote's minimum output, or 0 when the quote does not say."""
+        provider = _make_relay_provider()
+        req = _make_request(provider_id="relay-provider", amount=100)
+        details = {"currencyOut": currency_out} if currency_out else {}
+        req.quote_data = _make_quote_data(
+            provider_data={"response": {"details": details}}
+        )
+
+        assert provider.min_output(req) == expected
 
     def test_quote_wrong_status_raises(self) -> None:
         """quote() raises RuntimeError for wrong status (line 151)."""

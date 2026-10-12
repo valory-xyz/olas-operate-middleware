@@ -153,7 +153,8 @@ end up; quoting, monitoring and execution are shared:
    asked adds a buffer per step kind present (`FUNDING_RUN_BUFFER_BPS`), so
    price movement before the final re-quote does not ask the user for more.
    An **exact run** (a single net target funded with that token on its own
-   chain; for `onboard`/`deposit`, only with the Master Safe present) skips
+   chain; for `onboard`/`deposit`, only a non-native target, which never
+   includes the Master EOA reserve, with the Master Safe present) skips
    all of this: the user sends exactly the target, and RECEIVE is its only
    step. It goes straight to the Master Safe, except on a `signer_gas` run,
    which deposits to the Master EOA.
@@ -167,18 +168,21 @@ end up; quoting, monitoring and execution are shared:
    counts. Source-token funds the Master EOA held
    before the run count toward the quote but are not a deposit
    (`prior_received`): once a deposit arrives, a waiting run can no longer be
-   cancelled or replaced. On full receipt the run re-quotes once more and
-   freezes, unless the deposit no longer covers that fresh quote without its
-   buffer.
+   cancelled or replaced. Once the deposit covers the quote without its
+   buffer, the run re-quotes once more and freezes, unless the deposit no
+   longer covers that fresh quote without its buffer.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
    the Master EOA reserve moves to the Master Safe), then, for USDC sources,
    **delegation clearing**. Before the source leg is sent, the request that
    delivers destination native is re-quoted as exact-input (Relay
    `EXACT_INPUT`) over its input plus whatever the deposit leaves beyond the
    raw quote, so that leftover leaves the origin Master EOA with the run and
-   arrives as destination native. Funds held before the run only pay toward
-   the raw quote and are never swept. Only the unused part of the USDC gas
-   allowance, or of a native source's gas, stays behind.
+   arrives as destination native. The exact-input quote is used only if it
+   still delivers what the quoted leg promised. Funds held before the run
+   only pay toward the raw quote and are never swept. Only the unused part of
+   the USDC gas allowance stays behind, or for a native source twice its
+   quoted gas, in case gas costs more at send time. A retry re-sweeps against
+   the current balance.
 
 Routing reuses the bridge providers through `BridgeManager.quote_requests`,
 which never touches the Transak/bridge flow's cached bundle. One run exists at
@@ -222,8 +226,9 @@ with no user prompt. Custody properties:
   delegating to `address(0)`, paid with source-chain native the source leg
   reserves for it (`CLEAR_DELEGATION_GAS_RESERVE`), with the gas margin and
   short retry budget of `CLEAR_DELEGATION_*` in `operate/constants.py`.
-  Clearing never fails the run; it is retried in the background and at
-  start-up until the Master EOA has no code. While live, `Simple7702Account`
+  Clearing never fails the run; a transaction not mined within that budget
+  is confirmed on a later tick, and a failed one is retried in the
+  background and at start-up until the Master EOA has no code. While live, `Simple7702Account`
   accepts calls only from itself
   or the EntryPoint, and only with the Master EOA's own signature.
 

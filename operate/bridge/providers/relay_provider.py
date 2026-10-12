@@ -320,6 +320,16 @@ class RelayProvider(Provider):
 
             time.sleep(2)
 
+    def min_output(self, provider_request: ProviderRequest) -> int:
+        """Least amount of the `to` token a quoted request delivers; 0 if unknown."""
+        quote_data = provider_request.quote_data
+        response = (
+            (quote_data.provider_data or {}).get("response") if quote_data else None
+        )
+        currency_out = ((response or {}).get("details") or {}).get("currencyOut") or {}
+        amount = currency_out.get("minimumAmount", currency_out.get("amount"))
+        return int(amount) if amount is not None else 0
+
     def _get_txs(
         self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Dict]]:

@@ -30,6 +30,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from web3.exceptions import TransactionNotFound
 
 from operate.bridge.bridge_manager import BridgeManager
 from operate.bridge.providers.provider import (
@@ -125,6 +126,11 @@ class FakeProvider:
         result[token] = result.get(token, 0) + amount
         return {chain: {EOA: result}}
 
+    def min_output(self, request: ProviderRequest) -> int:
+        """1:1, less the bridge's configured shortfall."""
+        amount = request.params["from"].get("amount", request.params["to"]["amount"])
+        return int(amount) - self.bridge.output_shortfall
+
     def get_txs(self, request: ProviderRequest) -> t.List[t.Tuple[str, t.Dict]]:
         """One deposit tx per request, distinct per destination chain and token."""
         return [("deposit-0", _deposit_tx(request))]
@@ -215,6 +221,7 @@ class FakeBridge:
         self.unconfirmed: t.Set[str] = set()
         self.fail_quote = False
         self.fail_execute = False
+        self.output_shortfall = 0
         self.quote_count = 0
 
     def quote_requests(self, requests_params: t.List[t.Dict]) -> FakeBundle:
@@ -1019,16 +1026,38 @@ class TestExactPath:
         assert env.manager.run_json(run)["source"]["deposit_address"] == SAFE
 
     def test_listed_token_is_exact_too(self, tmp_path: Path) -> None:
-        """A single native target funded with native on its chain."""
+        """A single USDC target funded with USDC on its chain."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
 
         run = _deposit_run(
-            env, source_chain="polygon", source_token=NATIVE, amounts={NATIVE: 10}
+            env,
+            source_chain="polygon",
+            source_token=POLYGON_USDC,
+            amounts={POLYGON_USDC: 10},
         )
 
         assert run.exact is True
         assert env.manager.run_json(run)["source"]["deposit_address"] == SAFE
         assert run.required_amount == 10
+
+    @pytest.mark.parametrize("mode", ["onboard", "deposit"])
+    def test_native_target_is_never_exact(self, tmp_path: Path, mode: str) -> None:
+        """Native may include the Master EOA reserve, so it is not sent to the Safe."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+        env.funding_manager.destination_targets.return_value = {NATIVE: 10}
+
+        run = env.manager.create_run(
+            mode=mode,
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+            service_config_id="sc-1" if mode == "onboard" else None,
+            deposit_amounts={NATIVE: "10"} if mode == "deposit" else None,
+        )
+
+        assert not run.exact
+        assert env.manager.run_json(run)["source"]["deposit_address"] == EOA
+        assert STEP_SAFE in [s.id for s in run.steps]
 
     def test_without_safe_follows_standard_flow(self, tmp_path: Path) -> None:
         """No Master Safe on the chain: deposit to the Master EOA, as today."""
@@ -1234,6 +1263,21 @@ class TestBuffer:
             FundingRunStatus.PROCESSING if within else FundingRunStatus.AWAITING_DEPOSIT
         )
         assert run.status == expected
+
+    @pytest.mark.usefixtures("_buffered")
+    def test_deposit_covering_the_raw_quote_proceeds(self, tmp_path: Path) -> None:
+        """A deposit short of the buffer, e.g. after an exchange fee, still starts."""
+        env = Env(tmp_path)
+        run = _deposit_run(env)
+        raw = _required(run) - int(run.buffer_amount or 0)
+        env.balances[(Chain.BASE, BASE_USDC)] = raw
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.status == FundingRunStatus.PROCESSING
+        assert run.step(STEP_RECEIVE).amount == raw
+        assert env.manager.run_json(run)["quote"]["outstanding_amount"] == "0"
 
     def test_old_run_without_buffer_fields_loads(self, tmp_path: Path) -> None:
         """Runs stored before the update load as not exact and unbuffered."""
@@ -2249,8 +2293,9 @@ class TestSweep:
 
         swept = _native_leg(run)
         value = _deposit_tx(leg)["value"]
-        assert swept.params["from"]["amount"] == value + 100
-        assert swept.params["to"]["amount"] == value + 100
+        margin = GAS * len(run.source_requests)  # the quoted gas, held back again
+        assert swept.params["from"]["amount"] == value + 100 - margin
+        assert swept.params["to"]["amount"] == value + 100 - margin
 
     def test_same_chain_native_source_needs_no_sweep(self, tmp_path: Path) -> None:
         """The leftover already is destination native: the Safe step moves it."""
@@ -2282,21 +2327,41 @@ class TestSweep:
         assert _native_leg(run).execution_data is not None
         assert _logged(env, "not swept")
 
-    def test_retry_keeps_the_swept_amount(self, tmp_path: Path) -> None:
-        """A retried leg is re-quoted with the same from.amount, not swept twice."""
+    def test_retry_sweeps_what_is_left(self, tmp_path: Path) -> None:
+        """A failed attempt that cost funds shrinks the sweep instead of failing again."""
         env = Env(tmp_path)
         run = _overfunded(env, extra=1_000)
+        unswept = _native_leg(run).params["to"]["amount"]
         env.sender.prepare_batch.side_effect = GasAbstractionError("bundler down")
         env.manager.tick()
         run = env.reload(run)
         assert run.status == FundingRunStatus.FAILED
-        swept = _native_leg(run).params["from"]["amount"]
+        assert _native_leg(run).params["from"]["amount"] == unswept + 1_000
 
+        env.balances[(Chain.BASE, BASE_USDC)] -= 400  # e.g. paymaster fees
         env.sender.prepare_batch.side_effect = None
         env.manager.retry(run.id)
+        retried = env.bridge.quoted[-len(run.source_requests) :]
+        assert all("amount" not in p["from"] for p in retried)
+        assert unswept in [p["to"]["amount"] for p in retried]
         env.manager.tick()
 
-        assert _native_leg(env.reload(run)).params["from"]["amount"] == swept
+        assert _native_leg(env.reload(run)).params["from"]["amount"] == unswept + 600
+
+    def test_sweep_that_would_deliver_less_is_not_used(self, tmp_path: Path) -> None:
+        """The exact-input quote must deliver at least what the quoted leg promised."""
+        env = Env(tmp_path)
+        run = _overfunded(env, extra=1_000)
+        leg = _native_leg(run)
+        env.bridge.output_shortfall = 1_001
+
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert _native_leg(run).id == leg.id
+        assert _native_leg(run).execution_data is not None
+        assert run.unswept_to_amount is None
+        assert _logged(env, "would deliver less")
 
     def test_signer_gas_sweeps_into_existing_safe(self, tmp_path: Path) -> None:
         """Fund Pearl Wallet keeps the Signer reserve and moves the rest to the Safe."""
@@ -2316,9 +2381,10 @@ class TestSweep:
         run = env.tick_until(run, FundingRunStatus.COMPLETED)
 
         swept = _native_leg(run)
-        assert swept.params["from"]["amount"] == _deposit_tx(leg)["value"] + 100
+        gas = GAS * len(run.source_requests)
+        assert swept.params["from"]["amount"] == _deposit_tx(leg)["value"] + 100 - gas
         sent = sum(_deposit_tx(r)["value"] for r in run.source_requests)
-        assert balance - sent == GAS * len(run.source_requests)  # only gas stays
+        assert balance - sent == 2 * gas  # the quoted gas and its margin stay
         env.wallet.create_safe_and_transfer_excess.assert_called_once_with(
             chain=Chain.POLYGON, backup_owner=None
         )
@@ -3247,6 +3313,33 @@ class TestExecutionEdgeCases:
         assert not run.delegation_cleared
         pointer = env.manager._pointer()  # pylint: disable=protected-access
         assert pointer.pending_clear_run_ids == [run.id]
+
+    def test_unmined_clearing_is_confirmed_on_a_later_tick(
+        self, tmp_path: Path
+    ) -> None:
+        """A clearing tx still pending is neither failed nor resent; a later tick confirms it."""
+        env = Env(tmp_path)
+        run = _funded(env)
+        _all_succeed(env)
+        env.wallet.clear_delegation.side_effect = lambda chain: "0x" + "c3" * 32
+        ledger_api = MagicMock()
+        ledger_api.api.eth.get_transaction_receipt.side_effect = TransactionNotFound(
+            "pending"
+        )
+
+        with patch(f"{MODULE}.get_default_ledger_api", return_value=ledger_api):
+            run = env.tick_until(run, FundingRunStatus.COMPLETED)
+        step = run.step(STEP_CLEAR_DELEGATION)
+        assert step.status == FundingStepStatus.PROCESSING
+        assert step.tx_hash == "0x" + "c3" * 32
+
+        env.delegated = False  # mined
+        env.manager.tick()
+
+        run = env.reload(run)
+        assert run.step(STEP_CLEAR_DELEGATION).status == FundingStepStatus.DONE
+        assert run.delegation_cleared is True
+        env.wallet.clear_delegation.assert_called_once_with(Chain.BASE)
 
 
 # ---------------------------------------------------------------------------

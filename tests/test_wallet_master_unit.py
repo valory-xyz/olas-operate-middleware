@@ -26,9 +26,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-from autonomy.chain.exceptions import ChainInteractionError
+from autonomy.chain.exceptions import ChainInteractionError, ChainTimeoutError
 from eth_account import Account
 from eth_account.messages import encode_typed_data
+from web3.exceptions import TimeExhausted
 
 from operate.constants import (
     CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER,
@@ -2971,6 +2972,7 @@ class TestClearDelegation:
         nonces: t.List[int],
         builds: int,
         settler_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+        settle_error: t.Optional[Exception] = None,
     ) -> t.Tuple[str, t.List[t.Dict]]:
         ledger_api = MagicMock()
         ledger_api.api.eth.get_transaction_count.side_effect = nonces
@@ -2978,6 +2980,7 @@ class TestClearDelegation:
         settler = MagicMock()
         settler.transact.return_value = settler
         settler.settle.return_value = settler
+        settler.settle.side_effect = settle_error
         settler.tx_hash = "0xclear"
 
         def _settler(**kwargs: t.Any) -> MagicMock:
@@ -3015,6 +3018,19 @@ class TestClearDelegation:
         assert "0x" + auth.address.hex() == ZERO_ADDRESS
         assert tx["from"] == tx["to"] == account.address
         assert auth.authority.hex().lower() == account.address[2:].lower()
+
+    @pytest.mark.parametrize(
+        "error", [TimeExhausted("receipt"), ChainTimeoutError("not synced")]
+    )
+    def test_unmined_clearing_returns_its_hash(
+        self, tmp_path: Path, error: Exception
+    ) -> None:
+        """A receipt wait that times out is not a failure: the caller confirms later."""
+        wallet, _ = _wallet_with_real_key(tmp_path)
+
+        tx_hash, _ = self._run(wallet, nonces=[7], builds=1, settle_error=error)
+
+        assert tx_hash == "0xclear"
 
     def test_rebuild_resigns_against_fresh_nonce(self, tmp_path: Path) -> None:
         """A rebuild after `nonce too low` never reuses a stale authorization."""

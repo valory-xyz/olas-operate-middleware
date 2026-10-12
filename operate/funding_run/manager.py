@@ -43,6 +43,7 @@ from logging import Logger
 from pathlib import Path
 
 from web3 import Web3
+from web3.exceptions import TransactionNotFound
 
 from operate.bridge.bridge_manager import (
     BridgeManager,
@@ -473,8 +474,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             source != destination
             or len(targets) != 1
             or targets[0].lower() != token.lower()
-            or not (mode == FundingRunMode.SIGNER_GAS or source in self._wallet().safes)
         ):
+            return None
+        if mode == FundingRunMode.SIGNER_GAS:
+            return targets[0]
+        # A native target may include the Master EOA reserve, which must not
+        # land in the Safe.
+        if targets[0] == NATIVE or source not in self._wallet().safes:
             return None
         return targets[0]
 
@@ -709,10 +715,21 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
     def _reset_requests(self, run: FundingRun, old: t.List[ProviderRequest]) -> None:
         """Replace `old` requests with freshly quoted ones; others are untouched."""
-        fresh = self.bridge_manager.quote_requests([dict(r.params) for r in old])
+        fresh = self.bridge_manager.quote_requests(
+            [self._unswept_params(run, r) for r in old]
+        )
         self._replace_requests(
             run, {o.id: n for o, n in zip(old, fresh.provider_requests)}
         )
+
+    @staticmethod
+    def _unswept_params(run: FundingRun, request: ProviderRequest) -> t.Dict:
+        """Params as quoted before the sweep, so a retry sweeps the current balance."""
+        params = copy.deepcopy(request.params)
+        if "amount" in params["from"] and run.unswept_to_amount is not None:
+            del params["from"]["amount"]
+            params["to"]["amount"] = int(run.unswept_to_amount)
+        return params
 
     def _replace_requests(
         self, run: FundingRun, mapping: t.Dict[str, ProviderRequest]
@@ -1175,11 +1192,12 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             if not run.exact:
                 # The buffer absorbs a rise; the raw quote decides.
                 self._quote(run)
-            if self._deposit_covered(run, raw=True):
+            if self._deposit_covered(run):
                 receive = run.step(STEP_RECEIVE)
                 receive.status = FundingStepStatus.DONE
                 receive.started_at = receive.started_at or run.created_at
                 receive.finished_at = _now()
+                receive.amount = run.received_amount
                 run.status = FundingRunStatus.PROCESSING
                 self.logger.info(
                     f"[FUNDING RUN] {run.id} deposit received; processing."
@@ -1191,14 +1209,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         """The required amount without its buffer."""
         return int(t.cast(BigInt, run.required_amount)) - int(run.buffer_amount or 0)
 
-    def _deposit_covered(self, run: FundingRun, raw: bool = False) -> bool:
+    def _deposit_covered(self, run: FundingRun) -> bool:
         if (
             run.status != FundingRunStatus.AWAITING_DEPOSIT
             or run.required_amount is None
         ):
             return False
-        required = self._raw_required(run) if raw else int(run.required_amount)
-        return run.received_amount >= required
+        return run.received_amount >= self._raw_required(run)
 
     # --- execution -----------------------------------------------------------
 
@@ -1379,6 +1396,12 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         surplus = self._received(run) - max(
             self._raw_required(run), int(run.prior_received or 0)
         )
+        if token == NATIVE:
+            # Leaves the quoted gas once more, in case gas costs more at send time.
+            surplus -= sum(
+                self._source_amount(r, NATIVE) - self._leg_input(r, NATIVE)
+                for r in run.source_requests
+            )
         if surplus <= 0:
             return
         params = copy.deepcopy(leg.params)
@@ -1387,14 +1410,19 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             # A 1:1 native bridge sends to.amount; Relay ignores it on exact input.
             params["to"]["amount"] = params["from"]["amount"]
         (fresh,) = self.bridge_manager.quote_requests([params]).provider_requests
+        promised = int(leg.params["to"]["amount"])
         if fresh.status != ProviderRequestStatus.QUOTE_DONE:
-            # The requested tokens still arrive; the leftover stays behind.
-            self.logger.warning(
-                f"[FUNDING RUN] {run.id} leftover of {surplus} not swept: "
-                f"{fresh.quote_data.message if fresh.quote_data else 'quote failed'}"
-            )
+            reason = fresh.quote_data.message if fresh.quote_data else "quote failed"
+        elif self.bridge_manager.provider_for(fresh).min_output(fresh) < promised:
+            reason = f"it would deliver less than {promised}"
+        else:
+            run.unswept_to_amount = BigInt(promised)
+            self._replace_requests(run, {leg.id: fresh})
             return
-        self._replace_requests(run, {leg.id: fresh})
+        # The requested tokens still arrive; the leftover stays behind.
+        self.logger.warning(
+            f"[FUNDING RUN] {run.id} leftover of {surplus} not swept: {reason}"
+        )
 
     def _leg_input(self, request: ProviderRequest, token: str) -> int:
         """Source-token amount a request spends, without the gas it pays."""
@@ -1575,14 +1603,21 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if not self._has_step(run, STEP_CLEAR_DELEGATION) or run.delegation_cleared:
             return
         step = run.step(STEP_CLEAR_DELEGATION)
-        if (
-            step.started_at
-            and step.status != FundingStepStatus.PENDING
-            and _now() - step.started_at < CLEAR_DELEGATION_RETRY_SECONDS
-        ):
-            return
         source = Chain(run.source_chain)
         try:
+            sent = step.status == FundingStepStatus.PROCESSING and step.tx_hash
+            if (
+                sent
+                and self._sender_factory(self._wallet()).delegation_of(source) is None
+            ):
+                self._delegation_cleared(run, step)
+                return
+            if (
+                step.started_at
+                and step.status != FundingStepStatus.PENDING
+                and _now() - step.started_at < CLEAR_DELEGATION_RETRY_SECONDS
+            ):
+                return
             if step.request_ids:
                 self._track(run, step)
                 # The clearing gas is still being swapped in on the source
@@ -1609,15 +1644,11 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 run.clear_delegation_tx_hash = self._wallet().clear_delegation(source)
                 step.tx_hash = run.clear_delegation_tx_hash
             if sender.delegation_of(source) is not None:
+                if not self._is_mined(source, t.cast(str, step.tx_hash)):
+                    self._store(run)  # confirmed on a later tick
+                    return
                 raise GasAbstractionError("Delegation still present after clearing.")
-            step.status = FundingStepStatus.DONE
-            step.finished_at = _now()
-            run.delegation_cleared = True
-            self._store(run)
-            pointer = self._pointer()
-            if run.id in pointer.pending_clear_run_ids:
-                pointer.pending_clear_run_ids.remove(run.id)
-                pointer.store()
+            self._delegation_cleared(run, step)
         except Exception as e:  # pylint: disable=broad-except
             # Custody is unaffected either way; retried in the background.
             step.status = FundingStepStatus.FAILED
@@ -1626,6 +1657,24 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             self.logger.warning(
                 f"[FUNDING RUN] Clearing delegation for {run.id} failed: {e}"
             )
+
+    def _delegation_cleared(self, run: FundingRun, step: FundingRunStep) -> None:
+        step.status = FundingStepStatus.DONE
+        step.finished_at = _now()
+        run.delegation_cleared = True
+        self._store(run)
+        pointer = self._pointer()
+        if run.id in pointer.pending_clear_run_ids:
+            pointer.pending_clear_run_ids.remove(run.id)
+            pointer.store()
+
+    @staticmethod
+    def _is_mined(chain: Chain, tx_hash: str) -> bool:
+        try:
+            get_default_ledger_api(chain).api.eth.get_transaction_receipt(tx_hash)
+        except TransactionNotFound:
+            return False
+        return True
 
     # --- background loop ------------------------------------------------------
 
