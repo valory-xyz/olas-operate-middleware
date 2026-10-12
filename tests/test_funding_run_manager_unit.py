@@ -1061,6 +1061,20 @@ class TestExactPath:
         assert env.manager.run_json(run)["source"]["deposit_address"] == EOA
         assert [s.id for s in run.steps] == [STEP_RECEIVE]
 
+    def test_signer_gas_funded_in_usdc_is_not_exact(self, tmp_path: Path) -> None:
+        """Only a native deposit is the signer_gas target itself."""
+        env = Env(tmp_path, safes={Chain.BASE: SAFE})
+
+        run = env.manager.create_run(
+            mode="signer_gas",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="base",
+        )
+
+        assert not run.exact
+        assert [s.id for s in run.steps] != [STEP_RECEIVE]
+
     @pytest.mark.parametrize(
         "kwargs",
         [
