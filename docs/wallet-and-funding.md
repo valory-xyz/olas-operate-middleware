@@ -141,7 +141,8 @@ end up; quoting, monitoring and execution are shared:
 - `signer_gas`: the Master EOA native reserve (`DEFAULT_EOA_TOPUPS`). Ends in
   the Master EOA, and a Safe is never created. On a cross-chain run, anything
   above the reserve moves to the Master Safe when one exists on that chain; a
-  same-chain run is exact (below) and leaves an overpayment on the Master EOA.
+  same-chain run funded in native is exact (below) and leaves an overpayment
+  on the Master EOA.
 
 ### Flow
 1. **Quote**, walking backwards from the net targets: destination swaps from
