@@ -469,13 +469,14 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     ) -> t.Optional[str]:
         """The single target the deposit already is, if nothing needs converting."""
         targets = [k for k, v in net.items() if v > 0]
-        if source != destination or len(targets) != 1:
+        if (
+            source != destination
+            or len(targets) != 1
+            or targets[0].lower() != token.lower()
+            or not (mode == FundingRunMode.SIGNER_GAS or source in self._wallet().safes)
+        ):
             return None
-        if targets[0].lower() != token.lower():
-            return None
-        if mode == FundingRunMode.SIGNER_GAS or source in self._wallet().safes:
-            return targets[0]
-        return None
+        return targets[0]
 
     @staticmethod
     def _deposits_to_safe(run: FundingRun) -> bool:
@@ -1009,7 +1010,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             bps += FUNDING_RUN_BUFFER_BPS["bridge"]
         if swaps:
             bps += FUNDING_RUN_BUFFER_BPS["swap"]
-        return -(-amount * bps // 10_000)  # ceiling division, no float rounding
+        return -(-amount * bps // 10_000)
 
     def _usdc_gas_cap(
         self,
@@ -1142,12 +1143,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     # --- monitoring ----------------------------------------------------------
 
     def _received(self, run: FundingRun) -> int:
-        """What the deposit wallet holds of the source token on the source chain.
-
-        Idempotent by construction: "received" is derived from the current
-        balance (above the creation baseline for same-chain runs), so partial
-        deposits and restarts need no bookkeeping.
-        """
+        """Source-token balance of the deposit wallet, above the baseline if any."""
         source = Chain(run.source_chain)
         wallet = self._wallet()
         balance = int(
@@ -1379,11 +1375,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         # A leg that already carries from.amount was swept before a retry.
         if leg is None or "amount" in leg.params["from"]:
             return
-        received = self._received(run)
         # Funds held before the run only ever pay for the raw quote.
-        surplus = min(
-            received - self._raw_required(run),
-            received - int(run.prior_received or 0),
+        surplus = self._received(run) - max(
+            self._raw_required(run), int(run.prior_received or 0)
         )
         if surplus <= 0:
             return
