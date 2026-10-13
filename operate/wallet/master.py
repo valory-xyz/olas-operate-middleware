@@ -30,14 +30,18 @@ from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
-from autonomy.chain.exceptions import ChainInteractionError
+from autonomy.chain.exceptions import ChainInteractionError, ChainTimeoutError
 from autonomy.chain.tx import TxSettler
 from cryptography.fernet import InvalidToken
 from eth_account.datastructures import SignedSetCodeAuthorization
 from eth_account.signers.local import LocalAccount
 from web3 import Account, Web3
+from web3.exceptions import TimeExhausted
 
 from operate.constants import (
+    CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER,
+    CLEAR_DELEGATION_RETRIES,
+    CLEAR_DELEGATION_TIMEOUT,
     MSG_SAFE_CREATED_TRANSFER_COMPLETED,
     MSG_SAFE_CREATED_TRANSFER_FAILED,
     MSG_SAFE_CREATION_FAILED,
@@ -1402,20 +1406,26 @@ class EthereumMasterWallet(
             ledger_api=ledger_api,
             signer_address=self.address,
         ):
-            return (
-                TxSettler(
-                    ledger_api=ledger_api,
-                    crypto=self.crypto,
-                    chain_type=chain,
-                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                    retries=ON_CHAIN_INTERACT_RETRIES,
-                    sleep=ON_CHAIN_INTERACT_SLEEP,
-                    tx_builder=_build_tx,
+            settler = TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=chain,
+                timeout=CLEAR_DELEGATION_TIMEOUT,
+                retries=CLEAR_DELEGATION_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                gas_estimate_multiplier=CLEAR_DELEGATION_GAS_ESTIMATE_MULTIPLIER,
+                tx_builder=_build_tx,
+            ).transact()
+            try:
+                settler.settle()
+            except (TimeExhausted, ChainTimeoutError):
+                # Not mined within the short timeout (e.g. Ethereum blocks):
+                # the caller confirms the clearing on-chain later.
+                logger.warning(
+                    f"Delegation clearing {settler.tx_hash} on {chain.name} "
+                    "not mined yet."
                 )
-                .transact()
-                .settle()
-                .tx_hash
-            )
+            return t.cast(str, settler.tx_hash)
 
     def update_backup_owner(
         self,

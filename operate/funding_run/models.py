@@ -133,10 +133,15 @@ class FundingRun(LocalResource):  # pylint: disable=too-many-instance-attributes
     # reserve requests) and one swap per remaining target token.
     source_requests: t.List[ProviderRequest] = field(default_factory=list)
     swap_requests: t.List[ProviderRequest] = field(default_factory=list)
+    # to.amount of the swept native leg before the sweep; a retry quotes it again.
+    unswept_to_amount: t.Optional[BigInt] = None
     required_amount: t.Optional[BigInt] = None
+    # Part of required_amount that is buffer; see FUNDING_RUN_BUFFER_BPS.
+    buffer_amount: t.Optional[BigInt] = None
+    # See FundingRunManager._exact_token.
+    exact: t.Optional[bool] = None
     received_amount: BigInt = field(default_factory=lambda: BigInt(0))
-    # Same-chain runs only: the Master EOA source-token balance at creation
-    # that the targets already netted. Only growth above it is "received".
+    # Same-chain runs: deposit-wallet balance at creation; only growth above it counts.
     receive_baseline: t.Optional[BigInt] = None
     # Received at creation, from funds already held: quoted against, not a deposit.
     prior_received: t.Optional[BigInt] = None

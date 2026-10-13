@@ -46,6 +46,7 @@ from operate.ledger.profiles import (
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
     OLAS,
+    PUSD,
     USDC,
 )
 from operate.operate_types import Chain, LedgerType
@@ -976,6 +977,38 @@ class TestFundingRunRoutes:
             backup_owner=body.get("backup_owner"),
         )
 
+    def test_create_accepts_required_token_as_exact_safe_deposit(
+        self, client: TestClient
+    ) -> None:
+        """A single pUSD target on Polygon is funded with pUSD, straight into the Safe."""
+        safe = "0x" + "b" * 40
+        wallet = mock.Mock(address="0x" + "a" * 40, safes={Chain.POLYGON: safe})
+        wallet.get_balance.return_value = 0
+        pusd = PUSD[Chain.POLYGON]
+        with (
+            mock.patch("operate.cli.FundingRunManager._wallet", return_value=wallet),
+            mock.patch(
+                "operate.funding_run.manager.get_asset_decimals", return_value=6
+            ),
+        ):
+            response = client.post(
+                "/api/funding_run",
+                json={
+                    "mode": "deposit",
+                    "source": {"chain": "polygon", "token": pusd.lower()},
+                    "destination": {"chain": "polygon"},
+                    "deposit_amounts": {pusd: "10"},
+                },
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        body = response.json()
+        assert body["quote"]["exact"] is True
+        assert body["quote"]["required_amount"] == "10"
+        assert body["source"]["token"] == pusd
+        assert body["source"]["deposit_address"] == safe
+        assert [step["kind"] for step in body["steps"]] == ["RECEIVE"]
+
     @pytest.mark.parametrize(
         "body",
         [
@@ -990,6 +1023,13 @@ class TestFundingRunRoutes:
                 "source": {"chain": "gnosis", "token": USDC[Chain.GNOSIS]},
                 "destination": {"chain": "polygon"},
                 "deposit_amounts": {ZERO_ADDRESS: "1"},
+            },
+            {
+                # The required-token source needs a single required token.
+                "mode": "deposit",
+                "source": {"chain": "polygon", "token": PUSD[Chain.POLYGON]},
+                "destination": {"chain": "polygon"},
+                "deposit_amounts": {PUSD[Chain.POLYGON]: "1", ZERO_ADDRESS: "1"},
             },
             {
                 "mode": "deposit",
