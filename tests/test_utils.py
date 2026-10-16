@@ -495,6 +495,15 @@ class TestIterLinesBackwards:
         path = tmp_path / "file"
         path.write_bytes(b"x" * 1000 + b"\nlast")
         with open(path, "rb") as file:
+            bytes_read = []
+            read = file.read
+
+            def recording_read(*args: t.Any) -> bytes:
+                data = read(*args)
+                bytes_read.append(len(data))
+                return data
+
+            file.read = recording_read  # type: ignore[method-assign]
             iterator = iter_lines_backwards(file, 8)
             assert next(iterator) == b"last"
-            assert file.tell() == path.stat().st_size
+            assert sum(bytes_read) <= 8
