@@ -56,6 +56,8 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     AGENT_RUNNER_PREFIX,
     DEPLOYMENT_DIR,
+    FEED_PAGE_LIMIT_DEFAULT,
+    FEED_PAGE_LIMIT_MAX,
     FUNDING_RUNS_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
@@ -1540,6 +1542,43 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         def _fn() -> JSONResponse:
             service = operate.service_manager().load(service_config_id=safe_id)
             return JSONResponse(content=service.get_agent_performance())
+
+        return await run_in_executor(_fn)
+
+    @service_router.get("/api/v2/service/{service_config_id}/feed")
+    async def _get_feed(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        # Parsed by hand so a bad value answers 400 {"error"}, not pydantic's 422.
+        before: t.Optional[str] = Query(None),  # noqa: B008
+        limit: t.Optional[str] = Query(None),  # noqa: B008
+    ) -> JSONResponse:
+        """Get a page of the agent's feed, oldest entry first."""
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            before_id = None if before is None else int(before)
+            page_size = FEED_PAGE_LIMIT_DEFAULT if limit is None else int(limit)
+        except ValueError:
+            return JSONResponse(
+                content={"error": "'before' and 'limit' must be integers."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        if not 1 <= page_size <= FEED_PAGE_LIMIT_MAX:
+            return JSONResponse(
+                content={
+                    "error": f"'limit' must be between 1 and {FEED_PAGE_LIMIT_MAX}."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        safe_id = validated_safe_id(service_config_id)
+
+        def _fn() -> JSONResponse:
+            service = operate.service_manager().load(service_config_id=safe_id)
+            return JSONResponse(
+                content=service.get_feed_page(before=before_id, limit=page_size)
+            )
 
         return await run_in_executor(_fn)
 

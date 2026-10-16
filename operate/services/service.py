@@ -73,6 +73,7 @@ from operate.constants import (
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
     FEED_JSONL,
+    FEED_PAGE_LIMIT_DEFAULT,
     HEALTHCHECK_JSON,
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
@@ -1174,7 +1175,7 @@ class Service(LocalResource):
         return dict(sorted(agent_performance.items()))
 
     def get_feed_page(
-        self, before: t.Optional[int] = None, limit: int = 20
+        self, before: t.Optional[int] = None, limit: int = FEED_PAGE_LIMIT_DEFAULT
     ) -> FeedPage:
         """Return up to `limit` feed entries with an id below `before`, oldest first.
 

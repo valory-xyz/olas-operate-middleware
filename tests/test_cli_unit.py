@@ -4233,3 +4233,57 @@ class TestWithdrawSafeEndpoint:
                 )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
         assert "must be a JSON object" in resp.json()["detail"]
+
+
+class TestFeedRoute:
+    """GET /api/v2/service/{service_config_id}/feed."""
+
+    @staticmethod
+    def _get(m: MagicMock, query: str = "") -> Any:
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                return c.get(f"/api/v2/service/svc1/feed{query}")
+
+    @staticmethod
+    def _operate_with_service() -> tuple:
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = m.service_manager.return_value.load.return_value
+        svc.get_feed_page.return_value = {"entries": [{"id": 1}], "has_more": True}
+        return m, svc
+
+    def test_unknown_service(self) -> None:
+        """An unknown service is 404, like the other service routes."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = False
+        resp = self._get(m)
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+        assert resp.json() == {"error": "Service svc1 not found"}
+
+    def test_defaults(self) -> None:
+        """Without a query the newest default-sized page is returned."""
+        m, svc = self._operate_with_service()
+        resp = self._get(m)
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"entries": [{"id": 1}], "has_more": True}
+        svc.get_feed_page.assert_called_once_with(before=None, limit=20)
+
+    @pytest.mark.parametrize("limit", ["1", "50"])
+    def test_passes_before_and_limit(self, limit: str) -> None:
+        """`before` and `limit` reach the service as integers."""
+        m, svc = self._operate_with_service()
+        resp = self._get(m, f"?before=42&limit={limit}")
+        assert resp.status_code == HTTPStatus.OK
+        svc.get_feed_page.assert_called_once_with(before=42, limit=int(limit))
+
+    @pytest.mark.parametrize(
+        "query", ["?limit=0", "?limit=51", "?limit=-1", "?limit=abc", "?before=x"]
+    )
+    def test_bad_query_is_400(self, query: str) -> None:
+        """Out-of-range or non-integer values answer 400 in the error shape."""
+        m, svc = self._operate_with_service()
+        resp = self._get(m, query)
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "error" in resp.json()
+        svc.get_feed_page.assert_not_called()
