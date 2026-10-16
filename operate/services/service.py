@@ -1218,6 +1218,8 @@ class Service(LocalResource):
         """
         try:
             entry = json.loads(line, parse_constant=_reject_json_constant)
+            # A lone surrogate escape ("\ud83d") parses but cannot be sent as UTF-8.
+            json.dumps(entry, ensure_ascii=False).encode("utf-8")
         except ValueError:
             return None
         if (
