@@ -445,6 +445,18 @@ class TestGetFeedPage:
         page = self._service(tmp_path).get_feed_page()
         assert self._ids(page) == [1, 2]
 
+    @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+    def test_skips_lines_with_non_standard_constants(
+        self, tmp_path: Path, constant: str
+    ) -> None:
+        """A line the response could not serialise is skipped like any other."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1) + f'{{"id": 2, "value": {constant}}}\n' + _feed_line(3),
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 3]
+
     def test_has_more_ignores_unparseable_older_lines(self, tmp_path: Path) -> None:
         """`has_more` is only set when an older parseable entry exists."""
         self._write_feed(tmp_path, "garbage\n" + _feed_line(1) + _feed_line(2))

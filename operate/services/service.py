@@ -155,6 +155,11 @@ def mkdirs(build_dir: Path) -> None:
             continue
 
 
+def _reject_json_constant(constant: str) -> t.NoReturn:
+    """Reject NaN and Infinity, which a JSON response cannot serialise."""
+    raise ValueError(f"Non-standard JSON constant: {constant}")
+
+
 def remove_service_network(service_name: str, force: bool = True) -> None:
     """Remove service network cache."""
     client = from_env()
@@ -1212,7 +1217,7 @@ class Service(LocalResource):
         The agent appends while the middleware reads, so the last line can be cut.
         """
         try:
-            entry = json.loads(line)
+            entry = json.loads(line, parse_constant=_reject_json_constant)
         except ValueError:
             return None
         if (
