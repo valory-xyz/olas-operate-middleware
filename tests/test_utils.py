@@ -34,6 +34,7 @@ from operate.utils import (
     concurrent_execute,
     concurrent_execute_async,
     create_backup,
+    iter_lines_backwards,
     merge_sum_dicts,
     safe_file_operation,
     secure_copy_private_key,
@@ -462,3 +463,47 @@ class TestConcurrentExecuteAsyncCallable:
 
         result = await concurrent_execute_async((async_double, (5,)))
         assert result == [10]
+
+
+class TestIterLinesBackwards:
+    """Tests for iter_lines_backwards."""
+
+    @pytest.mark.parametrize("block_size", [1, 2, 3, 5, 7, 64])
+    @pytest.mark.parametrize(
+        "content",
+        [
+            b"",
+            b"\n",
+            b"a",
+            b"one\ntwo\nthree",
+            b"one\ntwo\nthree\n",
+            b"\n\nlonger line here\nx\n\n",
+        ],
+    )
+    def test_matches_lines_reversed(
+        self, tmp_path: Path, content: bytes, block_size: int
+    ) -> None:
+        """Every block size yields the same lines as splitting the whole file."""
+        path = tmp_path / "file"
+        path.write_bytes(content)
+        with open(path, "rb") as file:
+            lines = list(iter_lines_backwards(file, block_size))
+        assert lines == list(reversed(content.split(b"\n")))
+
+    def test_reads_no_more_than_needed(self, tmp_path: Path) -> None:
+        """Stopping after the last line leaves the start of the file unread."""
+        path = tmp_path / "file"
+        path.write_bytes(b"x" * 1000 + b"\nlast")
+        with open(path, "rb") as file:
+            bytes_read = []
+            read = file.read
+
+            def recording_read(*args: t.Any) -> bytes:
+                data = read(*args)
+                bytes_read.append(len(data))
+                return data
+
+            file.read = recording_read  # type: ignore[method-assign]
+            iterator = iter_lines_backwards(file, 8)
+            assert next(iterator) == b"last"
+            assert sum(bytes_read) <= 8

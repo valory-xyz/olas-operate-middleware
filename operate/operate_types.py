@@ -194,6 +194,13 @@ class ServiceTemplate(TypedDict, total=False):
     env_variables: EnvVariables
 
 
+class FeedPage(TypedDict):
+    """A page of the agent's feed.jsonl, oldest entry first."""
+
+    entries: t.List[t.Dict[str, t.Any]]
+    has_more: bool
+
+
 @dataclass
 class DeployedNodes(LocalResource):
     """Deployed nodes type."""

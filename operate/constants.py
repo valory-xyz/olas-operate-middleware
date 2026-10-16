@@ -35,6 +35,9 @@ DEPLOYMENT_JSON = "deployment.json"
 CONFIG_JSON = "config.json"
 USER_JSON = "user.json"
 HEALTHCHECK_JSON = "healthcheck.json"
+FEED_JSONL = "feed.jsonl"
+FEED_PAGE_LIMIT_DEFAULT = 20
+FEED_PAGE_LIMIT_MAX = 50
 ACHIEVEMENTS_NOTIFICATIONS_JSON = "achievements_notifications.json"
 PEARL_STORE_JSON = "pearl_store.json"
 VERSION_FILE = "operate.version"
@@ -94,11 +97,14 @@ CLEAR_DELEGATION_TIMEOUT = 10.0
 MIN_PASSWORD_LENGTH = 8
 DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS = 300  # Seconds to wait after an agent has been funded during which it will not be asked for fund requirements again
 
-AGENT_HTTP_PORT = 8716  # agent HTTP server (healthcheck / funds-status)
+AGENT_HTTP_PORT = 8716  # agent HTTP server (healthcheck / funds-status / chat)
 TENDERMINT_COM_PORT = 8080  # Tendermint manager (flask) control server
 
 HEALTH_CHECK_URL = f"http://127.0.0.1:{AGENT_HTTP_PORT}/healthcheck"  # possible DNS issues on windows so use IP address
 AGENT_FUNDS_STATUS_URL = f"http://127.0.0.1:{AGENT_HTTP_PORT}/funds-status"
+AGENT_CHAT_URL = f"http://127.0.0.1:{AGENT_HTTP_PORT}/api/v1/chat"
+# The agent replies to a chat message synchronously, after an LLM call.
+AGENT_CHAT_TIMEOUT_SECONDS = 60
 SAFE_WEBAPP_URL = "https://app.safe.global/home?safe=gno:"
 TM_CONTROL_URL = f"http://localhost:{TENDERMINT_COM_PORT}"
 IPFS_ADDRESS = "https://gateway.autonolas.tech/ipfs/f01701220{hash}"

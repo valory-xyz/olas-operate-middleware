@@ -72,6 +72,8 @@ from operate.constants import (
     CONFIG_JSON,
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
+    FEED_JSONL,
+    FEED_PAGE_LIMIT_DEFAULT,
     HEALTHCHECK_JSON,
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
@@ -96,6 +98,7 @@ from operate.operate_types import (
     DeploymentConfig,
     DeploymentStatus,
     EnvVariables,
+    FeedPage,
     LedgerConfig,
     LedgerConfigs,
     OnChainData,
@@ -107,7 +110,11 @@ from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
-from operate.utils import secure_copy_private_key, unrecoverable_delete
+from operate.utils import (
+    iter_lines_backwards,
+    secure_copy_private_key,
+    unrecoverable_delete,
+)
 from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
@@ -123,6 +130,8 @@ NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
 AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 80}
+
+FEED_READ_BLOCK_SIZE = 64 * 1024
 
 logger = setup_logger("operate.services.service")
 
@@ -144,6 +153,11 @@ def mkdirs(build_dir: Path) -> None:
             os.chown(path, 1000, 1000)
         except (PermissionError, AttributeError):  # pragma: nocover
             continue
+
+
+def _reject_json_constant(constant: str) -> t.NoReturn:
+    """Reject NaN and Infinity, which a JSON response cannot serialise."""
+    raise ValueError(f"Non-standard JSON constant: {constant}")
 
 
 def remove_service_network(service_name: str, force: bool = True) -> None:
@@ -1127,6 +1141,14 @@ class Service(LocalResource):
             except Exception as e:  # pylint: disable=broad-except
                 print(f"Exception deleting {healthcheck_json_path}: {e}")
 
+    def _agent_store_path(self) -> Path:
+        """Return the agent's persistent storage directory (its STORE_PATH)."""
+        return Path(
+            self.env_variables.get(
+                AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+            ).get("value", ".")
+        )
+
     def get_agent_performance(self) -> t.Dict:
         """Return the agent activity"""
 
@@ -1139,12 +1161,7 @@ class Service(LocalResource):
         }
 
         agent_performance_json_path = (
-            Path(
-                self.env_variables.get(
-                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
-                ).get("value", ".")
-            )
-            / "agent_performance.json"
+            self._agent_store_path() / "agent_performance.json"
         )
 
         if agent_performance_json_path.exists():
@@ -1162,6 +1179,57 @@ class Service(LocalResource):
 
         return dict(sorted(agent_performance.items()))
 
+    def get_feed_page(
+        self, before: t.Optional[int] = None, limit: int = FEED_PAGE_LIMIT_DEFAULT
+    ) -> FeedPage:
+        """Return up to `limit` feed entries with an id below `before`, oldest first.
+
+        The file is read from its end, as it grows for the agent's lifetime, and
+        read whatever the deployment status, so a stopped agent shows its history.
+
+        :param before: only return entries with a smaller id; None for the newest.
+        :param limit: the maximum number of entries to return.
+        :return: the entries, and whether an older entry exists.
+        """
+        entries: t.List[t.Dict[str, t.Any]] = []
+        has_more = False
+        try:
+            with open(self._agent_store_path() / FEED_JSONL, "rb") as file:
+                for line in iter_lines_backwards(file, FEED_READ_BLOCK_SIZE):
+                    entry = self._parse_feed_line(line)
+                    if entry is None or (before is not None and entry["id"] >= before):
+                        continue
+                    if len(entries) == limit:
+                        has_more = True
+                        break
+                    entries.append(entry)
+        except FileNotFoundError:
+            # The agent has not written its first entry yet.
+            pass
+
+        entries.reverse()
+        return {"entries": entries, "has_more": has_more}
+
+    @staticmethod
+    def _parse_feed_line(line: bytes) -> t.Optional[t.Dict[str, t.Any]]:
+        """Parse a feed.jsonl line, or return None if it is not a feed entry.
+
+        The agent appends while the middleware reads, so the last line can be cut.
+        """
+        try:
+            entry = json.loads(line, parse_constant=_reject_json_constant)
+            # A lone surrogate escape ("\ud83d") parses but cannot be sent as UTF-8.
+            json.dumps(entry, ensure_ascii=False).encode("utf-8")
+        except ValueError:
+            return None
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("id"), int)
+            or isinstance(entry["id"], bool)
+        ):
+            return None
+        return entry
+
     def _load_achievements_notifications(
         self,
     ) -> t.Tuple[AchievementsNotifications, t.Dict[str, t.Any]]:
@@ -1176,12 +1244,7 @@ class Service(LocalResource):
         )
 
         agent_performance_json_path = (
-            Path(
-                self.env_variables.get(
-                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
-                ).get("value", ".")
-            )
-            / "agent_performance.json"
+            self._agent_store_path() / "agent_performance.json"
         )
 
         agent_achievements: t.Dict[str, t.Any] = {}
