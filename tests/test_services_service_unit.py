@@ -406,12 +406,14 @@ class TestGetFeedPage:
         collected: t.List[int] = []
         before: t.Optional[int] = None
         with patch("operate.services.service.FEED_READ_BLOCK_SIZE", 7):
-            while True:
+            for _ in range(10):
                 page = svc.get_feed_page(before=before, limit=7)
                 collected = self._ids(page) + collected
                 if not page["has_more"]:
                     break
                 before = page["entries"][0]["id"]
+            else:
+                pytest.fail("paging did not reach the first entry")
         assert collected == list(range(1, 51))
 
     def test_skips_cut_last_line(self, tmp_path: Path) -> None:
