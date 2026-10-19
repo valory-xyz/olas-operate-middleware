@@ -457,6 +457,15 @@ class TestGetFeedPage:
         page = self._service(tmp_path).get_feed_page()
         assert self._ids(page) == [1, 3]
 
+    def test_skips_deeply_nested_lines(self, tmp_path: Path) -> None:
+        """A line nested too deep for the JSON parser is skipped like any other."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1) + "[" * 100_000 + "]" * 100_000 + "\n" + _feed_line(3),
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 3]
+
     def test_skips_lines_with_lone_surrogates(self, tmp_path: Path) -> None:
         """A line holding an unpaired surrogate escape is skipped like any other."""
         self._write_feed(
