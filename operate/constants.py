@@ -38,6 +38,7 @@ HEALTHCHECK_JSON = "healthcheck.json"
 FEED_JSONL = "feed.jsonl"
 FEED_PAGE_LIMIT_DEFAULT = 20
 FEED_PAGE_LIMIT_MAX = 50
+FEED_READ_BLOCK_SIZE = 64 * 1024
 ACHIEVEMENTS_NOTIFICATIONS_JSON = "achievements_notifications.json"
 PEARL_STORE_JSON = "pearl_store.json"
 VERSION_FILE = "operate.version"

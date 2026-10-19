@@ -74,6 +74,7 @@ from operate.constants import (
     DEPLOYMENT_JSON,
     FEED_JSONL,
     FEED_PAGE_LIMIT_DEFAULT,
+    FEED_READ_BLOCK_SIZE,
     HEALTHCHECK_JSON,
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
@@ -130,8 +131,6 @@ NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
 AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 80}
-
-FEED_READ_BLOCK_SIZE = 64 * 1024
 
 logger = setup_logger("operate.services.service")
 
@@ -1184,9 +1183,6 @@ class Service(LocalResource):
     ) -> FeedPage:
         """Return up to `limit` feed entries with an id below `before`, oldest first.
 
-        The file is read from its end, as it grows for the agent's lifetime, and
-        read whatever the deployment status, so a stopped agent shows its history.
-
         :param before: only return entries with a smaller id; None for the newest.
         :param limit: the maximum number of entries to return.
         :return: the entries, and whether an older entry exists.
@@ -1212,10 +1208,7 @@ class Service(LocalResource):
 
     @staticmethod
     def _parse_feed_line(line: bytes) -> t.Optional[t.Dict[str, t.Any]]:
-        """Parse a feed.jsonl line, or return None if it is not a feed entry.
-
-        The agent appends while the middleware reads, so the last line can be cut.
-        """
+        """Parse a feed.jsonl line, or return None if it is not a feed entry."""
         try:
             entry = json.loads(line, parse_constant=_reject_json_constant)
             # A lone surrogate escape ("\ud83d") parses but cannot be sent as UTF-8.
