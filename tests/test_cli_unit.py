@@ -4363,6 +4363,20 @@ class TestChatRoute:
         assert resp.status_code == HTTPStatus.NOT_FOUND
         assert resp.json() == {"error": "Service svc1 not found"}
 
+    def test_login_is_checked_before_the_body(self) -> None:
+        """A logged-out user gets 401 even with a bad body."""
+        resp = self._post(
+            self._operate(password=None), _closed_port_url(), content=b"not json"
+        )
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_service_is_checked_before_the_body(self) -> None:
+        """An unknown service gets 404 even with a bad body."""
+        resp = self._post(
+            self._operate(exists=False), _closed_port_url(), content=b"not json"
+        )
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
     @pytest.mark.parametrize(
         "kwargs",
         [
@@ -4460,3 +4474,27 @@ class TestChatRoute:
         assert resp.json() == agent_body
         assert resp.headers["content-type"].startswith("application/json")
         assert received == [self.BODY]
+
+    def test_passes_non_json_answer_through(self) -> None:
+        """A plain-text agent error comes back with its own body and Content-Type."""
+
+        async def handler(request: web.Request) -> web.Response:
+            return web.Response(text="boom", status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert resp.text == "boom"
+        assert resp.headers["content-type"].startswith("text/plain")
+
+    def test_passes_answer_without_content_type_through(self) -> None:
+        """An empty agent answer, which has no Content-Type, comes back as is."""
+
+        async def handler(request: web.Request) -> web.Response:
+            return web.Response(status=HTTPStatus.CONFLICT)
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.CONFLICT
+        assert resp.content == b""
+        assert "content-type" not in resp.headers
