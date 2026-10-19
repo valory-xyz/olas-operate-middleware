@@ -87,6 +87,7 @@ from operate.migration import MigrationManager
 from operate.operate_types import (
     Chain,
     ChainAmounts,
+    ChatRequest,
     DeploymentStatus,
     FundRecoveryExecuteRequest,
     FundRecoveryScanRequest,
@@ -1621,7 +1622,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return await run_in_executor(_fn)
 
     @service_router.post("/api/v2/service/{service_config_id}/chat")
-    async def _chat_with_agent(  # pylint: disable=too-many-return-statements
+    async def _chat_with_agent(
         service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
         request: Request,
     ) -> Response:
@@ -1635,29 +1636,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         try:
-            data = await request.json()
-        except Exception:  # pylint: disable=broad-except
+            chat = ChatRequest.model_validate_json(await request.body())
+        except ValidationError as ve:
+            error = ve.errors()[0]
+            field = ".".join(map(str, error["loc"]))
             return JSONResponse(
-                content={"error": "Invalid JSON body."},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-
-        if not isinstance(data, dict):
-            return JSONResponse(
-                content={"error": "Request body must be a JSON object."},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-
-        text = data.get("text")
-        client_id = data.get("client_id")
-        if not isinstance(text, str) or not text.strip():
-            return JSONResponse(
-                content={"error": "'text' must be a non-empty string."},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
-        if not isinstance(client_id, str) or not client_id:
-            return JSONResponse(
-                content={"error": "'client_id' must be a non-empty string."},
+                content={
+                    "error": f"'{field}': {error['msg']}" if field else error["msg"]
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -1673,7 +1659,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.SERVICE_UNAVAILABLE,
             )
 
-        return await forward_chat_to_agent(text=text, client_id=client_id)
+        return await forward_chat_to_agent(text=chat.text, client_id=chat.client_id)
 
     @service_router.get("/api/v2/service/{service_config_id}/funding_requirements")
     async def _get_funding_requirements(

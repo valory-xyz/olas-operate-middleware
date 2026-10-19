@@ -1848,7 +1848,7 @@ Send a chat message to the service's agent. The request is forwarded to the agen
 
 ```json
 {
-  "error": "'text' must be a non-empty string."
+  "error": "'client_id': Field required"
 }
 ```
 
