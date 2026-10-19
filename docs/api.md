@@ -1876,6 +1876,12 @@ Send a chat message to the service's agent. The request is forwarded to the agen
 }
 ```
 
+```json
+{
+  "error": "The agent cannot be reached."
+}
+```
+
 **Response (Agent did not reply within 60 seconds - 504):**
 
 ```json
