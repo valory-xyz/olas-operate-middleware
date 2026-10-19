@@ -466,7 +466,7 @@ class TestConcurrentExecuteAsyncCallable:
 
 
 class TestIterLinesBackwards:
-    """Tests for iter_lines_backwards."""
+    """Lines come back last first, whole, whatever the block size."""
 
     @pytest.mark.parametrize("block_size", [1, 2, 3, 5, 7, 64])
     @pytest.mark.parametrize(

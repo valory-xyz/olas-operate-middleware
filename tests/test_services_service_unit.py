@@ -326,11 +326,6 @@ class TestGetAgentPerformance:
         assert "metrics" in result
 
 
-# ---------------------------------------------------------------------------
-# Service.get_feed_page
-# ---------------------------------------------------------------------------
-
-
 def _feed_line(entry_id: int) -> str:
     """Return a feed.jsonl line for a message entry."""
     entry = {
@@ -344,7 +339,7 @@ def _feed_line(entry_id: int) -> str:
 
 
 class TestGetFeedPage:
-    """Tests for Service.get_feed_page."""
+    """Paging by `before` and `limit`, skipping lines that are not entries."""
 
     @staticmethod
     def _service(store_path: Path) -> Service:
