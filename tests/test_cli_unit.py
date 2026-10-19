@@ -4397,6 +4397,11 @@ class TestChatRoute:
         assert resp.status_code == HTTPStatus.BAD_REQUEST
         assert "error" in resp.json()
 
+    def test_bad_body_error_names_the_field(self) -> None:
+        """The 400 error says which field is wrong."""
+        resp = self._post(self._operate(), _closed_port_url(), json={"text": "hi"})
+        assert resp.json() == {"error": "'client_id': Field required"}
+
     @pytest.mark.parametrize(
         "status",
         [
