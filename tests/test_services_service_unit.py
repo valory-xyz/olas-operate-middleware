@@ -440,7 +440,9 @@ class TestGetFeedPage:
         page = self._service(tmp_path).get_feed_page()
         assert self._ids(page) == [1, 2]
 
-    @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+    @pytest.mark.parametrize(
+        "constant", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"]
+    )
     def test_skips_lines_with_non_standard_constants(
         self, tmp_path: Path, constant: str
     ) -> None:

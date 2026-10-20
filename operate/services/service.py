@@ -154,11 +154,6 @@ def mkdirs(build_dir: Path) -> None:
             continue
 
 
-def _reject_json_constant(constant: str) -> t.NoReturn:
-    """Reject NaN and Infinity, which a JSON response cannot serialise."""
-    raise ValueError(f"Non-standard JSON constant: {constant}")
-
-
 def remove_service_network(service_name: str, force: bool = True) -> None:
     """Remove service network cache."""
     client = from_env()
@@ -1210,9 +1205,9 @@ class Service(LocalResource):
     def _parse_feed_line(line: bytes) -> t.Optional[t.Dict[str, t.Any]]:
         """Parse a feed.jsonl line, or return None if it is not a feed entry."""
         try:
-            entry = json.loads(line, parse_constant=_reject_json_constant)
-            # A lone surrogate escape ("\ud83d") parses but cannot be sent as UTF-8.
-            json.dumps(entry, ensure_ascii=False).encode("utf-8")
+            entry = json.loads(line)
+            # Reject what parses but cannot be sent: NaN, 1e400, a lone "\ud83d".
+            json.dumps(entry, ensure_ascii=False, allow_nan=False).encode("utf-8")
         except (ValueError, RecursionError):
             return None
         if (
