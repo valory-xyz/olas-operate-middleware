@@ -27,7 +27,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as req_lib
 from web3 import Web3
-from web3.exceptions import TimeExhausted, TransactionNotFound
+from web3.exceptions import BlockNotFound, TimeExhausted, TransactionNotFound
 
 from operate.bridge.providers.mayan_provider import (
     MAYAN_EXPLORER_URL,
@@ -3281,6 +3281,30 @@ class TestNativeBridgeFindBlockBeforeTimestamp:
             w3_mock, 1
         )
         assert result == 0
+
+    def test_pruned_rpc_reads_only_recent_blocks(self) -> None:
+        """A non-archive RPC that has pruned old blocks still yields the block before the bridge tx."""
+        latest = 40_000_000
+        pruning_floor = latest - 10_000
+        requested: t.List[int] = []
+
+        def get_block_stub(n: int) -> t.Dict:
+            requested.append(n)
+            if n < pruning_floor:
+                raise BlockNotFound(f"Block with id: '{hex(n)}' not found.")
+            return {"timestamp": n * 5}
+
+        w3_mock = MagicMock()
+        w3_mock.eth.block_number = latest
+        w3_mock.eth.get_block.side_effect = get_block_stub
+
+        # Bridge tx mined 30 min ago, i.e. 360 Gnosis blocks back from the head
+        result = NativeBridgeProvider._find_block_before_timestamp(  # pylint: disable=protected-access
+            w3_mock, (latest - 360) * 5 + 1
+        )
+        assert result == latest - 360
+        # The first gallop probe older than the tx is latest - 512
+        assert min(requested) == latest - 512
 
 
 # ---------------------------------------------------------------------------

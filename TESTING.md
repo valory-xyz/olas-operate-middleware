@@ -115,6 +115,11 @@ RPC URLs are stored verbatim, so record only with keyless `*_RPC`
 URLs. Check that the recording run passed: a rate-limited response
 gets recorded and replayed as a skip.
 
+The `rpc-gate` Base and Gnosis endpoints are pruned, so cases that read
+old blocks need a keyless archive RPC (e.g. `https://mainnet.base.org`,
+`https://rpc.gnosis.gateway.fm`). Its URL must name the chain, or
+`infer_chain` cannot match it on replay.
+
 For VCR fundamentals (record modes, filter_headers, parameterised
 tests), see the [VCR.py docs](https://vcrpy.readthedocs.io/) — we
 don't duplicate them here.
