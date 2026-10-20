@@ -699,7 +699,9 @@ class Provider(ABC):
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
 
-    def _bridge_tx_likely_failed(self, provider_request: ProviderRequest) -> bool:
+    def _bridge_tx_likely_failed(  # pylint: disable=too-many-return-statements
+        self, provider_request: ProviderRequest
+    ) -> bool:
         """Whether the source transaction failed and the request will never settle."""
 
         execution_data = provider_request.execution_data
