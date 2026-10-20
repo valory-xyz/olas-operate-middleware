@@ -1868,7 +1868,9 @@ Send a chat message to the service's agent. The request is forwarded to the agen
 }
 ```
 
-**Response (Agent not running or unreachable - 503):**
+**Response (Agent not running, unreachable or without chat support - 503):**
+
+An agent that answers 400, 404 or 405 is treated as one without chat support.
 
 ```json
 {
@@ -1879,6 +1881,12 @@ Send a chat message to the service's agent. The request is forwarded to the agen
 ```json
 {
   "error": "The agent cannot be reached."
+}
+```
+
+```json
+{
+  "error": "The agent does not support chat."
 }
 ```
 

@@ -4480,6 +4480,25 @@ class TestChatRoute:
         assert resp.headers["content-type"].startswith("application/json")
         assert received == [self.BODY]
 
+    @pytest.mark.parametrize(
+        "agent_status",
+        [
+            HTTPStatus.BAD_REQUEST,
+            HTTPStatus.NOT_FOUND,
+            HTTPStatus.METHOD_NOT_ALLOWED,
+        ],
+    )
+    def test_agent_without_chat_route_is_503(self, agent_status: HTTPStatus) -> None:
+        """An agent that has no chat route answers 503, not its own empty error."""
+
+        async def handler(request: web.Request) -> web.Response:
+            return web.Response(status=agent_status)
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert resp.json() == {"error": "The agent does not support chat."}
+
     def test_passes_non_json_answer_through(self) -> None:
         """A plain-text agent error comes back with its own body and Content-Type."""
 

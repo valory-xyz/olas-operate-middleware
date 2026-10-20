@@ -158,7 +158,7 @@ async def forward_chat_to_agent(text: str, client_id: str) -> Response:
 
     :param text: the user's message.
     :param client_id: the id Pearl generated for the message.
-    :return: the agent's status and body unchanged, or 503 / 504 if it did not answer.
+    :return: the agent's status and body unchanged, or 503 / 504 if it cannot chat.
     """
     timeout = aiohttp.ClientTimeout(total=AGENT_CHAT_TIMEOUT_SECONDS)
     try:
@@ -166,6 +166,17 @@ async def forward_chat_to_agent(text: str, client_id: str) -> Response:
             async with session.post(
                 AGENT_CHAT_URL, json={"text": text, "client_id": client_id}
             ) as resp:
+                # Agents released before chat answer the unknown route with these.
+                if resp.status in (
+                    HTTPStatus.BAD_REQUEST,
+                    HTTPStatus.NOT_FOUND,
+                    HTTPStatus.METHOD_NOT_ALLOWED,
+                ):
+                    logger.warning(f"Agent chat route answered {resp.status}.")
+                    return JSONResponse(
+                        content={"error": "The agent does not support chat."},
+                        status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
                 return Response(
                     content=await resp.read(),
                     status_code=resp.status,
