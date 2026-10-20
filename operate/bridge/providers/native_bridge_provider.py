@@ -637,10 +637,26 @@ class NativeBridgeProvider(Provider):
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:
-        """Returns the largest block number of the block before `timestamp`."""
+        """Largest block number whose timestamp is < `timestamp`.
+
+        Gallops back from `latest` (latest - 1, latest - 2, latest - 4, …) and
+        bisects inside the first bracket, so a non-archive RPC is never asked
+        for a block much older than `timestamp`.
+        """
         latest = w3.eth.block_number
-        low, high = 0, latest
-        best = 0
+        if w3.eth.get_block(latest)["timestamp"] < timestamp:
+            return latest
+
+        newer, step = latest, 1
+        while True:
+            older = max(latest - step, 0)
+            if w3.eth.get_block(older)["timestamp"] < timestamp:
+                break
+            if older == 0:
+                return 0
+            newer, step = older, step * 2
+
+        best, low, high = older, older + 1, newer - 1
         while low <= high:
             mid = (low + high) // 2
             block = w3.eth.get_block(mid)
