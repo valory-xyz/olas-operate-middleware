@@ -740,6 +740,6 @@ class Provider(ABC):
         if age_seconds <= limit:
             return False
         self.logger.warning(
-            f"[PROVIDER] Transaction {from_tx_hash} {reason} after {age_seconds // 60} min - likely failed."
+            f"[PROVIDER] Transaction {from_tx_hash} {reason} after {int(age_seconds // 60)} min - likely failed."
         )
         return True
