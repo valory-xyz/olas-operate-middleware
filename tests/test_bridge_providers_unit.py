@@ -3138,15 +3138,15 @@ class TestOmnibridgeContractAdaptorCoverage:
 
 
 # ---------------------------------------------------------------------------
-# TestNativeBridgeFindBlockBeforeTimestamp — lines 686-690
+# TestNativeBridgeFindBlockBeforeTimestamp
 # ---------------------------------------------------------------------------
 
 
 class TestNativeBridgeFindBlockBeforeTimestamp:
-    """Tests for NativeBridgeProvider._find_block_before_timestamp (lines 686-690)."""
+    """Tests for NativeBridgeProvider._find_block_before_timestamp."""
 
     def test_binary_search_returns_largest_block_before_timestamp(self) -> None:
-        """_find_block_before_timestamp() uses binary search and returns correct block (lines 686-690)."""
+        """_find_block_before_timestamp() uses binary search and returns correct block."""
         w3_mock = MagicMock()
         w3_mock.eth.block_number = 10
 
