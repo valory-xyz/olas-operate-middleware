@@ -53,7 +53,7 @@ from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_TX_HARD_TIMEOUT_SECONDS = 1200
-# Bounds a receipt read that keeps failing, so a run never stays stuck
+# Status only: failure_is_final still blocks a resend while the receipt is unreadable
 BRIDGE_TX_UNREADABLE_TIMEOUT_SECONDS = 6 * 3600
 PROVIDER_REQUEST_PREFIX = "r-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
