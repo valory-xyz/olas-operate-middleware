@@ -1197,8 +1197,6 @@ class MayanProvider(Provider):
                 provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
 
             else:
-                # Unknown status — log and treat as UNKNOWN so
-                # _bridge_tx_likely_failed engages sooner than HARD_TIMEOUT
                 self.logger.warning(
                     f"[MAYAN PROVIDER] Unknown clientStatus '{client_status}' "
                     f"for request {provider_request.id} — treating as UNKNOWN."

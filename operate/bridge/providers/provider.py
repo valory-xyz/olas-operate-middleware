@@ -52,6 +52,9 @@ from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
+BRIDGE_TX_HARD_TIMEOUT_SECONDS = 1200
+# Bounds a receipt read that keeps failing, so a run never stays stuck
+BRIDGE_TX_UNREADABLE_TIMEOUT_SECONDS = 6 * 3600
 PROVIDER_REQUEST_PREFIX = "r-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
@@ -699,10 +702,8 @@ class Provider(ABC):
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
 
-    def _bridge_tx_likely_failed(  # pylint: disable=too-many-return-statements
-        self, provider_request: ProviderRequest
-    ) -> bool:
-        """Whether the source transaction failed and the request will never settle."""
+    def _bridge_tx_likely_failed(self, provider_request: ProviderRequest) -> bool:
+        """Whether the source tx reverted, was dropped, or is overdue after mining."""
 
         execution_data = provider_request.execution_data
         if not execution_data or not execution_data.from_tx_hash:
@@ -712,8 +713,7 @@ class Provider(ABC):
         age_seconds = time.time() - execution_data.timestamp
         eta = provider_request.quote_data.eta if provider_request.quote_data else None
 
-        HARD_TIMEOUT = 1200
-
+        limit, reason = BRIDGE_TX_HARD_TIMEOUT_SECONDS, "not seen"
         try:
             receipt = self._from_ledger_api(
                 provider_request
@@ -722,28 +722,24 @@ class Provider(ABC):
             receipt = None
         except Exception as e:  # pylint: disable=broad-except
             self.logger.warning(
-                f"[PROVIDER] Cannot read receipt of {from_tx_hash}: {e} - not marking failed."
+                f"[PROVIDER] Cannot read receipt of {from_tx_hash}: {e}"
             )
-            return False
+            receipt = None
+            limit, reason = BRIDGE_TX_UNREADABLE_TIMEOUT_SECONDS, "receipt unreadable"
 
-        if receipt is None:
-            if age_seconds > HARD_TIMEOUT:
+        if receipt is not None:
+            if receipt["status"] != 1:
                 self.logger.warning(
-                    f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds // 60} min - likely dropped."
+                    f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
                 )
                 return True
+            # A mined leg may still be delivered, so it only times out well past its ETA
+            limit = max(BRIDGE_TX_HARD_TIMEOUT_SECONDS, 2 * (eta or 0))
+            reason = "mined but not delivered"
+
+        if age_seconds <= limit:
             return False
-
-        if receipt["status"] != 1:
-            self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
-            )
-            return True
-
-        # A mined leg may still be delivered, so it only times out well past its ETA
-        if age_seconds > max(HARD_TIMEOUT, 2 * (eta or 0)):
-            self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} mined but not delivered after {age_seconds // 60} min."
-            )
-            return True
-        return False
+        self.logger.warning(
+            f"[PROVIDER] Transaction {from_tx_hash} {reason} after {age_seconds // 60} min - likely failed."
+        )
+        return True

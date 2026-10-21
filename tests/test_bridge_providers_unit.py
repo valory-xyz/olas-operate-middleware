@@ -27,6 +27,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as req_lib
 from web3 import Web3
+from web3.datastructures import AttributeDict
 from web3.exceptions import BlockNotFound, TimeExhausted, TransactionNotFound
 
 from operate.bridge.providers.mayan_provider import (
@@ -690,28 +691,27 @@ class TestProviderBase:
     @pytest.mark.parametrize(
         ("receipt", "error", "eta", "age", "expected"),
         [
-            # Mined: fails only after max(HARD_TIMEOUT, 2 * eta)
             ({"status": 1}, None, 30, 700, False),
             ({"status": 1}, None, 60, 1300, True),
             ({"status": 1}, None, None, 1100, False),
             ({"status": 1}, None, None, 1300, True),
             ({"status": 1}, None, 1800, 2000, False),
             ({"status": 1}, None, 1800, 3700, True),
-            # Reverted: fails at once
+            ({"status": 1}, None, 900, 1500, False),
+            ({"status": 1}, None, 900, 1900, True),
             ({"status": 0}, None, 1800, 5, True),
-            # Missing: dropped after HARD_TIMEOUT
             (None, None, 30, 700, False),
             (None, None, 30, 1300, True),
             (None, TransactionNotFound("not found"), 30, 700, False),
             (None, TransactionNotFound("not found"), 30, 1300, True),
-            # Unreadable: never fails it
             (None, ConnectionError("rpc down"), 30, 5000, False),
             (None, ConnectionError("rpc down"), None, 5000, False),
+            (None, ConnectionError("rpc down"), 1800, 6 * 3600 + 100, True),
         ],
     )
     def test_bridge_tx_likely_failed(
         self,
-        receipt: t.Optional[t.Dict],
+        receipt: t.Optional[t.Dict[str, int]],
         error: t.Optional[Exception],
         eta: t.Optional[int],
         age: int,
@@ -3200,7 +3200,7 @@ class TestNativeBridgeFindBlockBeforeTimestamp:
         pruning_floor = latest - 10_000
         requested: t.List[int] = []
 
-        def get_block_stub(n: int) -> t.Dict:
+        def get_block_stub(n: int) -> t.Dict[str, int]:
             requested.append(n)
             if n < pruning_floor:
                 raise BlockNotFound(f"Block with id: '{hex(n)}' not found.")
@@ -3210,13 +3210,37 @@ class TestNativeBridgeFindBlockBeforeTimestamp:
         w3_mock.eth.block_number = latest
         w3_mock.eth.get_block.side_effect = get_block_stub
 
-        # Bridge tx mined 30 min ago, i.e. 360 Gnosis blocks back from the head
         result = NativeBridgeProvider._find_block_before_timestamp(  # pylint: disable=protected-access
             w3_mock, (latest - 360) * 5 + 1
         )
         assert result == latest - 360
-        # The first gallop probe older than the tx is latest - 512
         assert min(requested) == latest - 512
+
+    @pytest.mark.parametrize(
+        ("latest", "timestamp", "expected"),
+        [
+            (10, 500, 4),  # bisected block has the same timestamp
+            (10, 800, 7),  # gallop probe has the same timestamp
+            (10, 1000, 9),  # head has the same timestamp
+            (10, 950, 9),  # answer is the first gallop probe
+            (10, 850, 8),  # empty bisect bracket
+            (16, 900, 8),  # answer is exactly latest - 2^k
+            (0, 1, 0),
+            (0, 0, 0),
+        ],
+    )
+    def test_search_boundaries(
+        self, latest: int, timestamp: int, expected: int
+    ) -> None:
+        """_find_block_before_timestamp() returns the largest block strictly before `timestamp`."""
+        w3_mock = MagicMock()
+        w3_mock.eth.block_number = latest
+        w3_mock.eth.get_block.side_effect = lambda n: {"timestamp": n * 100}
+
+        result = NativeBridgeProvider._find_block_before_timestamp(  # pylint: disable=protected-access
+            w3_mock, timestamp
+        )
+        assert result == expected
 
 
 # ---------------------------------------------------------------------------
@@ -3405,17 +3429,17 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
             from_chain="ethereum",
             to_chain="gnosis",
         )
-        # Past the old 1200 s HARD_TIMEOUT, within 2 x the omnibridge ETA
+        # Older than HARD_TIMEOUT, within 2 x ETA
         req.execution_data = _make_execution_data(
             from_tx_hash="0x" + "aa" * 32, timestamp=int(time.time()) - 2000
         )
         req.quote_data = _make_quote_data(eta=1800)
 
         mock_from_w3 = MagicMock()
-        mock_from_w3.eth.get_transaction_receipt.return_value = {
-            "status": 1,
-            "blockNumber": 100,
-        }
+        mock_from_w3.eth.get_transaction_receipt.return_value = AttributeDict(
+            {"status": 1, "blockNumber": 100}
+        )
+        mock_from_w3.eth.get_block.return_value = AttributeDict({"timestamp": 1000})
 
         def _pick_ledger(chain: t.Any) -> MagicMock:
             if chain.value == "ethereum":
@@ -3431,10 +3455,11 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
                 NativeBridgeProvider,
                 "_find_block_before_timestamp",
                 side_effect=BlockNotFound("Block with id: '0x1748c2c' not found."),
-            ),
+            ) as mock_find,
         ):
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
+        mock_find.assert_called_once()
         assert req.status == ProviderRequestStatus.EXECUTION_UNKNOWN
 
 
