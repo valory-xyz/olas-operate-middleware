@@ -830,9 +830,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         destination = Chain(run.destination_chain)
         gas = SAFE_TRANSFER_GAS * (n_assets + 1)
         if run.mode == FundingRunMode.ONBOARD:
-            # refill_requirements already asks for the Master EOA reserve, or
-            # before the Safe exists for DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, which
-            # covers its creation.
+            # refill_requirements asks for the EOA reserve; Safe creation gas is unbudgeted (docs/api.md)
             return gas * self._native_price(destination)
         wallet = self._wallet()
         if destination not in wallet.safes:

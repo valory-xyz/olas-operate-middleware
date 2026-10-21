@@ -2888,7 +2888,7 @@ Create a run, or replace a run that is still `AWAITING_DEPOSIT` / `QUOTE_FAILED`
 - `backup_owner` is used only if the Master Safe has to be created.
 - `source.token` is one of `GET /api/funding_run/sources` for `source.chain`, or, in `onboard`/`deposit` mode, the run's single required token when `source.chain == destination.chain`, it is the only non-zero net target and the Master Safe exists on that chain. Any other token is a `400`.
 
-If every net target is already met, the run is created directly as `COMPLETED` with empty `steps` and `to_receive`. The exception is an `onboard` run whose `destination.chain` has no Master Safe: it is created as `PROCESSING` with only the hidden `SAFE_AND_TRANSFER` step, `quote: null` and empty `to_receive`, and the background loop creates the Safe and moves the excess into it.
+If every net target is already met, the run is created directly as `COMPLETED` with empty `steps` and `to_receive`. The exception is an `onboard` run whose `destination.chain` has no Master Safe: it is created as `PROCESSING` with only the hidden `SAFE_AND_TRANSFER` step, `quote: null` and empty `to_receive`, and the background loop creates the Safe and moves the excess into it. The Safe's creation gas comes out of that excess, so the Safe can land short by that gas; the next `onboard` run quotes the gap.
 
 **Response (Success - 200):** the run object, which every run route returns:
 
