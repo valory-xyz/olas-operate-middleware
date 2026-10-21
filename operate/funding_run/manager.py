@@ -247,6 +247,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         ):
             self._queue_clear(run)
 
+    @staticmethod
+    def _safe_and_transfer_step() -> FundingRunStep:
+        """The hidden step that creates the Master Safe and sweeps funds into it."""
+        return FundingRunStep(
+            id=STEP_SAFE,
+            kind=FundingStepKind.SAFE_AND_TRANSFER,
+            status=FundingStepStatus.PENDING,
+            visible=False,
+        )
+
     def _queue_clear(self, run: FundingRun) -> None:
         """Have the background loop clear the run's source-chain delegation."""
         pointer = self._pointer()
@@ -367,14 +377,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 ):
                     # The Master EOA covers onboarding, but the agent cannot
                     # start until the Safe exists and holds the funds.
-                    run.steps = [
-                        FundingRunStep(
-                            id=STEP_SAFE,
-                            kind=FundingStepKind.SAFE_AND_TRANSFER,
-                            status=FundingStepStatus.PENDING,
-                            visible=False,
-                        )
-                    ]
+                    run.steps = [self._safe_and_transfer_step()]
                     run.status = FundingRunStatus.PROCESSING
                     self._store(run)
                     self._set_active(run)
@@ -1155,14 +1158,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             # Signer gas never creates a Safe, but sweeps into an existing one.
             or Chain(run.destination_chain) in self._wallet().safes
         ):
-            steps.append(
-                FundingRunStep(
-                    id=STEP_SAFE,
-                    kind=FundingStepKind.SAFE_AND_TRANSFER,
-                    status=FundingStepStatus.PENDING,
-                    visible=False,
-                )
-            )
+            steps.append(self._safe_and_transfer_step())
         if gas_abstracted and source_requests:
             steps.append(
                 FundingRunStep(
