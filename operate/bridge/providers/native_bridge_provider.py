@@ -637,16 +637,12 @@ class NativeBridgeProvider(Provider):
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:
-        """Largest block number whose timestamp is < `timestamp`.
-
-        Gallops back from `latest` (latest - 1, latest - 2, latest - 4, …) and
-        bisects inside the first bracket, so a non-archive RPC is never asked
-        for a block much older than `timestamp`.
-        """
+        """Largest block number whose timestamp is < `timestamp`."""
         latest = w3.eth.block_number
         if w3.eth.get_block(latest)["timestamp"] < timestamp:
             return latest
 
+        # Gallop from the head: non-archive RPCs prune old blocks
         newer, step = latest, 1
         while True:
             older = max(latest - step, 0)
@@ -656,16 +652,14 @@ class NativeBridgeProvider(Provider):
                 return 0
             newer, step = older, step * 2
 
-        best, low, high = older, older + 1, newer - 1
-        while low <= high:
+        low, high = older, newer
+        while high - low > 1:
             mid = (low + high) // 2
-            block = w3.eth.get_block(mid)
-            if block["timestamp"] < timestamp:
-                best = mid
-                low = mid + 1
+            if w3.eth.get_block(mid)["timestamp"] < timestamp:
+                low = mid
             else:
-                high = mid - 1
-        return best
+                high = mid
+        return low
 
     def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
