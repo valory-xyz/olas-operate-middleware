@@ -361,6 +361,24 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 self._finish(current, FundingRunStatus.CANCELLED)
 
             if not run.net_targets:
+                if (
+                    run_mode == FundingRunMode.ONBOARD
+                    and destination not in self._wallet().safes
+                ):
+                    # The Master EOA covers onboarding, but the agent cannot
+                    # start until the Safe exists and holds the funds.
+                    run.steps = [
+                        FundingRunStep(
+                            id=STEP_SAFE,
+                            kind=FundingStepKind.SAFE_AND_TRANSFER,
+                            status=FundingStepStatus.PENDING,
+                            visible=False,
+                        )
+                    ]
+                    run.status = FundingRunStatus.PROCESSING
+                    self._store(run)
+                    self._set_active(run)
+                    return run
                 # Nothing is missing: the app says so instead of asking for funds.
                 self._finish(run, FundingRunStatus.COMPLETED)
                 return run
