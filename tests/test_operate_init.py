@@ -133,7 +133,7 @@ class TestOperateInitPlatformBranches:
             patch("platform.system", return_value="Linux"),
             patch("os.path.exists", side_effect=exists),
             patch("certifi.where", return_value=str(certifi_bundle)),
-            patch("shutil.copyfile", side_effect=OSError("disk full")),
+            patch("shutil.copyfile", side_effect=OSError("disk full")) as copyfile,
             patch.dict(
                 os.environ, {"OPERATE_HOME": str(tmp_path / "operate-home")}, clear=True
             ),
@@ -141,6 +141,39 @@ class TestOperateInitPlatformBranches:
             importlib.reload(operate_module)
             assert os.environ.get("REQUESTS_CA_BUNDLE") == linux_bundle
             assert os.environ.get("SSL_CERT_FILE") == linux_bundle
+        copyfile.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("system", "system_bundle"),
+        [
+            ("Darwin", "/etc/ssl/cert.pem"),
+            ("Linux", "/etc/ssl/certs/ca-certificates.crt"),
+        ],
+    )
+    def test_materialized_certifi_bundle_preferred_over_system_bundle(
+        self, tmp_path: Path, system: str, system_bundle: str
+    ) -> None:
+        """A transient certifi bundle is materialized and wins over the OS bundle."""
+        pyinstaller_dir = tmp_path / "_MEI123"
+        pyinstaller_dir.mkdir()
+        certifi_bundle = pyinstaller_dir / "cacert.pem"
+        certifi_bundle.write_text("bundle-data", encoding="utf-8")
+        operate_home = tmp_path / "operate-home"
+        expected_bundle = operate_home / "certs" / "cacert.pem"
+        real_exists = os.path.exists
+
+        def exists(path: str) -> bool:
+            return path == system_bundle or real_exists(path)
+
+        with (
+            patch("platform.system", return_value=system),
+            patch("os.path.exists", side_effect=exists),
+            patch("certifi.where", return_value=str(certifi_bundle)),
+            patch.dict(os.environ, {"OPERATE_HOME": str(operate_home)}, clear=True),
+        ):
+            importlib.reload(operate_module)
+            assert os.environ.get("REQUESTS_CA_BUNDLE") == str(expected_bundle)
+            assert os.environ.get("SSL_CERT_FILE") == str(expected_bundle)
 
     def test_windows_branch(self) -> None:
         """Windows branch sets bundle_set=True without reading a file (lines 61-64)."""
