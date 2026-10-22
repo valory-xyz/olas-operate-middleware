@@ -178,6 +178,21 @@ def unrecoverable_delete(file_path: Path, passes: int = 3) -> None:
         print(f"Error during secure deletion of '{file_path}': {e}")
 
 
+def iter_lines_backwards(file: t.BinaryIO, block_size: int) -> t.Iterator[bytes]:
+    """Yield the lines of a binary file, last line first, one block read at a time."""
+    position = file.seek(0, os.SEEK_END)
+    partial = b""
+    while position > 0:
+        read_size = min(block_size, position)
+        position -= read_size
+        file.seek(position)
+        lines = (file.read(read_size) + partial).split(b"\n")
+        # The first piece may continue in the block before this one.
+        partial = lines.pop(0)
+        yield from reversed(lines)
+    yield partial
+
+
 @contextmanager
 def timing_context(label: str = "Block") -> t.Generator[None, None, None]:
     """Context manager for timing a code block."""

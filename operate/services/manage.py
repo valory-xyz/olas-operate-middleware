@@ -215,7 +215,11 @@ class ServiceManager:
 
     def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""
-        return (self.path / service_config_id).exists()
+        # Normalise and confine to the services directory: the id comes from the URL.
+        path = os.path.abspath(self.path / service_config_id)
+        if not path.startswith(os.path.join(os.path.abspath(self.path), "")):
+            return False
+        return os.path.exists(path)
 
     def get_eth_safe_tx_builder(self, ledger_config: LedgerConfig) -> EthSafeTxBuilder:
         """Get EthSafeTxBuilder instance."""

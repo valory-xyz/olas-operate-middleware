@@ -37,6 +37,7 @@ from time import time
 from types import FrameType
 from typing import Annotated
 
+import aiohttp
 import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
@@ -44,7 +45,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi import Path as FastApiPath
 from fastapi import Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from uvicorn.config import Config
@@ -54,8 +55,12 @@ from operate import __version__, services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
+    AGENT_CHAT_TIMEOUT_SECONDS,
+    AGENT_CHAT_URL,
     AGENT_RUNNER_PREFIX,
     DEPLOYMENT_DIR,
+    FEED_PAGE_LIMIT_DEFAULT,
+    FEED_PAGE_LIMIT_MAX,
     FUNDING_RUNS_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
@@ -82,6 +87,7 @@ from operate.migration import MigrationManager
 from operate.operate_types import (
     Chain,
     ChainAmounts,
+    ChatRequest,
     DeploymentStatus,
     FundRecoveryExecuteRequest,
     FundRecoveryScanRequest,
@@ -145,6 +151,52 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
         content={"error": f"Service {service_config_id} not found"},
         status_code=HTTPStatus.NOT_FOUND,
     )
+
+
+async def forward_chat_to_agent(text: str, client_id: str) -> Response:
+    """Forward a chat message to the running agent and pass its answer through.
+
+    :param text: the user's message.
+    :param client_id: the id Pearl generated for the message.
+    :return: the agent's status and body unchanged, or 503 / 504 if it cannot chat.
+    """
+    timeout = aiohttp.ClientTimeout(total=AGENT_CHAT_TIMEOUT_SECONDS)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                AGENT_CHAT_URL, json={"text": text, "client_id": client_id}
+            ) as resp:
+                # Agents released before chat answer the unknown route with these.
+                if resp.status in (
+                    HTTPStatus.BAD_REQUEST,
+                    HTTPStatus.NOT_FOUND,
+                    HTTPStatus.METHOD_NOT_ALLOWED,
+                ):
+                    logger.warning(f"Agent chat route answered {resp.status}.")
+                    return JSONResponse(
+                        content={"error": "The agent does not support chat."},
+                        status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+                return Response(
+                    content=await resp.read(),
+                    status_code=resp.status,
+                    media_type=resp.headers.get(aiohttp.hdrs.CONTENT_TYPE),
+                )
+    # Before ClientError: aiohttp's timeout errors subclass both.
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"Agent chat did not answer within {AGENT_CHAT_TIMEOUT_SECONDS} seconds."
+        )
+        return JSONResponse(
+            content={"error": "The agent did not reply in time."},
+            status_code=HTTPStatus.GATEWAY_TIMEOUT,
+        )
+    except aiohttp.ClientError as e:
+        logger.warning(f"Agent chat cannot be reached: {e!r}")
+        return JSONResponse(
+            content={"error": "The agent cannot be reached."},
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        )
 
 
 class ValidatedServiceRoute(APIRoute):
@@ -1542,6 +1594,83 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(content=service.get_agent_performance())
 
         return await run_in_executor(_fn)
+
+    @service_router.get("/api/v2/service/{service_config_id}/feed")
+    async def _get_feed(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        # Parsed by hand so a bad value answers 400 {"error"}, not pydantic's 422.
+        before: t.Optional[str] = Query(None),  # noqa: B008
+        limit: t.Optional[str] = Query(None),  # noqa: B008
+    ) -> JSONResponse:
+        """Get a page of the agent's feed, oldest entry first."""
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            before_id = None if before is None else int(before)
+            page_size = FEED_PAGE_LIMIT_DEFAULT if limit is None else int(limit)
+        except ValueError:
+            return JSONResponse(
+                content={"error": "'before' and 'limit' must be integers."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        if not 1 <= page_size <= FEED_PAGE_LIMIT_MAX:
+            return JSONResponse(
+                content={
+                    "error": f"'limit' must be between 1 and {FEED_PAGE_LIMIT_MAX}."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        safe_id = validated_safe_id(service_config_id)
+
+        def _fn() -> JSONResponse:
+            service = operate.service_manager().load(service_config_id=safe_id)
+            return JSONResponse(
+                content=service.get_feed_page(before=before_id, limit=page_size)
+            )
+
+        return await run_in_executor(_fn)
+
+    @service_router.post("/api/v2/service/{service_config_id}/chat")
+    async def _chat_with_agent(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+        request: Request,
+    ) -> Response:
+        """Forward a chat message to the service's agent while it is deployed."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            chat = ChatRequest.model_validate_json(await request.body())
+        except ValidationError as ve:
+            error = ve.errors()[0]
+            field = ".".join(map(str, error["loc"]))
+            return JSONResponse(
+                content={
+                    "error": f"'{field}': {error['msg']}" if field else error["msg"]
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        safe_id = validated_safe_id(service_config_id)
+
+        def _deployment_status() -> DeploymentStatus:
+            service = service_manager.load(service_config_id=safe_id)
+            return service.deployment.status
+
+        if await run_in_executor(_deployment_status) != DeploymentStatus.DEPLOYED:
+            return JSONResponse(
+                content={"error": "The agent is not running."},
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+
+        return await forward_chat_to_agent(text=chat.text, client_id=chat.client_id)
 
     @service_router.get("/api/v2/service/{service_config_id}/funding_requirements")
     async def _get_funding_requirements(

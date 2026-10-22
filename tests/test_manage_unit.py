@@ -312,6 +312,30 @@ class TestExists:
         )
         assert manager.exists("nonexistent") is False
 
+    @pytest.mark.parametrize(
+        "service_config_id",
+        ["..", "../sibling", "../services-evil", "", ".", "{tmp_path}/sibling"],
+    )
+    def test_exists_false_outside_services_dir(
+        self, tmp_path: Path, service_config_id: str
+    ) -> None:
+        """Returns False for an id that resolves to the directory or beyond it."""
+        services_dir = tmp_path / "services"
+        services_dir.mkdir()
+        (tmp_path / "sibling").mkdir()
+        # Starts with the services dir's name; only a separator-aware check rejects it.
+        (tmp_path / "services-evil").mkdir()
+        service_config_id = service_config_id.format(tmp_path=tmp_path)
+
+        manager = ServiceManager(
+            path=services_dir,
+            keys_manager=MagicMock(),
+            wallet_manager=MagicMock(),
+            funding_manager=MagicMock(),
+            logger=logging.getLogger("test"),
+        )
+        assert manager.exists(service_config_id) is False
+
 
 class TestGetOnChainManagerAndBuilder:
     """Tests for get_on_chain_manager() and get_eth_safe_tx_builder()."""

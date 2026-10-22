@@ -24,7 +24,7 @@ import os
 import time
 import typing as t
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 from autonomy.deploy.constants import (
@@ -36,7 +36,11 @@ from autonomy.deploy.constants import (
     VENVS_DIR,
 )
 
-from operate.constants import AGENT_PERSISTENT_STORAGE_ENV_VAR, HEALTHCHECK_JSON
+from operate.constants import (
+    AGENT_PERSISTENT_STORAGE_ENV_VAR,
+    FEED_JSONL,
+    HEALTHCHECK_JSON,
+)
 from operate.services.service import (
     AGENT_TYPE_IDS,
     SERVICE_CONFIG_PREFIX,
@@ -320,3 +324,170 @@ class TestGetAgentPerformance:
         # Should not raise; just returns defaults if file not found in cwd
         assert "timestamp" in result
         assert "metrics" in result
+
+
+def _feed_line(entry_id: int) -> str:
+    """Return a feed.jsonl line for a message entry."""
+    entry = {
+        "id": entry_id,
+        "ts": 1_700_000_000 + entry_id,
+        "kind": "message",
+        "role": "user",
+        "text": f"message {entry_id}",
+    }
+    return json.dumps(entry) + "\n"
+
+
+class TestGetFeedPage:
+    """Paging by `before` and `limit`, skipping lines that are not entries."""
+
+    @staticmethod
+    def _service(store_path: Path) -> Service:
+        return _make_service(
+            store_path,
+            env_variables={
+                AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(store_path)}
+            },
+        )
+
+    @staticmethod
+    def _write_feed(store_path: Path, content: str) -> None:
+        (store_path / FEED_JSONL).write_text(content, encoding="utf-8")
+
+    @staticmethod
+    def _ids(page: t.Dict[str, t.Any]) -> t.List[int]:
+        return [entry["id"] for entry in page["entries"]]
+
+    def test_missing_file_returns_empty_page(self, tmp_path: Path) -> None:
+        """A service whose agent has not written the feed yet has an empty page."""
+        page = self._service(tmp_path).get_feed_page()
+        assert page == {"entries": [], "has_more": False}
+
+    def test_returns_newest_entries_oldest_first(self, tmp_path: Path) -> None:
+        """Without `before`, the newest `limit` entries come back oldest first."""
+        self._write_feed(tmp_path, "".join(_feed_line(i) for i in range(1, 6)))
+        page = self._service(tmp_path).get_feed_page(limit=3)
+        assert self._ids(page) == [3, 4, 5]
+        assert page["has_more"] is True
+        assert page["entries"][-1] == json.loads(_feed_line(5))
+
+    def test_whole_feed_fits_in_page(self, tmp_path: Path) -> None:
+        """No older entry exists when the page holds the whole feed."""
+        self._write_feed(tmp_path, "".join(_feed_line(i) for i in range(1, 4)))
+        page = self._service(tmp_path).get_feed_page(limit=3)
+        assert self._ids(page) == [1, 2, 3]
+        assert page["has_more"] is False
+
+    def test_before_returns_older_entries(self, tmp_path: Path) -> None:
+        """`before` returns only entries with a smaller id."""
+        self._write_feed(tmp_path, "".join(_feed_line(i) for i in range(1, 11)))
+        svc = self._service(tmp_path)
+
+        page = svc.get_feed_page(before=6, limit=3)
+        assert self._ids(page) == [3, 4, 5]
+        assert page["has_more"] is True
+
+        page = svc.get_feed_page(before=3, limit=3)
+        assert self._ids(page) == [1, 2]
+        assert page["has_more"] is False
+
+        page = svc.get_feed_page(before=1, limit=3)
+        assert page == {"entries": [], "has_more": False}
+
+    def test_pages_across_block_boundaries(self, tmp_path: Path) -> None:
+        """Paging with `before` reads the whole feed when lines span many blocks."""
+        self._write_feed(tmp_path, "".join(_feed_line(i) for i in range(1, 51)))
+        svc = self._service(tmp_path)
+        collected: t.List[int] = []
+        before: t.Optional[int] = None
+        with patch("operate.services.service.FEED_READ_BLOCK_SIZE", 7):
+            for _ in range(10):
+                page = svc.get_feed_page(before=before, limit=7)
+                collected = self._ids(page) + collected
+                if not page["has_more"]:
+                    break
+                before = page["entries"][0]["id"]
+            else:
+                pytest.fail("paging did not reach the first entry")
+        assert collected == list(range(1, 51))
+
+    def test_skips_cut_last_line(self, tmp_path: Path) -> None:
+        """A line the agent is still appending is skipped, not an error."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1) + _feed_line(2) + _feed_line(3)[:20],
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 2]
+        assert page["has_more"] is False
+
+    def test_skips_lines_that_are_not_entries(self, tmp_path: Path) -> None:
+        """Lines that are not JSON objects with an integer id are skipped."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1)
+            + "not json\n"
+            + "[1, 2]\n"
+            + json.dumps({"id": "2"})
+            + "\n"
+            + json.dumps({"id": True})
+            + "\n"
+            + json.dumps({"text": "no id"})
+            + "\n"
+            + "\n"
+            + _feed_line(2),
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 2]
+
+    @pytest.mark.parametrize(
+        "constant", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"]
+    )
+    def test_skips_lines_with_non_standard_constants(
+        self, tmp_path: Path, constant: str
+    ) -> None:
+        """A line the response could not serialise is skipped like any other."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1) + f'{{"id": 2, "value": {constant}}}\n' + _feed_line(3),
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 3]
+
+    def test_skips_deeply_nested_lines(self, tmp_path: Path) -> None:
+        """A line nested too deep for the JSON parser is skipped like any other."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1) + "[" * 100_000 + "]" * 100_000 + "\n" + _feed_line(3),
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 3]
+
+    def test_skips_lines_with_lone_surrogates(self, tmp_path: Path) -> None:
+        """A line holding an unpaired surrogate escape is skipped like any other."""
+        self._write_feed(
+            tmp_path,
+            _feed_line(1) + '{"id": 2, "title": "\\ud83d"}\n' + _feed_line(3),
+        )
+        page = self._service(tmp_path).get_feed_page()
+        assert self._ids(page) == [1, 3]
+
+    def test_has_more_ignores_unparseable_older_lines(self, tmp_path: Path) -> None:
+        """`has_more` is only set when an older parseable entry exists."""
+        self._write_feed(tmp_path, "garbage\n" + _feed_line(1) + _feed_line(2))
+        page = self._service(tmp_path).get_feed_page(limit=2)
+        assert self._ids(page) == [1, 2]
+        assert page["has_more"] is False
+
+    def test_reads_feed_whatever_the_deployment_status(self, tmp_path: Path) -> None:
+        """A stopped agent's feed is read without looking at its deployment."""
+        self._write_feed(tmp_path, _feed_line(1))
+        svc = self._service(tmp_path)
+        with patch.object(
+            Service,
+            "deployment",
+            new_callable=PropertyMock,
+            side_effect=AssertionError("deployment must not be read"),
+        ):
+            page = svc.get_feed_page()
+        assert self._ids(page) == [1]

@@ -25,14 +25,16 @@ import logging
 import multiprocessing
 import os
 import signal as signal_module
+import socket
 import threading
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Iterator, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiohttp import web
 from starlette.testclient import TestClient
 
 from operate import __version__, cli
@@ -4233,3 +4235,290 @@ class TestWithdrawSafeEndpoint:
                 )
         assert resp.status_code == HTTPStatus.BAD_REQUEST
         assert "must be a JSON object" in resp.json()["detail"]
+
+
+class TestFeedRoute:
+    """GET /api/v2/service/{service_config_id}/feed."""
+
+    @staticmethod
+    def _get(m: MagicMock, query: str = "") -> Any:
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                return c.get(f"/api/v2/service/svc1/feed{query}")
+
+    @staticmethod
+    def _operate_with_service() -> tuple:
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        svc = m.service_manager.return_value.load.return_value
+        svc.get_feed_page.return_value = {"entries": [{"id": 1}], "has_more": True}
+        return m, svc
+
+    def test_unknown_service(self) -> None:
+        """An unknown service is 404, like the other service routes."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = False
+        resp = self._get(m)
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+        assert resp.json() == {"error": "Service svc1 not found"}
+
+    def test_defaults(self) -> None:
+        """Without a query the newest default-sized page is returned."""
+        m, svc = self._operate_with_service()
+        resp = self._get(m)
+        assert resp.status_code == HTTPStatus.OK
+        assert resp.json() == {"entries": [{"id": 1}], "has_more": True}
+        svc.get_feed_page.assert_called_once_with(before=None, limit=20)
+
+    @pytest.mark.parametrize("limit", ["1", "50"])
+    def test_passes_before_and_limit(self, limit: str) -> None:
+        """`before` and `limit` reach the service as integers."""
+        m, svc = self._operate_with_service()
+        resp = self._get(m, f"?before=42&limit={limit}")
+        assert resp.status_code == HTTPStatus.OK
+        svc.get_feed_page.assert_called_once_with(before=42, limit=int(limit))
+
+    @pytest.mark.parametrize(
+        "query", ["?limit=0", "?limit=51", "?limit=-1", "?limit=abc", "?before=x"]
+    )
+    def test_bad_query_is_400(self, query: str) -> None:
+        """Out-of-range or non-integer values answer 400 in the error shape."""
+        m, svc = self._operate_with_service()
+        resp = self._get(m, query)
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "error" in resp.json()
+        svc.get_feed_page.assert_not_called()
+
+
+AgentChatHandler = Callable[[web.Request], Awaitable[web.StreamResponse]]
+
+
+@contextmanager
+def _fake_agent(handler: AgentChatHandler) -> Iterator[str]:
+    """Serve `handler` at the agent's chat path on a free local port; yield its URL."""
+    loop = asyncio.new_event_loop()
+    agent_app = web.Application()
+    agent_app.router.add_post("/api/v1/chat", handler)
+    runner = web.AppRunner(agent_app)
+    loop.run_until_complete(runner.setup())
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    loop.run_until_complete(site.start())
+    port = runner.addresses[0][1]
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{port}/api/v1/chat"
+    finally:
+        asyncio.run_coroutine_threadsafe(runner.cleanup(), loop).result(timeout=5)
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=5)
+        loop.close()
+
+
+def _closed_port_url() -> str:
+    """Return a chat URL on a local port nothing listens on."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return f"http://127.0.0.1:{port}/api/v1/chat"
+
+
+class TestChatRoute:
+    """POST /api/v2/service/{service_config_id}/chat."""
+
+    BODY = {"text": "Why did you skip that market?", "client_id": "c-1"}
+
+    @staticmethod
+    def _operate(
+        status: DeploymentStatus = DeploymentStatus.DEPLOYED,
+        exists: bool = True,
+        password: Optional[str] = "pass",  # nosec B107
+    ) -> MagicMock:
+        m = _make_mock_operate()
+        m.password = password
+        m.service_manager.return_value.exists.return_value = exists
+        m.service_manager.return_value.load.return_value.deployment.status = status
+        return m
+
+    @staticmethod
+    def _post(m: MagicMock, agent_url: str, **kwargs: Any) -> Any:
+        stack, app, _, _ = _open_app(m)
+        with stack, patch("operate.cli.AGENT_CHAT_URL", agent_url):
+            with TestClient(app) as c:
+                return c.post("/api/v2/service/svc1/chat", **kwargs)
+
+    def test_not_logged_in(self) -> None:
+        """Chatting needs a logged-in user, like the other service POST routes."""
+        resp = self._post(
+            self._operate(password=None), _closed_port_url(), json=self.BODY
+        )
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_unknown_service(self) -> None:
+        """An unknown service is 404, like the other service routes."""
+        resp = self._post(
+            self._operate(exists=False), _closed_port_url(), json=self.BODY
+        )
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+        assert resp.json() == {"error": "Service svc1 not found"}
+
+    def test_login_is_checked_before_the_body(self) -> None:
+        """A logged-out user gets 401 even with a bad body."""
+        resp = self._post(
+            self._operate(password=None), _closed_port_url(), content=b"not json"
+        )
+        assert resp.status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_service_is_checked_before_the_body(self) -> None:
+        """An unknown service gets 404 even with a bad body."""
+        resp = self._post(
+            self._operate(exists=False), _closed_port_url(), content=b"not json"
+        )
+        assert resp.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"content": b"not json"},
+            {"json": ["text"]},
+            {"json": {"client_id": "c-1"}},
+            {"json": {"text": "", "client_id": "c-1"}},
+            {"json": {"text": "   ", "client_id": "c-1"}},
+            {"json": {"text": 5, "client_id": "c-1"}},
+            {"json": {"text": "hi"}},
+            {"json": {"text": "hi", "client_id": ""}},
+            {"json": {"text": "hi", "client_id": 1}},
+        ],
+    )
+    def test_bad_body_is_400(self, kwargs: dict) -> None:
+        """A body without a non-empty `text` and `client_id` string is 400."""
+        resp = self._post(self._operate(), _closed_port_url(), **kwargs)
+        assert resp.status_code == HTTPStatus.BAD_REQUEST
+        assert "error" in resp.json()
+
+    def test_bad_body_error_names_the_field(self) -> None:
+        """The 400 error says which field is wrong."""
+        resp = self._post(self._operate(), _closed_port_url(), json={"text": "hi"})
+        assert resp.json() == {"error": "'client_id': Field required"}
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            DeploymentStatus.BUILT,
+            DeploymentStatus.DEPLOYING,
+            DeploymentStatus.STOPPING,
+            DeploymentStatus.STOPPED,
+        ],
+    )
+    def test_not_deployed_is_503(self, status: DeploymentStatus) -> None:
+        """The chat is not forwarded unless the service is DEPLOYED."""
+        calls: list = []
+
+        async def handler(request: web.Request) -> web.Response:
+            calls.append(request)
+            return web.json_response({})
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(status=status), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert resp.json() == {"error": "The agent is not running."}
+        assert calls == []
+
+    def test_agent_unreachable_is_503(self) -> None:
+        """A deployed agent that does not accept the connection answers 503."""
+        resp = self._post(self._operate(), _closed_port_url(), json=self.BODY)
+        assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert resp.json() == {"error": "The agent cannot be reached."}
+
+    def test_agent_timeout_is_504(self) -> None:
+        """An agent that does not reply within the timeout answers 504."""
+
+        async def handler(request: web.Request) -> web.Response:
+            await asyncio.sleep(1)
+            return web.json_response({})
+
+        with (
+            _fake_agent(handler) as url,
+            patch("operate.cli.AGENT_CHAT_TIMEOUT_SECONDS", 0.1),
+        ):
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.GATEWAY_TIMEOUT
+        assert resp.json() == {"error": "The agent did not reply in time."}
+
+    @pytest.mark.parametrize(
+        ("agent_status", "agent_body"),
+        [
+            (
+                HTTPStatus.OK,
+                {
+                    "message": {"id": 7, "kind": "message", "role": "user"},
+                    "reply": {"id": 8, "kind": "message", "role": "agent"},
+                },
+            ),
+            (HTTPStatus.PAYMENT_REQUIRED, {"error": "Add xDAI to your agent."}),
+            (HTTPStatus.CONFLICT, {"error": "Still answering."}),
+            (HTTPStatus.SERVICE_UNAVAILABLE, {"error": "System initializing."}),
+            (HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "LLM failed."}),
+        ],
+    )
+    def test_passes_agent_answer_through(
+        self, agent_status: HTTPStatus, agent_body: dict
+    ) -> None:
+        """The agent gets `{text, client_id}`; its status and body come back unchanged."""
+        received: list = []
+
+        async def handler(request: web.Request) -> web.Response:
+            received.append(await request.json())
+            return web.json_response(agent_body, status=agent_status)
+
+        body = {**self.BODY, "extra": "not forwarded"}
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=body)
+        assert resp.status_code == agent_status
+        assert resp.json() == agent_body
+        assert resp.headers["content-type"].startswith("application/json")
+        assert received == [self.BODY]
+
+    @pytest.mark.parametrize(
+        "agent_status",
+        [
+            HTTPStatus.BAD_REQUEST,
+            HTTPStatus.NOT_FOUND,
+            HTTPStatus.METHOD_NOT_ALLOWED,
+        ],
+    )
+    def test_agent_without_chat_route_is_503(self, agent_status: HTTPStatus) -> None:
+        """An agent that has no chat route answers 503, not its own empty error."""
+
+        async def handler(request: web.Request) -> web.Response:
+            return web.Response(status=agent_status)
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert resp.json() == {"error": "The agent does not support chat."}
+
+    def test_passes_non_json_answer_through(self) -> None:
+        """A plain-text agent error comes back with its own body and Content-Type."""
+
+        async def handler(request: web.Request) -> web.Response:
+            return web.Response(text="boom", status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert resp.text == "boom"
+        assert resp.headers["content-type"].startswith("text/plain")
+
+    def test_passes_answer_without_content_type_through(self) -> None:
+        """An empty agent answer, which has no Content-Type, comes back as is."""
+
+        async def handler(request: web.Request) -> web.Response:
+            return web.Response(status=HTTPStatus.CONFLICT)
+
+        with _fake_agent(handler) as url:
+            resp = self._post(self._operate(), url, json=self.BODY)
+        assert resp.status_code == HTTPStatus.CONFLICT
+        assert resp.content == b""
+        assert "content-type" not in resp.headers

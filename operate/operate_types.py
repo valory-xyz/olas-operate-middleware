@@ -35,7 +35,7 @@ from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
-from pydantic import AfterValidator, BaseModel, ConfigDict, field_serializer
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer
 from web3 import Web3
 
 from operate.constants import (
@@ -192,6 +192,13 @@ class ServiceTemplate(TypedDict, total=False):
     home_chain: str
     configurations: ConfigurationTemplates
     env_variables: EnvVariables
+
+
+class FeedPage(TypedDict):
+    """A page of the agent's feed.jsonl, oldest entry first."""
+
+    entries: t.List[t.Dict[str, t.Any]]
+    has_more: bool
 
 
 @dataclass
@@ -645,6 +652,13 @@ class GasWarningEntry(BaseModel):
     """Gas warning entry for a single chain."""
 
     insufficient: bool
+
+
+class ChatRequest(BaseModel):
+    """Request body for POST /api/v2/service/{service_config_id}/chat."""
+
+    text: Annotated[str, Field(pattern=r"\S")]
+    client_id: Annotated[str, Field(min_length=1)]
 
 
 class FundRecoveryScanRequest(BaseModel):
