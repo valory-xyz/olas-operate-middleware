@@ -247,6 +247,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         ):
             self._queue_clear(run)
 
+    @staticmethod
+    def _safe_and_transfer_step() -> FundingRunStep:
+        """The hidden step that creates the Master Safe and sweeps funds into it."""
+        return FundingRunStep(
+            id=STEP_SAFE,
+            kind=FundingStepKind.SAFE_AND_TRANSFER,
+            status=FundingStepStatus.PENDING,
+            visible=False,
+        )
+
     def _queue_clear(self, run: FundingRun) -> None:
         """Have the background loop clear the run's source-chain delegation."""
         pointer = self._pointer()
@@ -361,6 +371,17 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 self._finish(current, FundingRunStatus.CANCELLED)
 
             if not run.net_targets:
+                if (
+                    run_mode == FundingRunMode.ONBOARD
+                    and destination not in self._wallet().safes
+                ):
+                    # The Master EOA covers onboarding, but the agent cannot
+                    # start until the Safe exists and holds the funds.
+                    run.steps = [self._safe_and_transfer_step()]
+                    run.status = FundingRunStatus.PROCESSING
+                    self._store(run)
+                    self._set_active(run)
+                    return run
                 # Nothing is missing: the app says so instead of asking for funds.
                 self._finish(run, FundingRunStatus.COMPLETED)
                 return run
@@ -809,9 +830,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         destination = Chain(run.destination_chain)
         gas = SAFE_TRANSFER_GAS * (n_assets + 1)
         if run.mode == FundingRunMode.ONBOARD:
-            # refill_requirements already asks for the Master EOA reserve, or
-            # before the Safe exists for DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, which
-            # covers its creation.
+            # refill_requirements asks for the EOA reserve; Safe creation gas is unbudgeted (docs/api.md)
             return gas * self._native_price(destination)
         wallet = self._wallet()
         if destination not in wallet.safes:
@@ -1137,14 +1156,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             # Signer gas never creates a Safe, but sweeps into an existing one.
             or Chain(run.destination_chain) in self._wallet().safes
         ):
-            steps.append(
-                FundingRunStep(
-                    id=STEP_SAFE,
-                    kind=FundingStepKind.SAFE_AND_TRANSFER,
-                    status=FundingStepStatus.PENDING,
-                    visible=False,
-                )
-            )
+            steps.append(self._safe_and_transfer_step())
         if gas_abstracted and source_requests:
             steps.append(
                 FundingRunStep(
