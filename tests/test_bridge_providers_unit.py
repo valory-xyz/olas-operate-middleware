@@ -27,7 +27,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as req_lib
 from web3 import Web3
-from web3.exceptions import TimeExhausted, TransactionNotFound
+from web3.datastructures import AttributeDict
+from web3.exceptions import BlockNotFound, TimeExhausted, TransactionNotFound
 
 from operate.bridge.providers.mayan_provider import (
     MAYAN_EXPLORER_URL,
@@ -687,121 +688,53 @@ class TestProviderBase:
             provider._bridge_tx_likely_failed(req) is True
         )  # pylint: disable=protected-access
 
-    def test_bridge_tx_likely_failed_age_exceeds_hard_timeout(self) -> None:
-        """_bridge_tx_likely_failed() returns True when age > HARD_TIMEOUT (lines 518-522)."""
+    @pytest.mark.parametrize(
+        ("receipt", "error", "eta", "age", "expected"),
+        [
+            ({"status": 1}, None, 30, 700, False),
+            ({"status": 1}, None, 60, 1300, True),
+            ({"status": 1}, None, None, 1100, False),
+            ({"status": 1}, None, None, 1300, True),
+            ({"status": 1}, None, 1800, 2000, False),
+            ({"status": 1}, None, 1800, 3700, True),
+            ({"status": 1}, None, 900, 1500, False),
+            ({"status": 1}, None, 900, 1900, True),
+            ({"status": 0}, None, 1800, 5, True),
+            (None, None, 30, 700, False),
+            (None, None, 30, 1300, True),
+            (None, TransactionNotFound("not found"), 30, 700, False),
+            (None, TransactionNotFound("not found"), 30, 1300, True),
+            (None, ConnectionError("rpc down"), 30, 5000, False),
+            (None, ConnectionError("rpc down"), None, 5000, False),
+            (None, ConnectionError("rpc down"), 1800, 6 * 3600 + 100, True),
+        ],
+    )
+    def test_bridge_tx_likely_failed(
+        self,
+        receipt: t.Optional[t.Dict[str, int]],
+        error: t.Optional[Exception],
+        eta: t.Optional[int],
+        age: int,
+        expected: bool,
+    ) -> None:
+        """_bridge_tx_likely_failed() reads the source receipt before applying any timeout."""
         provider = _ConcreteProvider()
         req = _make_request()
-        req.execution_data = _make_execution_data(
-            timestamp=int(time.time()) - 1300  # > 1200 HARD_TIMEOUT
-        )
-        req.quote_data = _make_quote_data(eta=60)
-        with patch("operate.bridge.providers.provider.get_default_ledger_api"):
-            result = provider._bridge_tx_likely_failed(
-                req
-            )  # pylint: disable=protected-access
-        assert result is True
-        provider.logger.warning.assert_called()  # type: ignore[attr-defined]
-
-    def test_bridge_tx_likely_failed_recent_tx_returns_false(self) -> None:
-        """_bridge_tx_likely_failed() returns False when age <= soft_timeout (lines 524-525)."""
-        provider = _ConcreteProvider()
-        req = _make_request()
-        req.execution_data = _make_execution_data(
-            timestamp=int(time.time()) - 5  # very recent
-        )
-        # eta=600 => soft_timeout = max(600, 600*10) = 6000; age=5 <= 6000
-        req.quote_data = _make_quote_data(eta=600)
-        result = provider._bridge_tx_likely_failed(
-            req
-        )  # pylint: disable=protected-access
-        assert result is False
-
-    def test_bridge_tx_likely_failed_receipt_status_1_returns_false(self) -> None:
-        """_bridge_tx_likely_failed() returns False when receipt.status==1 (lines 530-541)."""
-        provider = _ConcreteProvider()
-        req = _make_request()
-        # age > soft_timeout (600) but < HARD_TIMEOUT (1200)
-        req.execution_data = _make_execution_data(timestamp=int(time.time()) - 700)
-        req.quote_data = _make_quote_data(eta=30)  # eta<60 => eta_timeout=0; soft=600
-
-        mock_receipt = MagicMock()
-        mock_receipt.__getitem__ = lambda self, key: 1 if key == "status" else None
+        req.execution_data = _make_execution_data(timestamp=int(time.time()) - age)
+        req.quote_data = _make_quote_data(eta=eta)
 
         with patch(
             "operate.bridge.providers.provider.get_default_ledger_api"
         ) as mock_api:
             mock_w3 = MagicMock()
-            mock_w3.eth.get_transaction_receipt.return_value = mock_receipt
+            mock_w3.eth.get_transaction_receipt.return_value = receipt
+            mock_w3.eth.get_transaction_receipt.side_effect = error
             mock_api.return_value = MagicMock(api=mock_w3)
             result = provider._bridge_tx_likely_failed(
                 req
             )  # pylint: disable=protected-access
 
-        assert result is False
-
-    def test_bridge_tx_likely_failed_receipt_status_0_returns_true(self) -> None:
-        """_bridge_tx_likely_failed() returns True when receipt.status==0 (lines 543-546)."""
-        provider = _ConcreteProvider()
-        req = _make_request()
-        req.execution_data = _make_execution_data(timestamp=int(time.time()) - 700)
-        req.quote_data = _make_quote_data(eta=30)
-
-        mock_receipt = MagicMock()
-        mock_receipt.__getitem__ = lambda self, key: 0 if key == "status" else None
-
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
-            mock_w3 = MagicMock()
-            mock_w3.eth.get_transaction_receipt.return_value = mock_receipt
-            mock_api.return_value = MagicMock(api=mock_w3)
-            result = provider._bridge_tx_likely_failed(
-                req
-            )  # pylint: disable=protected-access
-
-        assert result is True
-
-    def test_bridge_tx_likely_failed_transaction_not_found(self) -> None:
-        """_bridge_tx_likely_failed() returns True on TransactionNotFound (lines 547-551)."""
-        provider = _ConcreteProvider()
-        req = _make_request()
-        req.execution_data = _make_execution_data(timestamp=int(time.time()) - 700)
-        req.quote_data = _make_quote_data(eta=30)
-
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
-            mock_w3 = MagicMock()
-            mock_w3.eth.get_transaction_receipt.side_effect = TransactionNotFound(
-                "not found"
-            )
-            mock_api.return_value = MagicMock(api=mock_w3)
-            result = provider._bridge_tx_likely_failed(
-                req
-            )  # pylint: disable=protected-access
-
-        assert result is True
-
-    def test_bridge_tx_likely_failed_generic_exception(self) -> None:
-        """_bridge_tx_likely_failed() returns True on generic Exception (lines 552-556)."""
-        provider = _ConcreteProvider()
-        req = _make_request()
-        req.execution_data = _make_execution_data(timestamp=int(time.time()) - 700)
-        req.quote_data = _make_quote_data(eta=30)
-
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
-            mock_w3 = MagicMock()
-            mock_w3.eth.get_transaction_receipt.side_effect = ConnectionError(
-                "rpc down"
-            )
-            mock_api.return_value = MagicMock(api=mock_w3)
-            result = provider._bridge_tx_likely_failed(
-                req
-            )  # pylint: disable=protected-access
-
-        assert result is True
+        assert result is expected
 
 
 # ---------------------------------------------------------------------------
@@ -1779,27 +1712,6 @@ class TestProviderBaseAdditional:
         assert result == 999_999
         mock_ledger.api.eth.get_transaction_receipt.assert_called_once_with(tx_hash)
         mock_ledger.api.eth.get_block.assert_called_once_with(42)
-
-    def test_bridge_tx_likely_failed_receipt_none(self) -> None:
-        """_bridge_tx_likely_failed() returns True when get_transaction_receipt returns None (line 534)."""
-        provider = _ConcreteProvider()
-        req = _make_request()
-        # age > soft_timeout: timestamp 700s ago, eta=30 => soft=600 < 700
-        req.execution_data = _make_execution_data(timestamp=int(time.time()) - 700)
-        req.quote_data = _make_quote_data(eta=30)
-
-        with patch(
-            "operate.bridge.providers.provider.get_default_ledger_api"
-        ) as mock_api:
-            mock_w3 = MagicMock()
-            # Return None — not raising TransactionNotFound, just None receipt
-            mock_w3.eth.get_transaction_receipt.return_value = None
-            mock_api.return_value = MagicMock(api=mock_w3)
-            result = provider._bridge_tx_likely_failed(
-                req
-            )  # pylint: disable=protected-access
-
-        assert result is True
 
 
 # ---------------------------------------------------------------------------
@@ -3226,15 +3138,15 @@ class TestOmnibridgeContractAdaptorCoverage:
 
 
 # ---------------------------------------------------------------------------
-# TestNativeBridgeFindBlockBeforeTimestamp — lines 686-690
+# TestNativeBridgeFindBlockBeforeTimestamp
 # ---------------------------------------------------------------------------
 
 
 class TestNativeBridgeFindBlockBeforeTimestamp:
-    """Tests for NativeBridgeProvider._find_block_before_timestamp (lines 686-690)."""
+    """Tests for NativeBridgeProvider._find_block_before_timestamp."""
 
     def test_binary_search_returns_largest_block_before_timestamp(self) -> None:
-        """_find_block_before_timestamp() uses binary search and returns correct block (lines 686-690)."""
+        """_find_block_before_timestamp() uses binary search and returns correct block."""
         w3_mock = MagicMock()
         w3_mock.eth.block_number = 10
 
@@ -3281,6 +3193,54 @@ class TestNativeBridgeFindBlockBeforeTimestamp:
             w3_mock, 1
         )
         assert result == 0
+
+    def test_pruned_rpc_reads_only_recent_blocks(self) -> None:
+        """A non-archive RPC that has pruned old blocks still yields the block before the bridge tx."""
+        latest = 40_000_000
+        pruning_floor = latest - 10_000
+        requested: t.List[int] = []
+
+        def get_block_stub(n: int) -> t.Dict[str, int]:
+            requested.append(n)
+            if n < pruning_floor:
+                raise BlockNotFound(f"Block with id: '{hex(n)}' not found.")
+            return {"timestamp": n * 5}
+
+        w3_mock = MagicMock()
+        w3_mock.eth.block_number = latest
+        w3_mock.eth.get_block.side_effect = get_block_stub
+
+        result = NativeBridgeProvider._find_block_before_timestamp(  # pylint: disable=protected-access
+            w3_mock, (latest - 360) * 5 + 1
+        )
+        assert result == latest - 360
+        assert min(requested) == latest - 512
+
+    @pytest.mark.parametrize(
+        ("latest", "timestamp", "expected"),
+        [
+            (10, 500, 4),  # bisected block has the same timestamp
+            (10, 800, 7),  # gallop probe has the same timestamp
+            (10, 1000, 9),  # head has the same timestamp
+            (10, 950, 9),  # answer is the first gallop probe
+            (10, 850, 8),  # empty bisect bracket
+            (16, 900, 8),  # answer is exactly latest - 2^k
+            (0, 1, 0),
+            (0, 0, 0),
+        ],
+    )
+    def test_search_boundaries(
+        self, latest: int, timestamp: int, expected: int
+    ) -> None:
+        """_find_block_before_timestamp() returns the largest block strictly before `timestamp`."""
+        w3_mock = MagicMock()
+        w3_mock.eth.block_number = latest
+        w3_mock.eth.get_block.side_effect = lambda n: {"timestamp": n * 100}
+
+        result = NativeBridgeProvider._find_block_before_timestamp(  # pylint: disable=protected-access
+            w3_mock, timestamp
+        )
+        assert result == expected
 
 
 # ---------------------------------------------------------------------------
@@ -3459,6 +3419,48 @@ class TestNativeBridgeUpdateExecutionStatusLoop:
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
         assert req.status == ProviderRequestStatus.EXECUTION_FAILED
+
+    def test_destination_rpc_error_keeps_mined_omnibridge_leg_unknown(self) -> None:
+        """A destination read error before 2 x ETA leaves a mined omnibridge leg EXECUTION_UNKNOWN."""
+        provider = _make_native_provider(adaptor=_make_omnibridge_adaptor())
+        req = _make_request(
+            provider_id="native-ethereum-to-gnosis",
+            status=ProviderRequestStatus.EXECUTION_PENDING,
+            from_chain="ethereum",
+            to_chain="gnosis",
+        )
+        # Older than HARD_TIMEOUT, within 2 x ETA
+        req.execution_data = _make_execution_data(
+            from_tx_hash="0x" + "aa" * 32, timestamp=int(time.time()) - 2000
+        )
+        req.quote_data = _make_quote_data(eta=1800)
+
+        mock_from_w3 = MagicMock()
+        mock_from_w3.eth.get_transaction_receipt.return_value = AttributeDict(
+            {"status": 1, "blockNumber": 100}
+        )
+        mock_from_w3.eth.get_block.return_value = AttributeDict({"timestamp": 1000})
+
+        def _pick_ledger(chain: t.Any) -> MagicMock:
+            if chain.value == "ethereum":
+                return MagicMock(api=mock_from_w3)
+            return MagicMock(api=MagicMock())
+
+        with (
+            patch(
+                "operate.bridge.providers.provider.get_default_ledger_api",
+                side_effect=_pick_ledger,
+            ),
+            patch.object(
+                NativeBridgeProvider,
+                "_find_block_before_timestamp",
+                side_effect=BlockNotFound("Block with id: '0x1748c2c' not found."),
+            ) as mock_find,
+        ):
+            provider._update_execution_status(req)  # pylint: disable=protected-access
+
+        mock_find.assert_called_once()
+        assert req.status == ProviderRequestStatus.EXECUTION_UNKNOWN
 
 
 # ---------------------------------------------------------------------------

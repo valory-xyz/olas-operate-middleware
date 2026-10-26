@@ -743,7 +743,7 @@ class TestNativeBridgeProvider:
         RUNNING_IN_CI and system() != "Linux",
         reason="Direct Web3.HTTPProvider calls bypass VCR cassette interception on macOS/Windows CI runners.",
     )
-    @pytest.mark.parametrize("rpc", ["https://rpc-gate.autonolas.tech/base-rpc/"])
+    @pytest.mark.parametrize("rpc", ["https://mainnet.base.org"])
     @pytest.mark.parametrize(
         ("timestamp", "expected_block"),
         [

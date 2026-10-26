@@ -52,6 +52,9 @@ from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
+BRIDGE_TX_HARD_TIMEOUT_SECONDS = 1200
+# Status only: failure_is_final still blocks a resend while the receipt is unreadable
+BRIDGE_TX_UNREADABLE_TIMEOUT_SECONDS = 6 * 3600
 PROVIDER_REQUEST_PREFIX = "r-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
@@ -699,67 +702,44 @@ class Provider(ABC):
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
 
-    def _bridge_tx_likely_failed(  # pylint: disable=too-many-locals, too-many-return-statements
-        self, provider_request: ProviderRequest
-    ) -> bool:
-        """Check if the bridge transaction likely failed and is not going to settle."""
+    def _bridge_tx_likely_failed(self, provider_request: ProviderRequest) -> bool:
+        """Whether the source tx reverted, was dropped, or is overdue after mining."""
 
         execution_data = provider_request.execution_data
         if not execution_data or not execution_data.from_tx_hash:
             return True
 
         from_tx_hash = execution_data.from_tx_hash
-        now = time.time()
-        age_seconds = now - execution_data.timestamp
-
+        age_seconds = time.time() - execution_data.timestamp
         eta = provider_request.quote_data.eta if provider_request.quote_data else None
 
-        MIN_SOFT_TIMEOUT = 600
-        HARD_TIMEOUT = 1200
-        ETA_MULTIPLIER = 10
-        ETA_MIN_THRESHOLD = 60
-
-        eta_timeout = (
-            (eta * ETA_MULTIPLIER) if (eta and eta >= ETA_MIN_THRESHOLD) else 0
-        )
-        soft_timeout = max(MIN_SOFT_TIMEOUT, eta_timeout)
-
-        if age_seconds > HARD_TIMEOUT:
-            self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} age {age_seconds // 60} > HARD_TIMEOUT."
-            )
-            return True
-
-        if age_seconds <= soft_timeout:
-            return False
-
-        from_ledger_api = self._from_ledger_api(provider_request)
-        w3 = from_ledger_api.api
-
+        limit, reason = BRIDGE_TX_HARD_TIMEOUT_SECONDS, "not seen"
         try:
-            receipt = w3.eth.get_transaction_receipt(from_tx_hash)
-
-            if receipt is None:
-                raise TransactionNotFound("Receipt not found")
-
-            if receipt["status"] == 1:
-                # Unusual corner case - succeeded but bridge doesn't know yet?
-                self.logger.info(
-                    f"[PROVIDER] Transaction {from_tx_hash} was mined and succeeded — waiting for provider sync"
-                )
-                return False
-
-            self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
-            )
-            return True
+            receipt = self._from_ledger_api(
+                provider_request
+            ).api.eth.get_transaction_receipt(from_tx_hash)
         except TransactionNotFound:
-            self.logger.warning(
-                f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds // 60} min - likely dropped."
-            )
-            return True
+            receipt = None
         except Exception as e:  # pylint: disable=broad-except
             self.logger.warning(
-                f"[PROVIDER] Error retrieving tx {from_tx_hash}: {e} - likely dropped."
+                f"[PROVIDER] Cannot read receipt of {from_tx_hash}: {e}"
             )
-            return True
+            receipt = None
+            limit, reason = BRIDGE_TX_UNREADABLE_TIMEOUT_SECONDS, "receipt unreadable"
+
+        if receipt is not None:
+            if receipt["status"] != 1:
+                self.logger.warning(
+                    f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
+                )
+                return True
+            # A mined leg may still be delivered, so it only times out well past its ETA
+            limit = max(BRIDGE_TX_HARD_TIMEOUT_SECONDS, 2 * (eta or 0))
+            reason = "mined but not delivered"
+
+        if age_seconds <= limit:
+            return False
+        self.logger.warning(
+            f"[PROVIDER] Transaction {from_tx_hash} {reason} after {int(age_seconds // 60)} min - likely failed."
+        )
+        return True
