@@ -1410,6 +1410,113 @@ class TestTargets:
         assert run.net_targets == {POLYGON_OLAS: 5}
         env.funding_manager.destination_targets.assert_called_once_with(env.service)
 
+    def test_onboard_covered_without_safe_still_creates_the_safe(
+        self, tmp_path: Path
+    ) -> None:
+        """Signer funds cover onboarding but no Safe exists: a Safe-only run creates it."""
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+            backup_owner=SAFE,
+        )
+        body = env.manager.run_json(run)
+
+        assert run.status == FundingRunStatus.PROCESSING
+        assert [(s.id, s.visible) for s in run.steps] == [(STEP_SAFE, False)]
+        assert body["quote"] is None
+        assert body["to_receive"] == []
+        assert env.bridge.quoted == []
+        assert env.manager.active_run().id == run.id  # type: ignore[union-attr]
+
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        assert run.step(STEP_SAFE).status == FundingStepStatus.DONE
+        env.wallet.create_safe_and_transfer_excess.assert_called_once_with(
+            chain=Chain.POLYGON, backup_owner=SAFE
+        )
+
+    def test_onboard_covered_safe_only_run_fails_and_retries(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed Safe creation leaves the run FAILED, and retry finishes it."""
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {}
+        env.wallet.create_safe_and_transfer_excess.return_value = {
+            "status": CreateSafeStatus.SAFE_CREATION_FAILED,
+            "safe": None,
+            "create_tx": None,
+            "transfer_txs": {},
+            "transfer_errors": {},
+            "message": "boom",
+        }
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        run = env.tick_until(run, FundingRunStatus.FAILED)
+        assert run.error == {"step_id": STEP_SAFE, "message": MESSAGE_TRANSFER_FAILED}
+        with pytest.raises(FundingRunConflictError):
+            _deposit_run(env)
+
+        env.wallet.create_safe_and_transfer_excess.return_value = {
+            "status": CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED,
+            "safe": SAFE,
+            "create_tx": "0x" + "5" * 64,
+            "transfer_txs": {},
+            "transfer_errors": {},
+            "message": "ok",
+        }
+        env.manager.retry(run.id)
+        env.tick_until(run, FundingRunStatus.COMPLETED)
+
+    def test_onboard_covered_with_safe_completes_immediately(
+        self, tmp_path: Path
+    ) -> None:
+        """With a Safe on the destination, nothing to add still completes at once."""
+        env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        assert run.status == FundingRunStatus.COMPLETED
+        assert run.steps == []
+        env.wallet.create_safe_and_transfer_excess.assert_not_called()
+
+    @pytest.mark.parametrize("mode", ["deposit", "signer_gas"])
+    def test_other_modes_covered_without_safe_complete_immediately(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        """Only onboarding creates a Safe when nothing is missing."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE
+
+        run = env.manager.create_run(
+            mode=mode,
+            source_chain="base",
+            source_token=BASE_USDC if mode == "deposit" else NATIVE,
+            destination_chain="polygon",
+            deposit_amounts={POLYGON_OLAS: 0} if mode == "deposit" else None,
+        )
+
+        assert run.status == FundingRunStatus.COMPLETED
+        assert run.steps == []
+
     @pytest.mark.parametrize(
         "kwargs",
         [

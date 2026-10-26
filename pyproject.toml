@@ -1,6 +1,6 @@
 [project]
 name = "olas-operate-middleware"
-version = "0.15.46"
+version = "0.15.47"
 description = ""
 license = "Apache-2.0"
 authors = [
@@ -10,10 +10,10 @@ authors = [
 requires-python = "<3.15,>=3.10"
 readme = "README.md"
 dependencies = [
-    "open-autonomy[cli,docker]>=0.21.29,<0.22",
-    "open-aea-ledger-cosmos>=2.2.5,<3",
-    "open-aea-ledger-ethereum>=2.2.5,<3",
-    "open-aea-cli-ipfs>=2.2.5,<3",
+    "open-autonomy[cli,docker]>=0.21.30,<0.22",
+    "open-aea-ledger-cosmos>=2.2.10,<3",
+    "open-aea-ledger-ethereum>=2.2.10,<3",
+    "open-aea-cli-ipfs>=2.2.10,<3",
     "clea==0.1.0rc4",
     "fastapi>=0.120,<0.121",
     "uvicorn>=0.30",
