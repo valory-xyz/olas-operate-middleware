@@ -1851,6 +1851,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "argon2-cffi" },
+    { name = "certifi" },
     { name = "clea" },
     { name = "cryptography" },
     { name = "deepdiff" },
@@ -1885,6 +1886,7 @@ development = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.13.4,<4" },
     { name = "argon2-cffi", specifier = "==23.1.0" },
+    { name = "certifi", specifier = ">=2026.10.19" },
     { name = "clea", specifier = "==0.1.0rc4" },
     { name = "cryptography", specifier = ">=46.0.7,<47" },
     { name = "deepdiff", specifier = ">=8.6.2,<9" },

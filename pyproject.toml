@@ -26,6 +26,7 @@ dependencies = [
     "flask>=3.0,<4",
     "werkzeug>=3.0,<4",
     "requests>=2.32,<3",
+    "certifi>=2026.10.19",
 ]
 
 [project.scripts]

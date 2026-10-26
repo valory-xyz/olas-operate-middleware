@@ -116,6 +116,17 @@ def get_runtime_ca_bundle_path() -> Optional[str]:
             if _is_usable_ca_bundle_path(configured_bundle):
                 return configured_bundle
 
+    # Bundled certifi wins over the OS bundle so Pearl's pinned trust store
+    # applies even when the user's OS has not shipped a CA revocation yet.
+    certifi_bundle = certifi.where()
+    if _is_usable_ca_bundle_path(certifi_bundle):
+        return certifi_bundle
+
+    if os.path.exists(certifi_bundle):
+        materialized_bundle = _materialize_certifi_bundle(certifi_bundle)
+        if materialized_bundle is not None:
+            return materialized_bundle
+
     system_bundle = None
     if system == "Darwin":
         system_bundle = "/etc/ssl/cert.pem"
@@ -124,13 +135,6 @@ def get_runtime_ca_bundle_path() -> Optional[str]:
 
     if system_bundle and os.path.exists(system_bundle):
         return system_bundle
-
-    certifi_bundle = certifi.where()
-    if _is_usable_ca_bundle_path(certifi_bundle):
-        return certifi_bundle
-
-    if os.path.exists(certifi_bundle):
-        return _materialize_certifi_bundle(certifi_bundle)
 
     return None
 
