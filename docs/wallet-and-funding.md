@@ -187,7 +187,8 @@ end up; quoting, monitoring and execution are shared:
 Routing reuses the bridge providers through `BridgeManager.quote_requests`,
 which never touches the Transak/bridge flow's cached bundle. One run exists at
 a time. The run is persisted in `funding_runs/<id>.json` (with
-`funding_runs/active.json` pointing at the live one), and every transition is
+`funding_runs/active.json` pointing at the live one and indexing each
+service's latest completed `onboard` run), and every transition is
 stored before its side effect: after a restart a step with a recorded UserOp
 hash, tx hash or Relay `requestId` is reconciled, never blindly resent, and a
 retry re-quotes only failed requests. A `FAILED` run with nothing in flight
