@@ -220,7 +220,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         """Index the COMPLETED onboard runs finished before the index existed."""
         # A read must not wait out a lock holder's RPC calls; the next
         # _pointer() call made under the lock runs the backfill instead.
-        if not self._lock.acquire(blocking=False):
+        if not self._lock.acquire(  # pylint: disable=consider-using-with
+            blocking=False
+        ):
             return pointer
         try:
             pointer = t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
