@@ -3611,6 +3611,195 @@ class TestBackgroundLoop:
 
 
 # ---------------------------------------------------------------------------
+# Completed onboard index
+# ---------------------------------------------------------------------------
+
+
+def _completed_onboard_run(env: Env, service_config_id: str = "sc-1") -> FundingRun:
+    """An onboard run with nothing missing and a Safe: COMPLETED at creation."""
+    env.wallet.safes = {Chain.POLYGON: SAFE}
+    env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+    run = env.manager.create_run(
+        mode="onboard",
+        source_chain="base",
+        source_token=BASE_USDC,
+        destination_chain="polygon",
+        service_config_id=service_config_id,
+    )
+    assert run.status == FundingRunStatus.COMPLETED
+    return run
+
+
+def _downgrade_pointer(env: Env) -> None:
+    """Rewrite active.json as a version-1 pointer, written before the index."""
+    path = env.manager.path / "active.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["completed_onboard"]
+    data["version"] = 1
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _set_finished_at(env: Env, run: FundingRun, finished_at: int) -> None:
+    run = env.reload(run)
+    run.finished_at = finished_at
+    run.store()
+
+
+class TestCompletedOnboardRuns:
+    """The service -> latest COMPLETED onboard run index and its backfill."""
+
+    def test_run_completed_at_creation_is_returned(self, tmp_path: Path) -> None:
+        """The immediate-completion path indexes the run."""
+        env = Env(tmp_path)
+        run = _completed_onboard_run(env)
+
+        assert env.manager.completed_onboard_runs(["sc-1"]) == [
+            {
+                "service_config_id": "sc-1",
+                "run_id": run.id,
+                "finished_at": run.finished_at,
+            }
+        ]
+
+    def test_run_completed_by_the_background_loop_is_returned(
+        self, tmp_path: Path
+    ) -> None:
+        """A run finished off-screen by tick() is indexed, long after the 5-min window."""
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+            backup_owner=SAFE,
+        )
+        run = env.tick_until(run, FundingRunStatus.COMPLETED)
+
+        with patch(f"{MODULE}._now", return_value=int(time.time()) + 86_400):
+            assert env.manager.active_run() is None
+            runs = env.manager.completed_onboard_runs(["sc-1"])
+
+        assert [r["run_id"] for r in runs] == [run.id]
+
+    def test_cancelled_and_unfinished_onboard_runs_are_omitted(
+        self, tmp_path: Path
+    ) -> None:
+        """Only COMPLETED runs count: a waiting or cancelled run leaves setup open."""
+        env = Env(tmp_path)
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+        assert env.manager.completed_onboard_runs(["sc-1"]) == []
+
+        env.manager.cancel(run.id)
+
+        assert env.reload(run).status == FundingRunStatus.CANCELLED
+        assert env.manager.completed_onboard_runs(["sc-1"]) == []
+
+    def test_other_modes_are_not_indexed(self, tmp_path: Path) -> None:
+        """A completed deposit run is not a setup run."""
+        env = Env(tmp_path)
+        run = _deposit_run(env, amounts={POLYGON_OLAS: 0})
+
+        assert run.status == FundingRunStatus.COMPLETED
+        assert (
+            env.manager._pointer().completed_onboard
+            == {}  # pylint: disable=protected-access
+        )
+
+    def test_latest_completed_run_wins(self, tmp_path: Path) -> None:
+        """A second completed onboard run for the same service replaces the first."""
+        env = Env(tmp_path)
+        _completed_onboard_run(env)
+        second = _completed_onboard_run(env)
+
+        runs = env.manager.completed_onboard_runs(["sc-1"])
+
+        assert [r["run_id"] for r in runs] == [second.id]
+
+    def test_only_requested_services_once_each(self, tmp_path: Path) -> None:
+        """Unknown ids are omitted, repeated ids answered once, in request order."""
+        env = Env(tmp_path)
+        first = _completed_onboard_run(env, "sc-1")
+        second = _completed_onboard_run(env, "sc-2")
+
+        runs = env.manager.completed_onboard_runs(["sc-2", "sc-9", "sc-1", "sc-2"])
+
+        assert [(r["service_config_id"], r["run_id"]) for r in runs] == [
+            ("sc-2", second.id),
+            ("sc-1", first.id),
+        ]
+
+    def test_missing_run_file_is_omitted(self, tmp_path: Path) -> None:
+        """An indexed run whose file is gone is left out, not an error."""
+        env = Env(tmp_path)
+        run = _completed_onboard_run(env)
+        run.path.unlink()
+
+        assert env.manager.completed_onboard_runs(["sc-1"]) == []
+        assert _logged(env, "Cannot load indexed")
+
+    def test_version_1_pointer_is_backfilled_once(self, tmp_path: Path) -> None:
+        """Runs finished before the update are indexed, latest by finished_at."""
+        env = Env(tmp_path)
+        older = _completed_onboard_run(env, "sc-1")
+        newer = _completed_onboard_run(env, "sc-1")
+        other = _completed_onboard_run(env, "sc-2")
+        # Written out of order: the backfill must not rely on file order.
+        _set_finished_at(env, older, 2_000)
+        _set_finished_at(env, newer, 1_000)
+        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        cancelled = env.manager.create_run(
+            mode="onboard",
+            source_chain="base",
+            source_token=BASE_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-3",
+        )
+        env.manager.cancel(cancelled.id)
+        (env.manager.path / "fr-00000000-0000-0000-0000-000000000000.json").write_text(
+            "not json", encoding="utf-8"
+        )
+        _downgrade_pointer(env)
+
+        runs = env.manager.completed_onboard_runs(["sc-1", "sc-2", "sc-3"])
+
+        assert [(r["service_config_id"], r["run_id"]) for r in runs] == [
+            ("sc-1", older.id),
+            ("sc-2", other.id),
+        ]
+        assert _logged(env, "Cannot index fr-00000000-0000-0000-0000-000000000000")
+        with patch.object(
+            FundingRunManager, "_backfill_completed_onboard", side_effect=AssertionError
+        ):
+            pointer = env.manager._pointer()  # pylint: disable=protected-access
+        assert pointer.version == 2
+
+    def test_interrupted_backfill_runs_again(self, tmp_path: Path) -> None:
+        """A backfill that died before storing version 2 is redone on the next read."""
+        env = Env(tmp_path)
+        run = _completed_onboard_run(env)
+        _downgrade_pointer(env)
+
+        with (
+            patch(f"{MODULE}.FundingRunPointer.store", side_effect=_Crash),
+            pytest.raises(_Crash),
+        ):
+            env.manager.completed_onboard_runs(["sc-1"])
+
+        assert [r["run_id"] for r in env.manager.completed_onboard_runs(["sc-1"])] == [
+            run.id
+        ]
+
+
+# ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
 
