@@ -220,7 +220,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             pointer = t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
             if pointer.version >= POINTER_VERSION:
                 return pointer
-            finished_at: t.Dict[str, int] = {}
+            latest: t.Dict[str, t.Tuple[int, int]] = {}
             for path in self.path.glob(f"{FUNDING_RUN_PREFIX}*.json"):
                 if not FUNDING_RUN_ID_RE.fullmatch(path.stem):
                     continue
@@ -232,9 +232,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 if not self._is_completed_onboard(run):
                     continue
                 service_config_id = t.cast(str, run.service_config_id)
-                run_finished_at = run.finished_at or 0
-                if run_finished_at >= finished_at.get(service_config_id, -1):
-                    finished_at[service_config_id] = run_finished_at
+                order = (run.finished_at or 0, run.created_at)
+                if order > latest.get(service_config_id, (-1, -1)):
+                    latest[service_config_id] = order
                     pointer.completed_onboard[service_config_id] = run.id
             pointer.version = POINTER_VERSION
             pointer.store()
