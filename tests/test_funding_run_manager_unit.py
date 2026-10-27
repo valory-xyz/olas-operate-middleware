@@ -62,6 +62,7 @@ from operate.funding_run.manager import (
 from operate.funding_run.models import (
     FundingRun,
     FundingRunMode,
+    FundingRunPointer,
     FundingRunStatus,
     FundingStepKind,
     FundingStepStatus,
@@ -3746,6 +3747,34 @@ class TestCompletedOnboardRuns:
         assert env.manager.completed_onboard_runs(["sc-1"]) == []
         assert _logged(env, "Cannot load indexed")
 
+    def test_indexed_run_without_finished_at_is_omitted(self, tmp_path: Path) -> None:
+        """An indexed run that no longer reads as a finished onboard run is left out."""
+        env = Env(tmp_path)
+        run = _completed_onboard_run(env)
+        run = env.reload(run)
+        run.finished_at = None
+        run.store()
+
+        assert env.manager.completed_onboard_runs(["sc-1"]) == []
+
+    def test_backfill_skipped_when_pointer_already_upgraded(
+        self, tmp_path: Path
+    ) -> None:
+        """A stale version-1 pointer is not backfilled again once disk holds version 2."""
+        env = Env(tmp_path)
+        run = _completed_onboard_run(env)
+        _downgrade_pointer(env)
+        stale = t.cast(FundingRunPointer, FundingRunPointer.load(env.manager.path))
+        env.manager._pointer()  # pylint: disable=protected-access
+
+        with patch.object(Path, "glob", side_effect=AssertionError):
+            pointer = env.manager._backfill_completed_onboard(  # pylint: disable=protected-access
+                stale
+            )
+
+        assert pointer.version == 2
+        assert pointer.completed_onboard == {"sc-1": run.id}
+
     def test_version_1_pointer_is_backfilled_once(self, tmp_path: Path) -> None:
         """Runs finished before the update are indexed, latest by finished_at."""
         env = Env(tmp_path)
@@ -3767,6 +3796,9 @@ class TestCompletedOnboardRuns:
         (env.manager.path / "fr-00000000-0000-0000-0000-000000000000.json").write_text(
             "not json", encoding="utf-8"
         )
+        (env.manager.path / "fr-not-a-run-id.json").write_text(
+            "not json", encoding="utf-8"
+        )
         _downgrade_pointer(env)
 
         runs = env.manager.completed_onboard_runs(["sc-1", "sc-2", "sc-3"])
@@ -3776,6 +3808,7 @@ class TestCompletedOnboardRuns:
             ("sc-2", other.id),
         ]
         assert _logged(env, "Cannot index fr-00000000-0000-0000-0000-000000000000")
+        assert not _logged(env, "fr-not-a-run-id")
         with patch.object(
             FundingRunManager, "_backfill_completed_onboard", side_effect=AssertionError
         ):
