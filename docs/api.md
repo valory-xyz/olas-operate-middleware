@@ -3096,7 +3096,7 @@ The latest `COMPLETED` `onboard` run of each service asked for, so the app can m
 
 - A service with no `COMPLETED` `onboard` run is omitted; `FAILED`, `CANCELLED` and unfinished runs never appear.
 - `finished_at` is unix seconds.
-- Served from an index in `active.json`, written as each run completes. Runs that completed before the index existed are added to it once, the first time the pointer is read after the update.
+- Served from an index in `active.json`, written as each run completes. Runs that completed before the index existed are added to it once after the update, on the first read that finds no run being processed. Until then they are omitted.
 
 **Errors:** `400` when no `service_config_id` is given.
 

@@ -211,12 +211,18 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             FundingRunPointer(path=self.path).store()
         pointer = t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
         if pointer.version < POINTER_VERSION:
-            pointer = self._backfill_completed_onboard()
+            pointer = self._backfill_completed_onboard(pointer)
         return pointer
 
-    def _backfill_completed_onboard(self) -> FundingRunPointer:
+    def _backfill_completed_onboard(
+        self, pointer: FundingRunPointer
+    ) -> FundingRunPointer:
         """Index the COMPLETED onboard runs finished before the index existed."""
-        with self._lock:
+        # A read must not wait out a lock holder's RPC calls; the next
+        # _pointer() call made under the lock runs the backfill instead.
+        if not self._lock.acquire(blocking=False):
+            return pointer
+        try:
             pointer = t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
             if pointer.version >= POINTER_VERSION:
                 return pointer
@@ -239,6 +245,8 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             pointer.version = POINTER_VERSION
             pointer.store()
             return pointer
+        finally:
+            self._lock.release()
 
     @staticmethod
     def _is_completed_onboard(run: FundingRun) -> bool:

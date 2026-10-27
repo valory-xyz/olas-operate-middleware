@@ -3798,6 +3798,33 @@ class TestCompletedOnboardRuns:
             run.id
         ]
 
+    def test_read_does_not_wait_for_a_held_lock(self, tmp_path: Path) -> None:
+        """While another thread holds the lock, a read skips the backfill; the holder runs it."""
+        env = Env(tmp_path)
+        run = _completed_onboard_run(env)
+        _downgrade_pointer(env)
+        held, release = threading.Event(), threading.Event()
+
+        def _hold() -> None:
+            with env.manager._lock:  # pylint: disable=protected-access
+                held.set()
+                release.wait(5)
+                env.manager._pointer()  # pylint: disable=protected-access
+
+        holder = threading.Thread(target=_hold)
+        holder.start()
+        try:
+            assert held.wait(5)
+            assert env.manager.active_run() is not None
+            assert env.manager.completed_onboard_runs(["sc-1"]) == []
+        finally:
+            release.set()
+            holder.join()
+
+        assert [r["run_id"] for r in env.manager.completed_onboard_runs(["sc-1"])] == [
+            run.id
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Models
