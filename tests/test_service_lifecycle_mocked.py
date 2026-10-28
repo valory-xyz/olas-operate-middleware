@@ -342,7 +342,7 @@ class TestServiceCreationFailure:
         service_template["home_chain"] = "not-a-chain"
         service_template["configurations"] = {"not-a-chain": {}}
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="not-a-chain"):
             Service.new(
                 agent_addresses=[],
                 storage=storage,
