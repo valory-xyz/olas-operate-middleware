@@ -121,6 +121,7 @@ from operate.utils import (
 )
 from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
+from operate.validators import validated_safe_id
 
 # pylint: disable=no-member,redefined-builtin,too-many-instance-attributes,too-many-locals
 
@@ -1015,7 +1016,11 @@ class Service(LocalResource):
             )
             service.store()
         except Exception:
-            shutil.rmtree(path, ignore_errors=True)
+            # Rebuild the path from the generated id rather than reuse `path`,
+            # which SnykCode treats as tainted by the request-supplied template.
+            shutil.rmtree(
+                storage / validated_safe_id(service_config_id), ignore_errors=True
+            )
             raise
         return service
 
