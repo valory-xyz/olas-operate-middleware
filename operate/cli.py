@@ -107,6 +107,7 @@ from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.fund_recovery_manager import FundRecoveryManager
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
+from operate.services.prestart_check import run_prestart_check
 from operate.services.service import Service
 from operate.settings import Settings
 from operate.utils.gnosis import Transfer
@@ -1687,6 +1688,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 service_config_id=safe_id
             )
             return JSONResponse(content=content)
+
+        return await run_in_executor(_fn)
+
+    @service_router.get("/api/v2/service/{service_config_id}/prestart_check")
+    async def _prestart_check(
+        service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
+    ) -> JSONResponse:
+        """Run the agent's own checks of whether it can start on this machine."""
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        safe_id = validated_safe_id(service_config_id)
+
+        def _fn() -> JSONResponse:
+            service = operate.service_manager().load(service_config_id=safe_id)
+            return JSONResponse(content=run_prestart_check(service))
 
         return await run_in_executor(_fn)
 

@@ -1964,6 +1964,42 @@ Notes:
 }
 ```
 
+### `GET /api/v2/service/{service_config_id}/prestart_check`
+
+Run the agent's own checks of whether it can start on this machine, e.g. whether Polystrat can reach Polymarket. The middleware fetches the service's agent runner and, when its `--help` lists `prestart-check`, runs `<agent_runner> prestart-check --service-dir <service package>` with the service's env variables and a 120 s timeout. It runs only when called; the start endpoint does not run it.
+
+| `status` | Meaning | Start |
+|---|---|---|
+| `passed` | The agent's checks passed | allowed |
+| `failed` | The agent's checks failed; `issues` holds what the agent wrote for the user | blocked |
+| `not_supported` | The agent release has no `prestart-check` command, or the service runs on the aea CLI | allowed |
+| `error` | The check could not complete: download failure, timeout, or output outside the contract. The cause is logged | blocked |
+
+`issues` is empty unless `status` is `failed`.
+
+**Response (Success - 200):**
+
+```json
+{
+  "status": "failed",
+  "issues": [
+    {
+      "code": "polymarket_unreachable",
+      "title": "Can't reach Polymarket",
+      "description": "Polystrat can't connect to Polymarket's trading service from this network, so it couldn't place any bets. Start the agent again once Polymarket is reachable from this network."
+    }
+  ]
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
 ### `GET /api/v2/service/{service_config_id}/refill_requirements`
 
 Get service refill requirements.
