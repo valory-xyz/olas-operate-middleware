@@ -1414,7 +1414,9 @@ class TestAgentRunnerHelpCache:
     @pytest.fixture(autouse=True)
     def _empty_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "operate.services.deployment_runner._AGENT_RUNNER_HELP_CACHE", {}
+            "operate.services.deployment_runner._AGENT_RUNNER_HELP_CACHE",
+            {},
+            raising=False,
         )
 
     @staticmethod
