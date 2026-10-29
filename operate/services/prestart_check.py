@@ -118,10 +118,17 @@ def run_prestart_check(service: Service) -> PrestartCheckResult:
         return _result(PrestartCheckStatus.NOT_SUPPORTED)
     try:
         binary = get_agent_runner_path(service_dir=service.path)
-        help_output = agent_runner_help(
+        help_result = agent_runner_help(
             binary=binary, timeout=BaseDeploymentRunner.PASSWORD_STDIN_PROBE_TIMEOUT
-        ).stdout.decode(errors="replace")
+        )
+        help_output = help_result.stdout.decode(errors="replace")
         if PRESTART_CHECK_COMMAND not in help_output:
+            # A crashing --help says nothing about whether the command exists.
+            if help_result.returncode != 0:
+                raise PrestartCheckError(
+                    f"--help exited with code {help_result.returncode}: "
+                    f"{help_output[:200]!r}"
+                )
             logger.info(f"Agent runner {binary} has no {PRESTART_CHECK_COMMAND}")
             return _result(PrestartCheckStatus.NOT_SUPPORTED)
         process = subprocess.run(  # nosec

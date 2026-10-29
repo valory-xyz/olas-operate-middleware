@@ -71,7 +71,7 @@ def fixture_runner() -> Iterator[MagicMock]:
         patch(f"{MODULE}.get_agent_runner_path", return_value=BINARY),
         patch(
             f"{MODULE}.agent_runner_help",
-            return_value=MagicMock(stdout=HELP_WITH_CHECK),
+            return_value=MagicMock(returncode=0, stdout=HELP_WITH_CHECK),
         ),
         patch(f"{MODULE}.subprocess.run") as run,
     ):
@@ -157,10 +157,20 @@ class TestRunPrestartCheck:
         """An agent release whose --help does not list the command allows the start."""
         with patch(
             f"{MODULE}.agent_runner_help",
-            return_value=MagicMock(stdout=HELP_WITHOUT_CHECK),
+            return_value=MagicMock(returncode=0, stdout=HELP_WITHOUT_CHECK),
         ):
             result = _check(tmp_path, runner)
         assert result == {"status": PrestartCheckStatus.NOT_SUPPORTED, "issues": []}
+        runner.assert_not_called()
+
+    def test_crashing_help_is_an_error(self, tmp_path: Path, runner: MagicMock) -> None:
+        """A --help that crashes is a broken runner, not one without the command."""
+        with patch(
+            f"{MODULE}.agent_runner_help",
+            return_value=MagicMock(returncode=1, stdout=b"Segmentation fault"),
+        ):
+            result = _check(tmp_path, runner)
+        assert result == {"status": PrestartCheckStatus.ERROR, "issues": []}
         runner.assert_not_called()
 
     @pytest.mark.parametrize(
