@@ -701,8 +701,8 @@ class TestDeploymentCopyLogs:
     ) -> None:
         """A restart loop keeps runs until the byte cap, not just the last two.
 
-        The trader-pearl log audit (finding L6): with a health-check restart
-        every 11 minutes, two retained runs covered about 30 minutes.
+        With a health-check restart every 11 minutes, two retained runs
+        covered about 30 minutes.
         """
         depl = Deployment.new(path=tmp_path)
         restarts_in_three_hours = 3 * 60 // 11
