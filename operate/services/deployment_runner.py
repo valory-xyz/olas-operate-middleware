@@ -122,6 +122,13 @@ def kill_process(pid: int) -> None:
     _kill_process(pid)
 
 
+class PortInUseError(RuntimeError):
+    """A fixed port is held by a program that is not a leftover deployment.
+
+    Retrying cannot help, since freeing the port needs the user to act.
+    """
+
+
 def is_port_in_use(port: int) -> bool:
     """Check whether a local process accepts connections on the given TCP port.
 
@@ -508,6 +515,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             try:
                 self._start(password=password)
                 return
+            except PortInUseError:
+                raise
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.exception(f"Error on starting deployment: {e}")
                 last_error = e
@@ -677,7 +686,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             return
         if is_port_in_use(port):
             holder = ", ".join(holders) or "a process this user cannot inspect"
-            raise RuntimeError(
+            raise PortInUseError(
                 f"Port {port} is in use by another program ({holder}), so the "
                 f"deployment cannot start. Stop that program and try again."
             )

@@ -39,6 +39,7 @@ from operate.services.deployment_runner import (
     DeploymentManager,
     HostPythonHostDeploymentRunner,
     PASSWORD_STDIN_ARG,
+    PortInUseError,
     PyInstallerHostDeploymentRunnerLinux,
     PyInstallerHostDeploymentRunnerMac,
     _kill_process,
@@ -704,6 +705,18 @@ class TestStart:
         ):
             runner.start(password="testpass")  # nosec B106
 
+    def test_start_does_not_retry_port_in_use(self, tmp_path: Path) -> None:
+        """start() raises a port conflict at once instead of retrying it."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        error = PortInUseError("Port 8080 is in use by another program")
+        with (
+            patch.object(runner, "_start", side_effect=error) as mock_start,
+            pytest.raises(PortInUseError) as raised,
+        ):
+            runner.start(password="testpass")  # nosec B106
+        assert raised.value is error
+        mock_start.assert_called_once()
+
     def test_internal_start_calls_tendermint_when_is_aea(self, tmp_path: Path) -> None:
         """_start calls _start_tendermint when is_aea=True."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
@@ -849,7 +862,7 @@ class TestLeftoverPortHolder:
         port = _free_tcp_port()
         program = _spawn_listener(tmp_path, port)
         try:
-            with pytest.raises(RuntimeError, match=f"Port {port} is in use"):
+            with pytest.raises(PortInUseError, match=f"Port {port} is in use"):
                 runner._free_port(port, starting=True)
             assert program.poll() is None
         finally:
@@ -1147,7 +1160,7 @@ class TestFreePort:
                 "operate.services.deployment_runner.get_port_listener_pids",
                 return_value=set(),
             ),
-            pytest.raises(RuntimeError, match="cannot inspect"),
+            pytest.raises(PortInUseError, match="cannot inspect"),
         ):
             runner._free_port(8080, starting=True)
 
