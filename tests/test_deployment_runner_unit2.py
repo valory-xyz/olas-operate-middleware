@@ -1027,13 +1027,15 @@ class TestFreePort:
         services_dir = (tmp_path / "services").resolve()
         process = self._process(
             cwd=services_dir / "sc-other" / "deployment",
-            exe="/tmp/.mount_PearlOld/resources/tendermint_bin",  # nosec B108
+            exe=str(tmp_path / ".mount_PearlOld" / "resources" / "tendermint_bin"),
         )
         with patch.object(
             ConcreteDeploymentRunner,
             "_tendermint_bin",
             new_callable=PropertyMock,
-            return_value="/tmp/.mount_PearlNew/resources/tendermint_bin",  # nosec B108
+            return_value=str(
+                tmp_path / ".mount_PearlNew" / "resources" / "tendermint_bin"
+            ),
         ):
             assert (
                 runner._get_deployment_service_dir(process) == services_dir / "sc-other"
