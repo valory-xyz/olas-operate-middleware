@@ -1010,9 +1010,34 @@ class TestFreePort:
         """A foreign binary run from a deployment dir is not a deployment."""
         process = self._process(
             cwd=(tmp_path / "services" / "sc-this" / "deployment").resolve(),
-            exe=str(tmp_path / "elsewhere" / "tendermint_bin"),
+            exe=str(tmp_path / "elsewhere" / "python3"),
         )
-        assert runner._get_deployment_service_dir(process) is None
+        with patch.object(
+            ConcreteDeploymentRunner,
+            "_tendermint_bin",
+            new_callable=PropertyMock,
+            return_value=str(tmp_path / "bundle" / "tendermint_bin"),
+        ):
+            assert runner._get_deployment_service_dir(process) is None
+
+    def test_service_dir_of_tendermint_from_another_bundle(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """A tendermint leftover from an older bundle path is recognised."""
+        services_dir = (tmp_path / "services").resolve()
+        process = self._process(
+            cwd=services_dir / "sc-other" / "deployment",
+            exe="/tmp/.mount_PearlOld/resources/tendermint_bin",  # nosec B108
+        )
+        with patch.object(
+            ConcreteDeploymentRunner,
+            "_tendermint_bin",
+            new_callable=PropertyMock,
+            return_value="/tmp/.mount_PearlNew/resources/tendermint_bin",  # nosec B108
+        ):
+            assert (
+                runner._get_deployment_service_dir(process) == services_dir / "sc-other"
+            )
 
     def test_service_dir_when_process_is_unreadable(
         self, runner: ConcreteDeploymentRunner

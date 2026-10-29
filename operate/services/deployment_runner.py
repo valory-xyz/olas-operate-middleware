@@ -589,8 +589,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Return the service dir a process provably runs a deployment for.
 
         The process must run from a service's deployment directory in this
-        operate home, and its binary must be the bundled tendermint binary or
-        live in that service's directory (agent runner, venv interpreter).
+        operate home, and its binary must be a tendermint binary or live in
+        that service's directory (agent runner, venv interpreter). Tendermint
+        is matched by file name, since a leftover may come from a bundle at
+        another path (an AppImage mount, a moved or updated app).
         """
         services_dir = self._work_directory.parent.parent.resolve()
         try:
@@ -609,7 +611,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 continue
             if (
                 self._tendermint_bin is not None
-                and binary.resolve() == Path(self._tendermint_bin).resolve()
+                and binary.name == Path(self._tendermint_bin).name
             ) or binary.parent.resolve().is_relative_to(service_dir):
                 return service_dir
         return None
