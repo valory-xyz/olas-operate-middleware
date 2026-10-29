@@ -89,9 +89,19 @@ def inject_runtime_ca_bundle(env: Dict[str, str]) -> Dict[str, str]:
     return updated_env
 
 
+# Successful ``--help`` runs by binary sha256: each run unpacks the one-file binary.
+_AGENT_RUNNER_HELP_CACHE: Dict[str, subprocess.CompletedProcess] = {}
+
+
 def agent_runner_help(binary: str, timeout: float) -> subprocess.CompletedProcess:
-    """Run ``<binary> --help``, with stderr merged into stdout."""
-    return subprocess.run(  # nosec
+    """Run ``<binary> --help``, with stderr merged into stdout; cached per binary."""
+    try:
+        binary_hash: t.Optional[str] = AgentAssetManager.get_asset_sha256(Path(binary))
+    except OSError:
+        binary_hash = None
+    if binary_hash is not None and binary_hash in _AGENT_RUNNER_HELP_CACHE:
+        return _AGENT_RUNNER_HELP_CACHE[binary_hash]
+    result = subprocess.run(  # nosec
         [binary, "--help"],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -100,6 +110,9 @@ def agent_runner_help(binary: str, timeout: float) -> subprocess.CompletedProces
         check=False,
         creationflags=no_window_creationflags(),
     )
+    if binary_hash is not None and result.returncode == 0:
+        _AGENT_RUNNER_HELP_CACHE[binary_hash] = result
+    return result
 
 
 def is_github_rate_limited(exc: BaseException) -> bool:

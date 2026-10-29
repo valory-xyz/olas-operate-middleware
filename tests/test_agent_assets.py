@@ -625,3 +625,26 @@ class TestCacheEviction:
             release.get_url_and_hash("agent.zip")
 
         assert mock_get.call_count == 2
+
+
+class TestGetAssetSha256:
+    """Tests for AgentAssetManager.get_asset_sha256."""
+
+    def test_uses_the_sidecar_hash(self, tmp_path: Path) -> None:
+        """The sidecar's recorded hash is returned without reading the asset."""
+        asset = tmp_path / "agent_runner"
+        asset.write_bytes(b"binary")
+        (tmp_path / "agent_runner.sha256").write_text(
+            json.dumps({"release": "v1", "sha256": "sha256:recorded"})
+        )
+        assert AgentAssetManager.get_asset_sha256(asset) == "sha256:recorded"
+
+    @pytest.mark.parametrize("sidecar", [None, "not json", '["sha256"]', "{}"])
+    def test_falls_back_to_the_file_hash(self, tmp_path: Path, sidecar: Any) -> None:
+        """Without a usable sidecar the asset itself is hashed."""
+        asset = tmp_path / "agent_runner"
+        asset.write_bytes(b"binary")
+        if sidecar is not None:
+            (tmp_path / "agent_runner.sha256").write_text(sidecar)
+        expected = "sha256:" + hashlib.sha256(b"binary").hexdigest()
+        assert AgentAssetManager.get_asset_sha256(asset) == expected
