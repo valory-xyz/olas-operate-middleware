@@ -687,13 +687,32 @@ class TestDeploymentCopyLogs:
         """Retention keeps the configured runs and drops anything older."""
         depl = Deployment.new(path=tmp_path)
 
-        for run in ("run one", "run two", "run three"):
-            _write_agent_run_log(tmp_path, run)
-            depl.copy_previous_agent_run_logs()
+        with patch("operate.services.service.AGENT_LOG_RETAINED_RUNS", 2):
+            for run in ("run one", "run two", "run three"):
+                _write_agent_run_log(tmp_path, run)
+                depl.copy_previous_agent_run_logs()
 
         assert (tmp_path / "prev_log.txt").read_text(encoding="utf-8") == "run three"
         assert (tmp_path / "prev_log_2.txt").read_text(encoding="utf-8") == "run two"
         assert not (tmp_path / "prev_log_3.txt").exists()
+
+    def test_an_eleven_minute_restart_loop_keeps_hours_of_history(
+        self, tmp_path: Path
+    ) -> None:
+        """A restart loop keeps runs until the byte cap, not just the last two.
+
+        The trader-pearl log audit (finding L6): with a health-check restart
+        every 11 minutes, two retained runs covered about 30 minutes.
+        """
+        depl = Deployment.new(path=tmp_path)
+        restarts_in_three_hours = 3 * 60 // 11
+
+        for run in range(1, restarts_in_three_hours + 1):
+            _write_agent_run_log(tmp_path, f"run {run}")
+            depl.copy_previous_agent_run_logs()
+
+        oldest = tmp_path / f"prev_log_{restarts_in_three_hours}.txt"
+        assert oldest.read_text(encoding="utf-8") == "run 1"
 
     def test_cap_drops_the_oldest_retained_run(self, tmp_path: Path) -> None:
         """The per-service cap is enforced, not advisory."""

@@ -30,6 +30,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import psutil
 import pytest
+from aea.helpers.yaml_utils import yaml_load_all
 
 from operate import constants
 from operate.services.agent_assets import AgentAssetManager
@@ -655,6 +656,125 @@ class TestSetupAgent:
 
         # rmtree called at least once because agent dir existed
         mock_rmtree.assert_called()
+
+
+AGENT_CONFIG_WITH_CONSOLE_LOGGER = """\
+agent_name: trader
+author: valory
+logging_config:
+  version: 1
+  disable_existing_loggers: false
+  formatters:
+    standard:
+      format: '[%(asctime)s] [%(levelname)s] %(message)s'
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: standard
+      stream: ext://sys.stdout
+  loggers:
+    aea:
+      handlers:
+      - console
+      propagate: true
+---
+public_id: valory/ledger:0.19.0
+type: connection
+config:
+  ledger_apis:
+    ethereum:
+      address: ${ETHEREUM_LEDGER_RPC:str:http://localhost:8545}
+"""
+
+# Mirrors the agent runner: open-autonomy's import-time `logging.basicConfig`
+# gives the root logger a stderr handler, the CLI's verbosity option sets the
+# `aea` level, then aea applies `logging_config`.
+LOG_THROUGH_AGENT_CONFIG = """
+import logging, logging.config, sys
+from aea.helpers.yaml_utils import yaml_load_all
+logging.basicConfig(format="[%(asctime)s][%(levelname)s] %(message)s")
+logging.getLogger("aea").setLevel(logging.INFO)
+with open(sys.argv[1], encoding="utf-8") as stream:
+    agent_config, *_ = yaml_load_all(stream)
+logging.config.dictConfig(agent_config["logging_config"])
+logging.getLogger("aea").info("[agent] Entered in the 'fetch_markets' round")
+"""
+
+
+class TestStopAgentLogPropagation:
+    """Tests for _stop_agent_log_propagation."""
+
+    def _prepare_sources(self, tmp_path: Path, agent_config: str) -> Path:
+        """Run prepare_agent_sources with an agent zip holding the given config."""
+        agent_dir = tmp_path / "agent"
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+
+        def extract(_zip_path: Path, target: Path) -> None:
+            target.mkdir(parents=True)
+            (target / "aea-config.yaml").write_text(agent_config, encoding="utf-8")
+
+        with (
+            patch.object(runner, "_run_aea_command"),
+            patch(
+                "operate.services.deployment_runner.get_agent_code_path",
+                return_value=str(tmp_path / "agent.zip"),
+            ),
+            patch.object(AgentAssetManager, "extract_agent_zip", side_effect=extract),
+        ):
+            runner.prepare_agent_sources(
+                working_dir=tmp_path,
+                private_key_in_agent=agent_dir / "ethereum_private_key.txt",
+                agent_dir_full_path=agent_dir,
+            )
+        return agent_dir / "aea-config.yaml"
+
+    def test_agent_runner_log_gets_each_agent_line_once(self, tmp_path: Path) -> None:
+        """An agent line reaches the shared stdout/stderr log once, not twice."""
+        config_path = self._prepare_sources(tmp_path, AGENT_CONFIG_WITH_CONSOLE_LOGGER)
+        log_path = tmp_path / "agent_runner.log"
+
+        with log_path.open("w", encoding="utf-8") as log_file:
+            subprocess.run(  # nosec B603
+                [sys.executable, "-c", LOG_THROUGH_AGENT_CONFIG, str(config_path)],
+                stdout=log_file,
+                stderr=log_file,
+                check=True,
+            )
+
+        lines = log_path.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        assert "] [INFO] [agent] Entered in the 'fetch_markets' round" in lines[0]
+
+    def test_the_rest_of_the_agent_config_is_kept(self, tmp_path: Path) -> None:
+        """Only `propagate` changes; the override documents survive intact."""
+        config_path = self._prepare_sources(tmp_path, AGENT_CONFIG_WITH_CONSOLE_LOGGER)
+
+        with config_path.open(encoding="utf-8") as stream:
+            agent_config, ledger_override = yaml_load_all(stream)
+        assert agent_config["logging_config"]["loggers"]["aea"] == {
+            "handlers": ["console"],
+            "propagate": False,
+        }
+        assert agent_config["agent_name"] == "trader"
+        assert ledger_override["config"]["ledger_apis"]["ethereum"]["address"] == (
+            "${ETHEREUM_LEDGER_RPC:str:http://localhost:8545}"
+        )
+
+    def test_a_config_without_an_aea_logger_is_left_alone(self, tmp_path: Path) -> None:
+        """With no `aea` handlers, aea logs only through the root logger: keep it."""
+        agent_config = "agent_name: trader\nauthor: valory\n"
+
+        config_path = self._prepare_sources(tmp_path, agent_config)
+
+        assert config_path.read_text(encoding="utf-8") == agent_config
+
+    def test_a_missing_agent_config_is_left_alone(self, tmp_path: Path) -> None:
+        """A non-aea agent zip has no aea-config.yaml to change."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+
+        runner._stop_agent_log_propagation(tmp_path)
+
+        assert not (tmp_path / "aea-config.yaml").exists()
 
 
 # ---------------------------------------------------------------------------
