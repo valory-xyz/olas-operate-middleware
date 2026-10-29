@@ -30,6 +30,8 @@ from operate.serialization import BigInt
 
 FUNDING_RUN_PREFIX = "fr-"
 ACTIVE_POINTER_FILE = "active.json"
+# Version 2 adds `completed_onboard`, backfilled once from the run files.
+POINTER_VERSION = 2
 
 
 class FundingRunMode(str, enum.Enum):
@@ -186,10 +188,27 @@ class FundingRunPointer(LocalResource):
     """`active.json`: which run is live, and which ran last."""
 
     path: Path
-    version: int = 1
+    version: int = POINTER_VERSION
     active_run_id: t.Optional[str] = None
     last_run_id: t.Optional[str] = None
     # Terminal runs whose delegation clearing is still unconfirmed.
     pending_clear_run_ids: t.List[str] = field(default_factory=list)
+    # service_config_id -> id of its latest COMPLETED onboard run.
+    completed_onboard: t.Dict[str, str] = field(default_factory=dict)
 
     _file = ACTIVE_POINTER_FILE
+
+    @classmethod
+    def from_json(cls, obj: t.Dict) -> "FundingRunPointer":
+        """Load, defaulting the index a version-1 pointer does not carry."""
+        return t.cast(
+            FundingRunPointer, super().from_json({"completed_onboard": {}, **obj})
+        )
+
+
+class CompletedOnboardRun(t.TypedDict):
+    """A service's COMPLETED onboard run, as `GET /completed_onboard` returns it."""
+
+    service_config_id: str
+    run_id: str
+    finished_at: int

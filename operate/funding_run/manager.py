@@ -52,6 +52,7 @@ from operate.bridge.bridge_manager import (
 from operate.bridge.providers.provider import ProviderRequest, ProviderRequestStatus
 from operate.constants import ZERO_ADDRESS
 from operate.funding_run.models import (
+    CompletedOnboardRun,
     FUNDING_RUN_PREFIX,
     FundingRun,
     FundingRunMode,
@@ -60,6 +61,7 @@ from operate.funding_run.models import (
     FundingRunStep,
     FundingStepKind,
     FundingStepStatus,
+    POINTER_VERSION,
 )
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import (
@@ -207,7 +209,54 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _pointer(self) -> FundingRunPointer:
         if not FundingRunPointer.exists_at(self.path):
             FundingRunPointer(path=self.path).store()
-        return t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
+        pointer = t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
+        if pointer.version < POINTER_VERSION:
+            pointer = self._backfill_completed_onboard(pointer)
+        return pointer
+
+    def _backfill_completed_onboard(
+        self, pointer: FundingRunPointer
+    ) -> FundingRunPointer:
+        """Index the COMPLETED onboard runs finished before the index existed."""
+        # A read must not wait out a lock holder's RPC calls; the next
+        # _pointer() call made under the lock runs the backfill instead.
+        if not self._lock.acquire(  # pylint: disable=consider-using-with
+            blocking=False
+        ):
+            return pointer
+        try:
+            pointer = t.cast(FundingRunPointer, FundingRunPointer.load(self.path))
+            if pointer.version >= POINTER_VERSION:
+                return pointer
+            latest: t.Dict[str, t.Tuple[int, int]] = {}
+            for path in self.path.glob(f"{FUNDING_RUN_PREFIX}*.json"):
+                if not FUNDING_RUN_ID_RE.fullmatch(path.stem):
+                    continue
+                try:
+                    run = t.cast(FundingRun, FundingRun.load(path))
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception(f"[FUNDING RUN] Cannot index {path.name}")
+                    continue
+                if not self._is_completed_onboard(run):
+                    continue
+                service_config_id = t.cast(str, run.service_config_id)
+                order = (run.finished_at or 0, run.created_at)
+                if order > latest.get(service_config_id, (-1, -1)):
+                    latest[service_config_id] = order
+                    pointer.completed_onboard[service_config_id] = run.id
+            pointer.version = POINTER_VERSION
+            pointer.store()
+            return pointer
+        finally:
+            self._lock.release()
+
+    @staticmethod
+    def _is_completed_onboard(run: FundingRun) -> bool:
+        return (
+            run.status == FundingRunStatus.COMPLETED
+            and run.mode == FundingRunMode.ONBOARD
+            and run.service_config_id is not None
+        )
 
     def _run_path(self, run_id: str) -> Path:
         return self.path / f"{run_id}.json"
@@ -241,6 +290,8 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if pointer.active_run_id == run.id:
             pointer.active_run_id = None
         pointer.last_run_id = run.id
+        if self._is_completed_onboard(run):
+            pointer.completed_onboard[t.cast(str, run.service_config_id)] = run.id
         pointer.store()
         if status == FundingRunStatus.COMPLETED and self._has_step(
             run, STEP_CLEAR_DELEGATION
@@ -278,6 +329,32 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             ):
                 return run
         return None
+
+    def completed_onboard_runs(
+        self, service_config_ids: t.Sequence[str]
+    ) -> t.List[CompletedOnboardRun]:
+        """The latest COMPLETED onboard run of each given service that has one."""
+        index = self._pointer().completed_onboard
+        runs: t.List[CompletedOnboardRun] = []
+        for service_config_id in dict.fromkeys(service_config_ids):
+            run_id = index.get(service_config_id)
+            if run_id is None:
+                continue
+            try:
+                run = self.load(run_id)
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(f"[FUNDING RUN] Cannot load indexed {run_id}")
+                continue
+            if not self._is_completed_onboard(run) or run.finished_at is None:
+                continue
+            runs.append(
+                CompletedOnboardRun(
+                    service_config_id=service_config_id,
+                    run_id=run.id,
+                    finished_at=run.finished_at,
+                )
+            )
+        return runs
 
     # --- wallet helpers -----------------------------------------------------
 
