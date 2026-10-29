@@ -1050,15 +1050,27 @@ class TestRestartStakingReconciliation:
 
         sm.reconcile_staking_for_restart.side_effect = _reconcile
 
-        with patch.object(HealthChecker, "FAILFAST_NUM", 2):
-            exc = await self._run_until_restart(health_checker)
+        async def always_unhealthy(*_args: object, **_kwargs: object) -> bool:
+            return False
+
+        health_checker.check_service_health = always_unhealthy  # type: ignore[assignment]
+
+        # The job ends on its own once failfast fires, so await it to completion
+        # instead of cancelling after a wall-clock delay a slow runner can miss.
+        with (
+            patch.object(HealthChecker, "FAILFAST_NUM", 2),
+            patch("operate.services.health_checker.asyncio.wait_for", _no_timeout),
+            patch("operate.services.health_checker.asyncio.sleep", _instant_sleep),
+            patch("operate.services.health_checker.time.time", return_value=0.0),
+        ):
+            # Failfast fires once reconciliation stops clearing evictions...
+            with pytest.raises(RuntimeError, match="stopped by failfast"):
+                await health_checker.healthcheck_job("test-service")
 
         sm.deploy_service_locally.assert_called_with(service_config_id="test-service")
-        # Three reconciled restarts cleared the budget, so the service outlived
-        # FAILFAST_NUM restarts instead of being stopped at the second...
+        # ...but only after three reconciled restarts cleared the budget, so the
+        # service outlived FAILFAST_NUM restarts instead of being stopped at the second.
         assert sm.deploy_service_locally.call_count > 2
-        # ...and once reconciliation stopped clearing evictions, failfast fired.
-        assert isinstance(exc, RuntimeError)
 
     @pytest.mark.asyncio
     async def test_skipped_reconciliation_waits_instead_of_redeploying(

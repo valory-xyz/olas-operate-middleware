@@ -21,6 +21,7 @@
 
 import json
 import os
+import socket
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
@@ -38,11 +39,13 @@ from operate.services.deployment_runner import (
     DeploymentManager,
     HostPythonHostDeploymentRunner,
     PASSWORD_STDIN_ARG,
+    PortInUseError,
     PyInstallerHostDeploymentRunnerLinux,
     PyInstallerHostDeploymentRunnerMac,
     _kill_process,
+    get_port_listener_pids,
+    is_port_in_use,
     kill_process,
-    kill_processes_on_port,
 )
 from operate.utils.pid_file import PIDFileError, StalePIDFile
 
@@ -64,6 +67,27 @@ class ConcreteDeploymentRunner(BaseDeploymentRunner):
 
     def _start_agent(self, password: str) -> None:
         """No-op agent start."""
+
+
+def _free_tcp_port() -> int:
+    """Return a local TCP port nothing listens on."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@pytest.fixture(autouse=True)
+def _unused_fixed_ports() -> Any:
+    """Point the fixed deployment ports at unused ports.
+
+    Start and stop free those ports, so tests must never find a real
+    deployment (or anything else) listening on 8716 or 8080.
+    """
+    with (
+        patch.object(constants, "AGENT_HTTP_PORT", _free_tcp_port()),
+        patch.object(constants, "TENDERMINT_COM_PORT", _free_tcp_port()),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +705,18 @@ class TestStart:
         ):
             runner.start(password="testpass")  # nosec B106
 
+    def test_start_does_not_retry_port_in_use(self, tmp_path: Path) -> None:
+        """start() raises a port conflict at once instead of retrying it."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        error = PortInUseError("Port 8080 is in use by another program")
+        with (
+            patch.object(runner, "_start", side_effect=error) as mock_start,
+            pytest.raises(PortInUseError) as raised,
+        ):
+            runner.start(password="testpass")  # nosec B106
+        assert raised.value is error
+        mock_start.assert_called_once()
+
     def test_internal_start_calls_tendermint_when_is_aea(self, tmp_path: Path) -> None:
         """_start calls _start_tendermint when is_aea=True."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
@@ -726,98 +762,423 @@ class TestStart:
     def test_free_deployment_ports_reaps_both_ports_for_aea(
         self, tmp_path: Path
     ) -> None:
-        """_free_deployment_ports reaps the agent and tendermint ports for aea."""
+        """_free_deployment_ports frees the agent and tendermint ports for aea."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        with patch(
-            "operate.services.deployment_runner.kill_processes_on_port"
-        ) as mock_reap:
+        with patch.object(runner, "_free_port") as mock_free:
             runner._free_deployment_ports()
-        reaped = {call.args[0] for call in mock_reap.call_args_list}
-        assert reaped == {constants.AGENT_HTTP_PORT, constants.TENDERMINT_COM_PORT}
+        assert {call.args[0] for call in mock_free.call_args_list} == {
+            constants.AGENT_HTTP_PORT,
+            constants.TENDERMINT_COM_PORT,
+        }
+        assert all(call.kwargs["starting"] for call in mock_free.call_args_list)
 
     def test_free_deployment_ports_skips_tendermint_when_not_aea(
         self, tmp_path: Path
     ) -> None:
-        """_free_deployment_ports only reaps the agent port when not aea."""
+        """_free_deployment_ports only frees the agent port when not aea."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
-        with patch(
-            "operate.services.deployment_runner.kill_processes_on_port"
-        ) as mock_reap:
+        with patch.object(runner, "_free_port") as mock_free:
             runner._free_deployment_ports()
-        reaped = {call.args[0] for call in mock_reap.call_args_list}
-        assert reaped == {constants.AGENT_HTTP_PORT}
+        assert {call.args[0] for call in mock_free.call_args_list} == {
+            constants.AGENT_HTTP_PORT
+        }
 
 
-class TestKillProcessesOnPort:
-    """Tests for kill_processes_on_port (port-reap backstop, fix #2)."""
+def _spawn_listener(cwd: Path, port: int) -> subprocess.Popen:
+    """Start a leftover-style process listening on a local port."""
+    code = (
+        "import socket, time\n"
+        "s = socket.socket()\n"
+        f"s.bind(('127.0.0.1', {port}))\n"
+        "s.listen()\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(600)\n"
+    )
+    process = subprocess.Popen(  # nosec B603
+        [sys.executable, "-c", code], cwd=cwd, stdout=subprocess.PIPE
+    )
+    assert process.stdout is not None
+    assert process.stdout.readline().strip() == b"ready"
+    return process
+
+
+def _make_deployment_dir(services_dir: Path, service: str) -> Path:
+    """Create <services>/<service>/deployment and return it."""
+    deployment = services_dir / service / constants.DEPLOYMENT_DIR
+    deployment.mkdir(parents=True)
+    return deployment
+
+
+class TestLeftoverPortHolder:
+    """Regression for a leftover tendermint_bin holding the Tendermint port.
+
+    A tendermint_bin orphaned from another service kept the port, every later
+    deployment started against it, and the cleanup that should have freed it
+    failed on macOS, where system-wide connection enumeration needs root.
+    """
+
+    def test_start_stops_other_services_leftover_on_macos(self, tmp_path: Path) -> None:
+        """A leftover from another service is stopped before the start."""
+        services_dir = tmp_path / "services"
+        leftover_dir = _make_deployment_dir(services_dir, "sc-other")
+        runner = ConcreteDeploymentRunner(
+            _make_deployment_dir(services_dir, "sc-this"), is_aea=True
+        )
+        tm_port, agent_port = _free_tcp_port(), _free_tcp_port()
+        leftover = _spawn_listener(leftover_dir, tm_port)
+        try:
+            (pid,) = get_port_listener_pids(tm_port)
+            bundled_bin = psutil.Process(pid).exe()
+            with (
+                patch.object(constants, "TENDERMINT_COM_PORT", tm_port),
+                patch.object(constants, "AGENT_HTTP_PORT", agent_port),
+                patch.object(
+                    ConcreteDeploymentRunner,
+                    "_tendermint_bin",
+                    new_callable=PropertyMock,
+                    return_value=bundled_bin,
+                ),
+                # What an unprivileged macOS process gets
+                patch(
+                    "operate.services.deployment_runner.psutil.net_connections",
+                    side_effect=psutil.AccessDenied(),
+                ),
+            ):
+                runner._free_deployment_ports()
+            assert not psutil.pid_exists(pid) or psutil.Process(pid).status() in (
+                psutil.STATUS_DEAD,
+                psutil.STATUS_ZOMBIE,
+            )
+            assert not is_port_in_use(tm_port)
+        finally:
+            kill_process(leftover.pid)
+            leftover.wait(timeout=10)
+
+    def test_start_fails_and_spares_unrelated_program(self, tmp_path: Path) -> None:
+        """A program outside the services dir is left running and fails the start."""
+        runner = ConcreteDeploymentRunner(
+            _make_deployment_dir(tmp_path / "services", "sc-this"), is_aea=True
+        )
+        port = _free_tcp_port()
+        program = _spawn_listener(tmp_path, port)
+        try:
+            with pytest.raises(PortInUseError, match=f"Port {port} is in use"):
+                runner._free_port(port, starting=True)
+            assert program.poll() is None
+        finally:
+            kill_process(program.pid)
+            program.wait(timeout=10)
+
+    def test_stop_spares_other_services_process(self, tmp_path: Path) -> None:
+        """Stopping a service leaves another service's deployment running."""
+        services_dir = tmp_path / "services"
+        other_dir = _make_deployment_dir(services_dir, "sc-other")
+        runner = ConcreteDeploymentRunner(
+            _make_deployment_dir(services_dir, "sc-this"), is_aea=True
+        )
+        runner.logger = MagicMock()
+        port = _free_tcp_port()
+        other = _spawn_listener(other_dir, port)
+        try:
+            (pid,) = get_port_listener_pids(port)
+            with patch.object(
+                ConcreteDeploymentRunner,
+                "_tendermint_bin",
+                new_callable=PropertyMock,
+                return_value=psutil.Process(pid).exe(),
+            ):
+                runner._free_port(port, starting=False)
+            assert other.poll() is None
+            runner.logger.warning.assert_called_once()
+        finally:
+            kill_process(other.pid)
+            other.wait(timeout=10)
+
+
+class TestPortHelpers:
+    """Tests for is_port_in_use and get_port_listener_pids."""
 
     @staticmethod
-    def _conn(port: int, pid: int, status: str = psutil.CONN_LISTEN) -> Any:
+    def _conn(port: int, pid: Any, status: str = psutil.CONN_LISTEN) -> Any:
         return SimpleNamespace(
             laddr=SimpleNamespace(ip="127.0.0.1", port=port),
             status=status,
             pid=pid,
         )
 
-    def test_kills_listener_on_matching_port(self) -> None:
-        """A process listening on the target port is killed."""
-        logger = MagicMock()
-        with (
-            patch(
-                "operate.services.deployment_runner.psutil.net_connections",
-                return_value=[self._conn(8716, 4321)],
-            ),
-            patch("operate.services.deployment_runner.os.getpid", return_value=999),
-            patch("operate.services.deployment_runner.kill_process") as mock_kill,
-        ):
-            kill_processes_on_port(8716, logger=logger)
-        mock_kill.assert_called_once_with(4321)
+    def test_is_port_in_use(self) -> None:
+        """A listening port is in use; a closed one is not."""
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            sock.listen()
+            assert is_port_in_use(sock.getsockname()[1])
+        assert not is_port_in_use(_free_tcp_port())
 
-    def test_ignores_other_ports_and_non_listening(self) -> None:
-        """Connections on other ports or not in LISTEN state are ignored."""
-        logger = MagicMock()
+    def test_listener_pids_from_system_wide_enumeration(self) -> None:
+        """Only listening sockets on the port with a known PID are returned."""
         conns = [
-            self._conn(9999, 1),
-            self._conn(8716, 2, status=psutil.CONN_ESTABLISHED),
+            self._conn(8716, 1),
+            self._conn(8716, None),
+            self._conn(9999, 2),
+            self._conn(8716, 3, status=psutil.CONN_ESTABLISHED),
         ]
-        with (
-            patch(
-                "operate.services.deployment_runner.psutil.net_connections",
-                return_value=conns,
-            ),
-            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        with patch(
+            "operate.services.deployment_runner.psutil.net_connections",
+            return_value=conns,
         ):
-            kill_processes_on_port(8716, logger=logger)
-        mock_kill.assert_not_called()
-
-    def test_skips_own_pid(self) -> None:
-        """The middleware never kills itself even if it matched the port."""
-        logger = MagicMock()
-        with (
-            patch(
-                "operate.services.deployment_runner.psutil.net_connections",
-                return_value=[self._conn(8716, 777)],
-            ),
-            patch("operate.services.deployment_runner.os.getpid", return_value=777),
-            patch("operate.services.deployment_runner.kill_process") as mock_kill,
-        ):
-            kill_processes_on_port(8716, logger=logger)
-        mock_kill.assert_not_called()
+            assert get_port_listener_pids(8716) == {1}
 
     @pytest.mark.parametrize("exc", [psutil.AccessDenied(), OSError("eperm")])
-    def test_enumeration_failure_is_handled_gracefully(self, exc: Exception) -> None:
-        """A connection-enumeration error is logged, not raised."""
-        logger = MagicMock()
+    def test_listener_pids_fall_back_to_per_process_lookup(
+        self, exc: Exception
+    ) -> None:
+        """Without system-wide access, each process reports its own sockets."""
+        listener, denied = MagicMock(pid=10), MagicMock(pid=11)
+        listener.connections.return_value = [self._conn(8716, None)]
+        denied.connections.side_effect = psutil.AccessDenied()
         with (
             patch(
                 "operate.services.deployment_runner.psutil.net_connections",
                 side_effect=exc,
             ),
+            patch(
+                "operate.services.deployment_runner.psutil.process_iter",
+                return_value=[listener, denied],
+            ),
+        ):
+            assert get_port_listener_pids(8716) == {10}
+
+
+class TestFreePort:
+    """Tests for the deployment-process checks behind _free_port."""
+
+    @staticmethod
+    def _process(
+        cwd: Any, exe: str = "", cmdline: Any = None, parent: Any = None
+    ) -> MagicMock:
+        process = MagicMock()
+        if isinstance(cwd, Exception):
+            process.cwd.side_effect = cwd
+        else:
+            process.cwd.return_value = str(cwd)
+        process.exe.return_value = exe
+        process.cmdline.return_value = cmdline or []
+        process.parent.return_value = parent
+        return process
+
+    @pytest.fixture
+    def runner(self, tmp_path: Path) -> ConcreteDeploymentRunner:
+        """Runner for <tmp>/services/sc-this/deployment."""
+        return ConcreteDeploymentRunner(
+            _make_deployment_dir(tmp_path / "services", "sc-this"), is_aea=True
+        )
+
+    def test_service_dir_of_agent_runner_in_service(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """An agent runner binary inside its own service dir is recognised."""
+        service_dir = (tmp_path / "services" / "sc-this").resolve()
+        process = self._process(
+            cwd=service_dir / "deployment" / "agent",
+            exe=str(service_dir / "agent_runner"),
+        )
+        assert runner._get_deployment_service_dir(process) == service_dir
+
+    def test_service_dir_of_venv_interpreter_by_argv(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """A venv interpreter is recognised by argv[0]; relative paths are skipped."""
+        service_dir = (tmp_path / "services" / "sc-this").resolve()
+        process = self._process(
+            cwd=service_dir / "deployment",
+            exe="python3",
+            cmdline=[str(service_dir / "deployment" / "venv" / "bin" / "python")],
+        )
+        assert runner._get_deployment_service_dir(process) == service_dir
+
+    @pytest.mark.parametrize(
+        "cwd_parts", [(), ("sc-this",), ("sc-this", "persistent_data")]
+    )
+    def test_service_dir_requires_a_deployment_cwd(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path, cwd_parts: Any
+    ) -> None:
+        """Processes outside a service's deployment dir are not deployments."""
+        services_dir = (tmp_path / "services").resolve()
+        process = self._process(
+            cwd=services_dir.joinpath(*cwd_parts),
+            exe=str(services_dir / "sc-this" / "agent_runner"),
+        )
+        assert runner._get_deployment_service_dir(process) is None
+
+    def test_service_dir_rejects_cwd_outside_services(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """A process outside the services dir is not a deployment."""
+        process = self._process(cwd=tmp_path, exe=sys.executable)
+        assert runner._get_deployment_service_dir(process) is None
+
+    def test_service_dir_rejects_foreign_binary(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """A foreign binary run from a deployment dir is not a deployment."""
+        process = self._process(
+            cwd=(tmp_path / "services" / "sc-this" / "deployment").resolve(),
+            exe=str(tmp_path / "elsewhere" / "python3"),
+        )
+        with patch.object(
+            ConcreteDeploymentRunner,
+            "_tendermint_bin",
+            new_callable=PropertyMock,
+            return_value=str(tmp_path / "bundle" / "tendermint_bin"),
+        ):
+            assert runner._get_deployment_service_dir(process) is None
+
+    def test_service_dir_of_tendermint_from_another_bundle(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """A tendermint leftover from an older bundle path is recognised."""
+        services_dir = (tmp_path / "services").resolve()
+        process = self._process(
+            cwd=services_dir / "sc-other" / "deployment",
+            exe=str(tmp_path / ".mount_PearlOld" / "resources" / "tendermint_bin"),
+        )
+        with patch.object(
+            ConcreteDeploymentRunner,
+            "_tendermint_bin",
+            new_callable=PropertyMock,
+            return_value=str(
+                tmp_path / ".mount_PearlNew" / "resources" / "tendermint_bin"
+            ),
+        ):
+            assert (
+                runner._get_deployment_service_dir(process) == services_dir / "sc-other"
+            )
+
+    def test_service_dir_when_process_is_unreadable(
+        self, runner: ConcreteDeploymentRunner
+    ) -> None:
+        """A process that cannot be inspected is never claimed."""
+        process = self._process(cwd=psutil.AccessDenied())
+        assert runner._get_deployment_service_dir(process) is None
+
+    def test_process_root_walks_up_the_same_service(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """The root is the topmost ancestor of the same service's deployment."""
+        service_dir = tmp_path / "services" / "sc-this"
+        foreign = MagicMock(pid=1)
+        bootloader = MagicMock(pid=2)
+        bootloader.parent.return_value = foreign
+        server = MagicMock(pid=3)
+        server.parent.return_value = bootloader
+        with patch.object(
+            runner,
+            "_get_deployment_service_dir",
+            side_effect=lambda p: service_dir if p is bootloader else None,
+        ):
+            assert (
+                runner._get_deployment_process_root(server, service_dir) is bootloader
+            )
+
+    def test_process_root_stops_at_missing_parent_or_self(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """No parent, an unreadable parent, or the middleware itself ends the walk."""
+        service_dir = tmp_path / "services" / "sc-this"
+        orphan = MagicMock(pid=3)
+        orphan.parent.return_value = None
+        gone = MagicMock(pid=4)
+        gone.parent.side_effect = psutil.NoSuchProcess(4)
+        child = MagicMock(pid=5)
+        child.parent.return_value = MagicMock(pid=os.getpid())
+        for process in (orphan, gone, child):
+            assert runner._get_deployment_process_root(process, service_dir) is process
+
+    def test_free_port_on_start_passes_when_port_is_free(
+        self, runner: ConcreteDeploymentRunner
+    ) -> None:
+        """With no listener and nothing answering, the start goes ahead."""
+        with (
+            patch(
+                "operate.services.deployment_runner.get_port_listener_pids",
+                return_value=set(),
+            ),
+            patch(
+                "operate.services.deployment_runner.is_port_in_use",
+                return_value=False,
+            ),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
         ):
-            kill_processes_on_port(8716, logger=logger)
+            runner._free_port(8080, starting=True)
         mock_kill.assert_not_called()
-        logger.warning.assert_called()
+
+    def test_free_port_kills_leftover_tree_and_skips_vanished(
+        self, runner: ConcreteDeploymentRunner, tmp_path: Path
+    ) -> None:
+        """A leftover's tree is killed; a holder that already exited is skipped."""
+        service_dir = tmp_path / "services" / "sc-other"
+        leftover = MagicMock(pid=20)
+        leftover.name.return_value = "tendermint_bin"
+        vanished = MagicMock(pid=21)
+        vanished.name.side_effect = psutil.NoSuchProcess(21)
+        with (
+            patch(
+                "operate.services.deployment_runner.is_port_in_use",
+                return_value=False,
+            ),
+            patch(
+                "operate.services.deployment_runner.get_port_listener_pids",
+                return_value={20, 21},
+            ),
+            patch(
+                "operate.services.deployment_runner.psutil.Process",
+                side_effect=lambda pid: leftover if pid == 20 else vanished,
+            ),
+            patch.object(
+                runner, "_get_deployment_service_dir", return_value=service_dir
+            ),
+            patch.object(
+                runner,
+                "_get_deployment_process_root",
+                return_value=MagicMock(pid=19),
+            ),
+            patch("operate.services.deployment_runner.kill_process") as mock_kill,
+        ):
+            runner._free_port(8080, starting=True)
+        mock_kill.assert_called_once_with(19)
+
+    def test_free_port_fails_start_on_uninspectable_holder(
+        self, runner: ConcreteDeploymentRunner
+    ) -> None:
+        """A holder this user cannot see still fails the start."""
+        with (
+            patch(
+                "operate.services.deployment_runner.is_port_in_use",
+                return_value=True,
+            ),
+            patch(
+                "operate.services.deployment_runner.get_port_listener_pids",
+                return_value=set(),
+            ),
+            pytest.raises(PortInUseError, match="cannot inspect"),
+        ):
+            runner._free_port(8080, starting=True)
+
+    def test_free_port_on_stop_ignores_uninspectable_holder(
+        self, runner: ConcreteDeploymentRunner
+    ) -> None:
+        """Stopping never probes the port or fails, even when it stays taken."""
+        runner.logger = MagicMock()
+        with (
+            patch("operate.services.deployment_runner.is_port_in_use") as mock_probe,
+            patch(
+                "operate.services.deployment_runner.get_port_listener_pids",
+                return_value=set(),
+            ),
+        ):
+            runner._free_port(8080, starting=False)
+        mock_probe.assert_not_called()
+        runner.logger.warning.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -939,7 +1300,7 @@ class TestStopAgent:
                 "operate.services.deployment_runner.psutil.pid_exists",
                 return_value=False,
             ),
-            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch.object(ConcreteDeploymentRunner, "_free_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
             patch("operate.services.deployment_runner.remove_pid_file") as mock_remove,
         ):
@@ -963,7 +1324,7 @@ class TestStopAgent:
                 "operate.services.deployment_runner.psutil.pid_exists",
                 return_value=False,
             ),
-            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch.object(ConcreteDeploymentRunner, "_free_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
             patch("operate.services.deployment_runner.remove_pid_file"),
         ):
@@ -992,7 +1353,7 @@ class TestStopAgent:
                 "operate.services.deployment_runner.psutil.pid_exists",
                 return_value=True,
             ),
-            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch.object(ConcreteDeploymentRunner, "_free_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
             patch("operate.services.deployment_runner.remove_pid_file"),
         ):
@@ -1004,11 +1365,9 @@ class TestStopAgent:
     def test_stop_agent_reaps_fixed_port(self, tmp_path: Path) -> None:
         """_stop_agent reaps the fixed agent HTTP port as a backstop."""
         runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
-        with patch(
-            "operate.services.deployment_runner.kill_processes_on_port"
-        ) as mock_reap:
+        with patch.object(runner, "_free_port") as mock_free:
             runner._stop_agent()
-        mock_reap.assert_any_call(constants.AGENT_HTTP_PORT, logger=runner.logger)
+        mock_free.assert_called_once_with(constants.AGENT_HTTP_PORT, starting=False)
 
     def test_pid_file_error_logged_and_file_removed(self, tmp_path: Path) -> None:
         """_stop_agent logs error and calls remove_pid_file when PIDFileError raised."""
@@ -1045,7 +1404,7 @@ class TestStopAgent:
                 "operate.services.deployment_runner.psutil.pid_exists",
                 return_value=True,
             ),
-            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch.object(ConcreteDeploymentRunner, "_free_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
             patch("operate.services.deployment_runner.remove_pid_file"),
         ):
@@ -1150,7 +1509,7 @@ class TestStopTendermint:
                 "operate.services.deployment_runner.psutil.pid_exists",
                 return_value=True,
             ),
-            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch.object(ConcreteDeploymentRunner, "_free_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
             patch("operate.services.deployment_runner.remove_pid_file"),
         ):
@@ -1196,7 +1555,7 @@ class TestStopTendermint:
                 "operate.services.deployment_runner.psutil.pid_exists",
                 return_value=False,
             ),
-            patch("operate.services.deployment_runner.kill_processes_on_port"),
+            patch.object(ConcreteDeploymentRunner, "_free_port"),
             patch("operate.services.deployment_runner.kill_process") as mock_kill,
             patch("operate.services.deployment_runner.remove_pid_file"),
         ):
@@ -1210,12 +1569,10 @@ class TestStopTendermint:
         with (
             patch("operate.services.deployment_runner.requests.get"),
             patch("operate.services.deployment_runner.time.sleep"),
-            patch(
-                "operate.services.deployment_runner.kill_processes_on_port"
-            ) as mock_reap,
+            patch.object(runner, "_free_port") as mock_free,
         ):
             runner._stop_tendermint()
-        mock_reap.assert_any_call(constants.TENDERMINT_COM_PORT, logger=runner.logger)
+        mock_free.assert_called_once_with(constants.TENDERMINT_COM_PORT, starting=False)
 
 
 # ---------------------------------------------------------------------------
