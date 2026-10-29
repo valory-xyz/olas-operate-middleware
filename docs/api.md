@@ -2166,7 +2166,7 @@ Returned when the service package cannot be downloaded from the IPFS registry (c
 
 ```json
 {
-  "error": "Failed to download the service package: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] ...>",
+  "error": "Failed to download the service package. Please check the logs.",
   "error_code": "SERVICE_PACKAGE_DOWNLOAD_FAILED"
 }
 ```

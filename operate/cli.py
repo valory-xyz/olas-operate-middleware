@@ -1726,7 +1726,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to download the service package: {e}",
+                    "error": "Failed to download the service package. Please check the logs.",
                     **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_GATEWAY,

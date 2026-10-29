@@ -1812,7 +1812,9 @@ class TestServiceRoutes:
             assert resp.status_code == HTTPStatus.BAD_GATEWAY
             body = resp.json()
             assert body["error_code"] == "SERVICE_PACKAGE_DOWNLOAD_FAILED"
-            assert "CERTIFICATE_VERIFY_FAILED" in body["error"]
+            assert body["error"] == (
+                "Failed to download the service package. Please check the logs."
+            )
 
     def test_create_service_other_failure_keeps_500(self) -> None:
         """Any other create failure keeps the global handler's 500 with no error_code."""
