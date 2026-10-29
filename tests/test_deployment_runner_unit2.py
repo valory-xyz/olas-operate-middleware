@@ -686,6 +686,44 @@ config:
       address: ${ETHEREUM_LEDGER_RPC:str:http://localhost:8545}
 """
 
+# The `logging_config` of a released trader agent, placeholders included:
+# aea resolves them when the agent loads, so rewriting the file must keep them.
+AGENT_CONFIG_WITH_TRADER_LOGGING = """\
+agent_name: trader
+author: valory
+logging_config:
+  version: 1
+  disable_existing_loggers: false
+  formatters:
+    standard:
+      format: '[%(asctime)s] [%(levelname)s] %(message)s'
+  handlers:
+    logfile:
+      class: logging.handlers.RotatingFileHandler
+      formatter: standard
+      filename: ${LOG_FILE:str:log.txt}
+      level: ${LOG_LEVEL:str:INFO}
+      maxBytes: ${LOG_MAX_BYTES:int:52428800}
+      backupCount: ${LOG_BACKUP_COUNT:int:1}
+    console:
+      class: logging.StreamHandler
+      formatter: standard
+      stream: ext://sys.stdout
+  loggers:
+    aea:
+      handlers:
+      - logfile
+      - console
+      propagate: true
+---
+public_id: valory/ledger:0.19.0
+type: connection
+config:
+  ledger_apis:
+    ethereum:
+      address: ${ETHEREUM_LEDGER_RPC:str:http://localhost:8545}
+"""
+
 # Mirrors the agent runner: open-autonomy's import-time `logging.basicConfig`
 # gives the root logger a stderr handler, the CLI's verbosity option sets the
 # `aea` level, then aea applies `logging_config`.
@@ -746,15 +784,21 @@ class TestStopAgentLogPropagation:
         assert "] [INFO] [agent] Entered in the 'fetch_markets' round" in lines[0]
 
     def test_the_rest_of_the_agent_config_is_kept(self, tmp_path: Path) -> None:
-        """Only `propagate` changes; the override documents survive intact."""
-        config_path = self._prepare_sources(tmp_path, AGENT_CONFIG_WITH_CONSOLE_LOGGER)
+        """Only `propagate` changes; placeholders and overrides survive intact."""
+        config_path = self._prepare_sources(tmp_path, AGENT_CONFIG_WITH_TRADER_LOGGING)
 
         with config_path.open(encoding="utf-8") as stream:
             agent_config, ledger_override = yaml_load_all(stream)
-        assert agent_config["logging_config"]["loggers"]["aea"] == {
-            "handlers": ["console"],
+        logging_config = agent_config["logging_config"]
+        assert logging_config["loggers"]["aea"] == {
+            "handlers": ["logfile", "console"],
             "propagate": False,
         }
+        logfile = logging_config["handlers"]["logfile"]
+        assert logfile["filename"] == "${LOG_FILE:str:log.txt}"
+        assert logfile["level"] == "${LOG_LEVEL:str:INFO}"
+        assert logfile["maxBytes"] == "${LOG_MAX_BYTES:int:52428800}"
+        assert logfile["backupCount"] == "${LOG_BACKUP_COUNT:int:1}"
         assert agent_config["agent_name"] == "trader"
         assert ledger_override["config"]["ledger_apis"]["ethereum"]["address"] == (
             "${ETHEREUM_LEDGER_RPC:str:http://localhost:8545}"
@@ -764,6 +808,19 @@ class TestStopAgentLogPropagation:
         """With no `aea` handlers, aea logs only through the root logger: keep it."""
         agent_config = "agent_name: trader\nauthor: valory\n"
 
+        config_path = self._prepare_sources(tmp_path, agent_config)
+
+        assert config_path.read_text(encoding="utf-8") == agent_config
+
+    @pytest.mark.parametrize(
+        "agent_config",
+        ["", "agent_name: trader\nlogging_config:\n", "logging_config:\n  loggers:\n"],
+        ids=["empty file", "null logging_config", "null loggers"],
+    )
+    def test_an_unreadable_logging_config_is_left_alone(
+        self, tmp_path: Path, agent_config: str
+    ) -> None:
+        """A config without a usable `logging_config` must not fail agent setup."""
         config_path = self._prepare_sources(tmp_path, agent_config)
 
         assert config_path.read_text(encoding="utf-8") == agent_config

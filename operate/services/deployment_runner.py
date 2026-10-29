@@ -442,18 +442,25 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _stop_agent_log_propagation(self, agent_dir: Path) -> None:
         """Keep the agent's `aea` logger from also writing through the root logger."""
-        # open-autonomy calls `logging.basicConfig` at import time, so the root
-        # logger gets a stderr handler. Each `aea` record then reaches
+        # open-autonomy's `autonomy/chain/tx.py` calls aea's `setup_logger` at
+        # import time, and that calls `logging.basicConfig`, so the root logger
+        # gets a stderr handler. Each `aea` record then reaches
         # `agent_runner.log` twice: once from the agent's console handler, once,
-        # reformatted as `[ts][LEVEL]`, through the root logger.
+        # reformatted as `[ts][LEVEL]`, through the root logger. Agents bundle
+        # their own open-autonomy, so this stays needed until released agents
+        # ship one without that import-time call.
         config_path = agent_dir / "aea-config.yaml"
         if not config_path.exists():
             return
         with config_path.open(encoding="utf-8") as stream:
-            agent_config, *overrides = yaml_load_all(stream)
-        aea_logger = (
-            agent_config.get("logging_config", {}).get("loggers", {}).get("aea")
-        )
+            documents = yaml_load_all(stream)
+        # A config this cannot read is left for aea to report, rather than
+        # failing every attempt of the setup retry loop.
+        if not documents or not isinstance(documents[0], dict):
+            return
+        agent_config, *overrides = documents
+        logging_config = agent_config.get("logging_config") or {}
+        aea_logger = (logging_config.get("loggers") or {}).get("aea")
         if not aea_logger or not aea_logger.get("handlers"):
             return
         aea_logger["propagate"] = False
