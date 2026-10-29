@@ -21,11 +21,11 @@
 
 import ctypes
 import json
-import logging
 import multiprocessing
 import os
 import platform
 import shutil  # nosec
+import socket
 import subprocess  # nosec
 import sys  # nosec
 import time
@@ -122,37 +122,52 @@ def kill_process(pid: int) -> None:
     _kill_process(pid)
 
 
-def kill_processes_on_port(port: int, logger: logging.Logger) -> None:
-    """Kill any local process listening on the given TCP port.
+def is_port_in_use(port: int) -> bool:
+    """Check whether a local process accepts connections on the given TCP port.
 
-    Backstop for PID-file tracking misses (PID reuse, unexpected process name,
-    orphaned child): only one agent owns the fixed ports at a time, so whatever
-    listens on one is the blocker preventing the next agent from binding.
+    Catches holders that listener lookup cannot see, such as another user's
+    process on macOS. A loopback listener answers at once; Windows only lets a
+    refused connect fail after retrying, hence the short timeout.
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def get_port_listener_pids(port: int) -> t.Set[int]:
+    """Return the PIDs of local processes listening on the given TCP port.
 
     ``net_connections`` needs root on macOS and raises ``AccessDenied`` for an
-    unprivileged process, so the reap is silently skipped there.
+    unprivileged process. Asking each process for its own sockets works there
+    for the user's own processes, which covers every process Pearl started.
     """
-    own_pid = os.getpid()
-    try:
-        connections = psutil.net_connections(kind="inet")
-    except (psutil.AccessDenied, OSError) as e:
-        logger.warning(f"Could not enumerate connections to free port {port}: {e}")
-        return
 
-    pids = {
-        conn.pid
-        for conn in connections
-        if conn.pid not in (None, own_pid)
-        and conn.status == psutil.CONN_LISTEN
-        and conn.laddr
-        and conn.laddr.port == port
-    }
-    for pid in pids:
-        logger.warning(
-            f"Port {port} is held by leftover process PID {pid}; "
-            f"killing it to free the port for the deployment"
+    def _listens(conn: Any) -> bool:
+        return (
+            conn.status == psutil.CONN_LISTEN
+            and bool(conn.laddr)
+            and conn.laddr.port == port
         )
-        kill_process(pid)
+
+    try:
+        return {
+            conn.pid
+            for conn in psutil.net_connections(kind="inet")
+            if conn.pid is not None and _listens(conn)
+        }
+    except (psutil.AccessDenied, OSError):
+        pass
+
+    pids = set()
+    for process in psutil.process_iter():
+        try:
+            if any(_listens(conn) for conn in process.connections(kind="inet")):
+                pids.add(process.pid)
+        except (psutil.Error, OSError):
+            continue
+    return pids
 
 
 class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
@@ -565,11 +580,111 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         finally:
             remove_pid_file(pid_file, force=True)
 
+    @property
+    def _tendermint_bin(self) -> t.Optional[str]:
+        """Return the bundled tendermint binary path, if the runner uses one."""
+        return None
+
+    def _get_deployment_service_dir(self, process: psutil.Process) -> t.Optional[Path]:
+        """Return the service dir a process provably runs a deployment for.
+
+        The process must run from a service's deployment directory in this
+        operate home, and its binary must be the bundled tendermint binary or
+        live in that service's directory (agent runner, venv interpreter).
+        """
+        services_dir = self._work_directory.parent.parent.resolve()
+        try:
+            cwd = Path(process.cwd()).resolve()
+            binaries = [process.exe(), *process.cmdline()[:1]]
+        except (psutil.Error, OSError):
+            return None
+        if not cwd.is_relative_to(services_dir):
+            return None
+        parts = cwd.relative_to(services_dir).parts
+        if parts[1:2] != (constants.DEPLOYMENT_DIR,):
+            return None
+        service_dir = services_dir / parts[0]
+        for binary in map(Path, filter(None, binaries)):
+            if not binary.is_absolute():
+                continue
+            if (
+                self._tendermint_bin is not None
+                and binary.resolve() == Path(self._tendermint_bin).resolve()
+            ) or binary.parent.resolve().is_relative_to(service_dir):
+                return service_dir
+        return None
+
+    def _get_deployment_process_root(
+        self, process: psutil.Process, service_dir: Path
+    ) -> psutil.Process:
+        """Return the topmost process of a deployment's process tree.
+
+        A PyInstaller binary runs as a bootloader plus a child, and tendermint
+        forks its server, so the port holder is rarely the whole deployment.
+        """
+        root = process
+        while True:
+            try:
+                parent = root.parent()
+            except psutil.Error:
+                return root
+            if (
+                parent is None
+                or parent.pid == os.getpid()
+                or self._get_deployment_service_dir(parent) != service_dir
+            ):
+                return root
+            root = parent
+
+    def _free_port(self, port: int, starting: bool) -> None:
+        """Stop leftover deployment processes listening on a fixed port.
+
+        Backstop for PID-file tracking misses (PID reuse, unexpected process
+        name, a child orphaned by a killed parent). On stop, only this
+        service's processes are stopped. On start, any service's leftover is
+        stopped, since only one deployment can own the fixed ports, and the
+        start fails if the port stays taken. Processes that are not provably
+        a deployment of this operate home are never touched.
+        """
+        own_service_dir = self._work_directory.parent.resolve()
+        holders = []
+        for pid in get_port_listener_pids(port) - {os.getpid()}:
+            try:
+                process = psutil.Process(pid)
+                name = process.name()
+            except psutil.Error:
+                continue
+            service_dir = self._get_deployment_service_dir(process)
+            if service_dir is None or (not starting and service_dir != own_service_dir):
+                holders.append(f"PID {pid} {name}")
+                continue
+            root = self._get_deployment_process_root(process, service_dir)
+            self.logger.warning(
+                f"Port {port} is held by leftover deployment process PID {pid} "
+                f"({name}) of {service_dir.name}; stopping its process tree "
+                f"from PID {root.pid}"
+            )
+            kill_process(root.pid)
+
+        if not starting:
+            if holders:
+                self.logger.warning(
+                    f"Port {port} is held by {', '.join(holders)}, which is "
+                    f"not this deployment; leaving it running"
+                )
+            return
+        if is_port_in_use(port):
+            holder = ", ".join(holders) or "a process this user cannot inspect"
+            raise RuntimeError(
+                f"Port {port} is in use by another program ({holder}), so the "
+                f"deployment cannot start. Stop that program and try again."
+            )
+
     def _free_deployment_ports(self) -> None:
-        """Reap leftover processes holding this deployment's fixed local ports."""
-        kill_processes_on_port(constants.AGENT_HTTP_PORT, logger=self.logger)
+        """Free this deployment's fixed local ports before it starts."""
+        self._free_port(constants.AGENT_HTTP_PORT, starting=True)
         if self._is_aea:
-            kill_processes_on_port(constants.TENDERMINT_COM_PORT, logger=self.logger)
+            self._free_port(constants.TENDERMINT_COM_PORT, starting=True)
 
     def _stop_agent(self) -> None:
         """Stop agent process using safe PID file operations."""
@@ -578,7 +693,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             expected_process_names=constants.AGENT_PROCESS_NAMES,
             label="agent",
         )
-        kill_processes_on_port(constants.AGENT_HTTP_PORT, logger=self.logger)
+        self._free_port(constants.AGENT_HTTP_PORT, starting=False)
         self._close_agent_log_file()
 
     def _get_tm_exit_url(self) -> str:
@@ -601,7 +716,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             expected_process_names=["tendermint", "flask", "python"],
             label="tendermint",
         )
-        kill_processes_on_port(constants.TENDERMINT_COM_PORT, logger=self.logger)
+        self._free_port(constants.TENDERMINT_COM_PORT, starting=False)
         self._close_tm_log_file()
 
     @abstractmethod
