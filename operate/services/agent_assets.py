@@ -225,11 +225,7 @@ class AgentAssetManager:
 
     @classmethod
     def get_asset_sha256(cls, asset_path: Path) -> str:
-        """Get an asset's sha256 from its sidecar, else by hashing the file.
-
-        The sidecar is trusted because ``get_agent_runner_path`` checks it against
-        the file, or rewrites it, before returning the asset.
-        """
+        """Get an asset's sha256 from its verified sidecar, else by hashing the file."""
         with suppress(OSError, ValueError, KeyError, TypeError):
             sidecar = json.loads(cls._sidecar_path(asset_path).read_text("utf-8"))
             return str(sidecar["sha256"])

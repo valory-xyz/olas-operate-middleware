@@ -37,7 +37,6 @@ from operate.services.service import Service
 
 PRESTART_CHECK_COMMAND = "prestart-check"
 PRESTART_CHECK_TIMEOUT = 120  # seconds, the one-file binary's unpack included
-# The exit code the agent runner uses for each outcome of its checks.
 EXIT_CODE_STATUS = {0: PrestartCheckStatus.PASSED, 1: PrestartCheckStatus.FAILED}
 
 logger = setup_logger(name="operate.prestart_check")
