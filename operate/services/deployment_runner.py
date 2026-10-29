@@ -89,7 +89,8 @@ def inject_runtime_ca_bundle(env: Dict[str, str]) -> Dict[str, str]:
     return updated_env
 
 
-# Successful ``--help`` runs by binary sha256: each run unpacks the one-file binary.
+# Successful ``--help`` runs by binary sha256, since each run unpacks the one-file
+# binary (up to ~45 s) and both the start and the prestart check need it.
 _AGENT_RUNNER_HELP_CACHE: Dict[str, subprocess.CompletedProcess] = {}
 
 
