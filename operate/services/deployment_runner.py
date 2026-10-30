@@ -42,6 +42,7 @@ import psutil
 import requests
 from aea.__version__ import __version__ as aea_version
 from aea.helpers.logging import setup_logger
+from aea.helpers.yaml_utils import yaml_dump_all, yaml_load_all
 from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import _is_usable_ca_bundle_path, constants, get_runtime_ca_bundle_env
@@ -476,6 +477,33 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 "it may still hold files from a previous agent version"
             )
 
+    def _stop_agent_log_propagation(self, agent_dir: Path) -> None:
+        """Keep the agent's `aea` logger from also writing through the root logger."""
+        # open-autonomy's `autonomy/chain/tx.py` calls aea's `setup_logger` at
+        # import time, and that calls `logging.basicConfig`, so the root logger
+        # gets a stderr handler. Each `aea` record then reaches
+        # `agent_runner.log` twice: once from the agent's console handler, once,
+        # reformatted as `[ts][LEVEL]`, through the root logger. Agents bundle
+        # their own open-autonomy, so this stays needed until released agents
+        # ship one without that import-time call.
+        config_path = agent_dir / "aea-config.yaml"
+        if not config_path.exists():
+            return
+        with config_path.open(encoding="utf-8") as stream:
+            documents = yaml_load_all(stream)
+        # A config this cannot read is left for aea to report, rather than
+        # failing every attempt of the setup retry loop.
+        if not documents or not isinstance(documents[0], dict):
+            return
+        agent_config, *overrides = documents
+        logging_config = agent_config.get("logging_config") or {}
+        aea_logger = (logging_config.get("loggers") or {}).get("aea")
+        if not aea_logger or not aea_logger.get("handlers"):
+            return
+        aea_logger["propagate"] = False
+        with config_path.open("w", encoding="utf-8") as stream:
+            yaml_dump_all([agent_config, *overrides], stream)
+
     def prepare_agent_sources(
         self, working_dir: Path, private_key_in_agent: Path, agent_dir_full_path: Path
     ) -> None:
@@ -497,6 +525,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         # Clear agent directory before extraction so each attempt starts clean.
         self._clear_agent_dir(agent_dir_full_path)
         AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
+        self._stop_agent_log_propagation(agent_dir_full_path)
 
         # Ensure parent directory exists before trying to delete file
         if private_key_in_agent.parent.exists():
