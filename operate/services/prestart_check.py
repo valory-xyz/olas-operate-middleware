@@ -113,8 +113,6 @@ def run_prestart_check(service: Service) -> PrestartCheckResult:
 
     Never raises: anything that keeps the check from completing is an ``error``.
     """
-    if service.agent_release["is_aea"]:
-        return _result(PrestartCheckStatus.NOT_SUPPORTED)
     try:
         binary = get_agent_runner_path(service_dir=service.path)
         help_result = agent_runner_help(

@@ -143,13 +143,14 @@ class TestRunPrestartCheck:
         )
         assert result == {"status": PrestartCheckStatus.FAILED, "issues": [ISSUE]}
 
-    def test_aea_service_is_not_supported(
+    def test_aea_service_runs_the_check(
         self, tmp_path: Path, runner: MagicMock
     ) -> None:
-        """A service run by the aea CLI has no agent runner to ask."""
+        """An is_aea service, like Polystrat, is checked by its agent runner too."""
+        runner.return_value = _completed(1, {"status": "failed", "issues": [ISSUE]})
         result = run_prestart_check(_service(tmp_path, is_aea=True))
-        assert result == {"status": PrestartCheckStatus.NOT_SUPPORTED, "issues": []}
-        runner.assert_not_called()
+        assert result == {"status": PrestartCheckStatus.FAILED, "issues": [ISSUE]}
+        assert runner.call_args.args[0][:2] == [BINARY, "prestart-check"]
 
     def test_runner_without_the_command_is_not_supported(
         self, tmp_path: Path, runner: MagicMock
