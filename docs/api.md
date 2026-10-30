@@ -3093,6 +3093,24 @@ If every net target is already met, the run is created directly as `COMPLETED` w
 
 The run object of the single non-terminal run. If there is none, the run that completed in the last 5 minutes (so the app can show the success modal after a restart); otherwise `null`. The app polls this route.
 
+### `GET /api/funding_run/completed_onboard`
+
+The latest `COMPLETED` `onboard` run of each service asked for, so the app can mark an agent's setup complete however long ago its run finished. Repeat `service_config_id` once per service: `?service_config_id=sc-1&service_config_id=sc-2`.
+
+```json
+{
+  "runs": [
+    { "service_config_id": "sc-1", "run_id": "fr-3f2a...", "finished_at": 1790592071 }
+  ]
+}
+```
+
+- A service with no `COMPLETED` `onboard` run is omitted; `FAILED`, `CANCELLED` and unfinished runs never appear.
+- `finished_at` is unix seconds.
+- Served from an index in `active.json`, written as each run completes. Runs that completed before the index existed are added to it once after the update: by the background loop when it starts after login, or earlier by a read that finds the funding-run lock free. Until then they are omitted.
+
+**Errors:** `400` when no `service_config_id` is given.
+
 ### `POST /api/funding_run/{id}/refresh_quote`
 
 Re-quote now. Valid only in `AWAITING_DEPOSIT` / `QUOTE_FAILED`. No request body. An exact run waiting for its deposit is returned unchanged.

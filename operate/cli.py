@@ -2317,6 +2317,29 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except Exception as e:  # pylint: disable=broad-except
             return _funding_run_error(e)
 
+    @app.get("/api/funding_run/completed_onboard")
+    async def _completed_onboard_funding_runs(request: Request) -> JSONResponse:
+        """The latest COMPLETED onboard run of each requested service."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        service_config_ids = request.query_params.getlist("service_config_id")
+        if not service_config_ids:
+            return JSONResponse(
+                content={"error": "Invalid funding run request."},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        def _fn() -> JSONResponse:
+            manager = operate.funding_run_manager
+            return JSONResponse(
+                content={"runs": manager.completed_onboard_runs(service_config_ids)}
+            )
+
+        try:
+            return await run_in_executor(_fn)
+        except Exception as e:  # pylint: disable=broad-except
+            return _funding_run_error(e)
+
     async def _funding_run_action(
         run_id: str, action: t.Callable[[FundingRunManager, str], t.Any]
     ) -> JSONResponse:

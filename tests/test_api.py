@@ -897,6 +897,7 @@ class TestFundingRunRoutes:
             ("get", "/api/funding_run/sources"),
             ("post", "/api/funding_run"),
             ("get", "/api/funding_run/active"),
+            ("get", "/api/funding_run/completed_onboard?service_config_id=sc-1"),
             ("post", "/api/funding_run/fr-x/refresh_quote"),
             ("post", "/api/funding_run/fr-x/retry"),
             ("delete", "/api/funding_run/fr-x"),
@@ -927,6 +928,38 @@ class TestFundingRunRoutes:
         response = client.get("/api/funding_run/active")
         assert response.status_code == HTTPStatus.OK
         assert response.json() is None
+
+    def test_completed_onboard_requires_a_service_config_id(
+        self, client: TestClient
+    ) -> None:
+        """Asking about no service is a 400."""
+        response = client.get("/api/funding_run/completed_onboard")
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Invalid funding run request."}
+
+    def test_completed_onboard_passes_every_service_config_id(
+        self, client: TestClient
+    ) -> None:
+        """Repeated service_config_id parameters reach the manager as one batch."""
+        runs = [{"service_config_id": "sc-1", "run_id": "fr-x", "finished_at": 1}]
+        with mock.patch(
+            "operate.cli.FundingRunManager.completed_onboard_runs", return_value=runs
+        ) as completed_onboard_runs:
+            response = client.get(
+                "/api/funding_run/completed_onboard",
+                params=[("service_config_id", "sc-1"), ("service_config_id", "sc-2")],
+            )
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {"runs": runs}
+        completed_onboard_runs.assert_called_once_with(["sc-1", "sc-2"])
+
+    def test_completed_onboard_is_empty_without_runs(self, client: TestClient) -> None:
+        """No run yet: an empty list."""
+        response = client.get(
+            "/api/funding_run/completed_onboard", params={"service_config_id": "sc-1"}
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {"runs": []}
 
     @pytest.mark.parametrize(
         "body",
@@ -1190,6 +1223,12 @@ class TestFundingRunRoutes:
                 },
             ),
             ("get", "/api/funding_run/active", "active_run", None),
+            (
+                "get",
+                "/api/funding_run/completed_onboard?service_config_id=sc-1",
+                "completed_onboard_runs",
+                None,
+            ),
         ],
     )
     def test_unexpected_error_is_500_without_detail(
