@@ -1966,13 +1966,13 @@ Notes:
 
 ### `GET /api/v2/service/{service_config_id}/prestart_check`
 
-Run the agent's own checks of whether it can start on this machine, e.g. whether Polystrat can reach Polymarket. The middleware fetches the service's agent runner and, when its `--help` lists `prestart-check`, runs `<agent_runner> prestart-check --service-dir <service package>` with the service's env variables and a 120 s timeout. It runs only when called; the start endpoint does not run it. The `--help` output is cached per binary sha256 and shared with the start's `--password-stdin` probe, so each agent runner release is unpacked for `--help` at most once; the check result itself is never cached.
+Run the agent's own checks of whether it can start on this machine, e.g. whether Polystrat can reach Polymarket. The middleware fetches the service's agent runner and, when its `--help` lists `prestart-check`, runs `<agent_runner> prestart-check --service-dir <service package>` with the service's env variables and a 120 s timeout. One call can take up to about 180 s (a 60 s `--help` probe and the 120 s check), plus the agent runner download on the first call for a release. It runs only when called; the start endpoint does not run it. The `--help` output is cached per binary sha256 and shared with the start's `--password-stdin` probe, so each agent runner release is unpacked for `--help` at most once per daemon run; the check result itself is never cached.
 
 | `status` | Meaning | Start |
 |---|---|---|
 | `passed` | The agent's checks passed | allowed |
 | `failed` | The agent's checks failed; `issues` holds what the agent wrote for the user | blocked |
-| `not_supported` | The agent release has no `prestart-check` command, or the service runs on the aea CLI | allowed |
+| `not_supported` | The agent release has no `prestart-check` command | allowed |
 | `error` | The check could not complete: download failure, timeout, or output outside the contract. The cause is logged | blocked |
 
 `issues` is empty unless `status` is `failed`.
