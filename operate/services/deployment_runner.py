@@ -63,6 +63,59 @@ from .agent_assets import AgentAssetManager, get_agent_code_path, get_agent_runn
 PASSWORD_STDIN_ARG = "--password-stdin"  # nosec B105
 
 
+def no_window_creationflags() -> int:
+    """Return the creation flags that keep a child from flashing a console on Windows."""
+    return 0x08000000 if platform.system() == "Windows" else 0  # CREATE_NO_WINDOW
+
+
+def inject_runtime_ca_bundle(env: Dict[str, str]) -> Dict[str, str]:
+    """Ensure spawned processes inherit the runtime CA bundle settings."""
+    bundle_env = get_runtime_ca_bundle_env()
+    updated_env = dict(env)
+    if not bundle_env:
+        if platform.system() == "Windows":
+            for key in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
+                current_value = updated_env.get(key)
+                if current_value is not None and not _is_usable_ca_bundle_path(
+                    current_value
+                ):
+                    updated_env.pop(key, None)
+        return updated_env
+
+    for key, value in bundle_env.items():
+        current_value = updated_env.get(key)
+        if not _is_usable_ca_bundle_path(current_value):
+            updated_env[key] = value
+    return updated_env
+
+
+# Successful ``--help`` runs by binary sha256, since each run unpacks the one-file
+# binary (up to ~45 s) and both the start and the prestart check need it.
+_AGENT_RUNNER_HELP_CACHE: Dict[str, subprocess.CompletedProcess] = {}
+
+
+def agent_runner_help(binary: str, timeout: float) -> subprocess.CompletedProcess:
+    """Run ``<binary> --help``, with stderr merged into stdout; cached per binary."""
+    try:
+        binary_hash: t.Optional[str] = AgentAssetManager.get_asset_sha256(Path(binary))
+    except OSError:
+        binary_hash = None
+    if binary_hash is not None and binary_hash in _AGENT_RUNNER_HELP_CACHE:
+        return _AGENT_RUNNER_HELP_CACHE[binary_hash]
+    result = subprocess.run(  # nosec
+        [binary, "--help"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        check=False,
+        creationflags=no_window_creationflags(),
+    )
+    if binary_hash is not None and result.returncode == 0:
+        _AGENT_RUNNER_HELP_CACHE[binary_hash] = result
+    return result
+
+
 def is_github_rate_limited(exc: BaseException) -> bool:
     """Check whether an exception is a GitHub rate-limit response.
 
@@ -169,23 +222,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     @staticmethod
     def _inject_runtime_ca_bundle(env: Dict[str, str]) -> Dict[str, str]:
         """Ensure spawned processes inherit the runtime CA bundle settings."""
-        bundle_env = get_runtime_ca_bundle_env()
-        updated_env = dict(env)
-        if not bundle_env:
-            if platform.system() == "Windows":
-                for key in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
-                    current_value = updated_env.get(key)
-                    if current_value is not None and not _is_usable_ca_bundle_path(
-                        current_value
-                    ):
-                        updated_env.pop(key, None)
-            return updated_env
-
-        for key, value in bundle_env.items():
-            current_value = updated_env.get(key)
-            if not _is_usable_ca_bundle_path(current_value):
-                updated_env[key] = value
-        return updated_env
+        return inject_runtime_ca_bundle(env)
 
     def __init__(self, work_directory: Path, is_aea: bool) -> None:
         """Initialize the deployment runner."""
@@ -621,16 +658,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _agent_runner_supports_password_stdin(self, binary: str) -> bool:
         """Check the agent binary's --help output for --password-stdin support."""
         try:
-            result = subprocess.run(  # nosec
-                [binary, "--help"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                timeout=self.PASSWORD_STDIN_PROBE_TIMEOUT,
-                check=False,
-                creationflags=(
-                    0x08000000 if platform.system() == "Windows" else 0
-                ),  # CREATE_NO_WINDOW: don't flash a console for the probe
+            result = agent_runner_help(
+                binary=binary, timeout=self.PASSWORD_STDIN_PROBE_TIMEOUT
             )
         except (OSError, subprocess.SubprocessError) as e:
             self.logger.warning(

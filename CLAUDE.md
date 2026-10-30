@@ -213,6 +213,7 @@ operate daemon
 - `deployment_runner.py`: Handles service deployment lifecycle
 - `funding_manager.py`: Manages wallet funding operations with cooldown mechanisms
 - `health_checker.py`: Monitors service health via healthcheck.json
+- `prestart_check.py`: Runs the agent runner's own `prestart-check` command before a start, when the app asks
 
 **Wallet Management (`operate/wallet/`)**
 - `master.py`: `MasterWalletManager` handles Master EOA (Externally Owned Account) and Master Safe (Gnosis Safe)

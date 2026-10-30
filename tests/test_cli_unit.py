@@ -47,7 +47,7 @@ from operate.cli import (
 from operate.constants import OPERATE, SERVICES_DIR, ZERO_ADDRESS
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
-from operate.operate_types import Chain, DeploymentStatus
+from operate.operate_types import Chain, DeploymentStatus, PrestartCheckStatus
 from operate.services.funding_manager import FundingInProgressError
 from operate.wallet.master import CreateSafeStatus, InsufficientFundsException
 from operate.wallet.wallet_recovery_manager import WalletRecoveryError
@@ -1754,6 +1754,36 @@ class TestServiceRoutes:
             with TestClient(app) as c:
                 resp = c.get("/api/v2/service/svc1/funding_requirements")
             assert resp.status_code == HTTPStatus.OK
+
+    def test_prestart_check_not_found(self) -> None:
+        """An unknown service answers 404 and runs nothing."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = False
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with patch("operate.cli.run_prestart_check") as run_check:
+                with TestClient(app) as c:
+                    resp = c.get("/api/v2/service/svc1/prestart_check")
+            assert resp.status_code == HTTPStatus.NOT_FOUND
+            run_check.assert_not_called()
+
+    def test_prestart_check_returns_the_result(self) -> None:
+        """The check's result is the response body."""
+        m = _make_mock_operate()
+        m.service_manager.return_value.exists.return_value = True
+        service = m.service_manager.return_value.load.return_value
+        issue = {"code": "c", "title": "t", "description": "d"}
+        result = {"status": PrestartCheckStatus.FAILED, "issues": [issue]}
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with patch(
+                "operate.cli.run_prestart_check", return_value=result
+            ) as run_check:
+                with TestClient(app) as c:
+                    resp = c.get("/api/v2/service/svc1/prestart_check")
+            assert resp.status_code == HTTPStatus.OK
+            assert resp.json() == {"status": "failed", "issues": [issue]}
+            run_check.assert_called_once_with(service)
 
     def test_get_refill_requirements_not_found(self) -> None:
         """Cover line 1237."""
