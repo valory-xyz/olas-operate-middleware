@@ -44,6 +44,8 @@ from aea.configurations.constants import (
 )
 from aea.helpers.logging import setup_logger
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
+from aea_cli_ipfs.exceptions import DownloadError
+from aea_cli_ipfs.ipfs_client import IPFSError
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
 from autonomy.configurations.constants import DEFAULT_SERVICE_CONFIG_FILE
@@ -79,6 +81,7 @@ from operate.constants import (
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
 )
+from operate.exceptions import ServicePackageDownloadError
 from operate.keys import KeysManager
 from operate.ledger import (
     get_default_ledger_api,
@@ -993,7 +996,7 @@ class Service(LocalResource):
                 self.store()
 
     @staticmethod
-    def new(  # pylint: disable=too-many-locals
+    def new(
         agent_addresses: t.List[str],
         service_template: ServiceTemplate,
         storage: Path,
@@ -1003,12 +1006,37 @@ class Service(LocalResource):
         service_config_id = Service.get_new_service_config_id(storage)
         path = storage / service_config_id
         path.mkdir()
-        package_absolute_path = Path(
-            IPFSTool().download(
-                hash_id=service_template["hash"],
-                target_dir=path,
+        try:
+            service = Service._new_in(
+                path=path,
+                service_config_id=service_config_id,
+                agent_addresses=agent_addresses,
+                service_template=service_template,
             )
-        )
+            service.store()
+        except Exception:
+            # deepcode ignore PT: target is storage/sc-<uuid4>
+            shutil.rmtree(path, ignore_errors=True)
+            raise
+        return service
+
+    @staticmethod
+    def _new_in(  # pylint: disable=too-many-locals
+        path: Path,
+        service_config_id: str,
+        agent_addresses: t.List[str],
+        service_template: ServiceTemplate,
+    ) -> "Service":
+        """Download the service package into `path` and build the service."""
+        try:
+            package_absolute_path = Path(
+                IPFSTool().download(
+                    hash_id=service_template["hash"],
+                    target_dir=path,
+                )
+            )
+        except (IPFSError, DownloadError) as e:
+            raise ServicePackageDownloadError(str(e)) from e
 
         chain_configs = {}
         for chain_str, config in service_template["configurations"].items():
@@ -1031,7 +1059,7 @@ class Service(LocalResource):
             )
 
         current_timestamp = int(time.time())
-        service = Service(
+        return Service(
             version=SERVICE_CONFIG_VERSION,
             service_config_id=service_config_id,
             name=service_template["name"],
@@ -1046,8 +1074,6 @@ class Service(LocalResource):
             env_variables=service_template["env_variables"],
             agent_release=service_template["agent_release"],
         )
-        service.store()
-        return service
 
     def service_public_id(self, include_version: bool = True) -> str:
         """Get the public id (based on the service hash)."""

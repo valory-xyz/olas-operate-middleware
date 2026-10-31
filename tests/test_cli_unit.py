@@ -45,6 +45,7 @@ from operate.cli import (
     service_not_found_error,
 )
 from operate.constants import OPERATE, SERVICES_DIR, ZERO_ADDRESS
+from operate.exceptions import ServicePackageDownloadError
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, PrestartCheckStatus
@@ -1827,6 +1828,34 @@ class TestServiceRoutes:
             with TestClient(app) as c:
                 resp = c.post("/api/v2/service", json={"name": "test"})
             assert resp.status_code == HTTPStatus.OK
+
+    def test_create_service_package_download_failure(self) -> None:
+        """A failed package download returns 502 with SERVICE_PACKAGE_DOWNLOAD_FAILED."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.create.side_effect = ServicePackageDownloadError(
+            "CERTIFICATE_VERIFY_FAILED"
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service", json={"name": "test"})
+            assert resp.status_code == HTTPStatus.BAD_GATEWAY
+            body = resp.json()
+            assert body["error_code"] == "SERVICE_PACKAGE_DOWNLOAD_FAILED"
+            assert body["error"] == (
+                "Failed to download the service package. Please check the logs."
+            )
+
+    def test_create_service_other_failure_keeps_500(self) -> None:
+        """Any other create failure keeps the global handler's 500 with no error_code."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.create.side_effect = ValueError("bad template")
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service", json={"name": "test"})
+            assert resp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+            assert resp.json() == {"error": "bad template"}
 
     def test_deploy_service_not_logged_in(self) -> None:
         """Cover line 1261."""

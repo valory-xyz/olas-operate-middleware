@@ -30,7 +30,10 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from aea_cli_ipfs.exceptions import DownloadError
+from aea_cli_ipfs.ipfs_client import CommunicationError
 
+from operate.exceptions import ServicePackageDownloadError
 from operate.operate_types import Chain
 from operate.services.service import NON_EXISTENT_MULTISIG, NON_EXISTENT_TOKEN, Service
 
@@ -281,6 +284,72 @@ class TestServiceCreationMocked:
         # Verify agent addresses were stored
         assert service.agent_addresses == agent_addresses
         assert len(service.agent_addresses) == 4
+
+
+class TestServiceCreationFailure:
+    """Test Service.new() when the create fails part way."""
+
+    @staticmethod
+    def _patch_download(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+        mock_ipfs_tool = MagicMock()
+        mock_ipfs_tool.return_value.download.side_effect = error
+        monkeypatch.setattr("operate.services.service.IPFSTool", mock_ipfs_tool)
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            CommunicationError(
+                "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate "
+                "verify failed: unable to get local issuer certificate>"
+            ),
+            DownloadError("Failed to download: bafytest123"),
+        ],
+    )
+    def test_download_failure_raises_typed_error_and_removes_dir(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        service_template: t.Dict[str, t.Any],
+        error: Exception,
+    ) -> None:
+        """An IPFS download failure surfaces as ServicePackageDownloadError, leaving no sc-* dir."""
+        storage = tmp_path / "services"
+        storage.mkdir()
+        self._patch_download(monkeypatch, error)
+
+        with pytest.raises(ServicePackageDownloadError) as exc_info:
+            Service.new(
+                agent_addresses=[],
+                storage=storage,
+                service_template=service_template,
+            )
+
+        assert exc_info.value.__cause__ is error
+        assert exc_info.value.to_error_fields() == {
+            "error_code": "SERVICE_PACKAGE_DOWNLOAD_FAILED"
+        }
+        assert list(storage.iterdir()) == []
+
+    def test_other_failure_keeps_original_error_and_removes_dir(
+        self,
+        tmp_path: Path,
+        mock_ipfs_download: t.Callable[[str, Path], str],
+        service_template: t.Dict[str, t.Any],
+    ) -> None:
+        """A failure after the download re-raises unchanged and removes the dir."""
+        storage = tmp_path / "services"
+        storage.mkdir()
+        service_template["home_chain"] = "not-a-chain"
+        service_template["configurations"] = {"not-a-chain": {}}
+
+        with pytest.raises(ValueError, match="not-a-chain"):
+            Service.new(
+                agent_addresses=[],
+                storage=storage,
+                service_template=service_template,
+            )
+
+        assert list(storage.iterdir()) == []
 
 
 class TestServiceStateTransitions:

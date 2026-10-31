@@ -2196,6 +2196,17 @@ Create a new service.
 }
 ```
 
+**Response (Service package download failed - 502):**
+
+Returned when the service package cannot be downloaded from the IPFS registry (certificate, network or registry error). No service is created.
+
+```json
+{
+  "error": "Failed to download the service package. Please check the logs.",
+  "error_code": "SERVICE_PACKAGE_DOWNLOAD_FAILED"
+}
+```
+
 ### `PUT /api/v2/service/{service_config_id}` <br /> `PATCH /api/v2/service/{service_config_id}`
 
 Update a service configuration. Use `PUT` for full updates and `PATCH` for partial updates.

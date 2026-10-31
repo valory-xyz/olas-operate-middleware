@@ -75,6 +75,7 @@ from operate.constants import (
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
 )
+from operate.exceptions import ServicePackageDownloadError
 from operate.funding_run.manager import (
     FundingRunConflictError,
     FundingRunError,
@@ -1734,7 +1735,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return USER_NOT_LOGGED_IN_ERROR
         template = await request.json()
         manager = operate.service_manager()
-        output = manager.create(service_template=template)
+        try:
+            output = manager.create(service_template=template)
+        except ServicePackageDownloadError as e:
+            logger.error(
+                f"Failed to download the service package: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to download the service package. Please check the logs.",
+                    **e.to_error_fields(),
+                },
+                status_code=HTTPStatus.BAD_GATEWAY,
+            )
 
         return JSONResponse(content=output.json)
 
