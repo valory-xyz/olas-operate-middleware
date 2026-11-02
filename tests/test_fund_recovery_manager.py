@@ -1750,18 +1750,25 @@ class TestFetchServicesFromSubgraph:
         assert result == [1, 2]
 
     @pytest.mark.parametrize(
-        ("chain", "creator_filter"),
+        ("chain", "query"),
         [
-            (Chain.GNOSIS, 'creator_: {id: "0xabc"}'),
-            (Chain.BASE, 'creator: {id_eq: "0xabc"}'),
-            (Chain.ROBINHOOD, 'creator: {id_eq: "0xabc"}'),
+            (
+                Chain.GNOSIS,
+                '{ services(where: {creator_: {id: "0xabc"}, id_gt: ""}, '
+                "orderBy: id, orderDirection: asc, first: 1000) { id } }",
+            ),
+            (Chain.BASE, '{ services(where: {creator: {id_eq: "0xabc"}}) { id } }'),
+            (
+                Chain.ROBINHOOD,
+                '{ services(where: {creator: {id_eq: "0xabc"}}) { id } }',
+            ),
         ],
     )
     @patch("operate.services.fund_recovery_manager.requests.post")
     def test_query_matches_endpoint_dialect(
-        self, mock_post: MagicMock, chain: Chain, creator_filter: str
+        self, mock_post: MagicMock, chain: Chain, query: str
     ) -> None:
-        """Graph-node subgraphs and SQD squids each get their own filter syntax."""
+        """Graph-node subgraphs and SQD squids each get their own query syntax."""
         from operate.services.fund_recovery_manager import (
             SUBGRAPH_URLS,
             _fetch_services_from_subgraph,
@@ -1773,9 +1780,73 @@ class TestFetchServicesFromSubgraph:
 
         result = _fetch_services_from_subgraph(SUBGRAPH_URLS[chain], "0xABC")
 
-        query = mock_post.call_args.kwargs["json"]["query"]
-        assert query == f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"
+        assert mock_post.call_count == 1
+        assert mock_post.call_args.kwargs["json"]["query"] == query
         assert result == [7, 12]
+
+    @patch("operate.services.fund_recovery_manager.SUBGRAPH_PAGE_SIZE", 2)
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_graph_dialect_pages_past_a_full_page(self, mock_post: MagicMock) -> None:
+        """A full page on graph-node fetches the next one from the last ID."""
+        from operate.services.fund_recovery_manager import (
+            SUBGRAPH_URLS,
+            _fetch_services_from_subgraph,
+        )
+
+        pages = [
+            [{"id": "10"}, {"id": "2"}],
+            [{"id": "3"}, {"id": "30"}],
+            [{"id": "4"}],
+        ]
+        mock_post.return_value.json.side_effect = [
+            {"data": {"services": page}} for page in pages
+        ]
+
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[Chain.GNOSIS], "0xabc")
+
+        assert result == [10, 2, 3, 30, 4]
+        queries = [c.kwargs["json"]["query"] for c in mock_post.call_args_list]
+        assert 'id_gt: ""' in queries[0]
+        assert 'id_gt: "2"' in queries[1]
+        assert 'id_gt: "30"' in queries[2]
+        assert all("first: 2)" in q for q in queries)
+
+    @patch("operate.services.fund_recovery_manager.SUBGRAPH_PAGE_SIZE", 2)
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_graph_dialect_stops_on_empty_page(self, mock_post: MagicMock) -> None:
+        """An exactly full last page ends with one empty follow-up query."""
+        from operate.services.fund_recovery_manager import (
+            SUBGRAPH_URLS,
+            _fetch_services_from_subgraph,
+        )
+
+        mock_post.return_value.json.side_effect = [
+            {"data": {"services": [{"id": "1"}, {"id": "2"}]}},
+            {"data": {"services": []}},
+        ]
+
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[Chain.POLYGON], "0xabc")
+
+        assert result == [1, 2]
+        assert mock_post.call_count == 2
+
+    @patch("operate.services.fund_recovery_manager.SUBGRAPH_PAGE_SIZE", 2)
+    @patch("operate.services.fund_recovery_manager.requests.post")
+    def test_squid_dialect_is_never_paged(self, mock_post: MagicMock) -> None:
+        """Squids have no row cap, so a large result is one query."""
+        from operate.services.fund_recovery_manager import (
+            SUBGRAPH_URLS,
+            _fetch_services_from_subgraph,
+        )
+
+        mock_post.return_value.json.return_value = {
+            "data": {"services": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}
+        }
+
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[Chain.BASE], "0xabc")
+
+        assert result == [1, 2, 3]
+        assert mock_post.call_count == 1
 
     @pytest.mark.parametrize(
         ("chain", "url"),

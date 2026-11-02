@@ -140,6 +140,9 @@ SQUID_URLS: t.FrozenSet[str] = frozenset(
     url for dialect, url in SUBGRAPH_ENDPOINTS.values() if dialect == "squid"
 )
 
+#: Page size for graph-node service queries (graph-node's maximum ``first``)
+SUBGRAPH_PAGE_SIZE = 1000
+
 #: Deployment block of the service registry per chain, where the mint-log sweep
 #: starts.  Pinned because the default RPCs of some chains are not archive nodes,
 #: so the deployment block cannot be found via historical ``eth_getCode``.
@@ -297,18 +300,10 @@ def _get_service_state(
         return OnChainState.NON_EXISTENT
 
 
-def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
-    """Fetch service IDs created by the Master EOA, in the endpoint's GraphQL dialect."""
-    eoa = eoa_address.lower()
-    # graph-node and SQD squids use different relation-filter syntax
-    creator_filter = (
-        f'creator: {{id_eq: "{eoa}"}}'
-        if url in SQUID_URLS
-        else f'creator_: {{id: "{eoa}"}}'
-    )
-    payload = {"query": f"{{ services(where: {{{creator_filter}}}) {{ id }} }}"}
+def _query_service_ids(url: str, query: str) -> t.List[str]:
+    """Post a ``services`` query to *url* and return the raw service IDs."""
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json={"query": query}, timeout=10)
         response.raise_for_status()
         data = response.json()
 
@@ -321,10 +316,35 @@ def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
             raise ValueError(f"No 'data' field in subgraph response: {data}")
 
         services = result_data.get("services", [])
-        return [int(s["id"]) for s in services]
+        return [str(s["id"]) for s in services]
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(f"Subgraph query failed for {url}: {exc}")
         raise
+
+
+def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
+    """Fetch service IDs created by the Master EOA, in the endpoint's GraphQL dialect."""
+    eoa = eoa_address.lower()
+    # graph-node and SQD squids use different relation-filter syntax
+    if url in SQUID_URLS:
+        # Squids have no default row limit, so one query returns every service.
+        query = f'{{ services(where: {{creator: {{id_eq: "{eoa}"}}}}) {{ id }} }}'
+        return [int(service_id) for service_id in _query_service_ids(url, query)]
+
+    # graph-node caps unpaged queries at 100 rows: page with an id_gt keyset.
+    service_ids: t.List[int] = []
+    last_id = ""
+    while True:
+        query = (
+            f'{{ services(where: {{creator_: {{id: "{eoa}"}}, id_gt: "{last_id}"}}, '
+            f"orderBy: id, orderDirection: asc, first: {SUBGRAPH_PAGE_SIZE}) "
+            "{ id } }"
+        )
+        page = _query_service_ids(url, query)
+        service_ids.extend(int(service_id) for service_id in page)
+        if len(page) < SUBGRAPH_PAGE_SIZE:
+            return service_ids
+        last_id = page[-1]
 
 
 def _get_master_safes_from_contracts(  # pylint: disable=too-many-locals
