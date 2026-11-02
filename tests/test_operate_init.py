@@ -175,11 +175,61 @@ class TestOperateInitPlatformBranches:
             assert os.environ.get("REQUESTS_CA_BUNDLE") == str(expected_bundle)
             assert os.environ.get("SSL_CERT_FILE") == str(expected_bundle)
 
-    def test_windows_branch(self) -> None:
-        """Windows branch sets bundle_set=True without reading a file (lines 61-64)."""
-        with patch("platform.system", return_value="Windows"):
+    def test_windows_exports_certifi_bundle(self) -> None:
+        """Windows exports certifi so default SSL contexts trust it on top of the store."""
+        import certifi
+
+        certifi_path = certifi.where()
+        env_copy = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE")
+        }
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch.dict(os.environ, env_copy, clear=True),
+        ):
             importlib.reload(operate_module)
-        # No exception means Windows branch executed correctly
+            assert os.environ.get("REQUESTS_CA_BUNDLE") == certifi_path
+            assert os.environ.get("SSL_CERT_FILE") == certifi_path
+            assert operate_module.get_runtime_ca_bundle_env() == {
+                "REQUESTS_CA_BUNDLE": certifi_path,
+                "SSL_CERT_FILE": certifi_path,
+            }
+
+    def test_windows_materializes_transient_certifi_bundle(
+        self, tmp_path: Path
+    ) -> None:
+        """On Windows, a PyInstaller certifi bundle is copied out of _MEI* and exported."""
+        pyinstaller_dir = tmp_path / "_MEI123"
+        pyinstaller_dir.mkdir()
+        certifi_bundle = pyinstaller_dir / "cacert.pem"
+        certifi_bundle.write_text("bundle-data", encoding="utf-8")
+        operate_home = tmp_path / "operate-home"
+        expected_bundle = operate_home / "certs" / "cacert.pem"
+
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch("certifi.where", return_value=str(certifi_bundle)),
+            patch.dict(os.environ, {"OPERATE_HOME": str(operate_home)}, clear=True),
+        ):
+            importlib.reload(operate_module)
+            assert os.environ.get("REQUESTS_CA_BUNDLE") == str(expected_bundle)
+            assert os.environ.get("SSL_CERT_FILE") == str(expected_bundle)
+            assert expected_bundle.read_text(encoding="utf-8") == "bundle-data"
+
+    def test_windows_honours_usable_env_override(self, tmp_path: Path) -> None:
+        """On Windows, a usable SSL_CERT_FILE override wins over certifi."""
+        override = tmp_path / "corp.pem"
+        override.write_text("corp-bundle", encoding="utf-8")
+
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch.dict(os.environ, {"SSL_CERT_FILE": str(override)}, clear=True),
+        ):
+            importlib.reload(operate_module)
+            assert os.environ.get("SSL_CERT_FILE") == str(override)
+            assert os.environ.get("REQUESTS_CA_BUNDLE") == str(override)
 
     def test_unknown_os_branch_with_certifi_fallback(self) -> None:
         """Unknown OS branch uses certifi for both requests and urllib clients."""
@@ -248,19 +298,10 @@ class TestOperateInitPlatformBranches:
             assert os.environ.get("REQUESTS_CA_BUNDLE") == linux_bundle
             assert os.environ.get("SSL_CERT_FILE") == linux_bundle
 
-    def test_windows_branch_leaves_file_based_bundle_env_unset(self) -> None:
-        """Windows branch relies on the system trust store instead of bundle files."""
+    def test_windows_without_bundle_clears_stale_env(self, caplog: Any) -> None:
+        """With no usable bundle, Windows drops stale env vars and uses the store only."""
         with (
-            patch("platform.system", return_value="Windows"),
-            patch.dict(os.environ, {}, clear=True),
-        ):
-            importlib.reload(operate_module)
-            assert "REQUESTS_CA_BUNDLE" not in os.environ
-            assert "SSL_CERT_FILE" not in os.environ
-
-    def test_windows_branch_clears_stale_file_based_bundle_env(self) -> None:
-        """Windows branch removes stale file-based CA bundle env vars."""
-        with (
+            caplog.at_level(logging.WARNING, logger="operate"),
             patch("platform.system", return_value="Windows"),
             patch("os.path.exists", return_value=False),
             patch.dict(
@@ -275,6 +316,8 @@ class TestOperateInitPlatformBranches:
             importlib.reload(operate_module)
             assert "REQUESTS_CA_BUNDLE" not in os.environ
             assert "SSL_CERT_FILE" not in os.environ
+        assert "using the Windows store only" in caplog.text
+        assert "Unknown OS" not in caplog.text
 
     def test_valid_requests_bundle_is_used_when_ssl_cert_file_is_invalid(self) -> None:
         """A valid REQUESTS_CA_BUNDLE still wins when SSL_CERT_FILE is unusable."""

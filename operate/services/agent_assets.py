@@ -224,6 +224,14 @@ class AgentAssetManager:
         return asset_path.parent / (asset_path.name + ".sha256")
 
     @classmethod
+    def get_asset_sha256(cls, asset_path: Path) -> str:
+        """Get an asset's sha256 from its verified sidecar, else by hashing the file."""
+        with suppress(OSError, ValueError, KeyError, TypeError):
+            sidecar = json.loads(cls._sidecar_path(asset_path).read_text("utf-8"))
+            return str(sidecar["sha256"])
+        return cls.get_local_file_sha256(asset_path)
+
+    @classmethod
     def _write_sidecar(cls, sidecar_path: Path, release: str, file_hash: str) -> None:
         """Record a verified hash; an I/O failure here must not fail the deployment.
 
