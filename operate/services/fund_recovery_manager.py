@@ -123,8 +123,8 @@ SUBGRAPH_ENDPOINTS: t.Dict[Chain, t.Tuple[SubgraphDialect, str]] = {
         "https://registry-polygon.subgraph.autonolas.tech",
     ),
     Chain.BASE: (
-        "graph",
-        "https://registry-base.subgraph.autonolas.tech",
+        "squid",
+        "https://subgraph.autonolas.tech/squid/service-registry-base/graphql",
     ),
     Chain.ROBINHOOD: (
         "squid",

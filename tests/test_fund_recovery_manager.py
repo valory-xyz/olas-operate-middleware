@@ -1753,6 +1753,7 @@ class TestFetchServicesFromSubgraph:
         ("chain", "creator_filter"),
         [
             (Chain.GNOSIS, 'creator_: {id: "0xabc"}'),
+            (Chain.BASE, 'creator: {id_eq: "0xabc"}'),
             (Chain.ROBINHOOD, 'creator: {id_eq: "0xabc"}'),
         ],
     )
@@ -1780,7 +1781,10 @@ class TestFetchServicesFromSubgraph:
         ("chain", "url"),
         [
             (Chain.POLYGON, "https://registry-polygon.subgraph.autonolas.tech"),
-            (Chain.BASE, "https://registry-base.subgraph.autonolas.tech"),
+            (
+                Chain.BASE,
+                "https://subgraph.autonolas.tech/squid/service-registry-base/graphql",
+            ),
             (Chain.OPTIMISM, "https://registry-optimism.subgraph.autonolas.tech"),
             (
                 Chain.ROBINHOOD,
@@ -1789,7 +1793,7 @@ class TestFetchServicesFromSubgraph:
         ],
     )
     def test_registry_proxy_urls_post_to_root(self, chain: Chain, url: str) -> None:
-        """The registry proxies serve POST at the root; only the squid uses /graphql."""
+        """The registry proxies serve POST at the root; only squids use /graphql."""
         from operate.services.fund_recovery_manager import SUBGRAPH_URLS
 
         assert SUBGRAPH_URLS[chain] == url
