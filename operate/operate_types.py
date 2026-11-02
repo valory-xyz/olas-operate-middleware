@@ -176,6 +176,30 @@ class AgentRelease(TypedDict):
     repository: AgentReleaseRepo
 
 
+class AgentIssue(TypedDict):
+    """A problem the agent reports, written by the agent for display."""
+
+    code: str
+    title: str
+    description: str
+
+
+class PrestartCheckStatus(str, enum.Enum):
+    """Outcome of an agent's prestart check."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    NOT_SUPPORTED = "not_supported"
+    ERROR = "error"
+
+
+class PrestartCheckResult(TypedDict):
+    """Result of an agent's prestart check; ``issues`` is empty unless it failed."""
+
+    status: PrestartCheckStatus
+    issues: t.List[AgentIssue]
+
+
 ConfigurationTemplates = t.Dict[str, ConfigurationTemplate]
 EnvVariables = t.Dict[str, EnvVariableAttributes]
 

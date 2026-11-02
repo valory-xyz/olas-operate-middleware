@@ -47,3 +47,11 @@ class InsufficientFundsException(Exception):
                 DEFAULT_EOA_TOPUPS[Chain(self.chain)][ZERO_ADDRESS]
             ),
         }
+
+
+class ServicePackageDownloadError(Exception):
+    """The service package could not be downloaded from the IPFS registry."""
+
+    def to_error_fields(self) -> t.Dict:
+        """Return structured error fields for merging into a JSONResponse body."""
+        return {"error_code": "SERVICE_PACKAGE_DOWNLOAD_FAILED"}

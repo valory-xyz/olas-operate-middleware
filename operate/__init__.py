@@ -107,14 +107,12 @@ def _materialize_certifi_bundle(certifi_bundle: str) -> Optional[str]:
 
 def get_runtime_ca_bundle_path() -> Optional[str]:
     """Return the CA bundle path to use for spawned Python runtimes."""
-    system = platform.system()
-    if system != "Windows":
-        for configured_bundle in (
-            os.environ.get("SSL_CERT_FILE"),
-            os.environ.get("REQUESTS_CA_BUNDLE"),
-        ):
-            if _is_usable_ca_bundle_path(configured_bundle):
-                return configured_bundle
+    for configured_bundle in (
+        os.environ.get("SSL_CERT_FILE"),
+        os.environ.get("REQUESTS_CA_BUNDLE"),
+    ):
+        if _is_usable_ca_bundle_path(configured_bundle):
+            return configured_bundle
 
     # Bundled certifi wins over the OS bundle so Pearl's pinned trust store
     # applies even when the user's OS has not shipped a CA revocation yet.
@@ -127,6 +125,7 @@ def get_runtime_ca_bundle_path() -> Optional[str]:
         if materialized_bundle is not None:
             return materialized_bundle
 
+    system = platform.system()
     system_bundle = None
     if system == "Darwin":
         system_bundle = "/etc/ssl/cert.pem"
@@ -141,9 +140,6 @@ def get_runtime_ca_bundle_path() -> Optional[str]:
 
 def get_runtime_ca_bundle_env() -> Dict[str, str]:
     """Return environment variables that point Python TLS clients to a CA bundle."""
-    if platform.system() == "Windows":
-        return {}  # pragma: no cover - Can't mock platform.system() on linux
-
     bundle_path = get_runtime_ca_bundle_path()
     if bundle_path is None:
         return {}
@@ -163,15 +159,17 @@ def _set_runtime_ca_bundle_env(bundle_env: Dict[str, str]) -> None:
 
 def configure_runtime_ca_bundle() -> None:
     """Populate CA bundle environment variables for the current process."""
-    system = platform.system()
-    if system == "Windows":
-        _clear_invalid_runtime_ca_bundle_env()
-        logger.info("Using system certificate store on Windows.")
-        return
-
+    # On Windows, default SSL contexts load the system store before
+    # SSL_CERT_FILE, so the bundle adds to the store rather than replacing it.
     bundle_env = get_runtime_ca_bundle_env()
     if bundle_env:
         _set_runtime_ca_bundle_env(bundle_env)
+        return
+
+    system = platform.system()
+    if system == "Windows":
+        _clear_invalid_runtime_ca_bundle_env()
+        logger.warning("No CA bundle file available; using the Windows store only.")
         return
 
     if system not in ("Darwin", "Linux"):
