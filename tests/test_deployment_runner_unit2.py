@@ -41,6 +41,7 @@ from operate.services.deployment_runner import (
     PyInstallerHostDeploymentRunnerLinux,
     PyInstallerHostDeploymentRunnerMac,
     _kill_process,
+    agent_runner_help,
     kill_process,
     kill_processes_on_port,
 )
@@ -1400,6 +1401,98 @@ class TestPasswordStdinProbe:
                 )
                 is False
             )
+
+
+# ---------------------------------------------------------------------------
+# agent_runner_help cache tests
+# ---------------------------------------------------------------------------
+
+
+class TestAgentRunnerHelpCache:
+    """Tests for the per-binary cache of agent_runner_help."""
+
+    @pytest.fixture(autouse=True)
+    def _empty_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "operate.services.deployment_runner._AGENT_RUNNER_HELP_CACHE",
+            {},
+            raising=False,
+        )
+
+    @staticmethod
+    def _binary(tmp_path: Path, sha256: str = "sha256:v1") -> str:
+        binary = tmp_path / "agent_runner"
+        binary.write_bytes(b"binary")
+        (tmp_path / "agent_runner.sha256").write_text(
+            json.dumps({"release": "v1", "sha256": sha256})
+        )
+        return str(binary)
+
+    @staticmethod
+    def _completed(returncode: int = 0) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=["agent_runner", "--help"],
+            returncode=returncode,
+            stdout=f"Usage: agent [OPTIONS]\n  {PASSWORD_STDIN_ARG}\n".encode(),
+        )
+
+    def test_second_call_does_not_spawn(self, tmp_path: Path) -> None:
+        """The same binary's --help runs once, for the start probe and any other caller."""
+        binary = self._binary(tmp_path)
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=False)
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            return_value=self._completed(),
+        ) as mock_run:
+            assert runner._agent_runner_supports_password_stdin(binary=binary)
+            result = agent_runner_help(binary=binary, timeout=1)
+        assert mock_run.call_count == 1
+        assert PASSWORD_STDIN_ARG.encode() in result.stdout
+
+    def test_new_hash_probes_again(self, tmp_path: Path) -> None:
+        """A new release of the binary, with a new sidecar hash, runs --help again."""
+        binary = self._binary(tmp_path, "sha256:v1")
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            return_value=self._completed(),
+        ) as mock_run:
+            agent_runner_help(binary=binary, timeout=1)
+            self._binary(tmp_path, "sha256:v2")
+            agent_runner_help(binary=binary, timeout=1)
+        assert mock_run.call_count == 2
+
+    @pytest.mark.parametrize(
+        "outcome",
+        [
+            subprocess.CompletedProcess(args=[], returncode=1, stdout=b"crash"),
+            subprocess.TimeoutExpired(cmd="agent_runner --help", timeout=1),
+        ],
+        ids=["crash", "timeout"],
+    )
+    def test_failure_is_not_cached(self, tmp_path: Path, outcome: Any) -> None:
+        """A crashing or timed-out --help is run again on the next call."""
+        binary = self._binary(tmp_path)
+        effects = [outcome, self._completed()]
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            side_effect=effects,
+        ) as mock_run:
+            try:
+                agent_runner_help(binary=binary, timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+            assert agent_runner_help(binary=binary, timeout=1).returncode == 0
+        assert mock_run.call_count == 2
+
+    def test_unhashable_binary_is_not_cached(self) -> None:
+        """A binary that cannot be hashed still gets probed, every time."""
+        with patch(
+            "operate.services.deployment_runner.subprocess.run",
+            return_value=self._completed(),
+        ) as mock_run:
+            agent_runner_help(binary="/missing/agent_runner", timeout=1)
+            agent_runner_help(binary="/missing/agent_runner", timeout=1)
+        assert mock_run.call_count == 2
 
 
 # ---------------------------------------------------------------------------
