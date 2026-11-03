@@ -37,21 +37,29 @@ import pytest
 from aiohttp import web
 from starlette.testclient import TestClient
 
-from operate import __version__, cli
+from operate import __version__, cli, constants
 from operate.cli import (
     OperateApp,
     create_app,
     main,
     service_not_found_error,
 )
-from operate.constants import OPERATE, SERVICES_DIR, ZERO_ADDRESS
+from operate.constants import DEPLOYMENT_DIR, OPERATE, SERVICES_DIR, ZERO_ADDRESS
 from operate.exceptions import ServicePackageDownloadError
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, PrestartCheckStatus
+from operate.services.deployment_runner import (
+    BaseDeploymentRunner,
+    DeploymentManager,
+    kill_process,
+)
 from operate.services.funding_manager import FundingInProgressError
+from operate.services.service import Deployment
 from operate.wallet.master import CreateSafeStatus, InsufficientFundsException
 from operate.wallet.wallet_recovery_manager import WalletRecoveryError
+
+from tests.test_deployment_runner_unit2 import _free_tcp_port, _spawn_listener
 
 # Test-only password fixtures. These are not credentials; they are arbitrary
 # strings used to exercise password-validation code paths in mocked endpoints.
@@ -1906,6 +1914,50 @@ class TestServiceRoutes:
             assert body["error_code"] == "INSUFFICIENT_SIGNER_GAS"
             assert body["chain"] == "gnosis"
             assert "prefill_amount_wei" in body
+
+    def test_deploy_service_port_conflict_is_reported(self, tmp_path: Path) -> None:
+        """A port conflict fails the request, through the real start path."""
+        service_dir = tmp_path / "services" / "sc-this"
+        (service_dir / DEPLOYMENT_DIR).mkdir(parents=True)
+        deployment = Deployment.new(service_dir)
+        deployment.status = DeploymentStatus.BUILT
+        deployment.store()
+
+        port = _free_tcp_port()
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.load.return_value.json = {}
+        m.service_manager.return_value.deploy_service_locally.side_effect = (
+            lambda **_: deployment.start(password=_TEST_PW_TESTPASS123, is_aea=True)
+        )
+        holder = _spawn_listener(tmp_path, port)
+        stack, app, _, _ = _open_app(m)
+        try:
+            with (
+                stack,
+                patch.object(constants, "AGENT_HTTP_PORT", port),
+                patch.object(constants, "TENDERMINT_COM_PORT", _free_tcp_port()),
+                # The failed start cleans up, which asks tendermint to exit
+                patch.object(
+                    BaseDeploymentRunner,
+                    "TM_CONTROL_URL",
+                    f"http://127.0.0.1:{_free_tcp_port()}",
+                ),
+                patch.object(DeploymentManager, "check_ipfs_connection_works"),
+            ):
+                with TestClient(app) as c:
+                    resp = c.post("/api/v2/service/svc1", json={})
+                start_for_service = cli.HealthChecker.return_value.start_for_service
+
+            assert resp.status_code == HTTPStatus.CONFLICT
+            assert f"Port {port} is in use" in resp.json()["error"]
+            assert f"PID {holder.pid}" in resp.json()["error"]
+            assert deployment.status == DeploymentStatus.BUILT
+            start_for_service.assert_not_called()
+            assert holder.poll() is None
+        finally:
+            kill_process(holder.pid)
+            holder.wait(timeout=10)
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""

@@ -2436,6 +2436,14 @@ Deploy and run a service.
 }
 ```
 
+**Response (Fixed port held by another program - 409):**
+
+```json
+{
+  "error": "Port 8716 is in use by another program (PID 1234 python3.13), so the deployment cannot start. Stop that program and try again."
+}
+```
+
 **Response (Not logged in - 401):**
 
 ```json

@@ -42,6 +42,7 @@ from operate.services.deployment_runner import (
     PortInUseError,
     PyInstallerHostDeploymentRunnerLinux,
     PyInstallerHostDeploymentRunnerMac,
+    _is_alive,
     _kill_process,
     agent_runner_help,
     get_port_listener_pids,
@@ -870,6 +871,88 @@ class TestLeftoverPortHolder:
             kill_process(program.pid)
             program.wait(timeout=10)
 
+    def test_stop_kills_own_services_leftover(self, tmp_path: Path) -> None:
+        """Stopping a service stops its own leftover holding the port."""
+        own_dir = _make_deployment_dir(tmp_path / "services", "sc-this")
+        runner = ConcreteDeploymentRunner(own_dir, is_aea=True)
+        port = _free_tcp_port()
+        leftover = _spawn_listener(own_dir, port)
+        try:
+            (pid,) = get_port_listener_pids(port)
+            with patch.object(
+                ConcreteDeploymentRunner,
+                "_tendermint_bin",
+                new_callable=PropertyMock,
+                return_value=psutil.Process(pid).exe(),
+            ):
+                runner._free_port(port, starting=False)
+            leftover.wait(timeout=10)
+            assert not is_port_in_use(port)
+        finally:
+            kill_process(leftover.pid)
+            leftover.wait(timeout=10)
+
+    def test_failed_kill_names_the_process_on_start(self, tmp_path: Path) -> None:
+        """A leftover that survives the kill is named in the start failure."""
+        own_dir = _make_deployment_dir(tmp_path / "services", "sc-this")
+        runner = ConcreteDeploymentRunner(own_dir, is_aea=True)
+        runner.logger = MagicMock()
+        port = _free_tcp_port()
+        leftover = _spawn_listener(own_dir, port)
+        try:
+            (pid,) = get_port_listener_pids(port)
+            with (
+                patch.object(
+                    ConcreteDeploymentRunner,
+                    "_tendermint_bin",
+                    new_callable=PropertyMock,
+                    return_value=psutil.Process(pid).exe(),
+                ),
+                patch(
+                    "operate.services.deployment_runner.psutil.Process.kill",
+                    side_effect=psutil.AccessDenied(),
+                ),
+                pytest.raises(
+                    PortInUseError, match=f"PID {pid} .*which could not be stopped"
+                ),
+            ):
+                runner._free_port(port, starting=True)
+            assert str(pid) in runner.logger.error.call_args.args[0]
+        finally:
+            kill_process(leftover.pid)
+            leftover.wait(timeout=10)
+
+    def test_failed_kill_on_stop_is_logged_as_a_failure(self, tmp_path: Path) -> None:
+        """A surviving leftover on stop is an error, not someone else's process."""
+        own_dir = _make_deployment_dir(tmp_path / "services", "sc-this")
+        runner = ConcreteDeploymentRunner(own_dir, is_aea=True)
+        runner.logger = MagicMock()
+        port = _free_tcp_port()
+        leftover = _spawn_listener(own_dir, port)
+        try:
+            (pid,) = get_port_listener_pids(port)
+            with (
+                patch.object(
+                    ConcreteDeploymentRunner,
+                    "_tendermint_bin",
+                    new_callable=PropertyMock,
+                    return_value=psutil.Process(pid).exe(),
+                ),
+                patch(
+                    "operate.services.deployment_runner.psutil.Process.kill",
+                    side_effect=psutil.AccessDenied(),
+                ),
+            ):
+                runner._free_port(port, starting=False)
+            assert str(pid) in runner.logger.error.call_args.args[0]
+            assert not any(
+                "not this deployment" in call.args[0]
+                for call in runner.logger.warning.call_args_list
+            )
+        finally:
+            kill_process(leftover.pid)
+            leftover.wait(timeout=10)
+
     def test_stop_spares_other_services_process(self, tmp_path: Path) -> None:
         """Stopping a service leaves another service's deployment running."""
         services_dir = tmp_path / "services"
@@ -898,6 +981,20 @@ class TestLeftoverPortHolder:
 
 class TestPortHelpers:
     """Tests for is_port_in_use and get_port_listener_pids."""
+
+    def test_is_alive_treats_a_vanished_process_as_gone(self) -> None:
+        """A process that disappears during the check is not alive."""
+        process = MagicMock()
+        process.is_running.return_value = True
+        process.status.side_effect = psutil.NoSuchProcess(1)
+        assert _is_alive(process) is False
+
+    def test_is_alive_treats_a_zombie_as_gone(self) -> None:
+        """A killed child its parent has not reaped no longer runs."""
+        process = MagicMock()
+        process.is_running.return_value = True
+        process.status.return_value = psutil.STATUS_ZOMBIE
+        assert _is_alive(process) is False
 
     @staticmethod
     def _conn(port: int, pid: Any, status: str = psutil.CONN_LISTEN) -> Any:

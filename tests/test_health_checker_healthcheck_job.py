@@ -17,6 +17,7 @@ import aiohttp
 import pytest
 
 from operate.operate_types import StakingReconcileOutcome
+from operate.services.deployment_runner import PortInUseError
 from operate.services.health_checker import HealthChecker
 
 # Save the REAL asyncio.sleep before any test patches it so nested-function
@@ -1105,6 +1106,25 @@ class TestRestartStakingReconciliation:
             health_checker.get_liveness("test-service")["restarts_since_last_healthy"]
             == 0
         )
+
+    @pytest.mark.asyncio
+    async def test_port_conflict_stops_the_restart_loop(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Retrying cannot free a port another program holds, so the job ends."""
+        sm = health_checker._service_manager
+        sm.reconcile_staking_for_restart.return_value = (
+            StakingReconcileOutcome.NOTHING_TO_DO
+        )
+        sm.deploy_service_locally.side_effect = PortInUseError("Port 1 is in use.")
+
+        with patch.object(HealthChecker, "FAILFAST_NUM", 2):
+            exc = await self._run_until_restart(health_checker)
+
+        assert exc is None
+        sm.deploy_service_locally.assert_called_once()
+        mock_error = t.cast(MagicMock, health_checker.logger.error)
+        assert "Port 1 is in use." in mock_error.call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_locked_eviction_stops_the_service_with_a_reason(

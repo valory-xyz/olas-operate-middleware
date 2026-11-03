@@ -29,6 +29,7 @@ from operate.services.deployment_runner import (
     AbstractDeploymentRunner,
     DeploymentManager,
     HostPythonHostDeploymentRunner,
+    PortInUseError,
     PyInstallerHostDeploymentRunnerLinux,
     PyInstallerHostDeploymentRunnerMac,
     PyInstallerHostDeploymentRunnerWindows,
@@ -335,6 +336,21 @@ class TestDeploymentManagerRunDeployment:
             manager.run_deployment(build_dir=tmp_path, password="pass")  # nosec B106
 
         assert manager._states[tmp_path] == States.ERROR
+        mock_stop.assert_called_once_with(build_dir=tmp_path, force=True)
+
+    def test_port_conflict_is_raised_after_cleanup(self, tmp_path: Path) -> None:
+        """A port conflict reaches the caller once the failed start is cleaned up."""
+        manager = _make_manager()
+        mock_runner = MagicMock()
+        mock_runner.start.side_effect = PortInUseError("Port 1 is in use.")
+        with (
+            patch.object(manager, "_get_deployment_runner", return_value=mock_runner),
+            patch.object(manager, "check_ipfs_connection_works"),
+            patch.object(manager, "stop_deployment") as mock_stop,
+            pytest.raises(PortInUseError, match="Port 1 is in use."),
+        ):
+            manager.run_deployment(build_dir=tmp_path, password="pass")  # nosec B106
+
         mock_stop.assert_called_once_with(build_dir=tmp_path, force=True)
 
     def test_stops_if_is_stopping_set_during_run(self, tmp_path: Path) -> None:
