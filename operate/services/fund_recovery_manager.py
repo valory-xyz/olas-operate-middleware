@@ -325,7 +325,6 @@ def _query_service_ids(url: str, query: str) -> t.List[str]:
 def _fetch_services_from_subgraph(url: str, eoa_address: str) -> t.List[int]:
     """Fetch service IDs created by the Master EOA, in the endpoint's GraphQL dialect."""
     eoa = eoa_address.lower()
-    # graph-node and SQD squids use different relation-filter syntax
     if url in SQUID_URLS:
         # Squids have no default row limit, so one query returns every service.
         query = f'{{ services(where: {{creator: {{id_eq: "{eoa}"}}}}) {{ id }} }}'
