@@ -913,7 +913,8 @@ class TestLeftoverPortHolder:
                     side_effect=psutil.AccessDenied(),
                 ),
                 pytest.raises(
-                    PortInUseError, match=f"PID {pid} .*which could not be stopped"
+                    PortInUseError,
+                    match=f"PID {pid} .*a leftover deployment that could not be stopped",
                 ),
             ):
                 runner._free_port(port, starting=True)

@@ -731,7 +731,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     f"({name}); it still holds port {port}"
                 )
                 if starting:
-                    holders.append(f"PID {pid} {name}, which could not be stopped")
+                    holders.append(
+                        f"PID {pid} {name}, a leftover deployment that could not "
+                        f"be stopped"
+                    )
 
         if not starting:
             if holders:
