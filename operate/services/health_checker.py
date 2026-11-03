@@ -53,6 +53,7 @@ class AgentLivenessReason(str, enum.Enum):
     AGENT_UNRESPONSIVE = "agent_unresponsive"
     EVICTED_CANNOT_RESTAKE = "evicted_cannot_restake"
     NOT_MONITORED = "not_monitored"
+    PORT_IN_USE = "port_in_use"
     STOPPED_BY_FAILFAST = "stopped_by_failfast"
 
 
@@ -626,6 +627,10 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         self.logger.error(
                             f"[HEALTH_CHECKER] {service_config_id} cannot restart: "
                             f"{exc} Leaving the service stopped."
+                        )
+                        self.record_reason(
+                            service_config_id=service_config_id,
+                            reason=AgentLivenessReason.PORT_IN_USE,
                         )
                         return
                     except Exception as exc:  # pylint: disable=broad-except

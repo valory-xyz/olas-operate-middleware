@@ -1125,6 +1125,9 @@ class TestRestartStakingReconciliation:
         sm.deploy_service_locally.assert_called_once()
         mock_error = t.cast(MagicMock, health_checker.logger.error)
         assert "Port 1 is in use." in mock_error.call_args.args[0]
+        liveness = health_checker.get_liveness("test-service")
+        assert liveness["is_alive"] is False
+        assert liveness["reason"] == "port_in_use"
 
     @pytest.mark.asyncio
     async def test_locked_eviction_stops_the_service_with_a_reason(
