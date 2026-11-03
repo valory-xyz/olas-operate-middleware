@@ -187,9 +187,10 @@ def _is_alive(process: psutil.Process) -> bool:
 
 
 class PortInUseError(RuntimeError):
-    """A fixed port is held by a program that is not a leftover deployment.
+    """A fixed port is held by a program the start cannot stop.
 
-    Retrying cannot help, since freeing the port needs the user to act.
+    The holder is either not a leftover deployment or a leftover that survived
+    the kill. Retrying cannot help, since freeing the port needs the user to act.
     """
 
 
