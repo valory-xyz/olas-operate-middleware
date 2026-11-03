@@ -628,6 +628,7 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                             f"[HEALTH_CHECKER] {service_config_id} cannot restart: "
                             f"{exc} Leaving the service stopped."
                         )
+                        self.record_restart(service_config_id=service_config_id)
                         self.record_reason(
                             service_config_id=service_config_id,
                             reason=AgentLivenessReason.PORT_IN_USE,

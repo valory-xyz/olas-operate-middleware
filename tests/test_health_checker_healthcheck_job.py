@@ -1128,6 +1128,7 @@ class TestRestartStakingReconciliation:
         liveness = health_checker.get_liveness("test-service")
         assert liveness["is_alive"] is False
         assert liveness["reason"] == "port_in_use"
+        assert liveness["restarts_since_last_healthy"] == 1
 
     @pytest.mark.asyncio
     async def test_locked_eviction_stops_the_service_with_a_reason(
