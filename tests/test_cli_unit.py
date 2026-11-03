@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterator, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import psutil
 import pytest
 from aiohttp import web
 from starlette.testclient import TestClient
@@ -1950,8 +1951,14 @@ class TestServiceRoutes:
                 start_for_service = cli.HealthChecker.return_value.start_for_service
 
             assert resp.status_code == HTTPStatus.CONFLICT
-            assert f"Port {port} is in use" in resp.json()["error"]
-            assert f"PID {holder.pid}" in resp.json()["error"]
+            error = resp.json()["error"]
+            assert f"Port {port} is in use" in error
+            # A Windows venv python.exe is a launcher: its child holds the port
+            holder_pids = [
+                holder.pid,
+                *(child.pid for child in psutil.Process(holder.pid).children()),
+            ]
+            assert any(f"PID {pid} " in error for pid in holder_pids)
             assert deployment.status == DeploymentStatus.BUILT
             start_for_service.assert_not_called()
             assert holder.poll() is None
