@@ -40,6 +40,7 @@ from operate.constants import (
     HEALTH_CHECK_URL,
 )
 from operate.operate_types import StakingReconcileOutcome
+from operate.services.deployment_runner import PortInUseError
 from operate.services.manage import ServiceManager  # type: ignore
 from operate.utils.pid_file import read_raw_pid, validate_pid
 
@@ -52,6 +53,7 @@ class AgentLivenessReason(str, enum.Enum):
     AGENT_UNRESPONSIVE = "agent_unresponsive"
     EVICTED_CANNOT_RESTAKE = "evicted_cannot_restake"
     NOT_MONITORED = "not_monitored"
+    PORT_IN_USE = "port_in_use"
     STOPPED_BY_FAILFAST = "stopped_by_failfast"
 
 
@@ -619,6 +621,19 @@ class HealthChecker:  # pylint: disable=too-many-instance-attributes
                         elif outcome == StakingReconcileOutcome.RECONCILED:
                             # The eviction that caused these restarts is cleared, so they were not futile.
                             failfast_records = []
+                    except PortInUseError as exc:
+                        # The failed start already stopped the service, and retrying
+                        # cannot free a port another program holds.
+                        self.logger.error(
+                            f"[HEALTH_CHECKER] {service_config_id} cannot restart: "
+                            f"{exc} Leaving the service stopped."
+                        )
+                        self.record_restart(service_config_id=service_config_id)
+                        self.record_reason(
+                            service_config_id=service_config_id,
+                            reason=AgentLivenessReason.PORT_IN_USE,
+                        )
+                        return
                     except Exception as exc:  # pylint: disable=broad-except
                         restart_failed = True
                         last_restart_exc = exc

@@ -175,10 +175,22 @@ def kill_process(pid: int) -> None:
     _kill_process(pid)
 
 
-class PortInUseError(RuntimeError):
-    """A fixed port is held by a program that is not a leftover deployment.
+def _is_alive(process: psutil.Process) -> bool:
+    """Check whether a process is still running; a zombie has already exited."""
+    try:
+        return process.is_running() and process.status() not in (
+            psutil.STATUS_DEAD,
+            psutil.STATUS_ZOMBIE,
+        )
+    except psutil.Error:
+        return False
 
-    Retrying cannot help, since freeing the port needs the user to act.
+
+class PortInUseError(RuntimeError):
+    """A fixed port is held by a program the start cannot stop.
+
+    The holder is either not a leftover deployment or a leftover that survived
+    the kill. Retrying cannot help, since freeing the port needs the user to act.
     """
 
 
@@ -713,6 +725,16 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 f"from PID {root.pid}"
             )
             kill_process(root.pid)
+            if _is_alive(process):
+                self.logger.error(
+                    f"Could not stop leftover deployment process PID {pid} "
+                    f"({name}); it still holds port {port}"
+                )
+                if starting:
+                    holders.append(
+                        f"PID {pid} {name}, a leftover deployment that could not "
+                        f"be stopped"
+                    )
 
         if not starting:
             if holders:
@@ -1407,12 +1429,14 @@ class DeploymentManager:
             deployment_runner.start(password=password)
             self.logger.info(f"Started deployment {build_dir}")
             self._states[build_dir] = States.STARTED
-        except Exception:  # pylint: disable=broad-except
+        except Exception as e:  # pylint: disable=broad-except
             self.logger.exception(
                 f"Starting deployment failed {build_dir}. so try to stop"
             )
             self._states[build_dir] = States.ERROR
             self.stop_deployment(build_dir=build_dir, force=True)
+            if isinstance(e, PortInUseError):
+                raise
 
         if self._is_stopping:
             self.logger.warning(
