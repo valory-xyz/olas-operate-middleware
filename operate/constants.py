@@ -66,10 +66,11 @@ AGENT_PID_FILE = "agent.pid"
 AGENT_PROCESS_NAMES = ["python", "agent", "aea"]
 
 # Previous agent runs kept per service beside the current run's
-# `deployment/agent/log.txt`. Two, not one: the health checker can force several
-# restarts inside a single Auto-Run window, and each restart used to overwrite the
-# only retained slot -- so the run that actually failed was the one lost.
-AGENT_LOG_RETAINED_RUNS = 2
+# `deployment/agent/log.txt`. The health checker can restart an agent every few
+# minutes, and with only two slots an 11-minute restart loop left about 30 minutes
+# of history. Twenty runs of that loop fill the byte cap below, so the cap rather
+# than the run count bounds the history.
+AGENT_LOG_RETAINED_RUNS = 20
 # Cap on the retained runs per service. At the ~90 KB/min a trading agent writes,
 # 20 MB spans 3-4 hours, which covers a ~70 min Auto-Run slot and the runs either
 # side of it. These files sit in the operate home directory on the user's disk, so
