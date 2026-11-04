@@ -104,7 +104,10 @@ from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
-from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.deployment_runner import (
+    PortInUseError,
+    stop_deployment_manager,
+)
 from operate.services.fund_recovery_manager import FundRecoveryManager
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
@@ -1788,6 +1791,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     **e.to_error_fields(),
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except PortInUseError as e:
+            logger.error(f"Deploy failed: {e}")
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
