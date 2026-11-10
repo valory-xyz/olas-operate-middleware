@@ -1081,6 +1081,7 @@ class TestClaimOnChainFromSafe:
         staking_contract: t.Optional[str] = _STAKING,
         claimable: bool = True,
         status: int = 1,
+        sftxb: t.Optional[MagicMock] = None,
     ) -> t.Tuple[int, MagicMock]:
         """Run claim_on_chain_from_safe with a mocked claim receipt."""
         manager = _make_manager(tmp_path)
@@ -1097,10 +1098,11 @@ class TestClaimOnChainFromSafe:
         receipt = MagicMock()
         receipt.status = status
         receipt.__getitem__.side_effect = {"logs": logs}.__getitem__
-        sftxb = MagicMock()
+        if sftxb is None:
+            sftxb = MagicMock()
+            sftxb.get_staking_params.return_value = {"staking_token": _REWARD_ERC20}
         sftxb.staking_rewards_claimable.return_value = claimable
         sftxb.new_tx.return_value.add.return_value.settle.return_value = receipt
-        sftxb.get_staking_params.return_value = {"staking_token": _REWARD_ERC20}
 
         with (
             patch.object(manager, "load", return_value=service),
@@ -1120,6 +1122,18 @@ class TestClaimOnChainFromSafe:
                 service_config_id="sc-test-id", chain=_CHAIN
             )
         return amount, sweep
+
+    def test_reward_token_read_failure_stops_before_the_claim_tx(
+        self, tmp_path: Path
+    ) -> None:
+        """The reward token is read before claiming, so a failed read sends no claim."""
+        sftxb = MagicMock()
+        sftxb.get_staking_params.side_effect = RuntimeError("rpc down")
+
+        with pytest.raises(RuntimeError, match="rpc down"):
+            self._run(tmp_path, logs=[], sftxb=sftxb)
+
+        sftxb.new_tx.return_value.add.return_value.settle.assert_not_called()
 
     def test_single_transfer_receipt_returns_its_amount(self, tmp_path: Path) -> None:
         """A claim paying one receiver returns that transfer's amount."""
