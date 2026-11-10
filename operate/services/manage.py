@@ -149,6 +149,25 @@ def _sum_erc20_transfers_from(
     return total
 
 
+def _require_recovery_module_for_reuse(
+    reuse_multisig: bool,
+    is_recovery_module_enabled: bool,
+    enable_error: t.Optional[RecoveryModuleNotEnabledError],
+    service_safe_address: str,
+    chain: str,
+) -> None:
+    """Stop a deploy that would reuse an Agent Safe still lacking the recovery module."""
+    if not reuse_multisig or is_recovery_module_enabled:
+        return
+    if enable_error is not None:
+        raise enable_error
+    raise RecoveryModuleNotEnabledError(
+        f"The Agent Safe {service_safe_address} on {chain} does not have the "
+        "recovery module enabled, so it cannot be reused for this deployment. Try "
+        "again; if it keeps failing, contact Pearl support with this message."
+    )
+
+
 class ServiceManager:
     """Service manager."""
 
@@ -487,7 +506,9 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-        self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
+        recovery_module_error = self._try_enable_recovery_module(
+            service_config_id=service_config_id, chain=chain
+        )
 
         current_agent_id = None
         on_chain_state = OnChainState.NON_EXISTENT
@@ -960,6 +981,13 @@ class ServiceManager:
                     ).get("enabled")
                 )
             self.logger.info(f"{reuse_multisig=}")
+            _require_recovery_module_for_reuse(
+                reuse_multisig=reuse_multisig,
+                is_recovery_module_enabled=is_recovery_module_enabled,
+                enable_error=recovery_module_error,
+                service_safe_address=service_safe_address,
+                chain=chain,
+            )
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -1181,6 +1209,13 @@ class ServiceManager:
 
                 self.logger.info(f"{reuse_multisig=}")
                 self.logger.info(f"{is_recovery_module_enabled=}")
+                _require_recovery_module_for_reuse(
+                    reuse_multisig=reuse_multisig,
+                    is_recovery_module_enabled=is_recovery_module_enabled,
+                    enable_error=recovery_module_error,
+                    service_safe_address=service_safe_address,
+                    chain=chain,
+                )
 
                 service_public_id = PublicId.from_str(service.service_public_id())
                 use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -1652,7 +1687,8 @@ class ServiceManager:
                 # The swap does not need the module. Once the Master Safe owns the
                 # Agent Safe, the next deploy enables it through the Master Safe.
                 self.logger.warning(
-                    f"[SERVICE MANAGER] {e} Continuing with the Safe owner swap."
+                    f"[SERVICE MANAGER] {e} Continuing with the Safe owner swap.",
+                    exc_info=True,
                 )
             self.logger.info("[SERVICE MANAGER] Swapping Safe owners")
             owner_crypto = self.keys_manager.get_crypto_instance(
@@ -1730,6 +1766,20 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
+    def _try_enable_recovery_module(
+        self, service_config_id: str, chain: str
+    ) -> t.Optional[RecoveryModuleNotEnabledError]:
+        """Enable the recovery module if possible, returning the error instead of raising it."""
+        try:
+            self._enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
+        except RecoveryModuleNotEnabledError as e:
+            # Only a reuse deploy needs the module, so it decides whether to stop.
+            self.logger.warning(f"[SERVICE MANAGER] {e}", exc_info=True)
+            return e
+        return None
+
     def _enable_recovery_module(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
@@ -1737,7 +1787,7 @@ class ServiceManager:
     ) -> None:
         """Enable the recovery module on the service Safe, or raise RecoveryModuleNotEnabledError.
 
-        A Master Signer gas shortfall on the Master Safe's transaction is raised as
+        A Master EOA gas shortfall on the Master Safe's transaction is raised as
         InsufficientFundsException instead, so callers keep its funding details.
         """
         self.logger.info(f"_enable_recovery_module {chain=}")
@@ -1795,30 +1845,30 @@ class ServiceManager:
                 raise RecoveryModuleNotEnabledError(
                     f"Could not enable the recovery module on the Agent Safe "
                     f"{service_safe_address} on {chain}, so the agent cannot use "
-                    f"it: {e}. Make sure the Agent Signer {agent_address} holds "
-                    "enough gas on this chain, then try again."
+                    f"it. Make sure the Agent EOA {agent_address} holds enough gas "
+                    "on this chain, then try again."
                 ) from e
             self.logger.info(
                 "(Agent) Recovery module enabled successfully in service Safe."
             )
         elif service_safe_owners == [safe]:
             self.logger.info("(Master Safe) Enabling recovery module in service Safe.")
-            tx = sftxb.new_tx()
-            for message in sftxb.get_safe_b_exec_messages(
-                safe_b_address=service_safe_address,
-                txs=[enable_module_data],
-            ):
-                tx.add(message)
             try:
+                tx = sftxb.new_tx()
+                for message in sftxb.get_safe_b_exec_messages(
+                    safe_b_address=service_safe_address,
+                    txs=[enable_module_data],
+                ):
+                    tx.add(message)
                 tx.settle()
             except InsufficientFundsException:
                 raise
             except Exception as e:  # pylint: disable=broad-except
                 raise RecoveryModuleNotEnabledError(
                     f"Could not enable the recovery module on the Agent Safe "
-                    f"{service_safe_address} on {chain} through the Pearl Safe "
-                    f"{safe}, so the agent cannot use it: {e}. Try again; if it "
-                    "keeps failing, contact Pearl support with this message."
+                    f"{service_safe_address} on {chain} through the Master Safe "
+                    f"{safe}, so the agent cannot use it. Try again; if it keeps "
+                    "failing, contact Pearl support with this message."
                 ) from e
             self.logger.info(
                 "(Master Safe) Recovery module enabled successfully in service Safe."
@@ -1827,7 +1877,7 @@ class ServiceManager:
             raise RecoveryModuleNotEnabledError(
                 f"Cannot enable the recovery module on the Agent Safe "
                 f"{service_safe_address} on {chain}: its owners {service_safe_owners} "
-                f"are neither the Agent Signer {agent_address} nor the Pearl Safe "
+                f"are neither the Agent EOA {agent_address} nor the Master Safe "
                 f"{safe}, so the agent cannot use it. Contact Pearl support with "
                 "this message."
             )
@@ -2335,12 +2385,6 @@ class ServiceManager:
             )
             .settle()
         )
-
-        if receipt.status != 1:
-            self.logger.error(
-                f"Failed to claim staking rewards. Tx hash: {receipt.tx_hash}"
-            )
-            return 0
 
         # A claim can pay several receivers, so every reward transfer counts.
         amount_claimed = _sum_erc20_transfers_from(

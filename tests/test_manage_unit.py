@@ -41,7 +41,10 @@ from operate.operate_types import (
     StakingEvictionState,
     StakingReconcileOutcome,
 )
-from operate.services.manage import ServiceManager
+from operate.services.manage import (
+    ServiceManager,
+    _require_recovery_module_for_reuse,
+)
 from operate.services.protocol import StakingState
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
@@ -744,6 +747,7 @@ class TestEnableRecoveryModule:
         multisig: str = _SERVICE_SAFE,
         agent_settle_error: t.Optional[Exception] = None,
         master_settle_error: t.Optional[Exception] = None,
+        exec_messages_error: t.Optional[Exception] = None,
     ) -> t.Dict[str, t.Any]:
         """Run _enable_recovery_module against mocked chain state."""
         manager = _make_manager(tmp_path)
@@ -771,6 +775,8 @@ class TestEnableRecoveryModule:
             agent_tx.settle.side_effect = agent_settle_error
         if master_settle_error is not None:
             sftxb.new_tx.return_value.settle.side_effect = master_settle_error
+        if exec_messages_error is not None:
+            sftxb.get_safe_b_exec_messages.side_effect = exec_messages_error
 
         error: t.Optional[Exception] = None
         with (
@@ -846,14 +852,15 @@ class TestEnableRecoveryModule:
 
     def test_agent_owned_safe_raises_when_agent_tx_fails(self, tmp_path: Path) -> None:
         """A failed agent enableModule stops the flow with an actionable error."""
-        cause = RuntimeError("insufficient funds for gas")
+        cause = RuntimeError("403 for url https://rpc.example/secret-key")
         result = self._run(tmp_path, owners=[_AGENT], agent_settle_error=cause)
 
         error = result["error"]
         assert isinstance(error, RecoveryModuleNotEnabledError)
         assert error.__cause__ is cause
         assert _SERVICE_SAFE in str(error)
-        assert f"Make sure the Agent Signer {_AGENT} holds enough gas" in str(error)
+        assert f"Make sure the Agent EOA {_AGENT} holds enough gas" in str(error)
+        assert "secret-key" not in str(error)
 
     def test_master_safe_owned_safe_enables_module_through_nested_safe_tx(
         self, tmp_path: Path
@@ -881,13 +888,26 @@ class TestEnableRecoveryModule:
         self, tmp_path: Path
     ) -> None:
         """A reverted nested Safe tx surfaces as RecoveryModuleNotEnabledError."""
-        cause = ChainInteractionError("Safe transaction reverted on-chain.")
+        cause = ChainInteractionError("reverted via https://rpc.example/secret-key")
         result = self._run(tmp_path, owners=[_MASTER_SAFE], master_settle_error=cause)
 
         error = result["error"]
         assert isinstance(error, RecoveryModuleNotEnabledError)
         assert error.__cause__ is cause
         assert "contact Pearl support" in str(error)
+        assert "secret-key" not in str(error)
+
+    def test_master_safe_message_build_failure_raises_actionable_error(
+        self, tmp_path: Path
+    ) -> None:
+        """An RPC failure while building the nested tx (nonce read) is not left raw."""
+        cause = ConnectionError("read timed out")
+        result = self._run(tmp_path, owners=[_MASTER_SAFE], exec_messages_error=cause)
+
+        error = result["error"]
+        assert isinstance(error, RecoveryModuleNotEnabledError)
+        assert error.__cause__ is cause
+        result["sftxb"].new_tx.return_value.settle.assert_not_called()
 
     def test_master_safe_out_of_gas_keeps_insufficient_funds_error(
         self, tmp_path: Path
@@ -915,19 +935,25 @@ class TestEnableRecoveryModule:
         result["new_agent_tx"].assert_not_called()
         result["sftxb"].new_tx.assert_not_called()
 
-    def test_deploy_stops_before_building_any_tx_when_module_cannot_be_enabled(
+    def test_deploy_continues_when_module_cannot_be_enabled(
         self, tmp_path: Path
     ) -> None:
-        """A Safe reuse never reaches the same-address deploy with the module missing."""
+        """A failed enable does not stop a deploy that reuses no Safe, e.g. a restart."""
+
+        class _ReachedOnChainSync(Exception):
+            """Raised by the first call after the recovery-module step."""
+
         manager = _make_manager(tmp_path)
         service = _make_mock_service()
         chain_config = MagicMock()
+        chain_config.chain_data.token = 7
         chain_config.ledger_config = _make_ledger_config()
         service.chain_configs = {_CHAIN: chain_config}
         manager.wallet_manager.load.return_value.safes = {  # type: ignore
             Chain.GNOSIS: _MASTER_SAFE
         }
         sftxb = MagicMock()
+        sftxb.info.side_effect = _ReachedOnChainSync
 
         with (
             patch.object(manager, "load", return_value=service),
@@ -935,17 +961,80 @@ class TestEnableRecoveryModule:
             patch.object(
                 manager,
                 "_enable_recovery_module",
-                side_effect=RecoveryModuleNotEnabledError("inconsistent owners"),
+                side_effect=RecoveryModuleNotEnabledError("agent tx failed"),
             ),
             patch.dict("os.environ", {}),
-            pytest.raises(RecoveryModuleNotEnabledError),
+            pytest.raises(_ReachedOnChainSync),
         ):
             manager._deploy_service_onchain_from_safe(
                 service_config_id="sc-test-id", chain=_CHAIN
             )
 
-        sftxb.get_deploy_data_from_safe.assert_not_called()
-        sftxb.new_tx.assert_not_called()
+    def test_try_enable_returns_the_error_instead_of_raising(
+        self, tmp_path: Path
+    ) -> None:
+        """The deploy keeps the error so only a reuse deploy acts on it."""
+        manager = _make_manager(tmp_path)
+        error = RecoveryModuleNotEnabledError("agent tx failed")
+        with patch.object(manager, "_enable_recovery_module", side_effect=error):
+            assert (
+                manager._try_enable_recovery_module(
+                    service_config_id="sc-test-id", chain=_CHAIN
+                )
+                is error
+            )
+        with patch.object(manager, "_enable_recovery_module"):
+            assert (
+                manager._try_enable_recovery_module(
+                    service_config_id="sc-test-id", chain=_CHAIN
+                )
+                is None
+            )
+
+
+class TestRequireRecoveryModuleForReuse:
+    """Tests for _require_recovery_module_for_reuse()."""
+
+    @pytest.mark.parametrize(
+        ("reuse_multisig", "is_recovery_module_enabled"),
+        [(False, False), (False, True), (True, True)],
+        ids=["new-safe", "new-safe-enabled", "reuse-enabled"],
+    )
+    def test_allows_deploys_that_do_not_reuse_a_safe_without_the_module(
+        self, reuse_multisig: bool, is_recovery_module_enabled: bool
+    ) -> None:
+        """Only a reuse with the module missing is stopped."""
+        _require_recovery_module_for_reuse(
+            reuse_multisig=reuse_multisig,
+            is_recovery_module_enabled=is_recovery_module_enabled,
+            enable_error=RecoveryModuleNotEnabledError("agent tx failed"),
+            service_safe_address=_SERVICE_SAFE,
+            chain=_CHAIN,
+        )
+
+    def test_reuse_without_module_raises_the_enable_error(self) -> None:
+        """The enable step's actionable error is the one the user sees."""
+        error = RecoveryModuleNotEnabledError("agent tx failed")
+        with pytest.raises(RecoveryModuleNotEnabledError) as exc_info:
+            _require_recovery_module_for_reuse(
+                reuse_multisig=True,
+                is_recovery_module_enabled=False,
+                enable_error=error,
+                service_safe_address=_SERVICE_SAFE,
+                chain=_CHAIN,
+            )
+        assert exc_info.value is error
+
+    def test_reuse_without_module_and_no_enable_error_still_raises(self) -> None:
+        """A reuse never goes ahead with the module missing."""
+        with pytest.raises(RecoveryModuleNotEnabledError, match=_SERVICE_SAFE):
+            _require_recovery_module_for_reuse(
+                reuse_multisig=True,
+                is_recovery_module_enabled=False,
+                enable_error=None,
+                service_safe_address=_SERVICE_SAFE,
+                chain=_CHAIN,
+            )
 
 
 class TestGetCurrentStakingProgram:
@@ -1080,7 +1169,6 @@ class TestClaimOnChainFromSafe:
         token: int = 7,
         staking_contract: t.Optional[str] = _STAKING,
         claimable: bool = True,
-        status: int = 1,
         sftxb: t.Optional[MagicMock] = None,
     ) -> t.Tuple[int, MagicMock]:
         """Run claim_on_chain_from_safe with a mocked claim receipt."""
@@ -1096,7 +1184,7 @@ class TestClaimOnChainFromSafe:
         }
 
         receipt = MagicMock()
-        receipt.status = status
+        receipt.status = 1
         receipt.__getitem__.side_effect = {"logs": logs}.__getitem__
         if sftxb is None:
             sftxb = MagicMock()
@@ -1118,6 +1206,7 @@ class TestClaimOnChainFromSafe:
             ),
             patch("operate.services.manage.transfer_erc20_from_safe") as sweep,
         ):
+            self._last_sweep = sweep
             amount = manager.claim_on_chain_from_safe(
                 service_config_id="sc-test-id", chain=_CHAIN
             )
@@ -1218,20 +1307,32 @@ class TestClaimOnChainFromSafe:
             {"token": NON_EXISTENT_TOKEN},
             {"staking_contract": None},
             {"claimable": False},
-            {"status": 0},
         ],
-        ids=["not-minted", "no-staking-contract", "nothing-claimable", "reverted"],
+        ids=["not-minted", "no-staking-contract", "nothing-claimable"],
     )
     def test_returns_zero_without_a_successful_claim(
         self, tmp_path: Path, overrides: t.Dict[str, t.Any]
     ) -> None:
-        """Nothing claimable or a failed claim returns 0 and sweeps nothing."""
+        """Nothing to claim returns 0 and sweeps nothing."""
         logs = [_transfer_log(_REWARD_ERC20, _STAKING, _RECEIVER_A, 700)]
 
         amount, sweep = self._run(tmp_path, logs, agent_safe_balance=900, **overrides)
 
         assert amount == 0
         sweep.assert_not_called()
+
+    def test_reverted_claim_raises_and_sweeps_nothing(self, tmp_path: Path) -> None:
+        """settle() raises on a reverted claim, so nothing is swept."""
+        sftxb = MagicMock()
+        sftxb.get_staking_params.return_value = {"staking_token": _REWARD_ERC20}
+        sftxb.new_tx.return_value.add.return_value.settle.side_effect = (
+            ChainInteractionError("Safe transaction 0xabc reverted on-chain.")
+        )
+
+        with pytest.raises(ChainInteractionError):
+            self._run(tmp_path, logs=[], agent_safe_balance=900, sftxb=sftxb)
+
+        self._last_sweep.assert_not_called()
 
 
 class TestFundService:
@@ -2010,6 +2111,7 @@ class TestTerminateBatching:
                 "_enable_recovery_module",
                 side_effect=RecoveryModuleNotEnabledError("agent tx failed"),
             ),
+            patch.object(manager, "logger") as logger,
         ):
             manager.terminate_service_on_chain_from_safe(
                 service_config_id="sc-test", chain=_CHAIN
@@ -2017,6 +2119,7 @@ class TestTerminateBatching:
 
         sftxb.swap.assert_called_once()
         assert sftxb.swap.call_args.kwargs["new_owner_address"] == "0xMasterSafe"
+        assert logger.warning.call_args.kwargs["exc_info"] is True
 
 
 class TestStakeBatching:
