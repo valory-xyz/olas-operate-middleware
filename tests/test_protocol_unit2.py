@@ -25,6 +25,7 @@ import pytest
 from autonomy.chain.config import ChainType
 from autonomy.chain.exceptions import ChainInteractionError
 
+from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
 from operate.operate_types import Chain as OperateChain
 from operate.services.protocol import (
@@ -1355,13 +1356,18 @@ class TestGetSafeBExecMessages:
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
-        assert exec_message["to"] == self._SAFE_B
-        assert exec_message["data"] == "execTransaction"
+        assert exec_message == {
+            "to": self._SAFE_B,
+            "data": "execTransaction",
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
         exec_args = safe_b_instance.encode_abi.call_args_list[1].kwargs["args"]
         assert exec_args[0] == self._MULTISEND
         assert exec_args[1] == 5
         assert exec_args[2] == b"multisend-data"
         assert exec_args[3] == SafeOperation.DELEGATE_CALL.value
+        assert exec_args[4:9] == [0, 0, 0, ZERO_ADDRESS, ZERO_ADDRESS]
         assert hash_kwargs["operation"] == SafeOperation.DELEGATE_CALL.value
         assert exec_args[-1] == get_packed_signature_for_approved_hash(
             owners=(_MASTER_SAFE,)
