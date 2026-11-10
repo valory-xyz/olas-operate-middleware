@@ -1644,9 +1644,16 @@ class ServiceManager:
                         return
                     raise e
 
-            self._enable_recovery_module(
-                service_config_id=service_config_id, chain=chain
-            )
+            try:
+                self._enable_recovery_module(
+                    service_config_id=service_config_id, chain=chain
+                )
+            except RecoveryModuleNotEnabledError as e:
+                # The swap does not need the module. Once the Master Safe owns the
+                # Agent Safe, the next deploy enables it through the Master Safe.
+                self.logger.warning(
+                    f"[SERVICE MANAGER] {e} Continuing with the Safe owner swap."
+                )
             self.logger.info("[SERVICE MANAGER] Swapping Safe owners")
             owner_crypto = self.keys_manager.get_crypto_instance(
                 address=current_safe_owners[0]
@@ -1728,7 +1735,11 @@ class ServiceManager:
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable the recovery module on the service Safe, or raise RecoveryModuleNotEnabledError."""
+        """Enable the recovery module on the service Safe, or raise RecoveryModuleNotEnabledError.
+
+        A Master Signer gas shortfall on the Master Safe's transaction is raised as
+        InsufficientFundsException instead, so callers keep its funding details.
+        """
         self.logger.info(f"_enable_recovery_module {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]

@@ -1977,6 +1977,33 @@ class TestTerminateBatching:
 
         tab_mock.assert_called_once()
 
+    def test_swap_runs_when_recovery_module_cannot_be_enabled(
+        self, tmp_path: Path
+    ) -> None:
+        """The Safe owner swap still runs, so the next deploy can enable the module."""
+        manager, service, sftxb = self._setup_manager(tmp_path)
+        sftxb.get_service_safe_owners.return_value = ["0xAgentAddr"]
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(manager, "_get_current_staking_program", return_value=None),
+            patch.object(manager, "_terminate_and_unbond"),
+            patch("operate.services.manage.get_staking_contract", return_value=None),
+            patch("operate.services.manage.get_asset_balance", return_value=10**18),
+            patch.object(
+                manager,
+                "_enable_recovery_module",
+                side_effect=RecoveryModuleNotEnabledError("agent tx failed"),
+            ),
+        ):
+            manager.terminate_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN
+            )
+
+        sftxb.swap.assert_called_once()
+        assert sftxb.swap.call_args.kwargs["new_owner_address"] == "0xMasterSafe"
+
 
 class TestStakeBatching:
     """Tests for batched approve+stake in stake_service_on_chain_from_safe."""
