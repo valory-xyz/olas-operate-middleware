@@ -24,6 +24,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from hexbytes import HexBytes
+from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import (
@@ -1016,6 +1018,172 @@ class TestClaimAllOnChainFromSafe:
             manager.claim_all_on_chain_from_safe()
 
         mock_claim.assert_not_called()
+
+
+_STAKING = "0x5a4e000000000000000000000000000000000004"
+_REWARD_TOKEN = "0xce11e14225575945b8E6Dc0D4F2dD4C570f79d9f"
+_OTHER_TOKEN = "0x0e40000000000000000000000000000000000005"
+_RECEIVER_A = "0xa000000000000000000000000000000000000006"
+_RECEIVER_B = "0xb000000000000000000000000000000000000007"
+_TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)")
+
+
+def _topic(address: str) -> HexBytes:
+    """Left-pad an address to a 32-byte log topic."""
+    return HexBytes(bytes(12) + bytes.fromhex(address[2:]))
+
+
+def _transfer_log(
+    token: str, sender: str, receiver: str, amount: int
+) -> t.Dict[str, t.Any]:
+    """An ERC-20 Transfer log shaped like a web3 receipt entry."""
+    return {
+        "address": token,
+        "topics": [_TRANSFER_TOPIC, _topic(sender), _topic(receiver)],
+        "data": HexBytes(amount.to_bytes(32, "big")),
+    }
+
+
+class TestClaimOnChainFromSafe:
+    """Tests for claim_on_chain_from_safe()."""
+
+    def _run(
+        self,
+        tmp_path: Path,
+        logs: t.List[t.Dict[str, t.Any]],
+        agent_safe_balance: int = 0,
+        token: int = 7,
+        staking_contract: t.Optional[str] = _STAKING,
+        claimable: bool = True,
+        status: int = 1,
+    ) -> t.Tuple[int, MagicMock]:
+        """Run claim_on_chain_from_safe with a mocked claim receipt."""
+        manager = _make_manager(tmp_path)
+        service = _make_mock_service()
+        chain_config = MagicMock()
+        chain_config.chain_data.token = token
+        chain_config.chain_data.multisig = _SERVICE_SAFE
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+        manager.wallet_manager.load.return_value.safes = {  # type: ignore
+            Chain.GNOSIS: _MASTER_SAFE
+        }
+
+        receipt = MagicMock()
+        receipt.status = status
+        receipt.__getitem__.side_effect = {"logs": logs}.__getitem__
+        sftxb = MagicMock()
+        sftxb.staking_rewards_claimable.return_value = claimable
+        sftxb.new_tx.return_value.add.return_value.settle.return_value = receipt
+        sftxb.get_staking_params.return_value = {"staking_token": _REWARD_TOKEN}
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(manager, "_get_current_staking_program"),
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value=staking_contract,
+            ),
+            patch(
+                "operate.services.manage.get_asset_balance",
+                return_value=agent_safe_balance,
+            ),
+            patch("operate.services.manage.transfer_erc20_from_safe") as sweep,
+        ):
+            amount = manager.claim_on_chain_from_safe(
+                service_config_id="sc-test-id", chain=_CHAIN
+            )
+        return amount, sweep
+
+    def test_single_transfer_receipt_returns_its_amount(self, tmp_path: Path) -> None:
+        """A claim paying one receiver returns that transfer's amount."""
+        logs = [
+            {
+                "address": _MASTER_SAFE,
+                "topics": [HexBytes(b"\x01" * 32)],
+                "data": HexBytes(b""),
+            },
+            _transfer_log(_REWARD_TOKEN, _STAKING, _SERVICE_SAFE, 10**18),
+        ]
+
+        amount, _ = self._run(tmp_path, logs)
+
+        assert amount == 10**18
+
+    def test_multi_transfer_receipt_sums_reward_transfers_from_staking(
+        self, tmp_path: Path
+    ) -> None:
+        """Every reward-token transfer from the staking contract counts; nothing else does."""
+        logs = [
+            _transfer_log(_REWARD_TOKEN, _STAKING, _RECEIVER_A, 600),
+            _transfer_log(_REWARD_TOKEN, _MASTER_SAFE, _RECEIVER_A, 10_000),
+            _transfer_log(_OTHER_TOKEN, _STAKING, _RECEIVER_A, 20_000),
+            {
+                "address": _REWARD_TOKEN,
+                "topics": [
+                    _TRANSFER_TOPIC,
+                    _topic(_STAKING),
+                    _topic(_RECEIVER_A),
+                    HexBytes((5).to_bytes(32, "big")),
+                ],
+                "data": HexBytes(b""),
+            },
+            _transfer_log(_REWARD_TOKEN.lower(), _STAKING, _RECEIVER_B, 400),
+        ]
+
+        amount, _ = self._run(tmp_path, logs)
+
+        assert amount == 1_000
+
+    def test_receipt_without_reward_transfer_returns_zero(self, tmp_path: Path) -> None:
+        """No transfer from the staking contract means nothing was claimed."""
+        amount, _ = self._run(tmp_path, logs=[])
+
+        assert amount == 0
+
+    def test_agent_safe_balance_is_swept_to_master_safe(self, tmp_path: Path) -> None:
+        """Rewards paid into the Agent Safe are still moved to the Master Safe."""
+        logs = [_transfer_log(_REWARD_TOKEN, _STAKING, _SERVICE_SAFE, 700)]
+
+        amount, sweep = self._run(tmp_path, logs, agent_safe_balance=900)
+
+        assert amount == 700
+        sweep_kwargs = sweep.call_args.kwargs
+        assert sweep_kwargs["safe"] == _SERVICE_SAFE
+        assert sweep_kwargs["token"] == _REWARD_TOKEN
+        assert sweep_kwargs["to"] == _MASTER_SAFE
+        assert sweep_kwargs["amount"] == 900
+
+    def test_empty_agent_safe_is_not_swept(self, tmp_path: Path) -> None:
+        """At zero Agent Safe balance the sweep does nothing."""
+        logs = [_transfer_log(_REWARD_TOKEN, _STAKING, _RECEIVER_A, 700)]
+
+        amount, sweep = self._run(tmp_path, logs, agent_safe_balance=0)
+
+        assert amount == 700
+        sweep.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"token": NON_EXISTENT_TOKEN},
+            {"staking_contract": None},
+            {"claimable": False},
+            {"status": 0},
+        ],
+        ids=["not-minted", "no-staking-contract", "nothing-claimable", "reverted"],
+    )
+    def test_returns_zero_without_a_successful_claim(
+        self, tmp_path: Path, overrides: t.Dict[str, t.Any]
+    ) -> None:
+        """Nothing claimable or a failed claim returns 0 and sweeps nothing."""
+        logs = [_transfer_log(_REWARD_TOKEN, _STAKING, _RECEIVER_A, 700)]
+
+        amount, sweep = self._run(tmp_path, logs, agent_safe_balance=900, **overrides)
+
+        assert amount == 0
+        sweep.assert_not_called()
 
 
 class TestFundService:

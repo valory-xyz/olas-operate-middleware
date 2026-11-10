@@ -36,6 +36,7 @@ from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
+from web3 import Web3
 
 from operate.constants import (
     AGENT_LOG_DIR,
@@ -127,6 +128,27 @@ _STATES_REQUIRING_UNBOND = (
     OnChainState.DEPLOYED,
     OnChainState.TERMINATED_BONDED,
 )
+
+_ERC20_TRANSFER_TOPIC = bytes(Web3.keccak(text="Transfer(address,address,uint256)"))
+
+
+def _sum_erc20_transfers_from(
+    logs: t.Iterable[t.Mapping[str, t.Any]], token: str, sender: str
+) -> int:
+    """Sum the amounts of ``token`` that ``sender`` transfers in ``logs``."""
+    sender_bytes = bytes.fromhex(sender[2:])
+    total = 0
+    for log in logs:
+        topics = log["topics"]
+        # An ERC-721 Transfer shares the signature but indexes a fourth topic.
+        if (
+            log["address"].lower() == token.lower()
+            and len(topics) == 3
+            and bytes(topics[0]) == _ERC20_TRANSFER_TOPIC
+            and bytes(topics[1])[-20:] == sender_bytes
+        ):
+            total += int.from_bytes(bytes(log["data"]), "big")
+    return total
 
 
 class ServiceManager:
@@ -2233,12 +2255,12 @@ class ServiceManager:
                 chain=service.home_chain,
             )
 
-    def claim_on_chain_from_safe(  # pragma: no cover
+    def claim_on_chain_from_safe(
         self,
         service_config_id: str,
         chain: str,
     ) -> int:
-        """Claim rewards from staking and returns the claimed amount"""
+        """Claim rewards; return the total reward-token amount transferred by the staking contract."""
         self.logger.info("claim_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
@@ -2296,10 +2318,14 @@ class ServiceManager:
             )
             return 0
 
-        # transfer reward token balance from agents safe to master safe
-        # TODO: remove after staking contract directly starts sending the rewards to master safe
-        reward_token = receipt["logs"][0]["address"]
-        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
+        # A claim can pay several receivers, so every reward transfer counts.
+        reward_token = sftxb.get_staking_params(staking_contract=staking_contract)[
+            "staking_token"
+        ]
+        amount_claimed = _sum_erc20_transfers_from(
+            logs=receipt["logs"], token=reward_token, sender=staking_contract
+        )
+        # Services that have not migrated are still paid into the Agent Safe.
         amount_to_transfer = get_asset_balance(
             ledger_api=ledger_api,
             asset_address=reward_token,
