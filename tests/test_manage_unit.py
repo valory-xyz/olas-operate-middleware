@@ -1046,8 +1046,8 @@ class TestClaimAllOnChainFromSafe:
 
 
 _STAKING = "0x5a4e000000000000000000000000000000000004"
-_REWARD_TOKEN = "0xce11e14225575945b8E6Dc0D4F2dD4C570f79d9f"
-_OTHER_TOKEN = "0x0e40000000000000000000000000000000000005"
+_REWARD_ERC20 = "0xce11e14225575945b8E6Dc0D4F2dD4C570f79d9f"
+_OTHER_ERC20 = "0x0e40000000000000000000000000000000000005"
 _RECEIVER_A = "0xa000000000000000000000000000000000000006"
 _RECEIVER_B = "0xb000000000000000000000000000000000000007"
 _TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)")
@@ -1100,7 +1100,7 @@ class TestClaimOnChainFromSafe:
         sftxb = MagicMock()
         sftxb.staking_rewards_claimable.return_value = claimable
         sftxb.new_tx.return_value.add.return_value.settle.return_value = receipt
-        sftxb.get_staking_params.return_value = {"staking_token": _REWARD_TOKEN}
+        sftxb.get_staking_params.return_value = {"staking_token": _REWARD_ERC20}
 
         with (
             patch.object(manager, "load", return_value=service),
@@ -1129,7 +1129,7 @@ class TestClaimOnChainFromSafe:
                 "topics": [HexBytes(b"\x01" * 32)],
                 "data": HexBytes(b""),
             },
-            _transfer_log(_REWARD_TOKEN, _STAKING, _SERVICE_SAFE, 10**18),
+            _transfer_log(_REWARD_ERC20, _STAKING, _SERVICE_SAFE, 10**18),
         ]
 
         amount, _ = self._run(tmp_path, logs)
@@ -1141,11 +1141,11 @@ class TestClaimOnChainFromSafe:
     ) -> None:
         """Every reward-token transfer from the staking contract counts; nothing else does."""
         logs = [
-            _transfer_log(_REWARD_TOKEN, _STAKING, _RECEIVER_A, 600),
-            _transfer_log(_REWARD_TOKEN, _MASTER_SAFE, _RECEIVER_A, 10_000),
-            _transfer_log(_OTHER_TOKEN, _STAKING, _RECEIVER_A, 20_000),
+            _transfer_log(_REWARD_ERC20, _STAKING, _RECEIVER_A, 600),
+            _transfer_log(_REWARD_ERC20, _MASTER_SAFE, _RECEIVER_A, 10_000),
+            _transfer_log(_OTHER_ERC20, _STAKING, _RECEIVER_A, 20_000),
             {
-                "address": _REWARD_TOKEN,
+                "address": _REWARD_ERC20,
                 "topics": [
                     _TRANSFER_TOPIC,
                     _topic(_STAKING),
@@ -1155,7 +1155,7 @@ class TestClaimOnChainFromSafe:
                 "data": HexBytes((30_000).to_bytes(32, "big")),
             },
             {
-                "address": _REWARD_TOKEN,
+                "address": _REWARD_ERC20,
                 "topics": [
                     Web3.keccak(text="Approval(address,address,uint256)"),
                     _topic(_STAKING),
@@ -1163,7 +1163,7 @@ class TestClaimOnChainFromSafe:
                 ],
                 "data": HexBytes((40_000).to_bytes(32, "big")),
             },
-            _transfer_log(_REWARD_TOKEN.lower(), _STAKING, _RECEIVER_B, 400),
+            _transfer_log(_REWARD_ERC20.lower(), _STAKING, _RECEIVER_B, 400),
         ]
 
         amount, _ = self._run(tmp_path, logs)
@@ -1178,20 +1178,20 @@ class TestClaimOnChainFromSafe:
 
     def test_agent_safe_balance_is_swept_to_master_safe(self, tmp_path: Path) -> None:
         """Rewards paid into the Agent Safe are still moved to the Master Safe."""
-        logs = [_transfer_log(_REWARD_TOKEN, _STAKING, _SERVICE_SAFE, 700)]
+        logs = [_transfer_log(_REWARD_ERC20, _STAKING, _SERVICE_SAFE, 700)]
 
         amount, sweep = self._run(tmp_path, logs, agent_safe_balance=900)
 
         assert amount == 700
         sweep_kwargs = sweep.call_args.kwargs
         assert sweep_kwargs["safe"] == _SERVICE_SAFE
-        assert sweep_kwargs["token"] == _REWARD_TOKEN
+        assert sweep_kwargs["token"] == _REWARD_ERC20
         assert sweep_kwargs["to"] == _MASTER_SAFE
         assert sweep_kwargs["amount"] == 900
 
     def test_empty_agent_safe_is_not_swept(self, tmp_path: Path) -> None:
         """At zero Agent Safe balance the sweep does nothing."""
-        logs = [_transfer_log(_REWARD_TOKEN, _STAKING, _RECEIVER_A, 700)]
+        logs = [_transfer_log(_REWARD_ERC20, _STAKING, _RECEIVER_A, 700)]
 
         amount, sweep = self._run(tmp_path, logs, agent_safe_balance=0)
 
@@ -1212,7 +1212,7 @@ class TestClaimOnChainFromSafe:
         self, tmp_path: Path, overrides: t.Dict[str, t.Any]
     ) -> None:
         """Nothing claimable or a failed claim returns 0 and sweeps nothing."""
-        logs = [_transfer_log(_REWARD_TOKEN, _STAKING, _RECEIVER_A, 700)]
+        logs = [_transfer_log(_REWARD_ERC20, _STAKING, _RECEIVER_A, 700)]
 
         amount, sweep = self._run(tmp_path, logs, agent_safe_balance=900, **overrides)
 
