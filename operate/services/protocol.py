@@ -1719,7 +1719,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_safe_b_native_transfer_messages(  # pragma: no cover
+    def get_safe_b_native_transfer_messages(
         self,
         safe_b_address: str,
         to: str,
@@ -1740,7 +1740,7 @@ class EthSafeTxBuilder(_ChainUtil):
             nonce=nonce,
         )
 
-    def get_safe_b_erc20_transfer_messages(  # pragma: no cover
+    def get_safe_b_erc20_transfer_messages(
         self,
         safe_b_address: str,
         token: str,

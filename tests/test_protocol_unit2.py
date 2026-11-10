@@ -1320,7 +1320,7 @@ class TestGetSafeBExecMessages:
             mock_cc.get.return_value.contracts = {builder.chain_type: self._MULTISEND}
             mock_rc.gnosis_safe.get_instance.return_value = safe_b_instance
             mock_rc.multisend.get_multisend_tx.return_value = {
-                "value": 0,
+                "value": 5,
                 "data": b"multisend-data",
             }
             mock_rc.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
@@ -1329,17 +1329,26 @@ class TestGetSafeBExecMessages:
             approve_message, exec_message = builder.get_safe_b_exec_messages(
                 safe_b_address=self._SAFE_B,
                 txs=[
-                    {"to": self._SAFE_B, "data": "0xa1b2", "operation": 0, "value": 0}
+                    {"to": self._SAFE_B, "data": "0xa1b2", "operation": 0, "value": 0},
+                    {"to": "0xc0de", "data": b"\x01\x02", "operation": 0, "value": 5},
                 ],
                 nonce=7,
             )
 
         multisend_txs = mock_rc.multisend.get_multisend_tx.call_args.kwargs["txs"]
-        assert multisend_txs[0]["data"] == bytes.fromhex("a1b2")
+        assert [tx["to"] for tx in multisend_txs] == [self._SAFE_B, "0xc0de"]
+        assert [tx["data"] for tx in multisend_txs] == [
+            bytes.fromhex("a1b2"),
+            b"\x01\x02",
+        ]
         hash_kwargs = mock_rc.gnosis_safe.get_raw_safe_transaction_hash.call_args.kwargs
         assert hash_kwargs["contract_address"] == self._SAFE_B
         assert hash_kwargs["to_address"] == self._MULTISEND
+        assert hash_kwargs["value"] == 5
+        assert hash_kwargs["data"] == b"multisend-data"
         assert hash_kwargs["safe_nonce"] == 7
+        approve_args = safe_b_instance.encode_abi.call_args_list[0].kwargs["args"]
+        assert approve_args == ["0xinnerhash"]
         assert approve_message == {
             "to": self._SAFE_B,
             "data": "approveHash",
@@ -1350,11 +1359,82 @@ class TestGetSafeBExecMessages:
         assert exec_message["data"] == "execTransaction"
         exec_args = safe_b_instance.encode_abi.call_args_list[1].kwargs["args"]
         assert exec_args[0] == self._MULTISEND
+        assert exec_args[1] == 5
         assert exec_args[2] == b"multisend-data"
         assert exec_args[3] == SafeOperation.DELEGATE_CALL.value
         assert hash_kwargs["operation"] == SafeOperation.DELEGATE_CALL.value
         assert exec_args[-1] == get_packed_signature_for_approved_hash(
             owners=(_MASTER_SAFE,)
+        )
+
+    def test_native_transfer_builds_a_plain_value_call(self) -> None:
+        """A native withdrawal from Safe B is one CALL to the recipient carrying the amount."""
+        builder = _make_eth_safe_tx_builder()
+        with patch.object(
+            builder, "get_safe_b_exec_messages", return_value=("approve", "exec")
+        ) as exec_mock:
+            result = builder.get_safe_b_native_transfer_messages(
+                safe_b_address=self._SAFE_B, to="0xrecipient", amount=42, nonce=3
+            )
+
+        assert result == ("approve", "exec")
+        exec_mock.assert_called_once_with(
+            safe_b_address=self._SAFE_B,
+            txs=[
+                {
+                    "to": "0xrecipient",
+                    "data": b"",
+                    "operation": MultiSendOperation.CALL,
+                    "value": 42,
+                }
+            ],
+            nonce=3,
+        )
+
+    def test_erc20_transfer_calls_the_token_with_zero_value(self) -> None:
+        """An ERC-20 withdrawal from Safe B calls transfer(to, amount) on the token."""
+        builder = _make_eth_safe_tx_builder()
+        erc20_instance = MagicMock()
+        erc20_instance.encode_abi.return_value = "0xtransferdata"
+        with (
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch.object(
+                builder, "get_safe_b_exec_messages", return_value=("approve", "exec")
+            ) as exec_mock,
+        ):
+            mock_rc.erc20.get_instance.return_value = erc20_instance
+            result = builder.get_safe_b_erc20_transfer_messages(
+                safe_b_address=self._SAFE_B,
+                token="0xtoken",
+                to="0xrecipient",
+                amount=42,
+                nonce=3,
+            )
+
+        assert result == ("approve", "exec")
+        assert mock_rc.erc20.get_instance.call_args.kwargs["contract_address"] == (
+            "0xtoken"
+        )
+        erc20_instance.encode_abi.assert_called_once_with(
+            abi_element_identifier="transfer", args=["0xrecipient", 42]
+        )
+        exec_mock.assert_called_once_with(
+            safe_b_address=self._SAFE_B,
+            txs=[
+                {
+                    "to": "0xtoken",
+                    "data": "0xtransferdata",
+                    "operation": MultiSendOperation.CALL,
+                    "value": 0,
+                }
+            ],
+            nonce=3,
         )
 
 
