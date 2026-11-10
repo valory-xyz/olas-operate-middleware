@@ -1394,6 +1394,7 @@ class TestGetSafeBExecMessages:
     def test_erc20_transfer_calls_the_token_with_zero_value(self) -> None:
         """An ERC-20 withdrawal from Safe B calls transfer(to, amount) on the token."""
         builder = _make_eth_safe_tx_builder()
+        token_address = "0x" + "70" * 20
         erc20_instance = MagicMock()
         erc20_instance.encode_abi.return_value = "0xtransferdata"
         with (
@@ -1411,15 +1412,16 @@ class TestGetSafeBExecMessages:
             mock_rc.erc20.get_instance.return_value = erc20_instance
             result = builder.get_safe_b_erc20_transfer_messages(
                 safe_b_address=self._SAFE_B,
-                token="0xtoken",
+                token=token_address,
                 to="0xrecipient",
                 amount=42,
                 nonce=3,
             )
 
         assert result == ("approve", "exec")
-        assert mock_rc.erc20.get_instance.call_args.kwargs["contract_address"] == (
-            "0xtoken"
+        assert (
+            mock_rc.erc20.get_instance.call_args.kwargs["contract_address"]
+            == token_address
         )
         erc20_instance.encode_abi.assert_called_once_with(
             abi_element_identifier="transfer", args=["0xrecipient", 42]
@@ -1428,7 +1430,7 @@ class TestGetSafeBExecMessages:
             safe_b_address=self._SAFE_B,
             txs=[
                 {
-                    "to": "0xtoken",
+                    "to": token_address,
                     "data": "0xtransferdata",
                     "operation": MultiSendOperation.CALL,
                     "value": 0,
