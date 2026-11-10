@@ -59,3 +59,7 @@ class ServicePackageDownloadError(Exception):
 
 class RecoveryModuleNotEnabledError(Exception):
     """The service Safe still lacks the recovery module, so it cannot be reused."""
+
+    def to_error_fields(self) -> t.Dict:
+        """Return structured error fields for merging into a JSONResponse body."""
+        return {"error_code": "RECOVERY_MODULE_NOT_ENABLED"}

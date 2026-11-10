@@ -2447,11 +2447,17 @@ Deploy and run a service.
 
 **Response (Agent Safe cannot get the recovery module - 409):**
 
-A reused Agent Safe must have the recovery module enabled before it is deployed. When the Agent Signer's transaction to enable it fails, or the Safe's owners are neither the Agent Signer nor the Pearl Safe, the deployment stops and `error` says what to do.
+A reused Agent Safe must have the recovery module enabled before it is deployed. The deployment stops when the module cannot be enabled, and `error` says what to do. This happens when:
+- the Agent Signer owns the Safe and its transaction to enable the module fails;
+- the Pearl Safe owns the Safe and its transaction to enable the module fails;
+- the Safe's owners are neither the Agent Signer nor the Pearl Safe.
+
+`error_code` is always `RECOVERY_MODULE_NOT_ENABLED`. A Master Signer gas shortfall on the Pearl Safe's transaction is not reported here: it returns a 400 with `error_code` `INSUFFICIENT_SIGNER_GAS` instead.
 
 ```json
 {
-  "error": "Could not enable the recovery module on the Agent Safe 0x... on gnosis, so the agent cannot use it: <reason>. Make sure the Agent Signer 0x... holds enough gas on this chain, then try again."
+  "error": "Could not enable the recovery module on the Agent Safe 0x... on gnosis, so the agent cannot use it: <reason>. Make sure the Agent Signer 0x... holds enough gas on this chain, then try again.",
+  "error_code": "RECOVERY_MODULE_NOT_ENABLED"
 }
 ```
 

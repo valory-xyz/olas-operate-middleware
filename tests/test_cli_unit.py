@@ -1981,7 +1981,10 @@ class TestServiceRoutes:
             with TestClient(app) as c:
                 resp = c.post("/api/v2/service/svc1", json={})
             assert resp.status_code == HTTPStatus.CONFLICT
-            assert resp.json() == {"error": "Contact Pearl support with this message."}
+            assert resp.json() == {
+                "error": "Contact Pearl support with this message.",
+                "error_code": "RECOVERY_MODULE_NOT_ENABLED",
+            }
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""
