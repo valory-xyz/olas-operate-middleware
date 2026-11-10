@@ -55,3 +55,7 @@ class ServicePackageDownloadError(Exception):
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
         return {"error_code": "SERVICE_PACKAGE_DOWNLOAD_FAILED"}
+
+
+class RecoveryModuleNotEnabledError(Exception):
+    """The service Safe still lacks the recovery module, so it cannot be reused."""

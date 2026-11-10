@@ -52,6 +52,7 @@ from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
+from operate.exceptions import RecoveryModuleNotEnabledError
 from operate.keys import KeysManager
 from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
@@ -1702,12 +1703,12 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
-    def _enable_recovery_module(  # pylint: disable=too-many-locals  # pragma: no cover
+    def _enable_recovery_module(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable recovery module"""
+        """Enable the recovery module on the service Safe, or raise RecoveryModuleNotEnabledError."""
         self.logger.info(f"_enable_recovery_module {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
@@ -1744,10 +1745,12 @@ class ServiceManager:
         # NOTE Recovery from agent only works for single-agent services
         agent_address = service.agent_addresses[0]
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
-        agent_is_service_safe_owner = service_safe_owners == [agent_address]
-        master_safe_is_service_safe_owner = service_safe_owners == [safe]
+        enable_module_data = sftxb.get_enable_module_data(
+            module_address=recovery_module_address,
+            safe_address=service_safe_address,
+        )
 
-        if agent_is_service_safe_owner:
+        if service_safe_owners == [agent_address]:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
             try:
                 crypto = self.keys_manager.get_crypto_instance(address=agent_address)
@@ -1756,29 +1759,36 @@ class ServiceManager:
                     crypto=crypto,
                     chain_type=ChainType(chain),
                     safe=service_safe_address,
-                ).add(
-                    sftxb.get_enable_module_data(
-                        module_address=recovery_module_address,
-                        safe_address=service_safe_address,
-                    )
-                ).settle()
-                self.logger.info(
-                    "(Agent) Recovery module enabled successfully in service Safe."
-                )
+                ).add(enable_module_data).settle()
             except Exception as e:  # pylint: disable=broad-except
-                self.logger.error(
-                    f"Failed to enable recovery module in service Safe. Exception {e}: {traceback.format_exc()}"
-                )
-        elif master_safe_is_service_safe_owner:
-            # TODO Enable recovery module when Safe owner = master Safe.
-            # This should be similar to the above code, but
-            # requires implement a transaction where the owner is another Safe.
+                raise RecoveryModuleNotEnabledError(
+                    f"Could not enable the recovery module on the Agent Safe "
+                    f"{service_safe_address} on {chain}, so the agent cannot use "
+                    f"it: {e}. Make sure the Agent Signer {agent_address} holds "
+                    "enough gas on this chain, then try again."
+                ) from e
             self.logger.info(
-                "(Service owner) Enabling recovery module in service Safe. [Not implemented]"
+                "(Agent) Recovery module enabled successfully in service Safe."
+            )
+        elif service_safe_owners == [safe]:
+            self.logger.info("(Master Safe) Enabling recovery module in service Safe.")
+            tx = sftxb.new_tx()
+            for message in sftxb.get_safe_b_exec_messages(
+                safe_b_address=service_safe_address,
+                txs=[enable_module_data],
+            ):
+                tx.add(message)
+            tx.settle()
+            self.logger.info(
+                "(Master Safe) Recovery module enabled successfully in service Safe."
             )
         else:
-            self.logger.error(
-                f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
+            raise RecoveryModuleNotEnabledError(
+                f"Cannot enable the recovery module on the Agent Safe "
+                f"{service_safe_address} on {chain}: its owners {service_safe_owners} "
+                f"are neither the Agent Signer {agent_address} nor the Pearl Safe "
+                f"{safe}, so the agent cannot use it. Contact Pearl support with "
+                "this message."
             )
 
     def _get_current_staking_program(

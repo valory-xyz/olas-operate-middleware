@@ -26,7 +26,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from operate.constants import ZERO_ADDRESS
-from operate.exceptions import InsufficientFundsException
+from operate.exceptions import (
+    InsufficientFundsException,
+    RecoveryModuleNotEnabledError,
+)
 from operate.operate_types import (
     Chain,
     DeploymentStatus,
@@ -718,6 +721,204 @@ class TestGetMechConfigs:
         assert (
             result.priority_mech_address == "0x77af31De935740567Cf4fF1986D04B2c964A786a"
         )
+
+
+_SERVICE_SAFE = "0x5afe000000000000000000000000000000000001"
+_MASTER_SAFE = "0xd5afe00000000000000000000000000000000002"
+_AGENT = "0xaaaa"
+_RECOVERY_MODULE = "0x7ec0000000000000000000000000000000000003"
+
+
+class TestEnableRecoveryModule:
+    """Tests for _enable_recovery_module()."""
+
+    def _run(
+        self,
+        tmp_path: Path,
+        owners: t.List[str],
+        module_enabled: bool = False,
+        token: int = 7,
+        multisig: str = _SERVICE_SAFE,
+        agent_settle_error: t.Optional[Exception] = None,
+    ) -> t.Dict[str, t.Any]:
+        """Run _enable_recovery_module against mocked chain state."""
+        manager = _make_manager(tmp_path)
+        service = _make_mock_service()
+        service.agent_addresses = [_AGENT]
+        chain_config = MagicMock()
+        chain_config.chain_data.token = token
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+        manager.wallet_manager.load.return_value.safes = {  # type: ignore
+            Chain.GNOSIS: _MASTER_SAFE
+        }
+
+        sftxb = MagicMock()
+        sftxb.info.return_value = {"multisig": multisig}
+        sftxb.get_service_safe_owners.return_value = owners
+        sftxb.get_enable_module_data.return_value = {"enable": "module"}
+        sftxb.get_safe_b_exec_messages.return_value = (
+            {"approve": "hash"},
+            {"exec": "tx"},
+        )
+        agent_tx = MagicMock()
+        agent_tx.add.return_value = agent_tx
+        if agent_settle_error is not None:
+            agent_tx.settle.side_effect = agent_settle_error
+
+        error: t.Optional[Exception] = None
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch(
+                "operate.services.manage.CONTRACTS",
+                {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
+            ),
+            patch("operate.services.manage.registry_contracts") as mock_rc,
+            patch(
+                "operate.services.manage.EthSafeTxBuilder._new_tx",
+                return_value=agent_tx,
+            ) as new_agent_tx,
+        ):
+            mock_rc.gnosis_safe.is_module_enabled.return_value = {
+                "enabled": module_enabled
+            }
+            try:
+                manager._enable_recovery_module(
+                    service_config_id="sc-test-id", chain=_CHAIN
+                )
+            except RecoveryModuleNotEnabledError as e:
+                error = e
+
+        return {
+            "error": error,
+            "sftxb": sftxb,
+            "agent_tx": agent_tx,
+            "new_agent_tx": new_agent_tx,
+            "keys_manager": manager.keys_manager,
+        }
+
+    @pytest.mark.parametrize(
+        ("token", "multisig", "module_enabled"),
+        [
+            (NON_EXISTENT_TOKEN, _SERVICE_SAFE, False),
+            (7, ZERO_ADDRESS, False),
+            (7, _SERVICE_SAFE, True),
+        ],
+        ids=["not-minted", "no-safe", "already-enabled"],
+    )
+    def test_nothing_to_enable_sends_no_tx(
+        self, tmp_path: Path, token: int, multisig: str, module_enabled: bool
+    ) -> None:
+        """No Safe yet, or the module already on: nothing is sent, nothing raised."""
+        result = self._run(
+            tmp_path,
+            owners=[_AGENT],
+            module_enabled=module_enabled,
+            token=token,
+            multisig=multisig,
+        )
+
+        assert result["error"] is None
+        result["new_agent_tx"].assert_not_called()
+        result["sftxb"].new_tx.assert_not_called()
+
+    def test_agent_owned_safe_enables_module_with_agent_key(
+        self, tmp_path: Path
+    ) -> None:
+        """The Agent Signer signs enableModule on its own Safe."""
+        result = self._run(tmp_path, owners=[_AGENT])
+
+        assert result["error"] is None
+        result["keys_manager"].get_crypto_instance.assert_called_once_with(
+            address=_AGENT
+        )
+        assert result["new_agent_tx"].call_args.kwargs["safe"] == _SERVICE_SAFE
+        result["agent_tx"].add.assert_called_once_with({"enable": "module"})
+        result["agent_tx"].settle.assert_called_once()
+        result["sftxb"].new_tx.assert_not_called()
+
+    def test_agent_owned_safe_raises_when_agent_tx_fails(self, tmp_path: Path) -> None:
+        """A failed agent enableModule stops the flow with an actionable error."""
+        cause = RuntimeError("insufficient funds for gas")
+        result = self._run(tmp_path, owners=[_AGENT], agent_settle_error=cause)
+
+        error = result["error"]
+        assert isinstance(error, RecoveryModuleNotEnabledError)
+        assert error.__cause__ is cause
+        assert _SERVICE_SAFE in str(error)
+        assert f"Make sure the Agent Signer {_AGENT} holds enough gas" in str(error)
+
+    def test_master_safe_owned_safe_enables_module_through_nested_safe_tx(
+        self, tmp_path: Path
+    ) -> None:
+        """The Master Safe executes enableModule on the service Safe it owns."""
+        result = self._run(tmp_path, owners=[_MASTER_SAFE])
+
+        sftxb = result["sftxb"]
+        assert result["error"] is None
+        sftxb.get_enable_module_data.assert_called_once_with(
+            module_address=_RECOVERY_MODULE, safe_address=_SERVICE_SAFE
+        )
+        sftxb.get_safe_b_exec_messages.assert_called_once_with(
+            safe_b_address=_SERVICE_SAFE, txs=[{"enable": "module"}]
+        )
+        master_tx = sftxb.new_tx.return_value
+        assert [c.args[0] for c in master_tx.add.call_args_list] == [
+            {"approve": "hash"},
+            {"exec": "tx"},
+        ]
+        master_tx.settle.assert_called_once()
+        result["new_agent_tx"].assert_not_called()
+
+    @pytest.mark.parametrize(
+        "owners",
+        [["0xbbbb"], [_AGENT, _MASTER_SAFE], []],
+        ids=["stranger", "agent-and-master", "none"],
+    )
+    def test_inconsistent_owners_raise_without_sending(
+        self, tmp_path: Path, owners: t.List[str]
+    ) -> None:
+        """Owners that are neither the agent nor the Master Safe raise; no tx is sent."""
+        result = self._run(tmp_path, owners=owners)
+
+        error = result["error"]
+        assert isinstance(error, RecoveryModuleNotEnabledError)
+        assert "Contact Pearl support" in str(error)
+        result["new_agent_tx"].assert_not_called()
+        result["sftxb"].new_tx.assert_not_called()
+
+    def test_deploy_stops_before_building_any_tx_when_module_cannot_be_enabled(
+        self, tmp_path: Path
+    ) -> None:
+        """A Safe reuse never reaches the same-address deploy with the module missing."""
+        manager = _make_manager(tmp_path)
+        service = _make_mock_service()
+        chain_config = MagicMock()
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+        manager.wallet_manager.load.return_value.safes = {  # type: ignore
+            Chain.GNOSIS: _MASTER_SAFE
+        }
+        sftxb = MagicMock()
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager,
+                "_enable_recovery_module",
+                side_effect=RecoveryModuleNotEnabledError("inconsistent owners"),
+            ),
+            patch.dict("os.environ", {}),
+            pytest.raises(RecoveryModuleNotEnabledError),
+        ):
+            manager._deploy_service_onchain_from_safe(
+                service_config_id="sc-test-id", chain=_CHAIN
+            )
+
+        sftxb.get_deploy_data_from_safe.assert_not_called()
+        sftxb.new_tx.assert_not_called()
 
 
 class TestGetCurrentStakingProgram:
