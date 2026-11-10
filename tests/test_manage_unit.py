@@ -24,6 +24,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from autonomy.chain.exceptions import ChainInteractionError
 from hexbytes import HexBytes
 from web3 import Web3
 
@@ -742,6 +743,7 @@ class TestEnableRecoveryModule:
         token: int = 7,
         multisig: str = _SERVICE_SAFE,
         agent_settle_error: t.Optional[Exception] = None,
+        master_settle_error: t.Optional[Exception] = None,
     ) -> t.Dict[str, t.Any]:
         """Run _enable_recovery_module against mocked chain state."""
         manager = _make_manager(tmp_path)
@@ -767,6 +769,8 @@ class TestEnableRecoveryModule:
         agent_tx.add.return_value = agent_tx
         if agent_settle_error is not None:
             agent_tx.settle.side_effect = agent_settle_error
+        if master_settle_error is not None:
+            sftxb.new_tx.return_value.settle.side_effect = master_settle_error
 
         error: t.Optional[Exception] = None
         with (
@@ -789,7 +793,7 @@ class TestEnableRecoveryModule:
                 manager._enable_recovery_module(
                     service_config_id="sc-test-id", chain=_CHAIN
                 )
-            except RecoveryModuleNotEnabledError as e:
+            except Exception as e:  # pylint: disable=broad-except
                 error = e
 
         return {
@@ -872,6 +876,27 @@ class TestEnableRecoveryModule:
         ]
         master_tx.settle.assert_called_once()
         result["new_agent_tx"].assert_not_called()
+
+    def test_master_safe_tx_failure_raises_actionable_error(
+        self, tmp_path: Path
+    ) -> None:
+        """A reverted nested Safe tx surfaces as RecoveryModuleNotEnabledError."""
+        cause = ChainInteractionError("Safe transaction reverted on-chain.")
+        result = self._run(tmp_path, owners=[_MASTER_SAFE], master_settle_error=cause)
+
+        error = result["error"]
+        assert isinstance(error, RecoveryModuleNotEnabledError)
+        assert error.__cause__ is cause
+        assert "contact Pearl support" in str(error)
+
+    def test_master_safe_out_of_gas_keeps_insufficient_funds_error(
+        self, tmp_path: Path
+    ) -> None:
+        """The Master EOA gas shortfall keeps its own structured error."""
+        cause = InsufficientFundsException("no gas", chain=_CHAIN)
+        result = self._run(tmp_path, owners=[_MASTER_SAFE], master_settle_error=cause)
+
+        assert result["error"] is cause
 
     @pytest.mark.parametrize(
         "owners",
@@ -1127,7 +1152,16 @@ class TestClaimOnChainFromSafe:
                     _topic(_RECEIVER_A),
                     HexBytes((5).to_bytes(32, "big")),
                 ],
-                "data": HexBytes(b""),
+                "data": HexBytes((30_000).to_bytes(32, "big")),
+            },
+            {
+                "address": _REWARD_TOKEN,
+                "topics": [
+                    Web3.keccak(text="Approval(address,address,uint256)"),
+                    _topic(_STAKING),
+                    _topic(_RECEIVER_A),
+                ],
+                "data": HexBytes((40_000).to_bytes(32, "big")),
             },
             _transfer_log(_REWARD_TOKEN.lower(), _STAKING, _RECEIVER_B, 400),
         ]

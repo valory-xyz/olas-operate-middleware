@@ -1660,9 +1660,7 @@ class EthSafeTxBuilder(_ChainUtil):
         multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
             self.chain_type
         ]
-        # This multisend call bypasses GnosisSafeTransaction.build() (the
-        # boundary), so tx data must be coerced to bytes here. See
-        # normalize_tx_data_to_bytes.
+        # Bypasses GnosisSafeTransaction.build(); see normalize_tx_data_to_bytes.
         multisend_tx = registry_contracts.multisend.get_multisend_tx(
             ledger_api=self.ledger_api,
             contract_address=multisend_address,

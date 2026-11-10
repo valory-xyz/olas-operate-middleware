@@ -44,6 +44,7 @@ from operate.constants import (
     KEYS_DIR,
     NO_STAKING_PROGRAM_ID,
     SERVICES_DIR,
+    TRANSFER_EVENT_TOPIC,
     WALLETS_DIR,
     ZERO_ADDRESS,
 )
@@ -154,7 +155,6 @@ SERVICE_REGISTRY_START_BLOCKS: t.Dict[Chain, int] = {
     Chain.ROBINHOOD: 58_564_789,
 }
 
-_TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
 _ZERO_ADDRESS_TOPIC = "0x" + "0" * 64
 
 #: A real IPFS CID used when constructing a synthetic service via
@@ -265,7 +265,7 @@ def _enumerate_services_minted_to_owned_safes(
             service_registry_address,
             SERVICE_REGISTRY_START_BLOCKS[chain],
             w3.eth.block_number,
-            [_TRANSFER_TOPIC, _ZERO_ADDRESS_TOPIC, None],
+            [TRANSFER_EVENT_TOPIC.to_0x_hex(), _ZERO_ADDRESS_TOPIC, None],
         )
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(f"Service enumeration failed on {chain.value}: {exc}")

@@ -1796,7 +1796,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except (PortInUseError, RecoveryModuleNotEnabledError) as e:
-            logger.error(f"Deploy failed: {e}")
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={"error": str(e)},
                 status_code=HTTPStatus.CONFLICT,

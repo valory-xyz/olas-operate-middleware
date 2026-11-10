@@ -21,6 +21,8 @@
 
 from pathlib import Path
 
+from web3 import Web3
+
 from operate.serialization import BigInt
 
 OPERATE = ".operate"
@@ -82,6 +84,8 @@ AGENT_LOG_RETENTION_MAX_BYTES = 20 * 1024 * 1024
 DEPLOYMENT_LOG_MAX_BYTES = 10 * 1024 * 1024
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+# Shared by ERC-20 and ERC-721 Transfer events.
+TRANSFER_EVENT_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)")
 
 DEFAULT_TIMEOUT = 30
 MIN_AGENT_BOND = BigInt(1)

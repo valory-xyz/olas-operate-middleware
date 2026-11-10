@@ -36,7 +36,6 @@ from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
-from web3 import Web3
 
 from operate.constants import (
     AGENT_LOG_DIR,
@@ -46,6 +45,7 @@ from operate.constants import (
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
     POLY_SAFE_SERVICE_NAMES,
+    TRANSFER_EVENT_TOPIC,
     ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
@@ -129,8 +129,6 @@ _STATES_REQUIRING_UNBOND = (
     OnChainState.TERMINATED_BONDED,
 )
 
-_ERC20_TRANSFER_TOPIC = bytes(Web3.keccak(text="Transfer(address,address,uint256)"))
-
 
 def _sum_erc20_transfers_from(
     logs: t.Iterable[t.Mapping[str, t.Any]], token: str, sender: str
@@ -144,7 +142,7 @@ def _sum_erc20_transfers_from(
         if (
             log["address"].lower() == token.lower()
             and len(topics) == 3
-            and bytes(topics[0]) == _ERC20_TRANSFER_TOPIC
+            and bytes(topics[0]) == TRANSFER_EVENT_TOPIC
             and bytes(topics[1])[-20:] == sender_bytes
         ):
             total += int.from_bytes(bytes(log["data"]), "big")
@@ -1774,8 +1772,8 @@ class ServiceManager:
 
         if service_safe_owners == [agent_address]:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
+            crypto = self.keys_manager.get_crypto_instance(address=agent_address)
             try:
-                crypto = self.keys_manager.get_crypto_instance(address=agent_address)
                 EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
                     ledger_api=sftxb.ledger_api,
                     crypto=crypto,
@@ -1800,7 +1798,17 @@ class ServiceManager:
                 txs=[enable_module_data],
             ):
                 tx.add(message)
-            tx.settle()
+            try:
+                tx.settle()
+            except InsufficientFundsException:
+                raise
+            except Exception as e:  # pylint: disable=broad-except
+                raise RecoveryModuleNotEnabledError(
+                    f"Could not enable the recovery module on the Agent Safe "
+                    f"{service_safe_address} on {chain} through the Pearl Safe "
+                    f"{safe}, so the agent cannot use it: {e}. Try again; if it "
+                    "keeps failing, contact Pearl support with this message."
+                ) from e
             self.logger.info(
                 "(Master Safe) Recovery module enabled successfully in service Safe."
             )
@@ -2301,6 +2309,11 @@ class ServiceManager:
             self.logger.info("No staking rewards claimable")
             return 0
 
+        # Read before claiming so an RPC failure cannot strand the rewards
+        # between the claim and the Agent Safe sweep.
+        reward_token = sftxb.get_staking_params(staking_contract=staking_contract)[
+            "staking_token"
+        ]
         receipt = (
             sftxb.new_tx()
             .add(
@@ -2319,9 +2332,6 @@ class ServiceManager:
             return 0
 
         # A claim can pay several receivers, so every reward transfer counts.
-        reward_token = sftxb.get_staking_params(staking_contract=staking_contract)[
-            "staking_token"
-        ]
         amount_claimed = _sum_erc20_transfers_from(
             logs=receipt["logs"], token=reward_token, sender=staking_contract
         )
