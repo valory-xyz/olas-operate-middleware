@@ -2447,17 +2447,30 @@ Deploy and run a service.
 
 **Response (Agent Safe cannot get the recovery module - 409):**
 
-A reused Agent Safe must have the recovery module enabled before it is deployed. The deployment stops when the module cannot be enabled, and `error` says what to do. This happens when:
-- the Agent Signer owns the Safe and its transaction to enable the module fails;
-- the Pearl Safe owns the Safe and its transaction to enable the module fails;
-- the Safe's owners are neither the Agent Signer nor the Pearl Safe.
+A deployment that reuses an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do. Deployments that reuse no Safe, such as restarting a service that is already deployed, go ahead. The module cannot be enabled when:
+- the Agent EOA owns the Safe and its transaction to enable the module fails;
+- the Master Safe owns the Safe and its transaction to enable the module fails;
+- the Safe's owners are neither the Agent EOA nor the Master Safe.
 
-`error_code` is always `RECOVERY_MODULE_NOT_ENABLED`. A Master Signer gas shortfall on the Pearl Safe's transaction is not reported here: it returns a 400 with `error_code` `INSUFFICIENT_SIGNER_GAS` instead.
+`error_code` is always `RECOVERY_MODULE_NOT_ENABLED`. The message names the Safe, the chain and the account involved, never the underlying RPC or transaction error, which is logged only.
 
 ```json
 {
-  "error": "Could not enable the recovery module on the Agent Safe 0x... on gnosis, so the agent cannot use it: <reason>. Make sure the Agent Signer 0x... holds enough gas on this chain, then try again.",
+  "error": "Could not enable the recovery module on the Agent Safe 0x... on gnosis, so the agent cannot use it. Make sure the Agent EOA 0x... holds enough gas on this chain, then try again.",
   "error_code": "RECOVERY_MODULE_NOT_ENABLED"
+}
+```
+
+**Response (Insufficient signer gas - 400):**
+
+Returned when the Master EOA cannot pay for a transaction the deployment sends, including the Master Safe's transaction that enables the recovery module.
+
+```json
+{
+  "error": "Failed to deploy service due to insufficient funds.",
+  "error_code": "INSUFFICIENT_SIGNER_GAS",
+  "chain": "gnosis",
+  "prefill_amount_wei": "750000000000000000"
 }
 ```
 
