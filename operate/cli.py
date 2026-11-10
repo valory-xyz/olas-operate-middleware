@@ -75,7 +75,10 @@ from operate.constants import (
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
 )
-from operate.exceptions import ServicePackageDownloadError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    ServicePackageDownloadError,
+)
 from operate.funding_run.manager import (
     FundingRunConflictError,
     FundingRunError,
@@ -1794,6 +1797,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         except PortInUseError as e:
             logger.error(f"Deploy failed: {e}")
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
+            )
+        except RecoveryModuleNotEnabledError as e:
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={"error": str(e)},
                 status_code=HTTPStatus.CONFLICT,

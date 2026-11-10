@@ -46,7 +46,10 @@ from operate.cli import (
     service_not_found_error,
 )
 from operate.constants import DEPLOYMENT_DIR, OPERATE, SERVICES_DIR, ZERO_ADDRESS
-from operate.exceptions import ServicePackageDownloadError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    ServicePackageDownloadError,
+)
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, PrestartCheckStatus
@@ -1965,6 +1968,20 @@ class TestServiceRoutes:
         finally:
             kill_process(holder.pid)
             holder.wait(timeout=10)
+
+    def test_deploy_service_recovery_module_not_enabled(self) -> None:
+        """Deploy returns 409 carrying the actionable recovery-module message."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            RecoveryModuleNotEnabledError("Contact Pearl support with this message.")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.CONFLICT
+            assert resp.json() == {"error": "Contact Pearl support with this message."}
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""

@@ -2445,6 +2445,16 @@ Deploy and run a service.
 }
 ```
 
+**Response (Agent Safe cannot get the recovery module - 409):**
+
+A reused Agent Safe must have the recovery module enabled before it is deployed. When the Agent Signer's transaction to enable it fails, or the Safe's owners are neither the Agent Signer nor the Pearl Safe, the deployment stops and `error` says what to do.
+
+```json
+{
+  "error": "Could not enable the recovery module on the Agent Safe 0x... on gnosis, so the agent cannot use it: <reason>. Make sure the Agent Signer 0x... holds enough gas on this chain, then try again."
+}
+```
+
 **Response (Not logged in - 401):**
 
 ```json
