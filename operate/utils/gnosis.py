@@ -585,7 +585,7 @@ def normalize_tx_data_to_bytes(data: t.Union[str, bytes]) -> bytes:
     normalization in ``GnosisSafeTransaction.build`` in
     ``operate.services.protocol``. Callers that build multisend tx dicts and
     bypass ``build()`` must call this helper explicitly before the multisend
-    call (see ``get_safe_b_erc20_transfer_messages``).
+    call (see ``get_safe_b_exec_messages``).
     """
     if isinstance(data, bytes):
         return data

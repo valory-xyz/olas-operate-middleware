@@ -36,6 +36,7 @@ from operate.services.protocol import (
     get_packed_signature_for_approved_hash,
 )
 from operate.services.service import NON_EXISTENT_TOKEN
+from operate.utils.gnosis import MultiSendOperation, SafeOperation
 
 _STAKING_CONTRACT = "0xaaaa000000000000000000000000000000000001"
 _SERVICE_REGISTRY = "0xbbbb000000000000000000000000000000000002"
@@ -1282,6 +1283,79 @@ class TestEthSafeTxBuilderNewTx:
 
         call_kwargs = mock_inner.call_args.kwargs
         assert call_kwargs["crypto"] is mock_self_crypto
+
+
+class TestGetSafeBExecMessages:
+    """Tests for EthSafeTxBuilder.get_safe_b_exec_messages."""
+
+    _SAFE_B = "0xeeee000000000000000000000000000000000005"
+    _MULTISEND = "0x0000000000000000000000000000000000000008"
+
+    def test_builds_approve_hash_and_exec_messages_signed_by_this_safe(
+        self,
+    ) -> None:
+        """This Safe approves the inner hash on Safe B, then executes it there."""
+        builder = _make_eth_safe_tx_builder()
+        safe_b_instance = MagicMock()
+        safe_b_instance.encode_abi.side_effect = lambda abi_element_identifier, args: (
+            "0x" + abi_element_identifier
+        )
+
+        with (
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                type(builder),
+                "safe",
+                new_callable=PropertyMock,
+                return_value=_MASTER_SAFE,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
+            mock_cc.get.return_value.contracts = {builder.chain_type: self._MULTISEND}
+            mock_rc.gnosis_safe.get_instance.return_value = safe_b_instance
+            mock_rc.multisend.get_multisend_tx.return_value = {
+                "value": 0,
+                "data": b"multisend-data",
+            }
+            mock_rc.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0xinnerhash"
+            }
+            approve_message, exec_message = builder.get_safe_b_exec_messages(
+                safe_b_address=self._SAFE_B,
+                txs=[
+                    {"to": self._SAFE_B, "data": "0xa1b2", "operation": 0, "value": 0}
+                ],
+                nonce=7,
+            )
+
+        multisend_txs = mock_rc.multisend.get_multisend_tx.call_args.kwargs["txs"]
+        assert multisend_txs[0]["data"] == bytes.fromhex("a1b2")
+        hash_kwargs = mock_rc.gnosis_safe.get_raw_safe_transaction_hash.call_args.kwargs
+        assert hash_kwargs["contract_address"] == self._SAFE_B
+        assert hash_kwargs["to_address"] == self._MULTISEND
+        assert hash_kwargs["safe_nonce"] == 7
+        assert approve_message == {
+            "to": self._SAFE_B,
+            "data": "approveHash",
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+        assert exec_message["to"] == self._SAFE_B
+        assert exec_message["data"] == "execTransaction"
+        exec_args = safe_b_instance.encode_abi.call_args_list[1].kwargs["args"]
+        assert exec_args[0] == self._MULTISEND
+        assert exec_args[2] == b"multisend-data"
+        assert exec_args[3] == SafeOperation.DELEGATE_CALL.value
+        assert hash_kwargs["operation"] == SafeOperation.DELEGATE_CALL.value
+        assert exec_args[-1] == get_packed_signature_for_approved_hash(
+            owners=(_MASTER_SAFE,)
+        )
 
 
 # ---------------------------------------------------------------------------

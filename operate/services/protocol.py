@@ -1637,19 +1637,18 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
-    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
+    def get_safe_b_exec_messages(
         self,
         safe_b_address: str,
-        to: str,
-        amount: int,
+        txs: t.List[t.Dict],
         nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
-        Build the two messages (Safe calls) to withdraw native ETH from Safe B via this Safe (owner of Safe B).
+        Build the two messages (Safe calls) to execute ``txs`` on Safe B via this Safe (owner of Safe B).
 
         Builds the messages to be settled by this Safe:
         1) approveHash(inner_tx_hash)
-        2) execTransaction(...) to transfer ETH
+        2) execTransaction(...) running ``txs`` through a MultiSend delegate call
 
         ``nonce`` is the Safe B nonce the inner tx hash is computed with;
         ``None`` reads the current nonce on-chain.
@@ -1658,24 +1657,19 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=safe_b_address,
         )
-
-        txs = []
-        txs.append(
-            {
-                "to": to,
-                "data": b"",
-                "operation": MultiSendOperation.CALL,
-                "value": amount,
-            }
-        )
-
         multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
             self.chain_type
         ]
+        # This multisend call bypasses GnosisSafeTransaction.build() (the
+        # boundary), so tx data must be coerced to bytes here. See
+        # normalize_tx_data_to_bytes.
         multisend_tx = registry_contracts.multisend.get_multisend_tx(
             ledger_api=self.ledger_api,
             contract_address=multisend_address,
-            txs=txs,
+            txs=[
+                {**tx, "data": normalize_tx_data_to_bytes(tx.get("data", b""))}
+                for tx in txs
+            ],
         )
 
         # Compute inner Safe transaction hash.
@@ -1692,7 +1686,6 @@ class EthSafeTxBuilder(_ChainUtil):
             safe_nonce=nonce,
         ).get("tx_hash")
 
-        # Build approveHash message
         approve_hash_data = safe_b_instance.encode_abi(
             abi_element_identifier="approveHash",
             args=[safe_tx_hash],
@@ -1704,7 +1697,6 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-        # Build execTransaction message
         exec_data = safe_b_instance.encode_abi(
             abi_element_identifier="execTransaction",
             args=[
@@ -1729,7 +1721,28 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
+    def get_safe_b_native_transfer_messages(  # pragma: no cover
+        self,
+        safe_b_address: str,
+        to: str,
+        amount: int,
+        nonce: t.Optional[int] = None,
+    ) -> t.Tuple[t.Dict, t.Dict]:
+        """Build the messages to withdraw native ETH from Safe B via this Safe (owner of Safe B)."""
+        return self.get_safe_b_exec_messages(
+            safe_b_address=safe_b_address,
+            txs=[
+                {
+                    "to": to,
+                    "data": b"",
+                    "operation": MultiSendOperation.CALL,
+                    "value": amount,
+                }
+            ],
+            nonce=nonce,
+        )
+
+    def get_safe_b_erc20_transfer_messages(  # pragma: no cover
         self,
         safe_b_address: str,
         token: str,
@@ -1737,104 +1750,27 @@ class EthSafeTxBuilder(_ChainUtil):
         amount: int,
         nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
-        """
-        Build the two messages (Safe calls) to withdraw ERC20 from Safe B via this Safe (owner of Safe B).
-
-        Builds the messages to be settled by this Safe:
-        1) approveHash(inner_tx_hash)
-        2) execTransaction(...) to transfer ERC20 tokens
-
-        ``nonce`` is the Safe B nonce the inner tx hash is computed with;
-        ``None`` reads the current nonce on-chain.
-        """
-        safe_b_instance = registry_contracts.gnosis_safe.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=safe_b_address,
-        )
+        """Build the messages to withdraw ERC20 from Safe B via this Safe (owner of Safe B)."""
         erc20_instance = registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
             contract_address=token,
         )
-
-        # Per-callsite normalization: this multisend call bypasses
-        # GnosisSafeTransaction.build() (the boundary), so the tx dict
-        # must be coerced to bytes here. See normalize_tx_data_to_bytes.
-        transfer_data = normalize_tx_data_to_bytes(
-            erc20_instance.encode_abi(
-                abi_element_identifier="transfer",
-                args=[to, amount],
-            )
+        transfer_data = erc20_instance.encode_abi(
+            abi_element_identifier="transfer",
+            args=[to, amount],
         )
-
-        txs = []
-        txs.append(
-            {
-                "to": token,
-                "data": transfer_data,
-                "operation": MultiSendOperation.CALL,
-                "value": 0,
-            }
-        )
-
-        multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
-            self.chain_type
-        ]
-        multisend_tx = registry_contracts.multisend.get_multisend_tx(
-            ledger_api=self.ledger_api,
-            contract_address=multisend_address,
-            txs=txs,
-        )
-
-        # Compute inner Safe transaction hash.
-        # operation must match what execTransaction will use (DELEGATE_CALL),
-        # because the Safe hashes all parameters including operation to verify
-        # the approved hash.
-        safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
-            ledger_api=self.ledger_api,
-            contract_address=safe_b_address,
-            to_address=multisend_address,
-            value=multisend_tx["value"],
-            data=multisend_tx["data"],
-            operation=SafeOperation.DELEGATE_CALL.value,
-            safe_nonce=nonce,
-        ).get("tx_hash")
-
-        # Build approveHash message
-        approve_hash_data = safe_b_instance.encode_abi(
-            abi_element_identifier="approveHash",
-            args=[safe_tx_hash],
-        )
-        approve_hash_message = {
-            "to": safe_b_address,
-            "data": approve_hash_data[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-
-        # Build execTransaction message
-        exec_data = safe_b_instance.encode_abi(
-            abi_element_identifier="execTransaction",
-            args=[
-                multisend_address,
-                multisend_tx["value"],
-                multisend_tx["data"],
-                SafeOperation.DELEGATE_CALL.value,
-                0,  # safeTxGas
-                0,  # baseGas
-                0,  # gasPrice
-                ZERO_ADDRESS,  # gasToken
-                ZERO_ADDRESS,  # refundReceiver
-                get_packed_signature_for_approved_hash(owners=(self.safe,)),
+        return self.get_safe_b_exec_messages(
+            safe_b_address=safe_b_address,
+            txs=[
+                {
+                    "to": token,
+                    "data": transfer_data,
+                    "operation": MultiSendOperation.CALL,
+                    "value": 0,
+                }
             ],
+            nonce=nonce,
         )
-        exec_message = {
-            "to": safe_b_address,
-            "data": exec_data[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-
-        return approve_hash_message, exec_message
 
     def get_terminate_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get terminate tx data."""
