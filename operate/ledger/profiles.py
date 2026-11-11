@@ -296,7 +296,8 @@ WRAPPED_NATIVE_ASSET = {
     Chain.ROBINHOOD: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
 }
 
-#: Chains whose WRAPPED_NATIVE_ASSET is the native coin's own ERC-20 face, so its balance is the native balance.
+#: Chains whose WRAPPED_NATIVE_ASSET is the native coin's own ERC-20 face,
+#: so its balance is the native balance.
 NATIVE_ERC20_CHAINS: t.FrozenSet[Chain] = frozenset({Chain.CELO})
 
 ERC20_TOKENS = {
