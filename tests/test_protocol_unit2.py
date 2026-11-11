@@ -1485,6 +1485,7 @@ class TestGetDeployDataFromSafe:
         builder = _make_eth_safe_tx_builder()
         mock_smi = MagicMock()
         mock_smi.encode_abi.return_value = _ENCODED
+        agent_crypto = MagicMock()
         wrappers = {
             SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name: "0xSafeWithRecovery",
             POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name: "0xPolySafeWithRecovery",
@@ -1518,7 +1519,7 @@ class TestGetDeployDataFromSafe:
             patch(
                 "operate.services.protocol.get_poly_safe_deployment_payload",
                 return_value="poly_payload",
-            ),
+            ) as poly_payload,
             patch(
                 "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
                 return_value=("reuse_payload", None),
@@ -1533,8 +1534,11 @@ class TestGetDeployDataFromSafe:
                 master_safe=_MASTER_SAFE,
                 reuse_multisig=reuse_multisig,
                 use_poly_safe=use_poly_safe,
-                agent_eoa_crypto=MagicMock(),
+                agent_eoa_crypto=agent_crypto,
             )
+
+        if payload == "poly_payload":
+            assert poly_payload.call_args.kwargs["crypto"] is agent_crypto
 
         assert mock_smi.encode_abi.call_args.kwargs == {
             "abi_element_identifier": "deploy",
