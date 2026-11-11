@@ -153,8 +153,8 @@ def _sum_erc20_transfers_from(
 
 
 # See _enable_recovery_module for when each is raised.
-_ENABLE_ERRORS = (RecoveryModuleNotEnabledError, InsufficientFundsException)
 _EnableFailure = t.Union[RecoveryModuleNotEnabledError, InsufficientFundsException]
+_ENABLE_ERRORS = t.get_args(_EnableFailure)
 
 
 def _stop_refused_reuse_before_txs(
@@ -1007,8 +1007,7 @@ class ServiceManager:
                 chain=chain,
                 service_safe_address=info["multisig"],
             )
-            if not reuse_multisig:
-                is_initial_funding = True
+            is_initial_funding = not reuse_multisig
             self.logger.info(f"{reuse_multisig=}")
 
             service_public_id = PublicId.from_str(service.service_public_id())
@@ -1586,7 +1585,7 @@ class ServiceManager:
             )
 
         # Cannot unstake, terminate flow.
-        if staking_locked:
+        if is_staked and staking_locked:
             # Cannot unstake yet (e.g. still within the staking lock window):
             # skip termination entirely; the caller retries on a later cycle.
             self.logger.warning(
@@ -1694,8 +1693,7 @@ class ServiceManager:
                         return
                     raise e
 
-            # The swap does not need the module. Once the Master Safe owns the
-            # Agent Safe, the next deploy enables it through the Master Safe.
+            # The swap does not need the module; see _stop_refused_reuse_before_txs.
             self._try_enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
@@ -1831,7 +1829,11 @@ class ServiceManager:
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable the recovery module on the service Safe, or raise RecoveryModuleNotEnabledError.
+        """Enable the recovery module on the service Safe, if it has one.
+
+        Returns without a tx when the service is not minted, has no Safe yet, or
+        the module is already enabled; raises RecoveryModuleNotEnabledError when
+        enabling it fails.
 
         A Master EOA gas shortfall on the Master Safe's transaction is raised as
         InsufficientFundsException instead, so callers keep its funding details.
