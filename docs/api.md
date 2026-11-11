@@ -2447,7 +2447,12 @@ Deploy and run a service.
 
 **Response (Agent Safe cannot get the recovery module - 409):**
 
-A deployment that will reuse an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do. When the first attempt to enable the module fails, it stops before any transaction is sent, so no bond is posted. That includes updating an already deployed service whose teardown runs step by step (unstake, terminate, unbond, then the owner swap), since it then reuses the Safe, unless the Agent EOA owns the Safe: that teardown funds the Agent EOA and swaps the Safe to the Master Safe, which then enables the module itself. Restarting an already deployed service reuses no Safe and goes ahead. This happens when:
+A deployment that will reuse an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do.
+- A deployment, or an update torn down step by step, stops with this 409 before it sends any transaction, so no bond is posted.
+- On a step-by-step update where the Agent EOA owns the Safe, the teardown runs first, because it swaps the Safe to the Master Safe, which can then enable the module. The 409 can still follow if the Master Safe cannot enable it, and the 400 `INSUFFICIENT_SIGNER_GAS` below if the Agent EOA cannot be funded for the swap.
+- A restart, or an update while the service cannot leave staking yet, sends no teardown and reuses no Safe, so it is never stopped.
+
+This happens when:
 - the Agent EOA owns the Safe and its transaction to enable the module fails;
 - the Master Safe owns the Safe and its transaction to enable the module fails;
 - the Safe's owners are neither the Agent EOA nor the Master Safe;
