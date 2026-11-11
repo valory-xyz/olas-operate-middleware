@@ -1888,6 +1888,15 @@ class ServiceManager:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
             try:
                 crypto = self.keys_manager.get_crypto_instance(address=agent_address)
+            except Exception as e:  # pylint: disable=broad-except
+                # Not an AgentCouldNot... error: the owner swap needs this same key.
+                raise RecoveryModuleNotEnabledError(
+                    f"Could not load the key of the Agent EOA {agent_address}, so the "
+                    f"recovery module cannot be enabled on the Agent Safe "
+                    f"{service_safe_address} on {chain}. Contact Pearl support with "
+                    "this message."
+                ) from e
+            try:
                 EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
                     ledger_api=sftxb.ledger_api,
                     crypto=crypto,

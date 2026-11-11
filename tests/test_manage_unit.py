@@ -914,16 +914,19 @@ class TestEnableRecoveryModule:
         assert error.__cause__ is cause
         assert f"Make sure the Agent EOA {_AGENT} holds enough gas" in str(error)
 
-    def test_agent_key_that_cannot_be_loaded_is_an_agent_enable_failure(
+    def test_agent_key_that_cannot_be_loaded_is_not_left_to_the_owner_swap(
         self, tmp_path: Path
     ) -> None:
-        """A missing or unreadable Agent EOA key is kept like a failed agent tx, not raised raw."""
+        """A missing Agent EOA key is a kept enable error, but not one the owner swap can fix."""
         cause = FileNotFoundError("keys/0xaaaa")
         result = self._run(tmp_path, owners=[_AGENT], key_load_error=cause)
 
         error = result["error"]
-        assert isinstance(error, AgentCouldNotEnableRecoveryModuleError)
+        assert isinstance(error, RecoveryModuleNotEnabledError)
+        # The swap loads the same key, so a stepwise teardown must stop before it starts.
+        assert not isinstance(error, AgentCouldNotEnableRecoveryModuleError)
         assert error.__cause__ is cause
+        assert "Contact Pearl support" in str(error)
         result["new_agent_tx"].assert_not_called()
 
     def test_agent_owned_safe_raises_when_agent_tx_fails(self, tmp_path: Path) -> None:
@@ -1105,7 +1108,7 @@ class TestDeployRecoveryModuleGate:
         service_state: OnChainState = OnChainState.DEPLOYED,
         module_turns_on: bool = True,
     ) -> t.Dict[str, t.Any]:
-        """Run an update of a service (DEPLOYED by default) whose first module enable fails.
+        """Run an update of a service (DEPLOYED by default), ``enable_effect`` driving each enable.
 
         A successful enable turns the module on unless ``module_turns_on`` is false.
 
@@ -1501,21 +1504,18 @@ class TestStopRefusedReuseBeforeTxs:
             teardown=_Teardown.STEPWISE,
         )
 
-    def test_a_failure_the_owner_swap_fixes_still_stops_a_deploy_not_yet_running(
-        self,
+    @pytest.mark.parametrize(
+        "error_type",
+        [RecoveryModuleNotEnabledError, AgentCouldNotEnableRecoveryModuleError],
+    )
+    def test_a_service_that_will_reuse_the_safe_is_stopped(
+        self, error_type: t.Type[RecoveryModuleNotEnabledError]
     ) -> None:
-        """Before the bond is posted nothing swaps the owner, so the deploy still stops."""
-        error = AgentCouldNotEnableRecoveryModuleError("agent tx failed")
-        with pytest.raises(RecoveryModuleNotEnabledError):
-            _stop_refused_reuse_before_txs(
-                recovery_module_error=error,
-                on_chain_state=OnChainState.PRE_REGISTRATION,
-                teardown=_Teardown.UNDECIDED,
-            )
+        """The enable error stops a deploy that has not posted its bond yet.
 
-    def test_a_service_that_will_reuse_the_safe_is_stopped(self) -> None:
-        """The enable error stops a deploy that has not posted its bond yet."""
-        error = RecoveryModuleNotEnabledError("agent tx failed")
+        Even one the owner swap would fix: before the bond nothing swaps the owner.
+        """
+        error = error_type("agent tx failed")
         with pytest.raises(RecoveryModuleNotEnabledError) as exc_info:
             _stop_refused_reuse_before_txs(
                 recovery_module_error=error,
