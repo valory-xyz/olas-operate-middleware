@@ -149,23 +149,17 @@ def _sum_erc20_transfers_from(
     return total
 
 
-def _require_recovery_module_for_reuse(
-    reuse_multisig: bool,
-    is_recovery_module_enabled: bool,
-    enable_error: t.Optional[RecoveryModuleNotEnabledError],
-    service_safe_address: str,
-    chain: str,
+def _stop_refused_reuse_before_txs(
+    recovery_module_error: t.Optional[RecoveryModuleNotEnabledError],
+    on_chain_state: OnChainState,
 ) -> None:
-    """Stop a deploy that would reuse an Agent Safe still lacking the recovery module."""
-    if not reuse_multisig or is_recovery_module_enabled:
-        return
-    if enable_error is not None:
-        raise enable_error
-    raise RecoveryModuleNotEnabledError(
-        f"The Agent Safe {service_safe_address} on {chain} does not have the "
-        "recovery module enabled, so it cannot be reused for this deployment. Try "
-        "again; if it keeps failing, contact Pearl support with this message."
-    )
+    """Stop before any bond is posted when the deploy will reuse a Safe it cannot use.
+
+    ``_enable_recovery_module`` only fails for a minted service with an Agent Safe,
+    and every later step of a deploy that is not yet running reuses that Safe.
+    """
+    if recovery_module_error is not None and on_chain_state != OnChainState.DEPLOYED:
+        raise recovery_module_error
 
 
 class ServiceManager:
@@ -521,6 +515,10 @@ class ServiceManager:
             current_agent_id = info["canonical_agents"][0]  # TODO Allow multiple agents
             service.store()
         self.logger.info(f"Service state: {on_chain_state.name}")
+        _stop_refused_reuse_before_txs(
+            recovery_module_error=recovery_module_error,
+            on_chain_state=on_chain_state,
+        )
 
         current_staking_program = self._get_current_staking_program(service, chain)
         fallback_params = dict(  # nosec
@@ -966,28 +964,15 @@ class ServiceManager:
 
             # --- Deploy ---
             info = sftxb.info(token_id=chain_data.token)
-            service_safe_address = info["multisig"]
-            if service_safe_address == ZERO_ADDRESS:
-                reuse_multisig = False
-                is_initial_funding = True
-                is_recovery_module_enabled = True
-            else:
-                reuse_multisig = True
-                is_recovery_module_enabled = (
-                    registry_contracts.gnosis_safe.is_module_enabled(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=service_safe_address,
-                        module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                    ).get("enabled")
-                )
-            self.logger.info(f"{reuse_multisig=}")
-            _require_recovery_module_for_reuse(
-                reuse_multisig=reuse_multisig,
-                is_recovery_module_enabled=is_recovery_module_enabled,
-                enable_error=recovery_module_error,
-                service_safe_address=service_safe_address,
+            reuse_multisig = self._resolve_safe_reuse(
+                sftxb=sftxb,
+                service_config_id=service_config_id,
                 chain=chain,
+                service_safe_address=info["multisig"],
             )
+            if not reuse_multisig:
+                is_initial_funding = True
+            self.logger.info(f"{reuse_multisig=}")
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -995,7 +980,7 @@ class ServiceManager:
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
-                use_recovery_module=is_recovery_module_enabled,
+                use_recovery_module=True,  # _resolve_safe_reuse guarantees it
                 use_poly_safe=use_poly_safe,
                 agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
@@ -1191,31 +1176,14 @@ class ServiceManager:
                 self.logger.info("Deploying service")
 
                 info = sftxb.info(token_id=chain_data.token)
-                service_safe_address = info["multisig"]
-                if service_safe_address == ZERO_ADDRESS:
-                    reuse_multisig = False
-                    is_initial_funding = True
-                    is_recovery_module_enabled = True
-                else:
-                    reuse_multisig = True
-                    is_initial_funding = False
-                    is_recovery_module_enabled = (
-                        registry_contracts.gnosis_safe.is_module_enabled(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=service_safe_address,
-                            module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                        ).get("enabled")
-                    )
-
-                self.logger.info(f"{reuse_multisig=}")
-                self.logger.info(f"{is_recovery_module_enabled=}")
-                _require_recovery_module_for_reuse(
-                    reuse_multisig=reuse_multisig,
-                    is_recovery_module_enabled=is_recovery_module_enabled,
-                    enable_error=recovery_module_error,
-                    service_safe_address=service_safe_address,
+                reuse_multisig = self._resolve_safe_reuse(
+                    sftxb=sftxb,
+                    service_config_id=service_config_id,
                     chain=chain,
+                    service_safe_address=info["multisig"],
                 )
+                is_initial_funding = not reuse_multisig
+                self.logger.info(f"{reuse_multisig=}")
 
                 service_public_id = PublicId.from_str(service.service_public_id())
                 use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -1225,7 +1193,7 @@ class ServiceManager:
                     service_id=chain_data.token,
                     reuse_multisig=reuse_multisig,
                     master_safe=safe,
-                    use_recovery_module=is_recovery_module_enabled,
+                    use_recovery_module=True,  # _resolve_safe_reuse guarantees it
                     use_poly_safe=use_poly_safe,
                     agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                         service.agent_addresses[0]
@@ -1679,17 +1647,11 @@ class ServiceManager:
                         return
                     raise e
 
-            try:
-                self._enable_recovery_module(
-                    service_config_id=service_config_id, chain=chain
-                )
-            except RecoveryModuleNotEnabledError as e:
-                # The swap does not need the module. Once the Master Safe owns the
-                # Agent Safe, the next deploy enables it through the Master Safe.
-                self.logger.warning(
-                    f"[SERVICE MANAGER] {e} Continuing with the Safe owner swap.",
-                    exc_info=True,
-                )
+            # The swap does not need the module. Once the Master Safe owns the
+            # Agent Safe, the next deploy enables it through the Master Safe.
+            self._try_enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
             self.logger.info("[SERVICE MANAGER] Swapping Safe owners")
             owner_crypto = self.keys_manager.get_crypto_instance(
                 address=current_safe_owners[0]
@@ -1765,6 +1727,42 @@ class ServiceManager:
                 )
             ).settle()
             self.logger.info("Recovering service Safe done.")
+
+    def _resolve_safe_reuse(
+        self,
+        sftxb: EthSafeTxBuilder,
+        service_config_id: str,
+        chain: str,
+        service_safe_address: str,
+    ) -> bool:
+        """Return whether the deploy reuses the Agent Safe, which then has the recovery module.
+
+        A reused Agent Safe without the module gets one more attempt to enable it, so
+        the error reflects its current owners; if it still lacks the module, raise
+        RecoveryModuleNotEnabledError rather than build a reuse deploy without it.
+        """
+        if service_safe_address == ZERO_ADDRESS:
+            return False
+
+        def _is_enabled() -> bool:
+            return bool(
+                registry_contracts.gnosis_safe.is_module_enabled(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=service_safe_address,
+                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                ).get("enabled")
+            )
+
+        if _is_enabled():
+            return True
+        self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
+        if _is_enabled():
+            return True
+        raise RecoveryModuleNotEnabledError(
+            f"The Agent Safe {service_safe_address} on {chain} does not have the "
+            "recovery module enabled, so it cannot be reused for this deployment. Try "
+            "again; if it keeps failing, contact Pearl support with this message."
+        )
 
     def _try_enable_recovery_module(
         self, service_config_id: str, chain: str

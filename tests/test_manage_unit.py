@@ -43,7 +43,7 @@ from operate.operate_types import (
 )
 from operate.services.manage import (
     ServiceManager,
-    _require_recovery_module_for_reuse,
+    _stop_refused_reuse_before_txs,
 )
 from operate.services.protocol import StakingState
 from operate.services.service import (
@@ -935,13 +935,13 @@ class TestEnableRecoveryModule:
         result["new_agent_tx"].assert_not_called()
         result["sftxb"].new_tx.assert_not_called()
 
-    def test_deploy_continues_when_module_cannot_be_enabled(
-        self, tmp_path: Path
-    ) -> None:
-        """A failed enable does not stop a deploy that reuses no Safe, e.g. a restart."""
+    def _run_deploy_until_staking_read(
+        self, tmp_path: Path, service_state: OnChainState, error: Exception
+    ) -> t.Tuple[t.Optional[BaseException], MagicMock]:
+        """Run the deploy with a failing enable; stop it at the staking-program read."""
 
-        class _ReachedOnChainSync(Exception):
-            """Raised by the first call after the recovery-module step."""
+        class _ReachedStakingRead(Exception):
+            """Raised by the first call after the early reuse gate."""
 
         manager = _make_manager(tmp_path)
         service = _make_mock_service()
@@ -953,22 +953,70 @@ class TestEnableRecoveryModule:
             Chain.GNOSIS: _MASTER_SAFE
         }
         sftxb = MagicMock()
-        sftxb.info.side_effect = _ReachedOnChainSync
+        sftxb.info.return_value = {
+            "service_state": service_state.value,
+            "instances": [_AGENT],
+            "multisig": _SERVICE_SAFE,
+            "canonical_agents": [25],
+        }
 
+        raised: t.Optional[BaseException] = None
         with (
             patch.object(manager, "load", return_value=service),
             patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(manager, "_enable_recovery_module", side_effect=error),
             patch.object(
                 manager,
-                "_enable_recovery_module",
-                side_effect=RecoveryModuleNotEnabledError("agent tx failed"),
+                "_get_current_staking_program",
+                side_effect=_ReachedStakingRead,
             ),
             patch.dict("os.environ", {}),
-            pytest.raises(_ReachedOnChainSync),
         ):
-            manager._deploy_service_onchain_from_safe(
-                service_config_id="sc-test-id", chain=_CHAIN
-            )
+            try:
+                manager._deploy_service_onchain_from_safe(
+                    service_config_id="sc-test-id", chain=_CHAIN
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                raised = e
+        assert raised is not None
+        if type(raised).__name__ == "_ReachedStakingRead":
+            raised = None
+        return raised, sftxb
+
+    def test_deploy_continues_when_module_cannot_be_enabled(
+        self, tmp_path: Path
+    ) -> None:
+        """A running service still restarts when the enable fails: it reuses no Safe."""
+        raised, _ = self._run_deploy_until_staking_read(
+            tmp_path,
+            OnChainState.DEPLOYED,
+            RecoveryModuleNotEnabledError("agent tx failed"),
+        )
+
+        assert raised is None
+
+    @pytest.mark.parametrize(
+        "service_state",
+        [
+            OnChainState.PRE_REGISTRATION,
+            OnChainState.ACTIVE_REGISTRATION,
+            OnChainState.FINISHED_REGISTRATION,
+        ],
+    )
+    def test_reuse_deploy_stops_before_any_bond_tx(
+        self, tmp_path: Path, service_state: OnChainState
+    ) -> None:
+        """A deploy that will reuse the Safe stops before activate or register is sent."""
+        error = RecoveryModuleNotEnabledError("agent tx failed")
+        raised, sftxb = self._run_deploy_until_staking_read(
+            tmp_path, service_state, error
+        )
+
+        assert raised is error
+        sftxb.new_tx.assert_not_called()
+        sftxb.get_activate_data.assert_not_called()
+        sftxb.get_register_instances_data.assert_not_called()
+        sftxb.get_deploy_data_from_safe.assert_not_called()
 
     def test_try_enable_returns_the_error_instead_of_raising(
         self, tmp_path: Path
@@ -992,49 +1040,118 @@ class TestEnableRecoveryModule:
             )
 
 
-class TestRequireRecoveryModuleForReuse:
-    """Tests for _require_recovery_module_for_reuse()."""
+class TestStopRefusedReuseBeforeTxs:
+    """Tests for _stop_refused_reuse_before_txs()."""
 
-    @pytest.mark.parametrize(
-        ("reuse_multisig", "is_recovery_module_enabled"),
-        [(False, False), (False, True), (True, True)],
-        ids=["new-safe", "new-safe-enabled", "reuse-enabled"],
-    )
-    def test_allows_deploys_that_do_not_reuse_a_safe_without_the_module(
-        self, reuse_multisig: bool, is_recovery_module_enabled: bool
-    ) -> None:
-        """Only a reuse with the module missing is stopped."""
-        _require_recovery_module_for_reuse(
-            reuse_multisig=reuse_multisig,
-            is_recovery_module_enabled=is_recovery_module_enabled,
-            enable_error=RecoveryModuleNotEnabledError("agent tx failed"),
-            service_safe_address=_SERVICE_SAFE,
-            chain=_CHAIN,
+    def test_no_error_lets_the_deploy_go_on(self) -> None:
+        """Without an enable error nothing stops."""
+        _stop_refused_reuse_before_txs(
+            recovery_module_error=None,
+            on_chain_state=OnChainState.FINISHED_REGISTRATION,
         )
 
-    def test_reuse_without_module_raises_the_enable_error(self) -> None:
-        """The enable step's actionable error is the one the user sees."""
+    def test_a_deployed_service_is_not_stopped(self) -> None:
+        """A restart reuses no Safe, so the error does not stop it."""
+        _stop_refused_reuse_before_txs(
+            recovery_module_error=RecoveryModuleNotEnabledError("agent tx failed"),
+            on_chain_state=OnChainState.DEPLOYED,
+        )
+
+    def test_a_service_that_will_reuse_the_safe_is_stopped(self) -> None:
+        """The enable error stops a deploy that has not posted its bond yet."""
         error = RecoveryModuleNotEnabledError("agent tx failed")
         with pytest.raises(RecoveryModuleNotEnabledError) as exc_info:
-            _require_recovery_module_for_reuse(
-                reuse_multisig=True,
-                is_recovery_module_enabled=False,
-                enable_error=error,
-                service_safe_address=_SERVICE_SAFE,
-                chain=_CHAIN,
+            _stop_refused_reuse_before_txs(
+                recovery_module_error=error,
+                on_chain_state=OnChainState.PRE_REGISTRATION,
             )
         assert exc_info.value is error
 
-    def test_reuse_without_module_and_no_enable_error_still_raises(self) -> None:
-        """A reuse never goes ahead with the module missing."""
-        with pytest.raises(RecoveryModuleNotEnabledError, match=_SERVICE_SAFE):
-            _require_recovery_module_for_reuse(
-                reuse_multisig=True,
-                is_recovery_module_enabled=False,
-                enable_error=None,
-                service_safe_address=_SERVICE_SAFE,
-                chain=_CHAIN,
-            )
+
+class TestResolveSafeReuse:
+    """Tests for ServiceManager._resolve_safe_reuse(), called by both deploy paths."""
+
+    def _run(
+        self,
+        tmp_path: Path,
+        multisig: str,
+        enabled_reads: t.List[bool],
+        enable_error: t.Optional[Exception] = None,
+    ) -> t.Dict[str, t.Any]:
+        """Run _resolve_safe_reuse with mocked module reads and enable step."""
+        manager = _make_manager(tmp_path)
+        result: t.Dict[str, t.Any] = {"error": None, "reuse": None}
+        with (
+            patch(
+                "operate.services.manage.CONTRACTS",
+                {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
+            ),
+            patch("operate.services.manage.registry_contracts") as mock_rc,
+            patch.object(
+                manager, "_enable_recovery_module", side_effect=enable_error
+            ) as enable,
+        ):
+            mock_rc.gnosis_safe.is_module_enabled.side_effect = [
+                {"enabled": value} for value in enabled_reads
+            ]
+            try:
+                result["reuse"] = manager._resolve_safe_reuse(
+                    sftxb=MagicMock(),
+                    service_config_id="sc-test-id",
+                    chain=_CHAIN,
+                    service_safe_address=multisig,
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                result["error"] = e
+        result["enable"] = enable
+        return result
+
+    def test_no_safe_is_not_reused(self, tmp_path: Path) -> None:
+        """Without an Agent Safe the deploy creates one; no module check is needed."""
+        result = self._run(tmp_path, multisig=ZERO_ADDRESS, enabled_reads=[])
+
+        assert result["reuse"] is False
+        result["enable"].assert_not_called()
+
+    def test_safe_with_module_is_reused(self, tmp_path: Path) -> None:
+        """A Safe that already has the module is reused as is."""
+        result = self._run(tmp_path, multisig=_SERVICE_SAFE, enabled_reads=[True])
+
+        assert result["reuse"] is True
+        result["enable"].assert_not_called()
+
+    def test_safe_without_module_is_enabled_then_reused(self, tmp_path: Path) -> None:
+        """The module is enabled for the Safe's current owners, then the Safe is reused."""
+        result = self._run(
+            tmp_path, multisig=_SERVICE_SAFE, enabled_reads=[False, True]
+        )
+
+        assert result["reuse"] is True
+        result["enable"].assert_called_once_with(
+            service_config_id="sc-test-id", chain=_CHAIN
+        )
+
+    def test_enable_failure_for_current_owners_is_raised(self, tmp_path: Path) -> None:
+        """The error comes from a fresh attempt, so it matches the Safe's owners now."""
+        error = RecoveryModuleNotEnabledError("owned by the Master Safe now")
+        result = self._run(
+            tmp_path,
+            multisig=_SERVICE_SAFE,
+            enabled_reads=[False],
+            enable_error=error,
+        )
+
+        assert result["error"] is error
+
+    def test_module_still_missing_raises(self, tmp_path: Path) -> None:
+        """A reuse deploy is never built while the module is missing."""
+        result = self._run(
+            tmp_path, multisig=_SERVICE_SAFE, enabled_reads=[False, False]
+        )
+
+        error = result["error"]
+        assert isinstance(error, RecoveryModuleNotEnabledError)
+        assert _SERVICE_SAFE in str(error)
 
 
 class TestGetCurrentStakingProgram:
@@ -1184,7 +1301,6 @@ class TestClaimOnChainFromSafe:
         }
 
         receipt = MagicMock()
-        receipt.status = 1
         receipt.__getitem__.side_effect = {"logs": logs}.__getitem__
         if sftxb is None:
             sftxb = MagicMock()
