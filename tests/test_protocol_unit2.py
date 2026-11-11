@@ -1351,7 +1351,6 @@ class TestGetSafeBExecMessages:
             )
 
         multisend_txs = mock_rc.multisend.get_multisend_tx.call_args.kwargs["txs"]
-        # Only the data is normalised; every other field passes through.
         assert multisend_txs == [
             {
                 "to": self._SAFE_B,

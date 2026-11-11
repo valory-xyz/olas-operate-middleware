@@ -2448,12 +2448,13 @@ Deploy and run a service.
 **Response (Agent Safe cannot get the recovery module - 409):**
 
 A deployment that will reuse an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do.
-- These stop with this 409 before they send any transaction, so no bond is posted: a deployment of a service not yet deployed on-chain (whoever owns its Agent Safe), an update folded into one batch, and a step-by-step update whose Agent Safe the Agent EOA does not own.
+- These stop with this 409 before any teardown, bond or deploy transaction (only the failed enable attempt is sent), so no bond is posted: a deployment of a service not yet deployed on-chain (whoever owns its Agent Safe), an update folded into one batch, and a step-by-step update whose Agent Safe the Agent EOA does not own.
 - A step-by-step update whose Agent Safe the Agent EOA owns runs its teardown (unstake, terminate, unbond, Safe swap) first, and can still end with this 409 after it.
 - A restart, or an update while the service cannot leave staking yet, sends no teardown and reuses no Safe, so neither a failed enable nor a gas shortfall on it stops it.
 
 This happens when:
 - the Agent EOA owns the Safe and its transaction to enable the module fails;
+- the Agent EOA owns the Safe but its key cannot be loaded;
 - the Master Safe owns the Safe and its transaction to enable the module fails;
 - the Safe's owners are not the Agent EOA alone or the Master Safe alone;
 - the module is still not enabled after a successful attempt.
@@ -2469,7 +2470,7 @@ This happens when:
 
 **Response (Insufficient signer gas - 400):**
 
-Returned when the Master EOA cannot pay for a transaction the deployment sends, including the Master Safe's transaction that enables the recovery module and the Agent EOA's top-up before a step-by-step update swaps the Safe. If the Master Safe's own balance cannot cover that top-up, the top-up is skipped; the swap then fails with a 500, after the teardown, only if the Agent EOA cannot pay for it.
+Returned when the Master EOA cannot pay for a transaction the deployment sends, including the Master Safe's transaction that enables the recovery module and, when the Agent Safe does not already have the recovery module, the Agent EOA's top-up before a step-by-step update swaps the Safe. If the Master Safe's own balance cannot cover that top-up, the top-up is skipped; the swap then fails with a 500, after the teardown, only if the Agent EOA cannot pay for it.
 
 ```json
 {

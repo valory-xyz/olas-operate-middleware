@@ -118,7 +118,6 @@ class TestMasterSafeEnablesRecoveryModule(OnFork):
         tx.settle()
         assert not _module_enabled()
 
-        # Redeploy: the deploy must enable the module and reuse the same Agent Safe.
         service_manager.deploy_service_onchain_from_safe(
             service_config_id=service_config_id
         )
