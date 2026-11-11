@@ -1445,14 +1445,7 @@ class TestGetSafeBExecMessages:
         assert result == ("approve", "exec")
         exec_mock.assert_called_once_with(
             safe_b_address=self._SAFE_B,
-            txs=[
-                {
-                    "to": "0xrecipient",
-                    "data": b"",
-                    "operation": MultiSendOperation.CALL,
-                    "value": 42,
-                }
-            ],
+            txs=[{"to": "0xrecipient", "value": 42}],
             nonce=3,
         )
 
@@ -1493,14 +1486,7 @@ class TestGetSafeBExecMessages:
         )
         exec_mock.assert_called_once_with(
             safe_b_address=self._SAFE_B,
-            txs=[
-                {
-                    "to": token_address,
-                    "data": "0xtransferdata",
-                    "operation": MultiSendOperation.CALL,
-                    "value": 0,
-                }
-            ],
+            txs=[{"to": token_address, "data": "0xtransferdata"}],
             nonce=3,
         )
 

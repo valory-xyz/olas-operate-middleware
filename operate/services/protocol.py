@@ -1612,7 +1612,7 @@ class EthSafeTxBuilder(_ChainUtil):
         safe_b_address: str,
         txs: t.List[MultiSendSubTx],
         nonce: t.Optional[int] = None,
-    ) -> t.Tuple[t.Dict, t.Dict]:
+    ) -> t.Tuple[MultiSendSubTx, MultiSendSubTx]:
         """
         Build the two messages (Safe calls) to execute ``txs`` on Safe B via this Safe (owner of Safe B).
 
@@ -1663,7 +1663,7 @@ class EthSafeTxBuilder(_ChainUtil):
             abi_element_identifier="approveHash",
             args=[safe_tx_hash],
         )
-        approve_hash_message = {
+        approve_hash_message: MultiSendSubTx = {
             "to": safe_b_address,
             "data": approve_hash_data[2:],
             "operation": MultiSendOperation.CALL,
@@ -1685,7 +1685,7 @@ class EthSafeTxBuilder(_ChainUtil):
                 get_packed_signature_for_approved_hash(owners=(self.safe,)),
             ],
         )
-        exec_message = {
+        exec_message: MultiSendSubTx = {
             "to": safe_b_address,
             "data": exec_data[2:],
             "operation": MultiSendOperation.CALL,
@@ -1700,18 +1700,11 @@ class EthSafeTxBuilder(_ChainUtil):
         to: str,
         amount: int,
         nonce: t.Optional[int] = None,
-    ) -> t.Tuple[t.Dict, t.Dict]:
+    ) -> t.Tuple[MultiSendSubTx, MultiSendSubTx]:
         """Build the messages to withdraw native ETH from Safe B via this Safe (owner of Safe B)."""
         return self.get_safe_b_exec_messages(
             safe_b_address=safe_b_address,
-            txs=[
-                {
-                    "to": to,
-                    "data": b"",
-                    "operation": MultiSendOperation.CALL,
-                    "value": amount,
-                }
-            ],
+            txs=[{"to": to, "value": amount}],
             nonce=nonce,
         )
 
@@ -1722,7 +1715,7 @@ class EthSafeTxBuilder(_ChainUtil):
         to: str,
         amount: int,
         nonce: t.Optional[int] = None,
-    ) -> t.Tuple[t.Dict, t.Dict]:
+    ) -> t.Tuple[MultiSendSubTx, MultiSendSubTx]:
         """Build the messages to withdraw ERC20 from Safe B via this Safe (owner of Safe B)."""
         erc20_instance = registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
@@ -1734,14 +1727,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return self.get_safe_b_exec_messages(
             safe_b_address=safe_b_address,
-            txs=[
-                {
-                    "to": token,
-                    "data": transfer_data,
-                    "operation": MultiSendOperation.CALL,
-                    "value": 0,
-                }
-            ],
+            txs=[{"to": token, "data": transfer_data}],
             nonce=nonce,
         )
 
@@ -1919,7 +1905,7 @@ class EthSafeTxBuilder(_ChainUtil):
         self,
         safe_address: str,
         module_address: str,
-    ) -> t.Dict:
+    ) -> MultiSendSubTx:
         """Get enable module tx data"""
         self._patch()
         instance = registry_contracts.gnosis_safe.get_instance(

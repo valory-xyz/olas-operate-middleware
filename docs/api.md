@@ -19,7 +19,7 @@ The API uses appropriate HTTP status codes:
 - `400 Bad Request`: Invalid request parameters
 - `401 Unauthorized`: Authentication required or invalid credentials
 - `404 Not Found`: Resource not found
-- `409 Conflict`: Resource already exists
+- `409 Conflict`: Request conflicts with the current state of the resource
 - `500 Internal Server Error`: Server-side errors
 
 ## General API Information

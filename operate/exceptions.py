@@ -60,16 +60,11 @@ class ServicePackageDownloadError(Exception):
 class RecoveryModuleNotEnabledError(Exception):
     """The service Safe still lacks the recovery module, so it cannot be reused."""
 
-    error_code = "RECOVERY_MODULE_NOT_ENABLED"
-
-    def __init__(self, user_message: str) -> None:
-        """Keep the message shown to the user apart from the exception itself."""
-        super().__init__(user_message)
-        self.user_message = user_message
+    error_code: t.ClassVar[str] = "RECOVERY_MODULE_NOT_ENABLED"
 
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
-        return {"error": self.user_message, "error_code": self.error_code}
+        return {"error_code": self.error_code}
 
 
 class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):

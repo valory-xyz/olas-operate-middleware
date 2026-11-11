@@ -1804,7 +1804,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except RecoveryModuleNotEnabledError as e:
             logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
-                content=e.to_error_fields(),
+                content={"error": str(e), **e.to_error_fields()},
                 status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except

@@ -153,48 +153,36 @@ def _sum_erc20_transfers_from(
     return total
 
 
-# See _enable_recovery_module for when each is raised.
 _EnableFailure = t.Union[RecoveryModuleNotEnabledError, InsufficientFundsException]
 _ENABLE_ERRORS = t.get_args(_EnableFailure)
 
 
-class _Teardown(enum.Enum):
-    """What a deploy tears down before it decides whether to reuse the Agent Safe."""
+class _SwapPlan(enum.Enum):
+    """Whether a stepwise teardown, which swaps the Agent Safe to the Master Safe, follows."""
 
-    UNDECIDED = "undecided"  # an update's teardown is not chosen yet
-    NONE = "none"  # nothing is torn down (e.g. inside the staking lock window)
-    STEPWISE = "stepwise"  # unstake, terminate, unbond and swap, each sent on its own
+    UNDECIDED = "undecided"
+    NO_SWAP = "no_swap"
+    STEPWISE = "stepwise"
 
 
 def _stop_refused_reuse_before_txs(
     recovery_module_error: t.Optional[_EnableFailure],
     on_chain_state: OnChainState,
-    teardown: _Teardown,
+    swap_plan: _SwapPlan,
 ) -> None:
-    """Stop before any tx is sent when the deploy will reuse a Safe it cannot use.
-
-    ``_enable_recovery_module`` only fails for a minted service with an Agent Safe.
-    Every later step of a deploy that is not yet running reuses that Safe. A
-    running service reuses it only when an update tears it down step by step,
-    which sends the unstake, terminate, unbond and swap before the reuse is
-    decided; an update folded into one batch decides it before sending anything.
-    That teardown funds the Agent EOA and swaps its Safe to the Master Safe, which
-    can then enable the module, so a failure the swap fixes does not stop it. The
-    same holds for an update resumed after such a teardown stopped before the
-    swap, so for a service not yet running that failure waits until the deploy
-    knows whether a stepwise swap follows (``teardown`` other than ``UNDECIDED``).
-    """
+    """Raise the enable error before any tx is sent if the deploy will reuse the Safe without the module."""
     if recovery_module_error is None:
         return
+    # After the swap the Master Safe owns the Safe and can enable the module itself.
     fixed_by_owner_swap = isinstance(
         recovery_module_error, AgentCouldNotEnableRecoveryModuleError
     )
     if on_chain_state != OnChainState.DEPLOYED:
-        # A resumed stepwise update swaps the Safe too, so wait until that is known.
-        if fixed_by_owner_swap and teardown is not _Teardown.NONE:
+        if fixed_by_owner_swap and swap_plan is not _SwapPlan.NO_SWAP:
             return
         raise recovery_module_error
-    if teardown is _Teardown.STEPWISE and not fixed_by_owner_swap:
+    # A running service reuses its Safe only after a stepwise teardown.
+    if swap_plan is _SwapPlan.STEPWISE and not fixed_by_owner_swap:
         raise recovery_module_error
 
 
@@ -554,7 +542,7 @@ class ServiceManager:
         _stop_refused_reuse_before_txs(
             recovery_module_error=recovery_module_error,
             on_chain_state=on_chain_state,
-            teardown=_Teardown.UNDECIDED,
+            swap_plan=_SwapPlan.UNDECIDED,
         )
 
         current_staking_program = self._get_current_staking_program(service, chain)
@@ -801,7 +789,9 @@ class ServiceManager:
                 _stop_refused_reuse_before_txs(
                     recovery_module_error=recovery_module_error,
                     on_chain_state=on_chain_state,
-                    teardown=_Teardown.NONE if staking_locked else _Teardown.STEPWISE,
+                    swap_plan=(
+                        _SwapPlan.NO_SWAP if staking_locked else _SwapPlan.STEPWISE
+                    ),
                 )
                 self.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id,
@@ -822,7 +812,7 @@ class ServiceManager:
             _stop_refused_reuse_before_txs(
                 recovery_module_error=recovery_module_error,
                 on_chain_state=on_chain_state,
-                teardown=_Teardown.NONE,
+                swap_plan=_SwapPlan.NO_SWAP,
             )
 
         # Mint service
@@ -1023,15 +1013,13 @@ class ServiceManager:
             mega_tx.add(register_data, label="register_instances")
 
             # --- Deploy ---
-            info = sftxb.info(token_id=chain_data.token)
             reuse_multisig = self._resolve_safe_reuse(
                 sftxb=sftxb,
                 service_config_id=service_config_id,
                 chain=chain,
-                service_safe_address=info["multisig"],
+                token_id=chain_data.token,
             )
             is_initial_funding = not reuse_multisig
-            self.logger.info(f"{reuse_multisig=}")
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -1233,15 +1221,13 @@ class ServiceManager:
             ):
                 self.logger.info("Deploying service")
 
-                info = sftxb.info(token_id=chain_data.token)
                 reuse_multisig = self._resolve_safe_reuse(
                     sftxb=sftxb,
                     service_config_id=service_config_id,
                     chain=chain,
-                    service_safe_address=info["multisig"],
+                    token_id=chain_data.token,
                 )
                 is_initial_funding = not reuse_multisig
-                self.logger.info(f"{reuse_multisig=}")
 
                 service_public_id = PublicId.from_str(service.service_public_id())
                 use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -1501,9 +1487,7 @@ class ServiceManager:
         )
 
         if staking_locked:
-            # Cannot unstake yet (e.g. still within the staking lock window) ->
-            # the service cannot be torn down, so the update cannot proceed this
-            # cycle. The legacy fallback returns without sending anything.
+            # The legacy fallback then returns without sending anything.
             self.logger.warning(
                 "Update teardown: service is staked and cannot be unstaked yet; "
                 "the update will not be applied until it becomes unstakeable."
@@ -1574,11 +1558,7 @@ class ServiceManager:
         chain: str,
         staking_locked: t.Optional[bool] = None,
     ) -> None:
-        """Terminate service on-chain.
-
-        ``staking_locked`` is the caller's ``_is_staking_locked`` answer; it is read
-        here when omitted.
-        """
+        """Terminate service on-chain; ``staking_locked`` is read when omitted."""
 
         self.logger.info("terminate_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
@@ -1733,7 +1713,7 @@ class ServiceManager:
                 ),  # TODO it should always be safe address
             )
 
-    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
+    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
         chain: str,
@@ -1811,20 +1791,17 @@ class ServiceManager:
         sftxb: EthSafeTxBuilder,
         service_config_id: str,
         chain: str,
-        service_safe_address: str,
+        token_id: int,
     ) -> bool:
-        """Return whether the deploy reuses the Agent Safe, which then has the recovery module.
-
-        A reused Agent Safe without the module gets one more attempt to enable it, so
-        the error reflects its current owners. If it still lacks the module, raise
-        RecoveryModuleNotEnabledError rather than build a reuse deploy without it; a
-        Master EOA gas shortfall on that attempt raises InsufficientFundsException.
-        """
+        """Return whether the deploy reuses the Agent Safe, enabling its recovery module first."""
+        service_safe_address = sftxb.info(token_id=token_id)["multisig"]
+        self.logger.info(f"Agent Safe to reuse: {service_safe_address}")
         if service_safe_address == ZERO_ADDRESS:
             return False
 
         if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
             return True
+        # A fresh attempt, so the error matches the Safe's current owners.
         self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
         if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
             return True
@@ -1853,15 +1830,7 @@ class ServiceManager:
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable the recovery module on the service Safe, if it has one.
-
-        Returns without a tx when the service is not minted, has no Safe yet, or
-        the module is already enabled; raises RecoveryModuleNotEnabledError when
-        enabling it fails.
-
-        A Master EOA gas shortfall on the Master Safe's transaction is raised as
-        InsufficientFundsException instead, so callers keep its funding details.
-        """
+        """Enable the recovery module on the service Safe if missing; raises an ``_EnableFailure``."""
         self.logger.info(f"_enable_recovery_module {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
