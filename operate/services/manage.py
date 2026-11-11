@@ -149,16 +149,29 @@ def _sum_erc20_transfers_from(
     return total
 
 
-def _stop_refused_reuse_before_txs(
-    recovery_module_error: t.Optional[RecoveryModuleNotEnabledError],
-    on_chain_state: OnChainState,
-) -> None:
-    """Stop before any bond is posted when the deploy will reuse a Safe it cannot use.
+# Why the recovery module could not be enabled at deploy start: either it cannot
+# be, or the Master EOA lacks gas for the Master Safe's transaction.
+RecoveryModuleEnableError = t.Union[
+    RecoveryModuleNotEnabledError, InsufficientFundsException
+]
 
-    ``_enable_recovery_module`` only fails for a minted service with an Agent Safe,
-    and every later step of a deploy that is not yet running reuses that Safe.
+
+def _stop_refused_reuse_before_txs(
+    recovery_module_error: t.Optional[RecoveryModuleEnableError],
+    on_chain_state: OnChainState,
+    tears_down_stepwise: bool = False,
+) -> None:
+    """Stop before any tx is sent when the deploy will reuse a Safe it cannot use.
+
+    ``_enable_recovery_module`` only fails for a minted service with an Agent Safe.
+    Every later step of a deploy that is not yet running reuses that Safe. A
+    running service reuses it only when an update tears it down step by step,
+    which sends the unstake, terminate, unbond and swap before the reuse is
+    decided; an update folded into one batch decides it before sending anything.
     """
-    if recovery_module_error is not None and on_chain_state != OnChainState.DEPLOYED:
+    if recovery_module_error is not None and (
+        on_chain_state != OnChainState.DEPLOYED or tears_down_stepwise
+    ):
         raise recovery_module_error
 
 
@@ -752,6 +765,11 @@ class ServiceManager:
                 master_safe=safe,
             )
             if update_teardown_prefix is None:
+                _stop_refused_reuse_before_txs(
+                    recovery_module_error=recovery_module_error,
+                    on_chain_state=on_chain_state,
+                    tears_down_stepwise=True,
+                )
                 self.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id, chain=chain
                 )
@@ -1766,14 +1784,13 @@ class ServiceManager:
 
     def _try_enable_recovery_module(
         self, service_config_id: str, chain: str
-    ) -> t.Optional[RecoveryModuleNotEnabledError]:
+    ) -> t.Optional[RecoveryModuleEnableError]:
         """Enable the recovery module if possible, returning the error instead of raising it."""
         try:
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
-        except RecoveryModuleNotEnabledError as e:
-            # Only a reuse deploy needs the module, so it decides whether to stop.
+        except (RecoveryModuleNotEnabledError, InsufficientFundsException) as e:
             self.logger.warning(f"[SERVICE MANAGER] {e}", exc_info=True)
             return e
         return None
