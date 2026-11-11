@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10, <3.15"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1212,7 +1212,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1536,7 +1536,7 @@ name = "importlib-metadata"
 version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.14'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/01/15bb152d77b21318514a96f43af312635eb2500c96b55398d020c93d86ea/importlib_metadata-9.0.0.tar.gz", hash = "sha256:a4f57ab599e6a2e3016d7595cfd72eb4661a5106e787a95bcc90c7105b831efc", size = 56405, upload-time = "2026-03-20T06:42:56.999Z" }
 wheels = [
@@ -1848,6 +1848,7 @@ wheels = [
 name = "olas-operate-middleware"
 version = "0.15.53"
 source = { editable = "." }
+default-groups = "all"
 dependencies = [
     { name = "aiohttp" },
     { name = "argon2-cffi" },
@@ -1896,7 +1897,7 @@ requires-dist = [
     { name = "open-aea-cli-ipfs", specifier = ">=2.2.10,<3" },
     { name = "open-aea-ledger-cosmos", specifier = ">=2.2.10,<3" },
     { name = "open-aea-ledger-ethereum", specifier = ">=2.2.10,<3" },
-    { name = "open-autonomy", extras = ["cli", "docker"], specifier = ">=0.21.30,<0.22" },
+    { name = "open-autonomy", extras = ["cli", "docker"], specifier = ">=0.21.31rc2,<0.22" },
     { name = "psutil", specifier = ">=5.9.8,<6" },
     { name = "requests", specifier = ">=2.32,<3" },
     { name = "uvicorn", specifier = ">=0.30" },
@@ -1986,7 +1987,7 @@ wheels = [
 
 [[package]]
 name = "open-autonomy"
-version = "0.21.30"
+version = "0.21.31rc2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2003,9 +2004,9 @@ dependencies = [
     { name = "requests" },
     { name = "web3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6f/45/b7c26e596ea0292fee939276ca4eb558358e0f8bd3d5b4c5af80d2943b79/open_autonomy-0.21.30.tar.gz", hash = "sha256:dabe161302dbc5ab190d5e394d10e05a1f4cb8dd48355a8d4f144d7e2ed08e06", size = 1165695, upload-time = "2026-10-26T09:59:01.386Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/08/288950643881e7a711f2e168b2b8c7b94152fd82786aa4e45960879461bd/open_autonomy-0.21.31rc2.tar.gz", hash = "sha256:c5b0ccdb20c123925dbbe70d8c6f2186858ee60e83ff7261848bea72144f4377", size = 1123784, upload-time = "2026-11-11T21:24:00.36Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/1a/7fd50d6961cfadc10cf282ed165ba1daa03f595952ccb56cb12c8dec61d9/open_autonomy-0.21.30-py3-none-any.whl", hash = "sha256:d84260a3f55d059be1a0dd23c9b492b38f493ccc3e903c92e784347cd925820e", size = 1675378, upload-time = "2026-10-26T09:58:59.982Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/a6/1fa1b742110372e33b33289797967d06915a020bfa49431484273368e406/open_autonomy-0.21.31rc2-py3-none-any.whl", hash = "sha256:ce7ac45b4142a264eafcc385d7af49e86f72a75b387d2287c5facf53bdf47028", size = 1634716, upload-time = "2026-11-11T21:23:58.748Z" },
 ]
 
 [package.optional-dependencies]
