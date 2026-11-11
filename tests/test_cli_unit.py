@@ -1981,7 +1981,7 @@ class TestServiceRoutes:
         ],
     )
     def test_deploy_service_recovery_module_not_enabled(
-        self, error_type: t.Type[Exception], error_code: str
+        self, error_type: type, error_code: str
     ) -> None:
         """Deploy returns 409 with the actionable message and the error's own code."""
         m = self._basic_with_password()

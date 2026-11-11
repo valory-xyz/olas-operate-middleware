@@ -1758,7 +1758,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @service_router.post("/api/v2/service/{service_config_id}")
-    async def _deploy_and_run_service(
+    async def _deploy_and_run_service(  # pylint: disable=too-many-return-statements
         service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
     ) -> JSONResponse:
         """Deploy a service."""
