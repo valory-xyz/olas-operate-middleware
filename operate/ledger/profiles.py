@@ -296,12 +296,20 @@ WRAPPED_NATIVE_ASSET = {
     Chain.ROBINHOOD: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
 }
 
+#: Chains whose WRAPPED_NATIVE_ASSET is the native coin's own ERC-20 interface
+#: (Celo's 0x471E…), not a separate token: its balance is the native balance.
+NATIVE_ERC20_CHAINS: t.FrozenSet[Chain] = frozenset({Chain.CELO})
+
 ERC20_TOKENS = {
     "OLAS": OLAS,
     "USDC": USDC,
     "USDC.e": USDC_E,
     "USDG": USDG,
-    "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
+    "WRAPPED_NATIVE": {
+        chain: address
+        for chain, address in WRAPPED_NATIVE_ASSET.items()
+        if chain not in NATIVE_ERC20_CHAINS
+    },
     "pUSD": PUSD,
 }
 
