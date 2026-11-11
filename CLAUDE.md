@@ -5,6 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+Fund recovery discovers service IDs through the registry indexers configured in
+`operate/services/fund_recovery_manager.py`: Base, Polygon and Robinhood use the existing
+SQD dialect; Gnosis and Optimism use Graph queries. Staking state is read from contracts.
+Registry endpoint defaults are packaged in middleware, so changing them requires a middleware
+release and updating Pearl's middleware dependency; no deployment env variable is involved.
+
 Olas Operate Middleware is a cross-platform Python package for running autonomous agents powered by the OLAS Network. It provides a daemon service with a FastAPI-based HTTP server that manages agent services, wallets, and blockchain interactions.
 
 ## Improvement Plan
