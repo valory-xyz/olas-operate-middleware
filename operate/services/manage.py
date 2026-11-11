@@ -1495,11 +1495,9 @@ class ServiceManager:
         agent_is_owner = service_safe_owners == [service.agent_addresses[0]]
         need_recover = not master_is_owner
         if need_recover:
-            recovery_enabled = registry_contracts.gnosis_safe.is_module_enabled(
-                ledger_api=sftxb.ledger_api,
-                contract_address=chain_data.multisig,
-                module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-            ).get("enabled")
+            recovery_enabled = self._is_recovery_module_enabled(
+                sftxb, chain, chain_data.multisig
+            )
             if not (agent_is_owner and recovery_enabled):
                 self.logger.info(
                     "Update teardown: recover_access needed but not feasible "
@@ -1687,15 +1685,9 @@ class ServiceManager:
                 try:
                     self.funding_manager.fund_chain_amounts(shortfalls)
                 except InsufficientFundsException as e:
-                    recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-                    is_recovery_module_enabled = (
-                        registry_contracts.gnosis_safe.is_module_enabled(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=chain_data.multisig,
-                            module_address=recovery_module_address,
-                        ).get("enabled")
-                    )
-                    if is_recovery_module_enabled:
+                    if self._is_recovery_module_enabled(
+                        sftxb, chain, chain_data.multisig
+                    ):
                         self.logger.info(
                             "[SERVICE MANAGER] Could not fund Agent EOA for service swap, but recovery module is enabled."
                         )
@@ -1747,12 +1739,9 @@ class ServiceManager:
             self.logger.info("Service Safe is not deployed.")
             return
 
-        recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
-            ledger_api=sftxb.ledger_api,
-            contract_address=service_safe_address,
-            module_address=recovery_module_address,
-        ).get("enabled")
+        is_recovery_module_enabled = self._is_recovery_module_enabled(
+            sftxb, chain, service_safe_address
+        )
 
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         master_safe_is_service_safe_owner = service_safe_owners == [safe]
@@ -1783,6 +1772,19 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
+    @staticmethod
+    def _is_recovery_module_enabled(
+        sftxb: EthSafeTxBuilder, chain: str, safe_address: str
+    ) -> bool:
+        """Whether the recovery module is enabled on the given Safe."""
+        return bool(
+            registry_contracts.gnosis_safe.is_module_enabled(
+                ledger_api=sftxb.ledger_api,
+                contract_address=safe_address,
+                module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+            ).get("enabled")
+        )
+
     def _resolve_safe_reuse(
         self,
         sftxb: EthSafeTxBuilder,
@@ -1799,19 +1801,10 @@ class ServiceManager:
         if service_safe_address == ZERO_ADDRESS:
             return False
 
-        def _is_enabled() -> bool:
-            return bool(
-                registry_contracts.gnosis_safe.is_module_enabled(
-                    ledger_api=sftxb.ledger_api,
-                    contract_address=service_safe_address,
-                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                ).get("enabled")
-            )
-
-        if _is_enabled():
+        if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
             return True
         self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
-        if _is_enabled():
+        if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
             return True
         raise RecoveryModuleNotEnabledError(
             f"The Agent Safe {service_safe_address} on {chain} does not have the "
@@ -1864,13 +1857,7 @@ class ServiceManager:
             return
 
         recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
-            ledger_api=sftxb.ledger_api,
-            contract_address=service_safe_address,
-            module_address=recovery_module_address,
-        ).get("enabled")
-
-        if is_recovery_module_enabled:
+        if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
             self.logger.info("Recovery module is already enabled in service Safe.")
             return
 
@@ -1894,12 +1881,19 @@ class ServiceManager:
                     chain_type=ChainType(chain),
                     safe=service_safe_address,
                 ).add(enable_module_data).settle()
-            except Exception as e:  # pylint: disable=broad-except
+            except InsufficientFundsException as e:
                 raise AgentCouldNotEnableRecoveryModuleError(
                     f"Could not enable the recovery module on the Agent Safe "
                     f"{service_safe_address} on {chain}, so the agent cannot use "
                     f"it. Make sure the Agent EOA {agent_address} holds enough gas "
                     "on this chain, then try again."
+                ) from e
+            except Exception as e:  # pylint: disable=broad-except
+                raise AgentCouldNotEnableRecoveryModuleError(
+                    f"The Agent EOA {agent_address} could not enable the recovery "
+                    f"module on the Agent Safe {service_safe_address} on {chain}, "
+                    "so the agent cannot use it. Try again; if it keeps failing, "
+                    "contact Pearl support with this message."
                 ) from e
             self.logger.info(
                 "(Agent) Recovery module enabled successfully in service Safe."
@@ -1930,8 +1924,8 @@ class ServiceManager:
             raise RecoveryModuleNotEnabledError(
                 f"Cannot enable the recovery module on the Agent Safe "
                 f"{service_safe_address} on {chain}: its owners {service_safe_owners} "
-                f"are neither the Agent EOA {agent_address} nor the Master Safe "
-                f"{safe}, so the agent cannot use it. Contact Pearl support with "
+                f"are not the Agent EOA {agent_address} alone or the Master Safe "
+                f"{safe} alone, so the agent cannot use it. Contact Pearl support with "
                 "this message."
             )
 
@@ -2443,7 +2437,8 @@ class ServiceManager:
         amount_claimed = _sum_erc20_transfers_from(
             logs=receipt["logs"], token=reward_token, sender=staking_contract
         )
-        # Services that have not migrated are still paid into the Agent Safe.
+        # Staking contracts that predate direct Master Safe payouts still pay
+        # rewards into the Agent Safe, so sweep it.
         amount_to_transfer = get_asset_balance(
             ledger_api=ledger_api,
             asset_address=reward_token,
