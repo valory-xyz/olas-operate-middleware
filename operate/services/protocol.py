@@ -1635,7 +1635,12 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=multisend_address,
             txs=[
-                {**tx, "data": normalize_tx_data_to_bytes(tx.get("data", b""))}
+                {
+                    **tx,
+                    "operation": tx.get("operation", MultiSendOperation.CALL),
+                    "value": tx.get("value", 0),
+                    "data": normalize_tx_data_to_bytes(tx.get("data", b"")),
+                }
                 for tx in txs
             ],
         )

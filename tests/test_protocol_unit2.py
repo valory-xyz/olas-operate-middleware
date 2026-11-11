@@ -1391,6 +1391,47 @@ class TestGetSafeBExecMessages:
             owners=(_MASTER_SAFE,)
         )
 
+    def test_defaults_a_sub_tx_without_operation_or_value_to_a_plain_call(
+        self,
+    ) -> None:
+        """A sub-tx giving only ``to`` and ``data`` is sent as a CALL with no value."""
+        builder = _make_eth_safe_tx_builder()
+        with (
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
+            patch.object(
+                type(builder),
+                "safe",
+                new_callable=PropertyMock,
+                return_value=_MASTER_SAFE,
+            ),
+            patch("operate.services.protocol.registry_contracts") as mock_rc,
+            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+        ):
+            mock_cc.get.return_value.contracts = {builder.chain_type: self._MULTISEND}
+            mock_rc.multisend.get_multisend_tx.return_value = {"value": 0, "data": b""}
+            mock_rc.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0xinnerhash"
+            }
+            builder.get_safe_b_exec_messages(
+                safe_b_address=self._SAFE_B,
+                txs=[{"to": self._SAFE_B, "data": "0xa1b2"}],
+                nonce=7,
+            )
+
+        assert mock_rc.multisend.get_multisend_tx.call_args.kwargs["txs"] == [
+            {
+                "to": self._SAFE_B,
+                "data": bytes.fromhex("a1b2"),
+                "operation": MultiSendOperation.CALL,
+                "value": 0,
+            }
+        ]
+
     def test_native_transfer_builds_a_plain_value_call(self) -> None:
         """A native withdrawal from Safe B is one CALL to the recipient carrying the amount."""
         builder = _make_eth_safe_tx_builder()
