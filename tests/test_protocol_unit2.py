@@ -23,6 +23,11 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from autonomy.chain.config import ChainType
+from autonomy.chain.constants import (
+    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
+    RECOVERY_MODULE_CONTRACT,
+    SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
+)
 from autonomy.chain.exceptions import ChainInteractionError
 
 from operate.constants import ZERO_ADDRESS
@@ -1462,11 +1467,29 @@ class TestGetDeployDataFromSafe:
         mock_smi.encode_abi.return_value = _ENCODED
         return mock_smi, MagicMock()
 
-    def test_new_multisig_with_recovery_no_poly(self) -> None:
-        """Deploys new multisig with recovery module but no poly safe."""
+    @pytest.mark.parametrize(
+        ("reuse_multisig", "use_poly_safe", "wrapper", "payload"),
+        [
+            (False, False, "0xSafeWithRecovery", "new_safe_payload"),
+            (False, True, "0xPolySafeWithRecovery", "poly_payload"),
+            (True, False, "0xRecoveryModule", "reuse_payload"),
+            # Reuse wins: a reused Safe is never replaced by a new Poly Safe.
+            (True, True, "0xRecoveryModule", "reuse_payload"),
+        ],
+        ids=["new-safe", "new-poly-safe", "reuse", "reuse-over-poly"],
+    )
+    def test_deploys_through_the_wrapper_and_payload_of_its_branch(
+        self, reuse_multisig: bool, use_poly_safe: bool, wrapper: str, payload: str
+    ) -> None:
+        """Each branch deploys with its own recovery-module wrapper and payload."""
         builder = _make_eth_safe_tx_builder()
         mock_smi = MagicMock()
         mock_smi.encode_abi.return_value = _ENCODED
+        wrappers = {
+            SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name: "0xSafeWithRecovery",
+            POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name: "0xPolySafeWithRecovery",
+            RECOVERY_MODULE_CONTRACT.name: "0xRecoveryModule",
+        }
 
         with (
             patch.object(builder, "_patch"),
@@ -1482,21 +1505,49 @@ class TestGetDeployDataFromSafe:
                 new_callable=PropertyMock,
                 return_value="0xSM",
             ),
+            patch.object(
+                type(builder),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=MagicMock(),
+            ),
             patch(
                 "operate.services.protocol.get_deployment_with_recovery_payload",
-                return_value="payload_recovery",
+                return_value="new_safe_payload",
+            ),
+            patch(
+                "operate.services.protocol.get_poly_safe_deployment_payload",
+                return_value="poly_payload",
+            ),
+            patch(
+                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
+                return_value=("reuse_payload", None),
             ),
             patch("operate.services.protocol.ContractConfigs") as mock_cc,
         ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: "0xSMRM"}
+            mock_cc.get.side_effect = lambda name: MagicMock(
+                contracts={builder.chain_type: wrappers[name]}
+            )
             result = builder.get_deploy_data_from_safe(
                 service_id=1,
                 master_safe=_MASTER_SAFE,
-                reuse_multisig=False,
-                use_poly_safe=False,
+                reuse_multisig=reuse_multisig,
+                use_poly_safe=use_poly_safe,
+                agent_eoa_crypto=MagicMock(),
             )
 
-        assert len(result) == 1
+        assert mock_smi.encode_abi.call_args.kwargs == {
+            "abi_element_identifier": "deploy",
+            "args": [1, wrapper, payload],
+        }
+        assert result == [
+            {
+                "to": "0xSM",
+                "data": _ENCODED[2:],
+                "operation": MultiSendOperation.CALL,
+                "value": 0,
+            }
+        ]
 
     def test_new_poly_safe_raises_when_no_crypto(self) -> None:
         """Raises ValueError when poly safe requested but no agent_eoa_crypto."""
@@ -1525,91 +1576,6 @@ class TestGetDeployDataFromSafe:
                     use_poly_safe=True,
                     agent_eoa_crypto=None,
                 )
-
-    def test_new_poly_safe_with_recovery_and_crypto(self) -> None:
-        """Deploys poly safe when recovery=True, poly=True, crypto provided."""
-        builder = _make_eth_safe_tx_builder()
-        mock_smi = MagicMock()
-        mock_smi.encode_abi.return_value = _ENCODED
-        mock_crypto = MagicMock()
-
-        with (
-            patch.object(builder, "_patch"),
-            patch.object(
-                type(builder),
-                "service_manager_instance",
-                new_callable=PropertyMock,
-                return_value=mock_smi,
-            ),
-            patch.object(
-                type(builder),
-                "service_manager_address",
-                new_callable=PropertyMock,
-                return_value="0xSM",
-            ),
-            patch.object(
-                type(builder),
-                "ledger_api",
-                new_callable=PropertyMock,
-                return_value=MagicMock(),
-            ),
-            patch(
-                "operate.services.protocol.get_poly_safe_deployment_payload",
-                return_value="poly_payload",
-            ),
-            patch("operate.services.protocol.ContractConfigs") as mock_cc,
-        ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: "0xPolySafe"}
-            result = builder.get_deploy_data_from_safe(
-                service_id=1,
-                master_safe=_MASTER_SAFE,
-                reuse_multisig=False,
-                use_poly_safe=True,
-                agent_eoa_crypto=mock_crypto,
-            )
-
-        assert len(result) == 1
-
-    def test_reuse_multisig_with_recovery(self) -> None:
-        """Reuse multisig path with recovery module returns one message."""
-        builder = _make_eth_safe_tx_builder()
-        mock_smi = MagicMock()
-        mock_smi.encode_abi.return_value = _ENCODED
-
-        with (
-            patch.object(builder, "_patch"),
-            patch.object(
-                type(builder),
-                "service_manager_instance",
-                new_callable=PropertyMock,
-                return_value=mock_smi,
-            ),
-            patch.object(
-                type(builder),
-                "service_manager_address",
-                new_callable=PropertyMock,
-                return_value="0xSM",
-            ),
-            patch.object(
-                type(builder),
-                "ledger_api",
-                new_callable=PropertyMock,
-                return_value=MagicMock(),
-            ),
-            patch(
-                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload",
-                return_value=("recovery_payload", None),
-            ),
-            patch("operate.services.protocol.ContractConfigs") as mock_cc,
-        ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: "0xRM"}
-            result = builder.get_deploy_data_from_safe(
-                service_id=1,
-                master_safe=_MASTER_SAFE,
-                reuse_multisig=True,
-            )
-
-        assert len(result) == 1
 
     def test_reuse_multisig_with_recovery_forwards_skip_owner_check(self) -> None:
         """skip_owner_check is forwarded to the recovery payload builder."""
