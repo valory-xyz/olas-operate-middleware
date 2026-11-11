@@ -60,17 +60,19 @@ class ServicePackageDownloadError(Exception):
 class RecoveryModuleNotEnabledError(Exception):
     """The service Safe still lacks the recovery module, so it cannot be reused."""
 
+    error_code = "RECOVERY_MODULE_NOT_ENABLED"
+
+    def __init__(self, user_message: str) -> None:
+        """Keep the message shown to the user apart from the exception itself."""
+        super().__init__(user_message)
+        self.user_message = user_message
+
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
-        return {"error_code": "RECOVERY_MODULE_NOT_ENABLED"}
+        return {"error": self.user_message, "error_code": self.error_code}
 
 
 class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
-    """The Agent EOA owns the service Safe and its enableModule failed.
+    """The Agent EOA owns the service Safe and its enableModule failed."""
 
-    Swapping the Safe to the Master Safe lets the Master Safe enable the module.
-    """
-
-    def to_error_fields(self) -> t.Dict:
-        """Return structured error fields for merging into a JSONResponse body."""
-        return {"error_code": "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE"}
+    error_code = "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE"
