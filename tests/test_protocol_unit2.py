@@ -1641,17 +1641,10 @@ class TestGetDeployDataFromSafe:
 
         assert len(result) == 1
 
-    def test_reuse_multisig_without_recovery_returns_two_messages(self) -> None:
-        """Reuse multisig path without recovery returns [approve_hash, deploy] messages."""
+    def test_reuse_multisig_without_recovery_module_raises(self) -> None:
+        """Refuses a reuse without the recovery module, so no same-address deploy is built."""
         builder = _make_eth_safe_tx_builder()
         mock_smi = MagicMock()
-        mock_smi.encode_abi.return_value = _ENCODED
-        approve_hash_msg = {
-            "to": "0xMultisig",
-            "data": "aaaa",
-            "operation": 0,
-            "value": 0,
-        }
 
         with (
             patch.object(builder, "_patch"),
@@ -1661,73 +1654,20 @@ class TestGetDeployDataFromSafe:
                 new_callable=PropertyMock,
                 return_value=mock_smi,
             ),
-            patch.object(
-                type(builder),
-                "service_manager_address",
-                new_callable=PropertyMock,
-                return_value="0xSM",
-            ),
-            patch.object(
-                type(builder),
-                "ledger_api",
-                new_callable=PropertyMock,
-                return_value=MagicMock(),
-            ),
             patch(
-                "operate.services.protocol.get_reuse_multisig_from_safe_payload",
-                return_value=("some_payload", approve_hash_msg, None),
-            ),
-            patch("operate.services.protocol.ContractConfigs") as mock_cc,
+                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload"
+            ) as mock_payload,
         ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: "0xGSSAM"}
-            result = builder.get_deploy_data_from_safe(
-                service_id=1,
-                master_safe=_MASTER_SAFE,
-                reuse_multisig=True,
-                use_recovery_module=False,
-            )
-
-        assert len(result) == 2
-        assert result[0] is approve_hash_msg
-
-    def test_reuse_multisig_raises_when_payload_none(self) -> None:
-        """Raises ValueError when get_reuse_multisig_from_safe_payload returns None payload."""
-        builder = _make_eth_safe_tx_builder()
-
-        with (
-            patch.object(builder, "_patch"),
-            patch.object(
-                type(builder),
-                "service_manager_instance",
-                new_callable=PropertyMock,
-                return_value=MagicMock(),
-            ),
-            patch.object(
-                type(builder),
-                "service_manager_address",
-                new_callable=PropertyMock,
-                return_value="0xSM",
-            ),
-            patch.object(
-                type(builder),
-                "ledger_api",
-                new_callable=PropertyMock,
-                return_value=MagicMock(),
-            ),
-            patch(
-                "operate.services.protocol.get_reuse_multisig_from_safe_payload",
-                return_value=(None, None, "No previous deployment"),
-            ),
-            patch("operate.services.protocol.ContractConfigs") as mock_cc,
-        ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: "0xGSSAM"}
-            with pytest.raises(ValueError, match="No previous deployment"):
+            with pytest.raises(ValueError, match="requires the recovery module"):
                 builder.get_deploy_data_from_safe(
                     service_id=1,
                     master_safe=_MASTER_SAFE,
                     reuse_multisig=True,
                     use_recovery_module=False,
                 )
+
+        mock_payload.assert_not_called()
+        mock_smi.encode_abi.assert_not_called()
 
     def test_reuse_multisig_with_recovery(self) -> None:
         """Reuse multisig path with recovery module returns one message."""

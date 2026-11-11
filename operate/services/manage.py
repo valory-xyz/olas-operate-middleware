@@ -980,7 +980,7 @@ class ServiceManager:
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
-                use_recovery_module=True,  # _resolve_safe_reuse guarantees it
+                use_recovery_module=True,
                 use_poly_safe=use_poly_safe,
                 agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
@@ -1193,7 +1193,7 @@ class ServiceManager:
                     service_id=chain_data.token,
                     reuse_multisig=reuse_multisig,
                     master_safe=safe,
-                    use_recovery_module=True,  # _resolve_safe_reuse guarantees it
+                    use_recovery_module=True,
                     use_poly_safe=use_poly_safe,
                     agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                         service.agent_addresses[0]

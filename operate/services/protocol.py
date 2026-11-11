@@ -39,7 +39,6 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainConfigs, ChainType, ContractConfigs
 from autonomy.chain.constants import (
     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT,
-    GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
     POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
@@ -1555,42 +1554,26 @@ class EthSafeTxBuilder(_ChainUtil):
         skip_owner_check: bool = False,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
-        approve_hash_message = None
         if reuse_multisig:
+            # The same-address wrapper a reuse without the module needs is disabled.
             if not use_recovery_module:
-                (
-                    _deployment_payload,
-                    approve_hash_message,
-                    error,
-                ) = get_reuse_multisig_from_safe_payload(
-                    ledger_api=self.ledger_api,
-                    chain_type=self.chain_type,
-                    service_id=service_id,
-                    master_safe=master_safe,
-                )
-                if _deployment_payload is None:
-                    raise ValueError(error)
-                deployment_payload = _deployment_payload
-                gnosis_safe_multisig = ContractConfigs.get(
-                    GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
-                ).contracts[self.chain_type]
-            else:
-                (
-                    _deployment_payload,
-                    error,
-                ) = get_reuse_multisig_with_recovery_from_safe_payload(
-                    ledger_api=self.ledger_api,
-                    chain_type=self.chain_type,
-                    service_id=service_id,
-                    master_safe=master_safe,
-                    skip_owner_check=skip_owner_check,
-                )
-                if _deployment_payload is None:
-                    raise ValueError(error)
-                deployment_payload = _deployment_payload
-                gnosis_safe_multisig = ContractConfigs.get(
-                    RECOVERY_MODULE_CONTRACT.name
-                ).contracts[self.chain_type]
+                raise ValueError("Reusing a service Safe requires the recovery module.")
+            (
+                _deployment_payload,
+                error,
+            ) = get_reuse_multisig_with_recovery_from_safe_payload(
+                ledger_api=self.ledger_api,
+                chain_type=self.chain_type,
+                service_id=service_id,
+                master_safe=master_safe,
+                skip_owner_check=skip_owner_check,
+            )
+            if _deployment_payload is None:
+                raise ValueError(error)
+            deployment_payload = _deployment_payload
+            gnosis_safe_multisig = ContractConfigs.get(
+                RECOVERY_MODULE_CONTRACT.name
+            ).contracts[self.chain_type]
         else:  # Deploy a new multisig
             if not use_recovery_module and not use_poly_safe:
                 deployment_payload = get_deployment_payload()
@@ -1627,15 +1610,14 @@ class EthSafeTxBuilder(_ChainUtil):
                 deployment_payload,
             ],
         )
-        deploy_message = {
-            "to": self.service_manager_address,
-            "data": deploy_data[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-        if approve_hash_message is None:
-            return [deploy_message]
-        return [approve_hash_message, deploy_message]
+        return [
+            {
+                "to": self.service_manager_address,
+                "data": deploy_data[2:],
+                "operation": MultiSendOperation.CALL,
+                "value": 0,
+            }
+        ]
 
     def get_safe_b_exec_messages(
         self,
@@ -2030,139 +2012,6 @@ def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
         signatures += packed_signature
 
     return signatures
-
-
-def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
-    ledger_api: LedgerApi,
-    chain_type: ChainType,
-    service_id: int,
-    master_safe: str,
-) -> t.Tuple[Optional[str], Optional[t.Dict[str, t.Any]], Optional[str]]:
-    """Reuse multisig."""
-    _, multisig_address, _, threshold, *_ = get_service_info(
-        ledger_api=ledger_api,
-        chain_type=chain_type,
-        token_id=service_id,
-    )
-    if multisig_address == ZERO_ADDRESS:
-        return None, None, "Cannot reuse multisig, No previous deployment exist!"
-
-    multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
-        chain_type
-    ]
-    multisig_instance = registry_contracts.gnosis_safe.get_instance(
-        ledger_api=ledger_api,
-        contract_address=multisig_address,
-    )
-
-    # Verify if the service was terminated properly or not
-    old_owners = multisig_instance.functions.getOwners().call()
-    if len(old_owners) != 1 or master_safe not in old_owners:
-        return (
-            None,
-            None,
-            "Service was not terminated properly, the service owner should be the only owner of the safe",
-        )
-
-    # Build multisend tx to add new instances as owners
-    txs = []
-    new_owners = t.cast(
-        t.List[str],
-        get_agent_instances(
-            ledger_api=ledger_api,
-            chain_type=chain_type,
-            token_id=service_id,
-        ).get("agentInstances"),
-    )
-
-    for _owner in new_owners:
-        txs.append(
-            {
-                "to": multisig_address,
-                "data": normalize_tx_data_to_bytes(
-                    multisig_instance.encode_abi(
-                        abi_element_identifier="addOwnerWithThreshold",
-                        args=[_owner, 1],
-                    )
-                ),
-                "operation": MultiSendOperation.CALL,
-                "value": 0,
-            }
-        )
-
-    txs.append(
-        {
-            "to": multisig_address,
-            "data": normalize_tx_data_to_bytes(
-                multisig_instance.encode_abi(
-                    abi_element_identifier="removeOwner",
-                    args=[new_owners[0], master_safe, 1],
-                )
-            ),
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-    )
-
-    txs.append(
-        {
-            "to": multisig_address,
-            "data": normalize_tx_data_to_bytes(
-                multisig_instance.encode_abi(
-                    abi_element_identifier="changeThreshold",
-                    args=[threshold],
-                )
-            ),
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-    )
-
-    multisend_tx = registry_contracts.multisend.get_multisend_tx(
-        ledger_api=ledger_api,
-        contract_address=multisend_address,
-        txs=txs,
-    )
-    signature_bytes = get_packed_signature_for_approved_hash(owners=(master_safe,))
-
-    safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
-        ledger_api=ledger_api,
-        contract_address=multisig_address,
-        to_address=multisend_address,
-        value=multisend_tx["value"],
-        data=multisend_tx["data"],
-        operation=1,
-    ).get("tx_hash")
-    approve_hash_data = multisig_instance.encode_abi(
-        abi_element_identifier="approveHash",
-        args=[
-            safe_tx_hash,
-        ],
-    )
-    approve_hash_message = {
-        "to": multisig_address,
-        "data": approve_hash_data[2:],
-        "operation": MultiSendOperation.CALL,
-        "value": 0,
-    }
-
-    safe_exec_data = multisig_instance.encode_abi(
-        abi_element_identifier="execTransaction",
-        args=[
-            multisend_address,  # to address
-            multisend_tx["value"],  # value
-            multisend_tx["data"],  # data
-            1,  # operation
-            0,  # safe tx gas
-            0,  # bas gas
-            0,  # safe gas price
-            ZERO_ADDRESS,  # gas token
-            ZERO_ADDRESS,  # refund receiver
-            signature_bytes,  # signatures
-        ],
-    )
-    payload = multisig_address + safe_exec_data[2:]
-    return payload, approve_hash_message, None
 
 
 def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
