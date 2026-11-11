@@ -765,24 +765,32 @@ class ServiceManager:
         # but cannot be performed in-batch.
         update_teardown_prefix: t.Optional[t.List[t.Tuple[t.Dict, str]]] = None
         if is_update:
+            # Read once, so the teardown prefix, the reuse gate and terminate agree.
+            staking_locked = self._cannot_unstake_yet(
+                chain=chain,
+                sftxb=sftxb,
+                service_id=chain_data.token,
+                current_staking_program=current_staking_program,
+            )
             update_teardown_prefix = self._build_update_teardown_prefix(
                 service=service,
                 chain=chain,
                 sftxb=sftxb,
                 chain_data=chain_data,
                 master_safe=safe,
+                staking_locked=staking_locked,
             )
             if update_teardown_prefix is None:
-                # Inside the staking lock window terminate only claims: no teardown, no reuse.
+                # Inside the staking lock window terminate sends nothing: no teardown, no reuse.
                 _stop_refused_reuse_before_txs(
                     recovery_module_error=recovery_module_error,
                     on_chain_state=on_chain_state,
-                    tears_down_stepwise=not self._cannot_unstake_yet(
-                        service=service, chain=chain, sftxb=sftxb, chain_data=chain_data
-                    ),
+                    tears_down_stepwise=not staking_locked,
                 )
                 self.terminate_service_on_chain_from_safe(
-                    service_config_id=service_config_id, chain=chain
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    staking_locked=staking_locked,
                 )
                 if (
                     self._get_on_chain_state(service=service, chain=chain)
@@ -1409,19 +1417,18 @@ class ServiceManager:
                 )
             ).settle()
 
+    @staticmethod
     def _cannot_unstake_yet(
-        self,
-        service: Service,
         chain: str,
         sftxb: EthSafeTxBuilder,
-        chain_data: t.Any,
+        service_id: int,
+        current_staking_program: t.Optional[str],
     ) -> bool:
         """Whether the service is staked but cannot be unstaked yet (e.g. its lock window)."""
-        current_staking_program = self._get_current_staking_program(service, chain)
         if current_staking_program is None:
             return False
         return not sftxb.can_unstake(
-            service_id=chain_data.token,
+            service_id=service_id,
             staking_contract=get_staking_contract(
                 chain=Chain(chain),
                 staking_program_id=current_staking_program,
@@ -1435,6 +1442,7 @@ class ServiceManager:
         sftxb: EthSafeTxBuilder,
         chain_data: t.Any,
         master_safe: str,
+        staking_locked: bool,
     ) -> t.Optional[t.List[t.Tuple[t.Dict, str]]]:
         """Build the in-batch teardown prefix for an update mega-batch.
 
@@ -1446,7 +1454,8 @@ class ServiceManager:
         Returns ``None`` when the combined path is not applicable and the
         caller must fall back to the legacy stepwise terminate + swap/recovery
         flow. That happens in three cases: there is no prior service Safe to
-        reuse; the service is staked but cannot be unstaked yet; or
+        reuse; the service is staked but cannot be unstaked yet
+        (``staking_locked``, decided by the caller); or
         ``recover_access`` is needed (the Master Safe is not the service Safe
         owner) but cannot be performed in-batch (recovery module not enabled, or
         the agent is not the sole service Safe owner). When ``recover_access``
@@ -1469,12 +1478,10 @@ class ServiceManager:
             else None
         )
 
-        if self._cannot_unstake_yet(
-            service=service, chain=chain, sftxb=sftxb, chain_data=chain_data
-        ):
+        if staking_locked:
             # Cannot unstake yet (e.g. still within the staking lock window) ->
             # the service cannot be torn down, so the update cannot proceed this
-            # cycle. The legacy fallback only claims rewards and returns.
+            # cycle. The legacy fallback returns without sending anything.
             self.logger.warning(
                 "Update teardown: service is staked and cannot be unstaked yet; "
                 "the update will not be applied until it becomes unstakeable."
@@ -1545,8 +1552,13 @@ class ServiceManager:
         self,
         service_config_id: str,
         chain: str,
+        staking_locked: t.Optional[bool] = None,
     ) -> None:
-        """Terminate service on-chain"""
+        """Terminate service on-chain.
+
+        ``staking_locked`` is the caller's ``_cannot_unstake_yet`` answer, so both
+        act on the same read; it is read here when not given.
+        """
 
         self.logger.info("terminate_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
@@ -1567,19 +1579,16 @@ class ServiceManager:
             chain,
         )
         is_staked = current_staking_program is not None
-
-        can_unstake = False
-        if current_staking_program is not None:
-            can_unstake = sftxb.can_unstake(
+        if staking_locked is None:
+            staking_locked = self._cannot_unstake_yet(
+                chain=chain,
+                sftxb=sftxb,
                 service_id=chain_data.token,
-                staking_contract=get_staking_contract(
-                    chain=ledger_config.chain,
-                    staking_program_id=current_staking_program,
-                ),
+                current_staking_program=current_staking_program,
             )
 
         # Cannot unstake, terminate flow.
-        if is_staked and not can_unstake:
+        if staking_locked:
             # Cannot unstake yet (e.g. still within the staking lock window):
             # skip termination entirely; the caller retries on a later cycle.
             self.logger.warning(
@@ -1587,7 +1596,7 @@ class ServiceManager:
             )
             return
 
-        if is_staked and can_unstake:
+        if is_staked:
             # Claim + reward transfer stays separate (different signer
             # for the reward transfer from service safe).
             self.claim_on_chain_from_safe(

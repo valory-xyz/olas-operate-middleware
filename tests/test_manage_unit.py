@@ -1039,12 +1039,14 @@ class TestEnableRecoveryModule:
         enable_effect: t.Any,
         terminate_effect: t.Any = None,
         cannot_unstake: bool = False,
+        terminate_tears_down: bool = True,
     ) -> t.Dict[str, t.Any]:
         """Run an update of a DEPLOYED service whose first module enable fails.
 
         ``terminate_effect`` defaults to stopping at the stepwise terminate. A terminate
-        that returns tears down: the registry then reads PRE_REGISTRATION. The deploy is
-        stopped where ``get_deploy_data_from_safe`` would build the deploy.
+        that returns tears down unless ``terminate_tears_down`` is false: the registry
+        then reads PRE_REGISTRATION. The deploy is stopped where
+        ``get_deploy_data_from_safe`` would build the deploy.
         """
 
         class _ReachedTeardown(Exception):
@@ -1084,7 +1086,9 @@ class TestEnableRecoveryModule:
         def _state(**_: t.Any) -> OnChainState:
             # A terminate that returned has torn the service down.
             torn_down = (
-                terminate.called and terminate.side_effect is not _ReachedTeardown
+                terminate_tears_down
+                and terminate.called
+                and terminate.side_effect is not _ReachedTeardown
             )
             return OnChainState.PRE_REGISTRATION if torn_down else OnChainState.DEPLOYED
 
@@ -1112,10 +1116,14 @@ class TestEnableRecoveryModule:
             patch.object(manager, "_get_on_chain_state", side_effect=_state),
             patch.object(
                 manager, "_build_update_teardown_prefix", return_value=teardown_prefix
-            ),
-            patch.object(manager, "_cannot_unstake_yet", return_value=cannot_unstake),
+            ) as build_prefix,
+            patch.object(
+                manager, "_cannot_unstake_yet", return_value=cannot_unstake
+            ) as cannot_unstake_yet,
             patch.object(manager, "terminate_service_on_chain_from_safe", terminate),
-            patch.object(manager, "_execute_recovery_module_flow_from_safe"),
+            patch.object(
+                manager, "_execute_recovery_module_flow_from_safe"
+            ) as recovery_flow,
             patch(
                 "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
                 # Enabled once an enable call has succeeded.
@@ -1136,6 +1144,9 @@ class TestEnableRecoveryModule:
             "terminate": terminate,
             "sftxb": sftxb,
             "enable": enable,
+            "cannot_unstake_yet": cannot_unstake_yet,
+            "recovery_flow": recovery_flow,
+            "build_prefix": build_prefix,
             "reached_teardown": isinstance(raised, _ReachedTeardown),
             "reached_deploy": isinstance(raised, _ReachedDeploy),
         }
@@ -1162,11 +1173,14 @@ class TestEnableRecoveryModule:
     def test_deployed_update_in_the_staking_lock_window_goes_ahead(
         self, tmp_path: Path, error: Exception
     ) -> None:
-        """Locked in staking, terminate only claims: nothing is torn down or reused."""
+        """Locked in staking, the gate lets the update reach terminate, deciding as it does."""
         run = self._run_deployed_update(tmp_path, None, error, cannot_unstake=True)
 
         assert run["reached_teardown"]
-        run["terminate"].assert_called_once()
+        # One lock read, shared by the prefix, the gate and terminate.
+        run["cannot_unstake_yet"].assert_called_once()
+        assert run["build_prefix"].call_args.kwargs["staking_locked"] is True
+        assert run["terminate"].call_args.kwargs["staking_locked"] is True
 
     def test_deployed_update_reuses_the_safe_once_the_owner_swap_lets_the_master_safe_enable(
         self, tmp_path: Path
@@ -1278,17 +1292,16 @@ class TestCannotUnstakeYet:
         manager = _make_manager(tmp_path)
         sftxb = MagicMock()
         sftxb.can_unstake.return_value = can_unstake
-        chain_data = MagicMock(token=7)
 
-        with (
-            patch.object(manager, "_get_current_staking_program", return_value=program),
-            patch(
-                "operate.services.manage.get_staking_contract",
-                return_value="0x5ta",
-            ),
+        with patch(
+            "operate.services.manage.get_staking_contract",
+            return_value="0x5ta",
         ):
             locked = manager._cannot_unstake_yet(
-                service=MagicMock(), chain=_CHAIN, sftxb=sftxb, chain_data=chain_data
+                chain=_CHAIN,
+                sftxb=sftxb,
+                service_id=7,
+                current_staking_program=program,
             )
 
         assert locked is expected
