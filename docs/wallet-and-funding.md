@@ -233,8 +233,9 @@ with no user prompt. Custody properties:
   accepts calls only from itself
   or the EntryPoint, and only with the Master EOA's own signature.
 
-Chains without a Circle Paymaster (Gnosis, Robinhood) accept native sources
-only, which pay their own gas.
+Chains without a Circle Paymaster accept native sources, which pay their own
+gas. Gnosis and Robinhood accept native only; Celo also accepts USDC, whose
+source leg pays its gas in native CELO.
 
 ## Health and funding relationship
 
