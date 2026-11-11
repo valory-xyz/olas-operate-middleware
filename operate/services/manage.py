@@ -179,15 +179,21 @@ def _stop_refused_reuse_before_txs(
     which sends the unstake, terminate, unbond and swap before the reuse is
     decided; an update folded into one batch decides it before sending anything.
     That teardown funds the Agent EOA and swaps its Safe to the Master Safe, which
-    can then enable the module, so a failure the swap fixes does not stop it.
+    can then enable the module, so a failure the swap fixes does not stop it. The
+    same holds for an update resumed after such a teardown stopped before the
+    swap, so for a service not yet running that failure waits until the deploy
+    knows whether a stepwise swap follows (``teardown`` other than ``UNDECIDED``).
     """
     if recovery_module_error is None:
         return
-    if on_chain_state != OnChainState.DEPLOYED:
-        raise recovery_module_error
     fixed_by_owner_swap = isinstance(
         recovery_module_error, AgentCouldNotEnableRecoveryModuleError
     )
+    if on_chain_state != OnChainState.DEPLOYED:
+        # A resumed stepwise update swaps the Safe too, so wait until that is known.
+        if fixed_by_owner_swap and teardown is not _Teardown.NONE:
+            return
+        raise recovery_module_error
     if teardown is _Teardown.STEPWISE and not fixed_by_owner_swap:
         raise recovery_module_error
 
@@ -811,6 +817,13 @@ class ServiceManager:
                         service_config_id=service_config_id, chain=chain
                     )
                     # Update mint is included in the mega-batch below
+        if not is_update or update_teardown_prefix is not None:
+            # No stepwise swap follows, so a failure it would have fixed stops here.
+            _stop_refused_reuse_before_txs(
+                recovery_module_error=recovery_module_error,
+                on_chain_state=on_chain_state,
+                teardown=_Teardown.NONE,
+            )
 
         # Mint service
         if (

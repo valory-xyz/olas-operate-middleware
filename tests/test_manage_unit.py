@@ -1107,6 +1107,9 @@ class TestDeployRecoveryModuleGate:
         terminate_tears_down: bool = True,
         service_state: OnChainState = OnChainState.DEPLOYED,
         module_turns_on: bool = True,
+        is_update: bool = True,
+        multisig: str = _SERVICE_SAFE,
+        deploy_goes_through: bool = False,
     ) -> t.Dict[str, t.Any]:
         """Run an update of a service (DEPLOYED by default), ``enable_effect`` driving each enable.
 
@@ -1132,14 +1135,27 @@ class TestDeployRecoveryModuleGate:
         service.service_public_id.return_value = "valory/trader:0.1.0"
         chain_config.chain_data.user_params.use_staking = False
         chain_config.chain_data.user_params.nft = _NFT_HASH
+        # The on-chain agent: only the description decides whether this is an update.
+        chain_config.chain_data.user_params.agent_id = 25
         sftxb = MagicMock()
         sftxb.info.return_value = {
             "service_state": service_state.value,
             "instances": [_AGENT],
-            "multisig": _SERVICE_SAFE,
+            "multisig": multisig,
             "canonical_agents": [25],
         }
-        sftxb.get_deploy_data_from_safe.side_effect = _ReachedDeploy
+        if deploy_goes_through:
+            sftxb.get_deploy_data_from_safe.return_value = []
+        else:
+            sftxb.get_deploy_data_from_safe.side_effect = _ReachedDeploy
+        if not is_update:
+            # The current and target staking params agree, so nothing triggers an update.
+            sftxb.get_staking_params.return_value = {
+                "agent_ids": [25],
+                "staking_token": ZERO_ADDRESS,
+                "min_staking_deposit": 1,
+                "activity_checker": ZERO_ADDRESS,
+            }
         terminate = MagicMock(
             side_effect=(
                 _ReachedTeardown if terminate_effect is None else terminate_effect
@@ -1173,7 +1189,10 @@ class TestDeployRecoveryModuleGate:
             patch.object(
                 manager,
                 "_get_on_chain_metadata",
-                return_value={"code_uri": "ipfs://hash", "description": "old"},
+                return_value={
+                    "code_uri": "ipfs://hash",
+                    "description": "old" if is_update else service.description,
+                },
             ),
             patch.object(manager, "_get_on_chain_state", side_effect=_state),
             patch.object(
@@ -1207,10 +1226,35 @@ class TestDeployRecoveryModuleGate:
             "enable": enable,
             "cannot_unstake_yet": cannot_unstake_yet,
             "recovery_flow": recovery_flow,
+            "manager": manager,
             "build_prefix": build_prefix,
             "reached_teardown": isinstance(raised, _ReachedTeardown),
             "reached_deploy": isinstance(raised, _ReachedDeploy),
         }
+
+    @pytest.mark.parametrize(
+        ("multisig", "funded"),
+        [(ZERO_ADDRESS, True), (_SERVICE_SAFE, False)],
+        ids=["new-safe", "reused-safe"],
+    )
+    def test_a_resumed_deploy_funds_the_agent_only_for_a_new_safe(
+        self, tmp_path: Path, multisig: str, funded: bool
+    ) -> None:
+        """A new Safe gets its initial funding; a reused one already holds the agent's funds."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            terminate_effect=lambda **_: None,
+            terminate_tears_down=False,
+            service_state=OnChainState.FINISHED_REGISTRATION,
+            multisig=multisig,
+            deploy_goes_through=True,
+        )
+
+        kwargs = run["sftxb"].get_deploy_data_from_safe.call_args.kwargs
+        assert kwargs["reuse_multisig"] is (not funded)
+        assert run["manager"].funding_manager.fund_service_initial.called is funded
 
     @pytest.mark.parametrize("module_turns_on", [True, False])
     def test_a_resumed_deploy_decides_reuse_at_the_legacy_deploy_step(
@@ -1234,6 +1278,37 @@ class TestDeployRecoveryModuleGate:
         else:
             assert isinstance(run["raised"], RecoveryModuleNotEnabledError)
             run["sftxb"].get_deploy_data_from_safe.assert_not_called()
+
+    def test_a_resumed_stepwise_update_still_reaches_the_owner_swap(
+        self, tmp_path: Path
+    ) -> None:
+        """Torn down by an earlier update, the service still gets the swap that fixes the agent's enable."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            AgentCouldNotEnableRecoveryModuleError("agent tx failed"),
+            service_state=OnChainState.PRE_REGISTRATION,
+        )
+
+        assert run["reached_teardown"]
+        run["sftxb"].new_tx.assert_not_called()
+
+    def test_a_redeploy_with_no_swap_to_come_stops_on_the_agent_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """Not an update, so nothing will swap the Safe: stop before any activate/register tx."""
+        error = AgentCouldNotEnableRecoveryModuleError("agent tx failed")
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            error,
+            service_state=OnChainState.PRE_REGISTRATION,
+            is_update=False,
+        )
+
+        assert run["raised"] is error
+        run["terminate"].assert_not_called()
+        run["sftxb"].new_tx.assert_not_called()
 
     @_each_kept_enable_error
     def test_deployed_update_stops_before_a_stepwise_teardown(
@@ -1505,24 +1580,42 @@ class TestStopRefusedReuseBeforeTxs:
         )
 
     @pytest.mark.parametrize(
-        "error_type",
-        [RecoveryModuleNotEnabledError, AgentCouldNotEnableRecoveryModuleError],
+        ("error_type", "teardown"),
+        [
+            (RecoveryModuleNotEnabledError, _Teardown.UNDECIDED),
+            (RecoveryModuleNotEnabledError, _Teardown.STEPWISE),
+            (AgentCouldNotEnableRecoveryModuleError, _Teardown.NONE),
+        ],
+        ids=["base-early", "base-stepwise", "agent-no-swap-follows"],
     )
     def test_a_service_that_will_reuse_the_safe_is_stopped(
-        self, error_type: t.Type[RecoveryModuleNotEnabledError]
+        self, error_type: t.Type[RecoveryModuleNotEnabledError], teardown: t.Any
     ) -> None:
         """The enable error stops a deploy that has not posted its bond yet.
 
-        Even one the owner swap would fix: before the bond nothing swaps the owner.
+        An Agent EOA failure only stops it once no stepwise swap follows to fix it.
         """
         error = error_type("agent tx failed")
         with pytest.raises(RecoveryModuleNotEnabledError) as exc_info:
             _stop_refused_reuse_before_txs(
                 recovery_module_error=error,
                 on_chain_state=OnChainState.PRE_REGISTRATION,
-                teardown=_Teardown.UNDECIDED,
+                teardown=teardown,
             )
         assert exc_info.value is error
+
+    @pytest.mark.parametrize("teardown", [_Teardown.UNDECIDED, _Teardown.STEPWISE])
+    def test_an_agent_failure_waits_for_a_resumed_stepwise_swap(
+        self, teardown: t.Any
+    ) -> None:
+        """A service torn down by an earlier update still gets the swap that fixes it."""
+        _stop_refused_reuse_before_txs(
+            recovery_module_error=AgentCouldNotEnableRecoveryModuleError(
+                "agent tx failed"
+            ),
+            on_chain_state=OnChainState.PRE_REGISTRATION,
+            teardown=teardown,
+        )
 
 
 class TestResolveSafeReuse:
