@@ -1462,44 +1462,6 @@ class TestGetDeployDataFromSafe:
         mock_smi.encode_abi.return_value = _ENCODED
         return mock_smi, MagicMock()
 
-    def test_new_multisig_no_recovery_no_poly(self) -> None:
-        """Default path: deploys new multisig without recovery module or poly safe."""
-        builder = _make_eth_safe_tx_builder()
-        mock_smi = MagicMock()
-        mock_smi.encode_abi.return_value = _ENCODED
-
-        with (
-            patch.object(builder, "_patch"),
-            patch.object(
-                type(builder),
-                "service_manager_instance",
-                new_callable=PropertyMock,
-                return_value=mock_smi,
-            ),
-            patch.object(
-                type(builder),
-                "service_manager_address",
-                new_callable=PropertyMock,
-                return_value="0xSM",
-            ),
-            patch(
-                "operate.services.protocol.get_deployment_payload",
-                return_value="payload",
-            ),
-            patch("operate.services.protocol.ContractConfigs") as mock_cc,
-        ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: "0xGSPF"}
-            result = builder.get_deploy_data_from_safe(
-                service_id=1,
-                master_safe=_MASTER_SAFE,
-                reuse_multisig=False,
-                use_recovery_module=False,
-                use_poly_safe=False,
-            )
-
-        assert len(result) == 1
-        assert result[0]["to"] == "0xSM"
-
     def test_new_multisig_with_recovery_no_poly(self) -> None:
         """Deploys new multisig with recovery module but no poly safe."""
         builder = _make_eth_safe_tx_builder()
@@ -1531,7 +1493,6 @@ class TestGetDeployDataFromSafe:
                 service_id=1,
                 master_safe=_MASTER_SAFE,
                 reuse_multisig=False,
-                use_recovery_module=True,
                 use_poly_safe=False,
             )
 
@@ -1561,39 +1522,8 @@ class TestGetDeployDataFromSafe:
                     service_id=1,
                     master_safe=_MASTER_SAFE,
                     reuse_multisig=False,
-                    use_recovery_module=True,
                     use_poly_safe=True,
                     agent_eoa_crypto=None,
-                )
-
-    def test_new_poly_safe_raises_without_recovery(self) -> None:
-        """Raises ValueError when poly safe without recovery module."""
-        builder = _make_eth_safe_tx_builder()
-
-        with (
-            patch.object(builder, "_patch"),
-            patch.object(
-                type(builder),
-                "service_manager_instance",
-                new_callable=PropertyMock,
-                return_value=MagicMock(),
-            ),
-            patch.object(
-                type(builder),
-                "service_manager_address",
-                new_callable=PropertyMock,
-                return_value="0xSM",
-            ),
-        ):
-            with pytest.raises(
-                ValueError, match="without recovery module is not supported"
-            ):
-                builder.get_deploy_data_from_safe(
-                    service_id=1,
-                    master_safe=_MASTER_SAFE,
-                    reuse_multisig=False,
-                    use_recovery_module=False,
-                    use_poly_safe=True,
                 )
 
     def test_new_poly_safe_with_recovery_and_crypto(self) -> None:
@@ -1634,40 +1564,11 @@ class TestGetDeployDataFromSafe:
                 service_id=1,
                 master_safe=_MASTER_SAFE,
                 reuse_multisig=False,
-                use_recovery_module=True,
                 use_poly_safe=True,
                 agent_eoa_crypto=mock_crypto,
             )
 
         assert len(result) == 1
-
-    def test_reuse_multisig_without_recovery_module_raises(self) -> None:
-        """Refuses a reuse without the recovery module, so no same-address deploy is built."""
-        builder = _make_eth_safe_tx_builder()
-        mock_smi = MagicMock()
-
-        with (
-            patch.object(builder, "_patch"),
-            patch.object(
-                type(builder),
-                "service_manager_instance",
-                new_callable=PropertyMock,
-                return_value=mock_smi,
-            ),
-            patch(
-                "operate.services.protocol.get_reuse_multisig_with_recovery_from_safe_payload"
-            ) as mock_payload,
-        ):
-            with pytest.raises(ValueError, match="requires the recovery module"):
-                builder.get_deploy_data_from_safe(
-                    service_id=1,
-                    master_safe=_MASTER_SAFE,
-                    reuse_multisig=True,
-                    use_recovery_module=False,
-                )
-
-        mock_payload.assert_not_called()
-        mock_smi.encode_abi.assert_not_called()
 
     def test_reuse_multisig_with_recovery(self) -> None:
         """Reuse multisig path with recovery module returns one message."""
@@ -1706,7 +1607,6 @@ class TestGetDeployDataFromSafe:
                 service_id=1,
                 master_safe=_MASTER_SAFE,
                 reuse_multisig=True,
-                use_recovery_module=True,
             )
 
         assert len(result) == 1
@@ -1748,7 +1648,6 @@ class TestGetDeployDataFromSafe:
                 service_id=1,
                 master_safe=_MASTER_SAFE,
                 reuse_multisig=True,
-                use_recovery_module=True,
                 skip_owner_check=True,
             )
 
@@ -1790,7 +1689,6 @@ class TestGetDeployDataFromSafe:
                     service_id=1,
                     master_safe=_MASTER_SAFE,
                     reuse_multisig=True,
-                    use_recovery_module=True,
                 )
 
 
