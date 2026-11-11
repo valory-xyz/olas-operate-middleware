@@ -2447,12 +2447,13 @@ Deploy and run a service.
 
 **Response (Agent Safe cannot get the recovery module - 409):**
 
-A deployment that reuses an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do. Deployments that reuse no Safe, such as restarting a service that is already deployed, go ahead. The module cannot be enabled when:
+A deployment that will reuse an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do. When the first attempt to enable the module fails, it stops before any activation or registration transaction is sent, so no bond is posted. Deployments that reuse no Safe, such as restarting a service that is already deployed, go ahead. This happens when:
 - the Agent EOA owns the Safe and its transaction to enable the module fails;
 - the Master Safe owns the Safe and its transaction to enable the module fails;
-- the Safe's owners are neither the Agent EOA nor the Master Safe.
+- the Safe's owners are neither the Agent EOA nor the Master Safe;
+- the module is still not enabled after a successful attempt.
 
-`error_code` is always `RECOVERY_MODULE_NOT_ENABLED`. The message names the Safe, the chain and the account involved, never the underlying RPC or transaction error, which is logged only.
+`error_code` is always `RECOVERY_MODULE_NOT_ENABLED`. The message names the Safe and the chain, and the account when one is involved. It never includes the underlying RPC or transaction error, which is logged only.
 
 ```json
 {
