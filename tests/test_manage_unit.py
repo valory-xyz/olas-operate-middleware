@@ -995,6 +995,10 @@ class TestEnableRecoveryModule:
         result["new_agent_tx"].assert_not_called()
         result["sftxb"].new_tx.assert_not_called()
 
+
+class TestDeployRecoveryModuleGate:
+    """Tests for the reuse gate of _deploy_service_onchain_from_safe()."""
+
     def _run_deploy_until_staking_read(
         self, tmp_path: Path, service_state: OnChainState, error: Exception
     ) -> t.Tuple[t.Optional[BaseException], MagicMock]:
@@ -1052,6 +1056,7 @@ class TestEnableRecoveryModule:
             OnChainState.PRE_REGISTRATION,
             OnChainState.ACTIVE_REGISTRATION,
             OnChainState.FINISHED_REGISTRATION,
+            OnChainState.TERMINATED_BONDED,
         ],
     )
     @_each_kept_enable_error
@@ -1103,7 +1108,7 @@ class TestEnableRecoveryModule:
         sftxb = MagicMock()
         sftxb.info.return_value = {
             "service_state": OnChainState.DEPLOYED.value,
-            "instances": ["0xaaaa"],
+            "instances": [_AGENT],
             "multisig": _SERVICE_SAFE,
             "canonical_agents": [25],
         }
@@ -1195,7 +1200,7 @@ class TestEnableRecoveryModule:
     def test_deployed_update_in_the_staking_lock_window_goes_ahead(
         self, tmp_path: Path, error: Exception
     ) -> None:
-        """Locked in staking, the gate lets the update reach terminate, deciding as it does."""
+        """Locked in staking, the gate lets the update reach terminate and passes its lock answer on."""
         run = self._run_deployed_update(tmp_path, None, error, cannot_unstake=True)
 
         assert run["reached_teardown"]
@@ -1230,7 +1235,6 @@ class TestEnableRecoveryModule:
         enable_calls: t.List[bool] = []
 
         def _enable(**_: t.Any) -> None:
-            # Only the enable after the teardown (owned by the Master Safe) succeeds.
             swapped = run_terminate.called
             enable_calls.append(swapped)
             if not swapped:
@@ -1281,6 +1285,10 @@ class TestEnableRecoveryModule:
         run["sftxb"].new_tx.return_value.settle.assert_not_called()
         run["sftxb"].get_deploy_data_from_safe.assert_not_called()
 
+
+class TestTryEnableRecoveryModule:
+    """Tests for _try_enable_recovery_module()."""
+
     @_each_kept_enable_error
     def test_try_enable_returns_the_error_instead_of_raising(
         self, tmp_path: Path, error: Exception
@@ -1312,6 +1320,54 @@ class TestEnableRecoveryModule:
                 manager._try_enable_recovery_module(
                     service_config_id="sc-test-id", chain=_CHAIN
                 )
+
+
+class TestBuildUpdateTeardownPrefix:
+    """Tests for _build_update_teardown_prefix()."""
+
+    def _build(self, tmp_path: Path, staking_locked: bool) -> t.Tuple[t.Any, MagicMock]:
+        manager = _make_manager(tmp_path)
+        service = _make_mock_service()
+        chain_data = MagicMock(token=7, multisig=_SERVICE_SAFE)
+        sftxb = MagicMock()
+        sftxb.get_service_safe_owners.return_value = [_MASTER_SAFE]
+        sftxb.staking_status.return_value = StakingState.STAKED
+        with (
+            patch.object(
+                manager, "_get_on_chain_state", return_value=OnChainState.DEPLOYED
+            ),
+            patch.object(
+                manager, "_get_current_staking_program", return_value="program"
+            ),
+            patch("operate.services.manage.get_staking_contract", return_value="0x5ta"),
+        ):
+            prefix = manager._build_update_teardown_prefix(
+                service=service,
+                chain=_CHAIN,
+                sftxb=sftxb,
+                chain_data=chain_data,
+                master_safe=_MASTER_SAFE,
+                staking_locked=staking_locked,
+            )
+        return prefix, sftxb
+
+    def test_a_locked_staked_service_gets_no_prefix(self, tmp_path: Path) -> None:
+        """Inside the lock window the update cannot be folded in: no teardown is built."""
+        prefix, sftxb = self._build(tmp_path, staking_locked=True)
+
+        assert prefix is None
+        sftxb.get_unstaking_data.assert_not_called()
+        sftxb.can_unstake.assert_not_called()
+
+    def test_an_unlocked_master_safe_owned_service_gets_the_full_teardown(
+        self, tmp_path: Path
+    ) -> None:
+        """Unlocked, with the Master Safe owning the Safe, the prefix needs no recover_access."""
+        prefix, sftxb = self._build(tmp_path, staking_locked=False)
+
+        assert prefix is not None
+        assert [label for _, label in prefix] == ["unstake", "terminate", "unbond"]
+        sftxb.can_unstake.assert_not_called()
 
 
 class TestCannotUnstakeYet:
@@ -2563,6 +2619,25 @@ class TestTerminateBatching:
         else:
             claim_mock.assert_called_once()
             sftxb.new_tx.return_value.settle.assert_called_once()
+
+    def test_a_service_no_longer_staked_terminates_despite_a_locked_answer(
+        self, tmp_path: Path
+    ) -> None:
+        """The caller read it as locked, but it has left staking since: terminate goes on."""
+        manager, service, sftxb = self._setup_manager(tmp_path)
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(manager, "_get_current_staking_program", return_value=None),
+            patch.object(manager, "_terminate_and_unbond") as tab_mock,
+            patch("operate.services.manage.get_staking_contract", return_value=None),
+        ):
+            manager.terminate_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN, staking_locked=True
+            )
+
+        tab_mock.assert_called_once()
 
     def test_not_staked_batches_terminate_unbond(self, tmp_path: Path) -> None:
         """Not staked → batch terminate+unbond via _terminate_and_unbond."""
