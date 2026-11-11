@@ -152,8 +152,7 @@ def _sum_erc20_transfers_from(
     return total
 
 
-# An InsufficientFundsException here means the Master EOA lacks gas for the
-# Master Safe's enable transaction.
+# See _enable_recovery_module for when each is raised.
 _ENABLE_ERRORS = (RecoveryModuleNotEnabledError, InsufficientFundsException)
 _EnableFailure = t.Union[RecoveryModuleNotEnabledError, InsufficientFundsException]
 
@@ -774,10 +773,13 @@ class ServiceManager:
                 master_safe=safe,
             )
             if update_teardown_prefix is None:
+                # Inside the staking lock window terminate only claims: no teardown, no reuse.
                 _stop_refused_reuse_before_txs(
                     recovery_module_error=recovery_module_error,
                     on_chain_state=on_chain_state,
-                    tears_down_stepwise=True,
+                    tears_down_stepwise=not self._cannot_unstake_yet(
+                        service=service, chain=chain, sftxb=sftxb, chain_data=chain_data
+                    ),
                 )
                 self.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id, chain=chain
@@ -1407,6 +1409,25 @@ class ServiceManager:
                 )
             ).settle()
 
+    def _cannot_unstake_yet(
+        self,
+        service: Service,
+        chain: str,
+        sftxb: EthSafeTxBuilder,
+        chain_data: t.Any,
+    ) -> bool:
+        """Whether the service is staked but cannot be unstaked yet (e.g. its lock window)."""
+        current_staking_program = self._get_current_staking_program(service, chain)
+        if current_staking_program is None:
+            return False
+        return not sftxb.can_unstake(
+            service_id=chain_data.token,
+            staking_contract=get_staking_contract(
+                chain=Chain(chain),
+                staking_program_id=current_staking_program,
+            ),
+        )
+
     def _build_update_teardown_prefix(  # pylint: disable=too-many-locals,too-many-return-statements  # pragma: no cover
         self,
         service: Service,
@@ -1448,8 +1469,8 @@ class ServiceManager:
             else None
         )
 
-        if is_staked and not sftxb.can_unstake(
-            service_id=service_id, staking_contract=staking_contract
+        if self._cannot_unstake_yet(
+            service=service, chain=chain, sftxb=sftxb, chain_data=chain_data
         ):
             # Cannot unstake yet (e.g. still within the staking lock window) ->
             # the service cannot be torn down, so the update cannot proceed this
@@ -1798,7 +1819,8 @@ class ServiceManager:
                 service_config_id=service_config_id, chain=chain
             )
         except _ENABLE_ERRORS as e:
-            self.logger.warning(f"[SERVICE MANAGER] {e}", exc_info=True)
+            # A restart goes on without the module, so this log is the only record of it.
+            self.logger.error(f"[SERVICE MANAGER] {e}", exc_info=True)
             return e
         return None
 
