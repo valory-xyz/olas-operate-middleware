@@ -80,12 +80,8 @@ class TestMasterSafeEnablesRecoveryModule(OnFork):
         recovery_module = CONTRACTS[SERVICE_CHAIN]["recovery_module"]
 
         def _module_enabled() -> bool:
-            return bool(
-                registry_contracts.gnosis_safe.is_module_enabled(
-                    ledger_api=ledger_api,
-                    contract_address=agent_safe,
-                    module_address=recovery_module,
-                ).get("enabled")
+            return service_manager._is_recovery_module_enabled(  # noqa: SLF001
+                sftxb, chain_str, agent_safe
             )
 
         assert _module_enabled()

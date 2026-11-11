@@ -2448,8 +2448,8 @@ Deploy and run a service.
 **Response (Agent Safe cannot get the recovery module - 409):**
 
 A deployment that will reuse an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do.
-- These stop with this 409 before any teardown, bond or deploy transaction (only the failed enable attempt is sent), so no bond is posted: a deployment of a service not yet deployed on-chain (whoever owns its Agent Safe), an update folded into one batch, and a step-by-step update whose Agent Safe the Agent EOA does not own.
-- A step-by-step update whose Agent Safe the Agent EOA owns runs its teardown (unstake, terminate, unbond, Safe swap) first, and can still end with this 409 after it.
+- These stop with this 409 before any teardown, bond or deploy transaction (only the failed enable attempt is sent), so no bond is posted: a deployment that is not an update, of a service not yet deployed on-chain; an update folded into one batch; and a step-by-step update whose error is `RECOVERY_MODULE_NOT_ENABLED`.
+- A step-by-step update whose Agent EOA's own enable transaction failed (`AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE`) runs its teardown (unstake, terminate, unbond, Safe swap) first, also when it resumes one that stopped before the swap, and can still end with this 409 after it.
 - A restart, or an update while the service cannot leave staking yet, sends no teardown and reuses no Safe, so neither a failed enable nor a gas shortfall on it stops it.
 
 This happens when:

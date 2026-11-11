@@ -83,6 +83,7 @@ from operate.utils import concurrent_execute
 from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     MultiSendOperation,
+    MultiSendSubTx,
     SafeOperation,
     hash_payload_to_hex,
     normalize_tx_data_to_bytes,
@@ -1609,7 +1610,7 @@ class EthSafeTxBuilder(_ChainUtil):
     def get_safe_b_exec_messages(
         self,
         safe_b_address: str,
-        txs: t.List[t.Dict],
+        txs: t.List[MultiSendSubTx],
         nonce: t.Optional[int] = None,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
