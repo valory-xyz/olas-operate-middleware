@@ -44,6 +44,7 @@ from operate.operate_types import (
 )
 from operate.services.manage import (
     ServiceManager,
+    _Teardown,
     _stop_refused_reuse_before_txs,
 )
 from operate.services.protocol import StakingState
@@ -734,6 +735,16 @@ _SERVICE_SAFE = "0x5afe000000000000000000000000000000000001"
 _MASTER_SAFE = "0xd5afe00000000000000000000000000000000002"
 _AGENT = "0xaaaa"
 _RECOVERY_MODULE = "0x7ec0000000000000000000000000000000000003"
+
+
+def _patch_recovery_module_address() -> t.Any:
+    """Point the recovery module of the test chain at ``_RECOVERY_MODULE``."""
+    return patch(
+        "operate.services.manage.CONTRACTS",
+        {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
+    )
+
+
 _NFT_HASH = "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq"
 # One case per failure _try_enable_recovery_module keeps (manage._ENABLE_ERRORS).
 _each_kept_enable_error = pytest.mark.parametrize(
@@ -770,10 +781,7 @@ class TestIsRecoveryModuleEnabled:
         """The given Safe is asked whether this chain's recovery module is enabled."""
         sftxb = MagicMock()
         with (
-            patch(
-                "operate.services.manage.CONTRACTS",
-                {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
-            ),
+            _patch_recovery_module_address(),
             patch("operate.services.manage.registry_contracts") as mock_rc,
         ):
             mock_rc.gnosis_safe.is_module_enabled.return_value = {"enabled": enabled}
@@ -802,10 +810,13 @@ class TestEnableRecoveryModule:
         agent_settle_error: t.Optional[Exception] = None,
         master_settle_error: t.Optional[Exception] = None,
         exec_messages_error: t.Optional[Exception] = None,
+        key_load_error: t.Optional[Exception] = None,
     ) -> t.Dict[str, t.Any]:
         """Run _enable_recovery_module against mocked chain state."""
         manager, service, _ = _make_manager_with_service(tmp_path, token=token)
         service.agent_addresses = [_AGENT]
+        if key_load_error is not None:
+            manager.keys_manager.get_crypto_instance.side_effect = key_load_error
 
         sftxb = MagicMock()
         sftxb.info.return_value = {"multisig": multisig}
@@ -828,10 +839,7 @@ class TestEnableRecoveryModule:
         with (
             patch.object(manager, "load", return_value=service),
             patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
-            patch(
-                "operate.services.manage.CONTRACTS",
-                {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
-            ),
+            _patch_recovery_module_address(),
             patch("operate.services.manage.registry_contracts") as mock_rc,
             patch(
                 "operate.services.manage.EthSafeTxBuilder._new_tx",
@@ -905,6 +913,18 @@ class TestEnableRecoveryModule:
         assert isinstance(error, AgentCouldNotEnableRecoveryModuleError)
         assert error.__cause__ is cause
         assert f"Make sure the Agent EOA {_AGENT} holds enough gas" in str(error)
+
+    def test_agent_key_that_cannot_be_loaded_is_an_agent_enable_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """A missing or unreadable Agent EOA key is kept like a failed agent tx, not raised raw."""
+        cause = FileNotFoundError("keys/0xaaaa")
+        result = self._run(tmp_path, owners=[_AGENT], key_load_error=cause)
+
+        error = result["error"]
+        assert isinstance(error, AgentCouldNotEnableRecoveryModuleError)
+        assert error.__cause__ is cause
+        result["new_agent_tx"].assert_not_called()
 
     def test_agent_owned_safe_raises_when_agent_tx_fails(self, tmp_path: Path) -> None:
         """A reverted or failed agent enableModule is not blamed on gas."""
@@ -1082,8 +1102,12 @@ class TestDeployRecoveryModuleGate:
         terminate_effect: t.Any = None,
         cannot_unstake: bool = False,
         terminate_tears_down: bool = True,
+        service_state: OnChainState = OnChainState.DEPLOYED,
+        module_turns_on: bool = True,
     ) -> t.Dict[str, t.Any]:
-        """Run an update of a DEPLOYED service whose first module enable fails.
+        """Run an update of a service (DEPLOYED by default) whose first module enable fails.
+
+        A successful enable turns the module on unless ``module_turns_on`` is false.
 
         ``terminate_effect`` defaults to stopping at the stepwise terminate. A terminate
         that returns tears down unless ``terminate_tears_down`` is false: the registry
@@ -1107,7 +1131,7 @@ class TestDeployRecoveryModuleGate:
         chain_config.chain_data.user_params.nft = _NFT_HASH
         sftxb = MagicMock()
         sftxb.info.return_value = {
-            "service_state": OnChainState.DEPLOYED.value,
+            "service_state": service_state.value,
             "instances": [_AGENT],
             "multisig": _SERVICE_SAFE,
             "canonical_agents": [25],
@@ -1125,7 +1149,7 @@ class TestDeployRecoveryModuleGate:
                 and terminate.called
                 and terminate.side_effect is not _ReachedTeardown
             )
-            return OnChainState.PRE_REGISTRATION if torn_down else OnChainState.DEPLOYED
+            return OnChainState.PRE_REGISTRATION if torn_down else service_state
 
         enabled: t.List[bool] = []
 
@@ -1153,7 +1177,7 @@ class TestDeployRecoveryModuleGate:
                 manager, "_build_update_teardown_prefix", return_value=teardown_prefix
             ) as build_prefix,
             patch.object(
-                manager, "_cannot_unstake_yet", return_value=cannot_unstake
+                manager, "_is_staking_locked", return_value=cannot_unstake
             ) as cannot_unstake_yet,
             patch.object(manager, "terminate_service_on_chain_from_safe", terminate),
             patch.object(
@@ -1161,7 +1185,7 @@ class TestDeployRecoveryModuleGate:
             ) as recovery_flow,
             patch(
                 "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
-                side_effect=lambda **_: {"enabled": bool(enabled)},
+                side_effect=lambda **_: {"enabled": bool(enabled) and module_turns_on},
             ),
             patch("operate.services.manage.get_staking_contract", return_value=None),
             patch.dict("os.environ", {}),
@@ -1184,6 +1208,29 @@ class TestDeployRecoveryModuleGate:
             "reached_teardown": isinstance(raised, _ReachedTeardown),
             "reached_deploy": isinstance(raised, _ReachedDeploy),
         }
+
+    @pytest.mark.parametrize("module_turns_on", [True, False])
+    def test_a_resumed_deploy_decides_reuse_at_the_legacy_deploy_step(
+        self, tmp_path: Path, module_turns_on: bool
+    ) -> None:
+        """Resumed from FINISHED_REGISTRATION, the stepwise deploy also refuses a Safe without the module."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            terminate_effect=lambda **_: None,
+            terminate_tears_down=False,
+            service_state=OnChainState.FINISHED_REGISTRATION,
+            module_turns_on=module_turns_on,
+        )
+
+        if module_turns_on:
+            assert run["reached_deploy"]
+            kwargs = run["sftxb"].get_deploy_data_from_safe.call_args.kwargs
+            assert kwargs["reuse_multisig"] is True
+        else:
+            assert isinstance(run["raised"], RecoveryModuleNotEnabledError)
+            run["sftxb"].get_deploy_data_from_safe.assert_not_called()
 
     @_each_kept_enable_error
     def test_deployed_update_stops_before_a_stepwise_teardown(
@@ -1370,8 +1417,8 @@ class TestBuildUpdateTeardownPrefix:
         sftxb.can_unstake.assert_not_called()
 
 
-class TestCannotUnstakeYet:
-    """Tests for _cannot_unstake_yet()."""
+class TestIsStakingLocked:
+    """Tests for _is_staking_locked()."""
 
     @pytest.mark.parametrize(
         ("program", "can_unstake", "expected"),
@@ -1394,7 +1441,7 @@ class TestCannotUnstakeYet:
             "operate.services.manage.get_staking_contract",
             return_value="0x5ta",
         ) as get_contract:
-            locked = manager._cannot_unstake_yet(
+            locked = manager._is_staking_locked(
                 chain=_CHAIN,
                 sftxb=sftxb,
                 service_id=7,
@@ -1419,13 +1466,16 @@ class TestStopRefusedReuseBeforeTxs:
         _stop_refused_reuse_before_txs(
             recovery_module_error=None,
             on_chain_state=OnChainState.FINISHED_REGISTRATION,
+            teardown=_Teardown.UNDECIDED,
         )
 
-    def test_a_deployed_service_is_not_stopped(self) -> None:
-        """A restart reuses no Safe, so the error does not stop it."""
+    @pytest.mark.parametrize("teardown", [_Teardown.UNDECIDED, _Teardown.NONE])
+    def test_a_deployed_service_is_not_stopped(self, teardown: t.Any) -> None:
+        """A restart, or an update that tears nothing down, reuses no Safe yet."""
         _stop_refused_reuse_before_txs(
             recovery_module_error=RecoveryModuleNotEnabledError("agent tx failed"),
             on_chain_state=OnChainState.DEPLOYED,
+            teardown=teardown,
         )
 
     def test_a_deployed_service_torn_down_stepwise_is_stopped(self) -> None:
@@ -1435,7 +1485,7 @@ class TestStopRefusedReuseBeforeTxs:
             _stop_refused_reuse_before_txs(
                 recovery_module_error=error,
                 on_chain_state=OnChainState.DEPLOYED,
-                tears_down_stepwise=True,
+                teardown=_Teardown.STEPWISE,
             )
         assert exc_info.value is error
 
@@ -1448,7 +1498,7 @@ class TestStopRefusedReuseBeforeTxs:
                 "agent tx failed"
             ),
             on_chain_state=OnChainState.DEPLOYED,
-            tears_down_stepwise=True,
+            teardown=_Teardown.STEPWISE,
         )
 
     def test_a_failure_the_owner_swap_fixes_still_stops_a_deploy_not_yet_running(
@@ -1460,6 +1510,7 @@ class TestStopRefusedReuseBeforeTxs:
             _stop_refused_reuse_before_txs(
                 recovery_module_error=error,
                 on_chain_state=OnChainState.PRE_REGISTRATION,
+                teardown=_Teardown.UNDECIDED,
             )
 
     def test_a_service_that_will_reuse_the_safe_is_stopped(self) -> None:
@@ -1469,6 +1520,7 @@ class TestStopRefusedReuseBeforeTxs:
             _stop_refused_reuse_before_txs(
                 recovery_module_error=error,
                 on_chain_state=OnChainState.PRE_REGISTRATION,
+                teardown=_Teardown.UNDECIDED,
             )
         assert exc_info.value is error
 
@@ -1487,10 +1539,7 @@ class TestResolveSafeReuse:
         manager = _make_manager(tmp_path)
         result: t.Dict[str, t.Any] = {"error": None, "reuse": None}
         with (
-            patch(
-                "operate.services.manage.CONTRACTS",
-                {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
-            ),
+            _patch_recovery_module_address(),
             patch("operate.services.manage.registry_contracts") as mock_rc,
             patch.object(
                 manager, "_enable_recovery_module", side_effect=enable_error
@@ -1738,6 +1787,17 @@ class TestClaimOnChainFromSafe:
             self._run(tmp_path, logs=[], sftxb=sftxb)
 
         sftxb.new_tx.return_value.add.return_value.settle.assert_not_called()
+
+    def test_reads_the_reward_token_from_the_service_staking_contract(
+        self, tmp_path: Path
+    ) -> None:
+        """The reward token is the staking contract's own ``stakingToken``."""
+        sftxb = MagicMock()
+        sftxb.get_staking_params.return_value = {"staking_token": _REWARD_ERC20}
+
+        self._run(tmp_path, logs=[], sftxb=sftxb)
+
+        sftxb.get_staking_params.assert_called_once_with(staking_contract=_STAKING)
 
     def test_single_transfer_receipt_returns_its_amount(self, tmp_path: Path) -> None:
         """A claim paying one receiver returns that transfer's amount."""

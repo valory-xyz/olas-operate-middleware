@@ -19,6 +19,7 @@
 # ------------------------------------------------------------------------------
 """Service manager."""
 
+import enum
 import json
 import logging
 import os
@@ -157,10 +158,18 @@ _EnableFailure = t.Union[RecoveryModuleNotEnabledError, InsufficientFundsExcepti
 _ENABLE_ERRORS = t.get_args(_EnableFailure)
 
 
+class _Teardown(enum.Enum):
+    """What a deploy tears down before it decides whether to reuse the Agent Safe."""
+
+    UNDECIDED = "undecided"  # an update's teardown is not chosen yet
+    NONE = "none"  # nothing is torn down (e.g. inside the staking lock window)
+    STEPWISE = "stepwise"  # unstake, terminate, unbond and swap, each sent on its own
+
+
 def _stop_refused_reuse_before_txs(
     recovery_module_error: t.Optional[_EnableFailure],
     on_chain_state: OnChainState,
-    tears_down_stepwise: bool = False,
+    teardown: _Teardown,
 ) -> None:
     """Stop before any tx is sent when the deploy will reuse a Safe it cannot use.
 
@@ -179,7 +188,7 @@ def _stop_refused_reuse_before_txs(
     fixed_by_owner_swap = isinstance(
         recovery_module_error, AgentCouldNotEnableRecoveryModuleError
     )
-    if tears_down_stepwise and not fixed_by_owner_swap:
+    if teardown is _Teardown.STEPWISE and not fixed_by_owner_swap:
         raise recovery_module_error
 
 
@@ -539,6 +548,7 @@ class ServiceManager:
         _stop_refused_reuse_before_txs(
             recovery_module_error=recovery_module_error,
             on_chain_state=on_chain_state,
+            teardown=_Teardown.UNDECIDED,
         )
 
         current_staking_program = self._get_current_staking_program(service, chain)
@@ -766,7 +776,7 @@ class ServiceManager:
         update_teardown_prefix: t.Optional[t.List[t.Tuple[t.Dict, str]]] = None
         if is_update:
             # Read once, so the teardown prefix, the reuse gate and terminate agree.
-            staking_locked = self._cannot_unstake_yet(
+            staking_locked = self._is_staking_locked(
                 chain=chain,
                 sftxb=sftxb,
                 service_id=chain_data.token,
@@ -785,7 +795,7 @@ class ServiceManager:
                 _stop_refused_reuse_before_txs(
                     recovery_module_error=recovery_module_error,
                     on_chain_state=on_chain_state,
-                    tears_down_stepwise=not staking_locked,
+                    teardown=_Teardown.NONE if staking_locked else _Teardown.STEPWISE,
                 )
                 self.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id,
@@ -1417,7 +1427,7 @@ class ServiceManager:
             ).settle()
 
     @staticmethod
-    def _cannot_unstake_yet(
+    def _is_staking_locked(
         chain: str,
         sftxb: EthSafeTxBuilder,
         service_id: int,
@@ -1553,8 +1563,8 @@ class ServiceManager:
     ) -> None:
         """Terminate service on-chain.
 
-        ``staking_locked`` is the caller's ``_cannot_unstake_yet`` answer, so both
-        act on the same read; it is read here when not given.
+        ``staking_locked`` is the caller's ``_is_staking_locked`` answer; it is read
+        here when omitted.
         """
 
         self.logger.info("terminate_service_on_chain_from_safe")
@@ -1577,7 +1587,7 @@ class ServiceManager:
         )
         is_staked = current_staking_program is not None
         if staking_locked is None:
-            staking_locked = self._cannot_unstake_yet(
+            staking_locked = self._is_staking_locked(
                 chain=chain,
                 sftxb=sftxb,
                 service_id=chain_data.token,
@@ -1793,8 +1803,9 @@ class ServiceManager:
         """Return whether the deploy reuses the Agent Safe, which then has the recovery module.
 
         A reused Agent Safe without the module gets one more attempt to enable it, so
-        the error reflects its current owners; if it still lacks the module, raise
-        RecoveryModuleNotEnabledError rather than build a reuse deploy without it.
+        the error reflects its current owners. If it still lacks the module, raise
+        RecoveryModuleNotEnabledError rather than build a reuse deploy without it; a
+        Master EOA gas shortfall on that attempt raises InsufficientFundsException.
         """
         if service_safe_address == ZERO_ADDRESS:
             return False
@@ -1875,8 +1886,8 @@ class ServiceManager:
 
         if service_safe_owners == [agent_address]:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
-            crypto = self.keys_manager.get_crypto_instance(address=agent_address)
             try:
+                crypto = self.keys_manager.get_crypto_instance(address=agent_address)
                 EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
                     ledger_api=sftxb.ledger_api,
                     crypto=crypto,
