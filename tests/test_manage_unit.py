@@ -762,6 +762,33 @@ def _make_manager_with_service(
     return manager, service, chain_config
 
 
+class TestIsRecoveryModuleEnabled:
+    """Tests for _is_recovery_module_enabled()."""
+
+    @pytest.mark.parametrize("enabled", [True, False])
+    def test_asks_the_safe_about_the_chain_recovery_module(self, enabled: bool) -> None:
+        """The given Safe is asked whether this chain's recovery module is enabled."""
+        sftxb = MagicMock()
+        with (
+            patch(
+                "operate.services.manage.CONTRACTS",
+                {Chain.GNOSIS: {"recovery_module": _RECOVERY_MODULE}},
+            ),
+            patch("operate.services.manage.registry_contracts") as mock_rc,
+        ):
+            mock_rc.gnosis_safe.is_module_enabled.return_value = {"enabled": enabled}
+            result = ServiceManager._is_recovery_module_enabled(
+                sftxb, _CHAIN, _SERVICE_SAFE
+            )
+
+        assert result is enabled
+        mock_rc.gnosis_safe.is_module_enabled.assert_called_once_with(
+            ledger_api=sftxb.ledger_api,
+            contract_address=_SERVICE_SAFE,
+            module_address=_RECOVERY_MODULE,
+        )
+
+
 class TestEnableRecoveryModule:
     """Tests for _enable_recovery_module()."""
 
