@@ -17,13 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Integration test for the Master Safe enabling the recovery module on a fork.
-
-A service whose Agent Safe the Master Safe owns, with the recovery module
-disabled, gets the module back through ``_enable_recovery_module``: the Master
-Safe approves and executes ``enableModule`` on the Agent Safe in one nested
-Safe transaction (``get_safe_b_exec_messages``).
-"""
+"""Fork test: the Master Safe re-enables the recovery module on an Agent Safe it owns."""
 
 import pytest
 from autonomy.chain.base import registry_contracts
@@ -47,7 +41,7 @@ class TestMasterSafeEnablesRecoveryModule(OnFork):
     def test_master_safe_enables_the_module_on_its_agent_safe(
         self, test_env: OperateTestEnv
     ) -> None:
-        """Disable the module on a Master-Safe-owned Agent Safe, then enable it again."""
+        """Disable the module on a Master-Safe-owned Agent Safe; a redeploy re-enables and reuses it."""
         operate = test_env.operate
         operate.password = test_env.password
         service_manager = operate.service_manager()
@@ -124,8 +118,17 @@ class TestMasterSafeEnablesRecoveryModule(OnFork):
         tx.settle()
         assert not _module_enabled()
 
-        service_manager._enable_recovery_module(  # noqa: SLF001
-            service_config_id=service_config_id, chain=chain_str
+        # Redeploy: the deploy must enable the module and reuse the same Agent Safe.
+        service_manager.deploy_service_onchain_from_safe(
+            service_config_id=service_config_id
         )
 
         assert _module_enabled()
+        service = service_manager.load(service_config_id=service_config_id)
+        assert (
+            service_manager._get_on_chain_state(  # noqa: SLF001
+                service=service, chain=chain_str
+            )
+            == OnChainState.DEPLOYED
+        )
+        assert sftxb.info(token_id=token_id)["multisig"] == agent_safe
