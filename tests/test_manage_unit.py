@@ -1182,6 +1182,26 @@ class TestEnableRecoveryModule:
         assert run["build_prefix"].call_args.kwargs["staking_locked"] is True
         assert run["terminate"].call_args.kwargs["staking_locked"] is True
 
+    @_each_kept_enable_error
+    def test_deployed_update_in_the_staking_lock_window_tears_nothing_down(
+        self, tmp_path: Path, error: Exception
+    ) -> None:
+        """Locked in staking, terminate sends nothing: the run ends with no teardown or reuse."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            error,
+            cannot_unstake=True,
+            terminate_effect=lambda **_: None,
+            terminate_tears_down=False,
+        )
+
+        assert run["raised"] is None
+        run["terminate"].assert_called_once()
+        run["recovery_flow"].assert_not_called()
+        run["sftxb"].get_deploy_data_from_safe.assert_not_called()
+        run["sftxb"].new_tx.assert_not_called()
+
     def test_deployed_update_reuses_the_safe_once_the_owner_swap_lets_the_master_safe_enable(
         self, tmp_path: Path
     ) -> None:
