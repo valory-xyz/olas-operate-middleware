@@ -1435,7 +1435,7 @@ class ServiceManager:
             ),
         )
 
-    def _build_update_teardown_prefix(  # pylint: disable=too-many-locals,too-many-return-statements  # pragma: no cover
+    def _build_update_teardown_prefix(  # pylint: disable=too-many-arguments,too-many-locals,too-many-return-statements  # pragma: no cover
         self,
         service: Service,
         chain: str,
