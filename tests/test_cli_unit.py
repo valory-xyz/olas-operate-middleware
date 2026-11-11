@@ -47,6 +47,7 @@ from operate.cli import (
 )
 from operate.constants import DEPLOYMENT_DIR, OPERATE, SERVICES_DIR, ZERO_ADDRESS
 from operate.exceptions import (
+    AgentCouldNotEnableRecoveryModuleError,
     RecoveryModuleNotEnabledError,
     ServicePackageDownloadError,
 )
@@ -1969,12 +1970,24 @@ class TestServiceRoutes:
             kill_process(holder.pid)
             holder.wait(timeout=10)
 
-    def test_deploy_service_recovery_module_not_enabled(self) -> None:
-        """Deploy returns 409 carrying the actionable recovery-module message."""
+    @pytest.mark.parametrize(
+        ("error_type", "error_code"),
+        [
+            (RecoveryModuleNotEnabledError, "RECOVERY_MODULE_NOT_ENABLED"),
+            (
+                AgentCouldNotEnableRecoveryModuleError,
+                "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE",
+            ),
+        ],
+    )
+    def test_deploy_service_recovery_module_not_enabled(
+        self, error_type: t.Type[Exception], error_code: str
+    ) -> None:
+        """Deploy returns 409 with the actionable message and the error's own code."""
         m = self._basic_with_password()
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
-            RecoveryModuleNotEnabledError("Contact Pearl support with this message.")
+            error_type("Fix it this way.")
         )
         stack, app, _, _ = _open_app(m)
         with stack:
@@ -1982,8 +1995,8 @@ class TestServiceRoutes:
                 resp = c.post("/api/v2/service/svc1", json={})
             assert resp.status_code == HTTPStatus.CONFLICT
             assert resp.json() == {
-                "error": "Contact Pearl support with this message.",
-                "error_code": "RECOVERY_MODULE_NOT_ENABLED",
+                "error": "Fix it this way.",
+                "error_code": error_code,
             }
 
     def test_deploy_service_generic_exception(self) -> None:

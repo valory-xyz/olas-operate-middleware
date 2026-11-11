@@ -1795,15 +1795,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
-        except (PortInUseError, RecoveryModuleNotEnabledError) as e:
+        except PortInUseError as e:
             logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
-            error_fields = (
-                e.to_error_fields()
-                if isinstance(e, RecoveryModuleNotEnabledError)
-                else {}
-            )
             return JSONResponse(
-                content={"error": str(e), **error_fields},
+                content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
+            )
+        except RecoveryModuleNotEnabledError as e:
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={"error": str(e), **e.to_error_fields()},
                 status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except
