@@ -45,7 +45,7 @@ CHAINS = [
 
 ARBITRUM_ONE_RPC = os.environ.get("ARBITRUM_ONE_RPC", "https://arb1.arbitrum.io/rpc")
 BASE_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
-CELO_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
+CELO_RPC = os.environ.get("CELO_RPC", "https://celo-rpc.publicnode.com")
 ETHEREUM_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
 GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://gnosis-rpc.publicnode.com")
 MODE_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network")
