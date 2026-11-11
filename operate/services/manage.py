@@ -53,7 +53,10 @@ from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
-from operate.exceptions import RecoveryModuleNotEnabledError
+from operate.exceptions import (
+    AgentCouldNotEnableRecoveryModuleError,
+    RecoveryModuleNotEnabledError,
+)
 from operate.keys import KeysManager
 from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
@@ -149,15 +152,14 @@ def _sum_erc20_transfers_from(
     return total
 
 
-# Why the recovery module could not be enabled at deploy start: either it cannot
-# be, or the Master EOA lacks gas for the Master Safe's transaction.
-RecoveryModuleEnableError = t.Union[
-    RecoveryModuleNotEnabledError, InsufficientFundsException
-]
+# An InsufficientFundsException here means the Master EOA lacks gas for the
+# Master Safe's enable transaction.
+_ENABLE_ERRORS = (RecoveryModuleNotEnabledError, InsufficientFundsException)
+_EnableFailure = t.Union[RecoveryModuleNotEnabledError, InsufficientFundsException]
 
 
 def _stop_refused_reuse_before_txs(
-    recovery_module_error: t.Optional[RecoveryModuleEnableError],
+    recovery_module_error: t.Optional[_EnableFailure],
     on_chain_state: OnChainState,
     tears_down_stepwise: bool = False,
 ) -> None:
@@ -168,10 +170,17 @@ def _stop_refused_reuse_before_txs(
     running service reuses it only when an update tears it down step by step,
     which sends the unstake, terminate, unbond and swap before the reuse is
     decided; an update folded into one batch decides it before sending anything.
+    That teardown funds the Agent EOA and swaps its Safe to the Master Safe, which
+    can then enable the module, so a failure the swap fixes does not stop it.
     """
-    if recovery_module_error is not None and (
-        on_chain_state != OnChainState.DEPLOYED or tears_down_stepwise
-    ):
+    if recovery_module_error is None:
+        return
+    if on_chain_state != OnChainState.DEPLOYED:
+        raise recovery_module_error
+    fixed_by_owner_swap = isinstance(
+        recovery_module_error, AgentCouldNotEnableRecoveryModuleError
+    )
+    if tears_down_stepwise and not fixed_by_owner_swap:
         raise recovery_module_error
 
 
@@ -998,7 +1007,6 @@ class ServiceManager:
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
-                use_recovery_module=True,
                 use_poly_safe=use_poly_safe,
                 agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
@@ -1211,7 +1219,6 @@ class ServiceManager:
                     service_id=chain_data.token,
                     reuse_multisig=reuse_multisig,
                     master_safe=safe,
-                    use_recovery_module=True,
                     use_poly_safe=use_poly_safe,
                     agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                         service.agent_addresses[0]
@@ -1784,13 +1791,13 @@ class ServiceManager:
 
     def _try_enable_recovery_module(
         self, service_config_id: str, chain: str
-    ) -> t.Optional[RecoveryModuleEnableError]:
+    ) -> t.Optional[_EnableFailure]:
         """Enable the recovery module if possible, returning the error instead of raising it."""
         try:
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
-        except (RecoveryModuleNotEnabledError, InsufficientFundsException) as e:
+        except _ENABLE_ERRORS as e:
             self.logger.warning(f"[SERVICE MANAGER] {e}", exc_info=True)
             return e
         return None
@@ -1857,7 +1864,7 @@ class ServiceManager:
                     safe=service_safe_address,
                 ).add(enable_module_data).settle()
             except Exception as e:  # pylint: disable=broad-except
-                raise RecoveryModuleNotEnabledError(
+                raise AgentCouldNotEnableRecoveryModuleError(
                     f"Could not enable the recovery module on the Agent Safe "
                     f"{service_safe_address} on {chain}, so the agent cannot use "
                     f"it. Make sure the Agent EOA {agent_address} holds enough gas "

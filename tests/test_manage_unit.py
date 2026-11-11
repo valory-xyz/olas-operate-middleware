@@ -30,6 +30,7 @@ from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import (
+    AgentCouldNotEnableRecoveryModuleError,
     InsufficientFundsException,
     RecoveryModuleNotEnabledError,
 )
@@ -733,6 +734,16 @@ _SERVICE_SAFE = "0x5afe000000000000000000000000000000000001"
 _MASTER_SAFE = "0xd5afe00000000000000000000000000000000002"
 _AGENT = "0xaaaa"
 _RECOVERY_MODULE = "0x7ec0000000000000000000000000000000000003"
+_NFT_HASH = "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq"
+# The two failures _try_enable_recovery_module keeps, as its ``except`` lists them.
+_ENABLE_ERRORS = pytest.mark.parametrize(
+    "error",
+    [
+        RecoveryModuleNotEnabledError("agent tx failed"),
+        InsufficientFundsException("no gas", chain=_CHAIN),
+    ],
+    ids=["module-not-enabled", "master-eoa-out-of-gas"],
+)
 
 
 class TestEnableRecoveryModule:
@@ -861,6 +872,8 @@ class TestEnableRecoveryModule:
         assert _SERVICE_SAFE in str(error)
         assert f"Make sure the Agent EOA {_AGENT} holds enough gas" in str(error)
         assert "secret-key" not in str(error)
+        # A stepwise teardown swaps this Safe to the Master Safe, which can enable it.
+        assert isinstance(error, AgentCouldNotEnableRecoveryModuleError)
 
     def test_master_safe_owned_safe_enables_module_through_nested_safe_tx(
         self, tmp_path: Path
@@ -896,6 +909,7 @@ class TestEnableRecoveryModule:
         assert error.__cause__ is cause
         assert "contact Pearl support" in str(error)
         assert "secret-key" not in str(error)
+        assert not isinstance(error, AgentCouldNotEnableRecoveryModuleError)
 
     def test_master_safe_message_build_failure_raises_actionable_error(
         self, tmp_path: Path
@@ -932,6 +946,7 @@ class TestEnableRecoveryModule:
         error = result["error"]
         assert isinstance(error, RecoveryModuleNotEnabledError)
         assert "Contact Pearl support" in str(error)
+        assert not isinstance(error, AgentCouldNotEnableRecoveryModuleError)
         result["new_agent_tx"].assert_not_called()
         result["sftxb"].new_tx.assert_not_called()
 
@@ -983,14 +998,7 @@ class TestEnableRecoveryModule:
             raised = None
         return raised, sftxb
 
-    @pytest.mark.parametrize(
-        "error",
-        [
-            RecoveryModuleNotEnabledError("agent tx failed"),
-            InsufficientFundsException("no gas", chain=_CHAIN),
-        ],
-        ids=["module-not-enabled", "master-eoa-out-of-gas"],
-    )
+    @_ENABLE_ERRORS
     def test_deploy_continues_when_module_cannot_be_enabled(
         self, tmp_path: Path, error: Exception
     ) -> None:
@@ -1009,14 +1017,7 @@ class TestEnableRecoveryModule:
             OnChainState.FINISHED_REGISTRATION,
         ],
     )
-    @pytest.mark.parametrize(
-        "error",
-        [
-            RecoveryModuleNotEnabledError("agent tx failed"),
-            InsufficientFundsException("no gas", chain=_CHAIN),
-        ],
-        ids=["module-not-enabled", "master-eoa-out-of-gas"],
-    )
+    @_ENABLE_ERRORS
     def test_reuse_deploy_stops_before_any_bond_tx(
         self, tmp_path: Path, service_state: OnChainState, error: Exception
     ) -> None:
@@ -1031,21 +1032,19 @@ class TestEnableRecoveryModule:
         sftxb.get_register_instances_data.assert_not_called()
         sftxb.get_deploy_data_from_safe.assert_not_called()
 
-    @pytest.mark.parametrize(
-        "teardown_prefix",
-        [None, [({"to": "0x1"}, "unstake")]],
-        ids=["stepwise", "batched"],
-    )
-    def test_deployed_update_stops_before_a_stepwise_teardown(
-        self, tmp_path: Path, teardown_prefix: t.Optional[t.List[t.Any]]
-    ) -> None:
-        """A running service updated step by step stops before unstake/terminate is sent.
+    def _run_deployed_update(
+        self,
+        tmp_path: Path,
+        teardown_prefix: t.Optional[t.List[t.Any]],
+        error: Exception,
+    ) -> t.Tuple[BaseException, MagicMock, MagicMock]:
+        """Run an update of a DEPLOYED service whose module enable keeps failing.
 
-        An update folded into one batch goes on: it decides the reuse before sending.
+        The stepwise teardown is stopped by raising from the terminate mock.
         """
 
-        class _ReachedMint(Exception):
-            """Raised by the first state read after the update teardown."""
+        class _ReachedTeardown(Exception):
+            """Raised by the stepwise terminate."""
 
         manager = _make_manager(tmp_path)
         service = _make_mock_service(home_chain="ethereum")
@@ -1054,6 +1053,7 @@ class TestEnableRecoveryModule:
         chain_config = MagicMock()
         chain_config.chain_data.token = 7
         chain_config.chain_data.user_params.use_staking = False
+        chain_config.chain_data.user_params.nft = _NFT_HASH
         chain_config.ledger_config = _make_ledger_config()
         service.chain_configs = {_CHAIN: chain_config}
         manager.wallet_manager.load.return_value.safes = {  # type: ignore
@@ -1066,9 +1066,6 @@ class TestEnableRecoveryModule:
             "multisig": _SERVICE_SAFE,
             "canonical_agents": [25],
         }
-        error = RecoveryModuleNotEnabledError("agent tx failed")
-        # Two reads before the teardown (first mint, current program), then the mint check.
-        states = [OnChainState.DEPLOYED, OnChainState.DEPLOYED, _ReachedMint]
 
         with (
             patch.object(manager, "load", return_value=service),
@@ -1080,36 +1077,79 @@ class TestEnableRecoveryModule:
                 "_get_on_chain_metadata",
                 return_value={"code_uri": "ipfs://hash", "description": "old"},
             ),
-            patch.object(manager, "_get_on_chain_state", side_effect=states),
+            # First-mint, mint and mega-batch entry checks all see DEPLOYED.
+            patch.object(
+                manager, "_get_on_chain_state", return_value=OnChainState.DEPLOYED
+            ),
             patch.object(
                 manager, "_build_update_teardown_prefix", return_value=teardown_prefix
             ),
-            patch.object(manager, "terminate_service_on_chain_from_safe") as terminate,
+            patch.object(
+                manager,
+                "terminate_service_on_chain_from_safe",
+                side_effect=_ReachedTeardown,
+            ) as terminate,
+            patch(
+                "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
+                return_value={"enabled": False},
+            ),
             patch("operate.services.manage.get_staking_contract", return_value=None),
             patch.dict("os.environ", {}),
         ):
-            with pytest.raises(
-                (RecoveryModuleNotEnabledError, _ReachedMint)
-            ) as exc_info:
+            with pytest.raises((type(error), _ReachedTeardown)) as exc_info:
                 manager._deploy_service_onchain_from_safe(
                     service_config_id="sc-test-id", chain=_CHAIN
                 )
-
-        if teardown_prefix is None:
-            assert exc_info.value is error
-            terminate.assert_not_called()
-        else:
-            assert isinstance(exc_info.value, _ReachedMint)
-        sftxb.new_tx.assert_not_called()
+        return exc_info.value, terminate, sftxb
 
     @pytest.mark.parametrize(
         "error",
         [
-            RecoveryModuleNotEnabledError("agent tx failed"),
+            RecoveryModuleNotEnabledError("owners are neither"),
+            RecoveryModuleNotEnabledError("master safe tx failed"),
             InsufficientFundsException("no gas", chain=_CHAIN),
         ],
-        ids=["module-not-enabled", "master-eoa-out-of-gas"],
+        ids=["inconsistent-owners", "master-safe-tx-failed", "master-eoa-out-of-gas"],
     )
+    def test_deployed_update_stops_before_a_stepwise_teardown(
+        self, tmp_path: Path, error: Exception
+    ) -> None:
+        """A stepwise teardown that cannot fix the module stops before unstake/terminate."""
+        raised, terminate, sftxb = self._run_deployed_update(tmp_path, None, error)
+
+        assert raised is error
+        terminate.assert_not_called()
+        sftxb.new_tx.assert_not_called()
+
+    def test_deployed_update_tears_down_when_the_owner_swap_fixes_the_module(
+        self, tmp_path: Path
+    ) -> None:
+        """An Agent-EOA-owned Safe goes on: terminate funds the agent and swaps it to the Master Safe."""
+        error = AgentCouldNotEnableRecoveryModuleError("agent tx failed")
+
+        raised, terminate, _ = self._run_deployed_update(tmp_path, None, error)
+
+        assert raised is not error
+        terminate.assert_called_once()
+
+    def test_batched_update_refuses_the_reuse_before_sending_the_batch(
+        self, tmp_path: Path
+    ) -> None:
+        """An update folded into one batch refuses the reuse before the batch settles."""
+        error = RecoveryModuleNotEnabledError("agent tx failed")
+
+        raised, terminate, sftxb = self._run_deployed_update(
+            tmp_path, [({"to": "0x1"}, "unstake")], error
+        )
+
+        assert raised is error
+        terminate.assert_not_called()
+        sftxb.new_tx.assert_called_once()
+        sftxb.get_register_instances_data.assert_called_once()
+        sftxb.new_tx.return_value.settle.assert_not_called()
+        sftxb.get_deploy_data_from_safe.assert_not_called()
+
+    @_ENABLE_ERRORS
     def test_try_enable_returns_the_error_instead_of_raising(
         self, tmp_path: Path, error: Exception
     ) -> None:
@@ -1169,6 +1209,29 @@ class TestStopRefusedReuseBeforeTxs:
                 tears_down_stepwise=True,
             )
         assert exc_info.value is error
+
+    def test_a_failure_the_owner_swap_fixes_does_not_stop_a_stepwise_teardown(
+        self,
+    ) -> None:
+        """The teardown swaps an Agent-EOA-owned Safe to the Master Safe, which can enable it."""
+        _stop_refused_reuse_before_txs(
+            recovery_module_error=AgentCouldNotEnableRecoveryModuleError(
+                "agent tx failed"
+            ),
+            on_chain_state=OnChainState.DEPLOYED,
+            tears_down_stepwise=True,
+        )
+
+    def test_a_failure_the_owner_swap_fixes_still_stops_a_deploy_not_yet_running(
+        self,
+    ) -> None:
+        """Before the bond is posted nothing swaps the owner, so the deploy still stops."""
+        error = AgentCouldNotEnableRecoveryModuleError("agent tx failed")
+        with pytest.raises(RecoveryModuleNotEnabledError):
+            _stop_refused_reuse_before_txs(
+                recovery_module_error=error,
+                on_chain_state=OnChainState.PRE_REGISTRATION,
+            )
 
     def test_a_service_that_will_reuse_the_safe_is_stopped(self) -> None:
         """The enable error stops a deploy that has not posted its bond yet."""

@@ -63,3 +63,10 @@ class RecoveryModuleNotEnabledError(Exception):
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
         return {"error_code": "RECOVERY_MODULE_NOT_ENABLED"}
+
+
+class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
+    """The Agent EOA owns the service Safe and its enableModule failed.
+
+    Swapping the Safe to the Master Safe lets the Master Safe enable the module.
+    """
