@@ -746,6 +746,22 @@ _each_kept_enable_error = pytest.mark.parametrize(
 )
 
 
+def _make_manager_with_service(
+    tmp_path: Path, token: int = 7, **service_kwargs: t.Any
+) -> t.Tuple[ServiceManager, MagicMock, MagicMock]:
+    """A manager with one Gnosis service minted as ``token``, and the Master Safe."""
+    manager = _make_manager(tmp_path)
+    service = _make_mock_service(**service_kwargs)
+    chain_config = MagicMock()
+    chain_config.chain_data.token = token
+    chain_config.ledger_config = _make_ledger_config()
+    service.chain_configs = {_CHAIN: chain_config}
+    manager.wallet_manager.load.return_value.safes = {  # type: ignore
+        Chain.GNOSIS: _MASTER_SAFE
+    }
+    return manager, service, chain_config
+
+
 class TestEnableRecoveryModule:
     """Tests for _enable_recovery_module()."""
 
@@ -761,16 +777,8 @@ class TestEnableRecoveryModule:
         exec_messages_error: t.Optional[Exception] = None,
     ) -> t.Dict[str, t.Any]:
         """Run _enable_recovery_module against mocked chain state."""
-        manager = _make_manager(tmp_path)
-        service = _make_mock_service()
+        manager, service, _ = _make_manager_with_service(tmp_path, token=token)
         service.agent_addresses = [_AGENT]
-        chain_config = MagicMock()
-        chain_config.chain_data.token = token
-        chain_config.ledger_config = _make_ledger_config()
-        service.chain_configs = {_CHAIN: chain_config}
-        manager.wallet_manager.load.return_value.safes = {  # type: ignore
-            Chain.GNOSIS: _MASTER_SAFE
-        }
 
         sftxb = MagicMock()
         sftxb.info.return_value = {"multisig": multisig}
@@ -861,16 +869,26 @@ class TestEnableRecoveryModule:
         result["agent_tx"].settle.assert_called_once()
         result["sftxb"].new_tx.assert_not_called()
 
+    def test_agent_owned_safe_out_of_gas_asks_for_gas(self, tmp_path: Path) -> None:
+        """The Agent EOA cannot pay for its enableModule: the error says to fund it."""
+        cause = InsufficientFundsException("no gas", chain=_CHAIN)
+        result = self._run(tmp_path, owners=[_AGENT], agent_settle_error=cause)
+
+        error = result["error"]
+        assert isinstance(error, AgentCouldNotEnableRecoveryModuleError)
+        assert error.__cause__ is cause
+        assert f"Make sure the Agent EOA {_AGENT} holds enough gas" in str(error)
+
     def test_agent_owned_safe_raises_when_agent_tx_fails(self, tmp_path: Path) -> None:
-        """A failed agent enableModule stops the flow with an actionable error."""
+        """A reverted or failed agent enableModule is not blamed on gas."""
         cause = RuntimeError("403 for url https://rpc.example/secret-key")
         result = self._run(tmp_path, owners=[_AGENT], agent_settle_error=cause)
 
         error = result["error"]
-        assert isinstance(error, RecoveryModuleNotEnabledError)
         assert error.__cause__ is cause
         assert _SERVICE_SAFE in str(error)
-        assert f"Make sure the Agent EOA {_AGENT} holds enough gas" in str(error)
+        assert "gas" not in str(error)
+        assert "contact Pearl support" in str(error)
         assert "secret-key" not in str(error)
         # A stepwise teardown swaps this Safe to the Master Safe, which can enable it.
         assert isinstance(error, AgentCouldNotEnableRecoveryModuleError)
@@ -940,7 +958,7 @@ class TestEnableRecoveryModule:
     def test_inconsistent_owners_raise_without_sending(
         self, tmp_path: Path, owners: t.List[str]
     ) -> None:
-        """Owners that are neither the agent nor the Master Safe raise; no tx is sent."""
+        """Any owner set other than the Agent EOA alone or the Master Safe alone raises; no tx is sent."""
         result = self._run(tmp_path, owners=owners)
 
         error = result["error"]
@@ -958,15 +976,7 @@ class TestEnableRecoveryModule:
         class _ReachedStakingRead(Exception):
             """Raised by the first call after the early reuse gate."""
 
-        manager = _make_manager(tmp_path)
-        service = _make_mock_service()
-        chain_config = MagicMock()
-        chain_config.chain_data.token = 7
-        chain_config.ledger_config = _make_ledger_config()
-        service.chain_configs = {_CHAIN: chain_config}
-        manager.wallet_manager.load.return_value.safes = {  # type: ignore
-            Chain.GNOSIS: _MASTER_SAFE
-        }
+        manager, service, _ = _make_manager_with_service(tmp_path)
         sftxb = MagicMock()
         sftxb.info.return_value = {
             "service_state": service_state.value,
@@ -1055,20 +1065,14 @@ class TestEnableRecoveryModule:
         class _ReachedDeploy(Exception):
             """Raised where the deploy data would be built."""
 
-        manager = _make_manager(tmp_path)
-        service = _make_mock_service(home_chain="ethereum")
+        manager, service, chain_config = _make_manager_with_service(
+            tmp_path, home_chain="ethereum"
+        )
         service.path = tmp_path
         service.description = "new description"
         service.service_public_id.return_value = "valory/trader:0.1.0"
-        chain_config = MagicMock()
-        chain_config.chain_data.token = 7
         chain_config.chain_data.user_params.use_staking = False
         chain_config.chain_data.user_params.nft = _NFT_HASH
-        chain_config.ledger_config = _make_ledger_config()
-        service.chain_configs = {_CHAIN: chain_config}
-        manager.wallet_manager.load.return_value.safes = {  # type: ignore
-            Chain.GNOSIS: _MASTER_SAFE
-        }
         sftxb = MagicMock()
         sftxb.info.return_value = {
             "service_state": OnChainState.DEPLOYED.value,
@@ -1084,7 +1088,6 @@ class TestEnableRecoveryModule:
         )
 
         def _state(**_: t.Any) -> OnChainState:
-            # A terminate that returned has torn the service down.
             torn_down = (
                 terminate_tears_down
                 and terminate.called
@@ -1126,7 +1129,6 @@ class TestEnableRecoveryModule:
             ) as recovery_flow,
             patch(
                 "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
-                # Enabled once an enable call has succeeded.
                 side_effect=lambda **_: {"enabled": bool(enabled)},
             ),
             patch("operate.services.manage.get_staking_contract", return_value=None),
@@ -1151,14 +1153,7 @@ class TestEnableRecoveryModule:
             "reached_deploy": isinstance(raised, _ReachedDeploy),
         }
 
-    @pytest.mark.parametrize(
-        "error",
-        [
-            RecoveryModuleNotEnabledError("owners are neither"),
-            InsufficientFundsException("no gas", chain=_CHAIN),
-        ],
-        ids=["module-not-enabled", "master-eoa-out-of-gas"],
-    )
+    @_each_kept_enable_error
     def test_deployed_update_stops_before_a_stepwise_teardown(
         self, tmp_path: Path, error: Exception
     ) -> None:
@@ -1177,7 +1172,6 @@ class TestEnableRecoveryModule:
         run = self._run_deployed_update(tmp_path, None, error, cannot_unstake=True)
 
         assert run["reached_teardown"]
-        # One lock read, shared by the prefix, the gate and terminate.
         run["cannot_unstake_yet"].assert_called_once()
         assert run["build_prefix"].call_args.kwargs["staking_locked"] is True
         assert run["terminate"].call_args.kwargs["staking_locked"] is True
@@ -1316,7 +1310,7 @@ class TestCannotUnstakeYet:
         with patch(
             "operate.services.manage.get_staking_contract",
             return_value="0x5ta",
-        ):
+        ) as get_contract:
             locked = manager._cannot_unstake_yet(
                 chain=_CHAIN,
                 sftxb=sftxb,
@@ -1326,6 +1320,9 @@ class TestCannotUnstakeYet:
 
         assert locked is expected
         if program is not None:
+            get_contract.assert_called_once_with(
+                chain=Chain.GNOSIS, staking_program_id=program
+            )
             sftxb.can_unstake.assert_called_once_with(
                 service_id=7, staking_contract="0x5ta"
             )
@@ -1614,16 +1611,10 @@ class TestClaimOnChainFromSafe:
         sftxb: t.Optional[MagicMock] = None,
     ) -> t.Tuple[int, MagicMock]:
         """Run claim_on_chain_from_safe with a mocked claim receipt."""
-        manager = _make_manager(tmp_path)
-        service = _make_mock_service()
-        chain_config = MagicMock()
-        chain_config.chain_data.token = token
+        manager, service, chain_config = _make_manager_with_service(
+            tmp_path, token=token
+        )
         chain_config.chain_data.multisig = _SERVICE_SAFE
-        chain_config.ledger_config = _make_ledger_config()
-        service.chain_configs = {_CHAIN: chain_config}
-        manager.wallet_manager.load.return_value.safes = {  # type: ignore
-            Chain.GNOSIS: _MASTER_SAFE
-        }
 
         receipt = MagicMock()
         receipt.__getitem__.side_effect = {"logs": logs}.__getitem__
@@ -2508,6 +2499,43 @@ class TestTerminateBatching:
 
         # No txs should be built
         sftxb.new_tx.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("staking_locked", "can_unstake"),
+        [(True, True), (False, False)],
+        ids=["told-locked-chain-says-unlocked", "told-unlocked-chain-says-locked"],
+    )
+    def test_acts_on_the_callers_lock_answer_without_reading_it_again(
+        self, tmp_path: Path, staking_locked: bool, can_unstake: bool
+    ) -> None:
+        """Terminate does what the deploy decided, even if the chain now says otherwise."""
+        manager, service, sftxb = self._setup_manager(tmp_path)
+        sftxb.can_unstake.return_value = can_unstake
+        sftxb.staking_status.return_value = StakingState.STAKED
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager, "_get_current_staking_program", return_value="pearl_beta"
+            ),
+            patch.object(manager, "claim_on_chain_from_safe") as claim_mock,
+            patch(
+                "operate.services.manage.get_staking_contract",
+                return_value="0xStakingContract",
+            ),
+        ):
+            manager.terminate_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN, staking_locked=staking_locked
+            )
+
+        sftxb.can_unstake.assert_not_called()
+        if staking_locked:
+            claim_mock.assert_not_called()
+            sftxb.new_tx.assert_not_called()
+        else:
+            claim_mock.assert_called_once()
+            sftxb.new_tx.return_value.settle.assert_called_once()
 
     def test_not_staked_batches_terminate_unbond(self, tmp_path: Path) -> None:
         """Not staked → batch terminate+unbond via _terminate_and_unbond."""
