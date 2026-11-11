@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from autonomy.chain.config import ChainType
 from autonomy.chain.constants import (
+    MULTISEND_CONTRACT,
     POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
@@ -1323,7 +1324,15 @@ class TestGetSafeBExecMessages:
             patch("operate.services.protocol.registry_contracts") as mock_rc,
             patch("operate.services.protocol.ContractConfigs") as mock_cc,
         ):
-            mock_cc.get.return_value.contracts = {builder.chain_type: self._MULTISEND}
+            mock_cc.get.side_effect = lambda name: MagicMock(
+                contracts={
+                    builder.chain_type: (
+                        self._MULTISEND
+                        if name == MULTISEND_CONTRACT.name
+                        else "0xwrong"
+                    )
+                }
+            )
             mock_rc.gnosis_safe.get_instance.return_value = safe_b_instance
             mock_rc.multisend.get_multisend_tx.return_value = {
                 "value": 5,
@@ -1342,10 +1351,15 @@ class TestGetSafeBExecMessages:
             )
 
         multisend_txs = mock_rc.multisend.get_multisend_tx.call_args.kwargs["txs"]
-        assert [tx["to"] for tx in multisend_txs] == [self._SAFE_B, "0xc0de"]
-        assert [tx["data"] for tx in multisend_txs] == [
-            bytes.fromhex("a1b2"),
-            b"\x01\x02",
+        # Only the data is normalised; every other field passes through.
+        assert multisend_txs == [
+            {
+                "to": self._SAFE_B,
+                "data": bytes.fromhex("a1b2"),
+                "operation": 0,
+                "value": 0,
+            },
+            {"to": "0xc0de", "data": b"\x01\x02", "operation": 0, "value": 5},
         ]
         hash_kwargs = mock_rc.gnosis_safe.get_raw_safe_transaction_hash.call_args.kwargs
         assert hash_kwargs["contract_address"] == self._SAFE_B
