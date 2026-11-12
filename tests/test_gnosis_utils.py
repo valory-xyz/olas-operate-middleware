@@ -49,6 +49,7 @@ from operate.utils.gnosis import (
     get_owners,
     get_prev_owner,
     hash_payload_to_hex,
+    normalize_multisend_sub_tx,
     normalize_tx_data_to_bytes,
     remove_owner,
     send_safe_multisend_txs,
@@ -1834,6 +1835,35 @@ class TestNormalizeTxDataToBytes:
     def test_handles_empty_bytes(self) -> None:
         """Empty bytes pass through."""
         assert normalize_tx_data_to_bytes(b"") == b""
+
+
+class TestNormalizeMultisendSubTx:
+    """Tests for the MultiSend sub-tx normalization helper."""
+
+    def test_defaults_operation_value_and_data(self) -> None:
+        """A bare ``to`` gets CALL, value 0 and empty bytes data."""
+        assert normalize_multisend_sub_tx({"to": "0xTo"}) == {
+            "to": "0xTo",
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+            "data": b"",
+        }
+
+    def test_keeps_given_fields_and_converts_hex_data(self) -> None:
+        """Given operation and value are kept; hex data becomes bytes."""
+        tx = {
+            "to": "0xTo",
+            "operation": MultiSendOperation.DELEGATE_CALL,
+            "value": 7,
+            "data": "0xdeadbeef",
+        }
+        assert normalize_multisend_sub_tx(tx) == {
+            "to": "0xTo",
+            "operation": MultiSendOperation.DELEGATE_CALL,
+            "value": 7,
+            "data": b"\xde\xad\xbe\xef",
+        }
+        assert tx["data"] == "0xdeadbeef"
 
 
 class TestSimulateSafeSubTx:

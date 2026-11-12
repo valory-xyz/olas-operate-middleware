@@ -581,16 +581,32 @@ def normalize_tx_data_to_bytes(data: t.Union[str, bytes]) -> bytes:
     ``bytes`` for concatenation. This helper handles both ``"0x..."`` and
     raw-hex inputs as well as already-``bytes`` values.
 
-    Used by ``send_safe_multisend_txs`` in this module and as the boundary
+    Used through ``normalize_multisend_sub_tx`` and as the boundary
     normalization in ``GnosisSafeTransaction.build`` in
     ``operate.services.protocol``. Callers that build multisend tx dicts and
-    bypass ``build()`` must call this helper explicitly before the multisend
-    call (see ``get_safe_b_exec_messages``).
+    bypass ``build()`` must normalise them with ``normalize_multisend_sub_tx``
+    before the multisend call.
     """
     if isinstance(data, bytes):
         return data
     hex_str = data[2:] if data.startswith("0x") else data
     return bytes.fromhex(hex_str)
+
+
+def normalize_multisend_sub_tx(tx: MultiSendSubTx) -> MultiSendSubTx:
+    """Return a copy of ``tx`` ready for the MultiSend encoder.
+
+    ``data`` becomes ``bytes`` (see ``normalize_tx_data_to_bytes``), and a
+    missing ``operation`` or ``value`` defaults to ``MultiSendOperation.CALL``
+    and ``0``. Used by ``send_safe_multisend_txs`` and
+    ``EthSafeTxBuilder.get_safe_b_exec_messages``.
+    """
+    return {
+        **tx,
+        "operation": tx.get("operation", MultiSendOperation.CALL),
+        "value": tx.get("value", 0),
+        "data": normalize_tx_data_to_bytes(tx.get("data", b"")),
+    }
 
 
 def send_safe_multisend_txs(  # pylint: disable=too-many-locals
@@ -603,8 +619,8 @@ def send_safe_multisend_txs(  # pylint: disable=too-many-locals
     """Send multiple sub-transactions as one Safe MultiSend transaction.
 
     Each entry in ``txs`` is a dict with keys ``to``, ``data`` (bytes or hex
-    string), ``value`` and optionally ``operation`` (defaults to
-    ``MultiSendOperation.CALL``). The batch executes as a single Safe
+    string) and optionally ``value`` (defaults to ``0``) and ``operation``
+    (defaults to ``MultiSendOperation.CALL``). The batch executes as a single Safe
     transaction that DELEGATE_CALLs into the MultiSend contract, so every
     sub-transaction runs with the Safe as ``msg.sender`` and the batch
     succeeds or reverts atomically.
@@ -614,12 +630,7 @@ def send_safe_multisend_txs(  # pylint: disable=too-many-locals
 
     owner = ledger_api.api.to_checksum_address(crypto.address)
 
-    normalized_txs = []
-    for tx in txs:
-        tx_copy = dict(tx)
-        tx_copy["data"] = normalize_tx_data_to_bytes(tx.get("data", b""))
-        tx_copy.setdefault("operation", MultiSendOperation.CALL)
-        normalized_txs.append(tx_copy)
+    normalized_txs = [normalize_multisend_sub_tx(tx) for tx in txs]
 
     multisend_payload = registry_contracts.multisend.get_tx_data(
         ledger_api=ledger_api,

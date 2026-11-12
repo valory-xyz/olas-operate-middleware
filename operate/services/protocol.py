@@ -86,6 +86,7 @@ from operate.utils.gnosis import (
     MultiSendSubTx,
     SafeOperation,
     hash_payload_to_hex,
+    normalize_multisend_sub_tx,
     normalize_tx_data_to_bytes,
     skill_input_hex_to_payload,
 )
@@ -1630,19 +1631,11 @@ class EthSafeTxBuilder(_ChainUtil):
         multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
             self.chain_type
         ]
-        # Bypasses GnosisSafeTransaction.build(); see normalize_tx_data_to_bytes.
+        # Bypasses GnosisSafeTransaction.build(), so normalise each sub-tx here.
         multisend_tx = registry_contracts.multisend.get_multisend_tx(
             ledger_api=self.ledger_api,
             contract_address=multisend_address,
-            txs=[
-                {
-                    **tx,
-                    "operation": tx.get("operation", MultiSendOperation.CALL),
-                    "value": tx.get("value", 0),
-                    "data": normalize_tx_data_to_bytes(tx.get("data", b"")),
-                }
-                for tx in txs
-            ],
+            txs=[normalize_multisend_sub_tx(tx) for tx in txs],
         )
 
         # Compute inner Safe transaction hash.
