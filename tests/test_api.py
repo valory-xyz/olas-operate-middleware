@@ -913,12 +913,14 @@ class TestFundingRunRoutes:
         assert sources["gnosis"] == [ZERO_ADDRESS]
         assert sources["robinhood"] == [ZERO_ADDRESS]
         assert sources["base"] == [ZERO_ADDRESS, USDC[Chain.BASE]]
+        assert sources["celo"] == [ZERO_ADDRESS]
         assert set(sources) == {
             "ethereum",
             "base",
             "optimism",
             "polygon",
             "arbitrum_one",
+            "celo",
             "gnosis",
             "robinhood",
         }
@@ -1047,7 +1049,7 @@ class TestFundingRunRoutes:
         [
             {
                 "mode": "deposit",
-                "source": {"chain": "celo", "token": ZERO_ADDRESS},
+                "source": {"chain": "mode", "token": ZERO_ADDRESS},
                 "destination": {"chain": "polygon"},
                 "deposit_amounts": {ZERO_ADDRESS: "1"},
             },

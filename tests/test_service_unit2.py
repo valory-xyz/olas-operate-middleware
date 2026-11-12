@@ -34,6 +34,7 @@ from operate.constants import (
     HEALTHCHECK_JSON,
     ZERO_ADDRESS,
 )
+from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     Chain,
@@ -1898,6 +1899,29 @@ class TestServiceGetBalances:
         assert wrapped_asset not in gnosis_assets
         # 100 (ZERO_ADDRESS) + 200 (wrapped) = 300
         assert gnosis_assets[ZERO_ADDRESS] == 300
+
+    def test_native_erc20_chain_not_unified(self, tmp_path: Path) -> None:
+        """On Celo the wrapped native is native CELO itself, so it is not added again."""
+        service = _make_service(tmp_path)
+        celo_erc20 = WRAPPED_NATIVE_ASSET[Chain.CELO]
+        mock_amounts = ChainAmounts(
+            {"celo": {_AGENT_ADDR: {ZERO_ADDRESS: BigInt(100), celo_erc20: BigInt(0)}}}
+        )
+
+        with (
+            patch.object(
+                service, "get_initial_funding_amounts", return_value=mock_amounts
+            ),
+            patch(
+                "operate.services.service.get_default_ledger_api",
+                return_value=MagicMock(),
+            ),
+            # Both reads see the same coins: the ERC-20 face mirrors the native balance.
+            patch("operate.services.service.get_asset_balance", return_value=100),
+        ):
+            result = service.get_balances(unify_wrapped_native_tokens=True)
+
+        assert result["celo"][_AGENT_ADDR] == {ZERO_ADDRESS: 100, celo_erc20: 100}
 
 
 # ---------------------------------------------------------------------------
