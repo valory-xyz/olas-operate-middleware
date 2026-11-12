@@ -21,6 +21,7 @@
 import json
 import os
 import shutil
+import sys
 import textwrap
 import time
 import typing as t
@@ -786,8 +787,9 @@ def run_service(  # pragma: no cover
             service_config_id=service.service_config_id
         )
     except RecoveryModuleNotEnabledError as e:
+        manager.logger.error(f"On-chain deploy refused: {e}", exc_info=True)
         print(f"\n{e}\n")
-        return
+        sys.exit(1)
 
     print_section("Funding the service")
     service = get_service(manager, template)
