@@ -979,16 +979,6 @@ class TestSourceWithoutPaymaster:
         assert run.quote_message == CELO_GAS_MESSAGE
         assert _logged(env, "source-leg gas")
 
-    def test_quote_needs_gas_for_every_source_request(self, tmp_path: Path) -> None:
-        """One request's gas is not enough when the leg sends two."""
-        env = Env(tmp_path)
-        env.balances[(Chain.CELO, NATIVE)] = GAS
-
-        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
-
-        assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == CELO_GAS_MESSAGE
-
     @pytest.mark.parametrize(
         ("native", "status"),
         [
@@ -1043,6 +1033,28 @@ class TestSourceWithoutPaymaster:
         assert source_steps
         assert all(s.status == FundingStepStatus.FAILED for s in source_steps)
         assert all(s.message == CELO_GAS_MESSAGE for s in source_steps)
+        assert run.status == FundingRunStatus.FAILED
+        assert run.error == {"step_id": STEP_BRIDGE, "message": CELO_GAS_MESSAGE}
+
+    def test_send_recheck_counts_only_unsent_requests(self, tmp_path: Path) -> None:
+        """A retry after a partial send needs gas for the remaining request only."""
+        env = Env(tmp_path)
+        env.balances[(Chain.CELO, NATIVE)] = 10 * GAS
+        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
+        env.balances[(Chain.CELO, CELO_USDC)] = _required(run)
+        env.manager.tick()
+        run = env.reload(run)
+        sent, remaining = run.source_requests
+        env.bridge.provider.execute(sent)
+        env.manager._store(run)  # pylint: disable=protected-access
+        env.bridge.executed.clear()
+        env.balances[(Chain.CELO, NATIVE)] = GAS
+
+        env.manager.tick()
+        run = env.reload(run)
+
+        assert env.bridge.executed == [remaining.params["to"]["token"]]
+        assert run.status != FundingRunStatus.FAILED
 
 
 class TestExactPath:

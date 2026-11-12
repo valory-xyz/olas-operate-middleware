@@ -23,7 +23,7 @@ A funding run turns one deposit of a user-chosen token on a user-chosen chain
 into the tokens Pearl needs on the destination chain:
 
     RECEIVE -> source leg (BRIDGE + NATIVE) -> SWAP per token
-            -> SAFE_AND_TRANSFER -> CLEAR_DELEGATION (USDC sources only)
+            -> SAFE_AND_TRANSFER -> CLEAR_DELEGATION (gas-abstracted USDC sources only)
 
 It is a persisted state machine advanced by one background loop. Every
 transition is stored before its side effect, and a step with a recorded
@@ -1369,6 +1369,9 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         """User-facing copy for a failed step."""
         if step.message == MESSAGE_AWAITING_CONFIRMATION:
             return MESSAGE_AWAITING_CONFIRMATION
+        source_gas = FundingRunManager._source_gas_message(Chain(run.source_chain))
+        if step.message == source_gas:
+            return source_gas
         destination = Chain(run.destination_chain)
         if step.kind == FundingStepKind.BRIDGE:
             return f"Couldn't bridge to {_chain_name(destination)}"
