@@ -116,7 +116,7 @@ MESSAGE_MONITOR_FAILED = "Unable to check the deposit or refresh the quote."
 # only logged.
 MESSAGE_QUOTE_FAILED = "Couldn't get a quote"
 MESSAGE_TRANSFER_FAILED = "Couldn't finish the transfer"
-# A token source with no paymaster (Celo USDC) pays its own gas in native.
+# A token source with no paymaster pays its own gas in native.
 MESSAGE_SOURCE_GAS = "Add {symbol} to your Pearl Wallet on {chain} to pay for gas"
 # Conservative destination gas budgets for the Safe step, priced at the
 # current gas price when quoting.
@@ -946,6 +946,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         return max(0, needed - balance)
 
     @staticmethod
+    def _source_gas_detail(source: Chain, shortfall: int) -> str:
+        return (
+            f"Master EOA lacks {shortfall} native on {source.value} for "
+            "source-leg gas."
+        )
+
+    @staticmethod
     def _source_gas_message(source: Chain) -> str:
         return MESSAGE_SOURCE_GAS.format(
             symbol=get_asset_name(source, NATIVE), chain=_chain_name(source)
@@ -1091,8 +1098,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         shortfall = self._source_gas_shortfall(source, token, source_requests)
         if shortfall:
             raise _QuoteError(
-                f"Master EOA lacks {shortfall} native on {source.value} for "
-                "source-leg gas.",
+                self._source_gas_detail(source, shortfall),
                 self._source_gas_message(source),
             )
 
@@ -1486,11 +1492,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
                 shortfall = self._source_gas_shortfall(source, run.source_token, unsent)
                 if shortfall:
                     self.logger.warning(
-                        f"[FUNDING RUN] {run.id}: Master EOA lacks {shortfall} "
-                        f"native on {source.value} for source-leg gas."
+                        f"[FUNDING RUN] {run.id}: "
+                        f"{self._source_gas_detail(source, shortfall)}"
                     )
                     self._fail_source_steps(run, self._source_gas_message(source))
-                    self._store(run)
                     return
                 for request in unsent:
                     run.sending_request_ids = [request.id]

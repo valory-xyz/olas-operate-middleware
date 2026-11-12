@@ -96,6 +96,7 @@ POLYGON_USDC = USDC[Chain.POLYGON]
 POLYGON_OLAS = OLAS[Chain.POLYGON]
 POLYGON_PUSD = PUSD[Chain.POLYGON]
 CELO_USDC = USDC[Chain.CELO]
+CELO_GAS_MESSAGE = "Add CELO to your Pearl Wallet on Celo to pay for gas"
 NATIVE = ZERO_ADDRESS
 GAS = 7  # native gas per quoted request, in wei, on every chain
 POLYGON_RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][NATIVE])
@@ -975,9 +976,7 @@ class TestSourceWithoutPaymaster:
         run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert (
-            run.quote_message == "Add CELO to your Pearl Wallet on Celo to pay for gas"
-        )
+        assert run.quote_message == CELO_GAS_MESSAGE
         assert _logged(env, "source-leg gas")
 
     def test_quote_needs_gas_for_every_source_request(self, tmp_path: Path) -> None:
@@ -988,6 +987,29 @@ class TestSourceWithoutPaymaster:
         run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
 
         assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == CELO_GAS_MESSAGE
+
+    @pytest.mark.parametrize(
+        ("native", "status"),
+        [
+            (2 * GAS - 1, FundingRunStatus.QUOTE_FAILED),
+            (2 * GAS, FundingRunStatus.AWAITING_DEPOSIT),
+        ],
+    )
+    def test_quote_gas_boundary(
+        self, tmp_path: Path, native: int, status: FundingRunStatus
+    ) -> None:
+        """The two source requests need exactly 2 * GAS: one wei short fails, exact passes."""
+        env = Env(tmp_path)
+        env.balances[(Chain.CELO, NATIVE)] = native
+
+        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
+
+        assert run.status == status
+        if status == FundingRunStatus.QUOTE_FAILED:
+            assert run.quote_message == CELO_GAS_MESSAGE
+        else:
+            assert len(run.source_requests) == 2
 
     def test_run_with_native_for_gas_sends_without_the_paymaster(
         self, tmp_path: Path
@@ -1020,10 +1042,7 @@ class TestSourceWithoutPaymaster:
         source_steps = [s for s in run.steps if s.id in (STEP_BRIDGE, STEP_NATIVE)]
         assert source_steps
         assert all(s.status == FundingStepStatus.FAILED for s in source_steps)
-        assert all(
-            s.message == "Add CELO to your Pearl Wallet on Celo to pay for gas"
-            for s in source_steps
-        )
+        assert all(s.message == CELO_GAS_MESSAGE for s in source_steps)
 
 
 class TestExactPath:

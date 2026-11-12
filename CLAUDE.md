@@ -237,7 +237,7 @@ operate daemon
 **Funding Run (`operate/funding_run/`)**
 - `manager.py`: `FundingRunManager`, a persisted, resumable state machine turning one deposit (chosen chain + token; see `docs/wallet-and-funding.md#funding-run` for where it is sent) into the destination tokens: quote (+ buffer) → receive → source leg (leftover swept as destination native) → swaps → Safe create + transfer → EIP-7702 delegation clearing. Modes `onboard`, `deposit`, `signer_gas`; one run at a time; advanced by `run_job()` scheduled after login
 - `models.py`: `FundingRun` / `FundingRunStep` persisted under `funding_runs/` (`active.json` points at the live run)
-- `operate/wallet/gas_abstraction.py`: `GasAbstractedSender`, the USDC-paid ERC-4337 UserOperation sender (EIP-7702 to `Simple7702Account`, Circle Paymaster permit, Candide bundler) used for USDC source legs
+- `operate/wallet/gas_abstraction.py`: `GasAbstractedSender`, the USDC-paid ERC-4337 UserOperation sender (EIP-7702 to `Simple7702Account`, Circle Paymaster permit, Candide bundler) used for USDC source legs on Circle Paymaster chains
 - See `docs/wallet-and-funding.md#funding-run` for the custody model and `docs/api.md#funding-run` for the routes
 
 **Ledger Integration (`operate/ledger/`)**

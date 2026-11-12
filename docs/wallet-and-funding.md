@@ -172,8 +172,8 @@ end up; quoting, monitoring and execution are shared:
    buffer, the run re-quotes once more and freezes, unless the deposit no
    longer covers that fresh quote without its buffer.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
-   the Master EOA reserve moves to the Master Safe), then, for USDC sources,
-   **delegation clearing**. Before the source leg is sent, the request that
+   the Master EOA reserve moves to the Master Safe), then, for USDC sources on
+   a Circle Paymaster chain, **delegation clearing**. Before the source leg is sent, the request that
    delivers destination native is re-quoted as exact-input (Relay
    `EXACT_INPUT`) over its input plus whatever the deposit leaves beyond the
    raw quote, so that leftover leaves the origin Master EOA with the run and
