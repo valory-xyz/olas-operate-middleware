@@ -1758,6 +1758,7 @@ class TestFetchServicesFromSubgraph:
                 "orderBy: id, orderDirection: asc, first: 1000) { id } }",
             ),
             (Chain.BASE, '{ services(where: {creator: {id_eq: "0xabc"}}) { id } }'),
+            (Chain.POLYGON, '{ services(where: {creator: {id_eq: "0xabc"}}) { id } }'),
             (
                 Chain.ROBINHOOD,
                 '{ services(where: {creator: {id_eq: "0xabc"}}) { id } }',
@@ -1825,14 +1826,17 @@ class TestFetchServicesFromSubgraph:
             {"data": {"services": []}},
         ]
 
-        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[Chain.POLYGON], "0xabc")
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[Chain.GNOSIS], "0xabc")
 
         assert result == [1, 2]
         assert mock_post.call_count == 2
 
+    @pytest.mark.parametrize("chain", [Chain.BASE, Chain.POLYGON])
     @patch("operate.services.fund_recovery_manager.SUBGRAPH_PAGE_SIZE", 2)
     @patch("operate.services.fund_recovery_manager.requests.post")
-    def test_squid_dialect_is_never_paged(self, mock_post: MagicMock) -> None:
+    def test_squid_dialect_is_never_paged(
+        self, mock_post: MagicMock, chain: Chain
+    ) -> None:
         """Squids have no row cap, so a large result is one query."""
         from operate.services.fund_recovery_manager import (
             SUBGRAPH_URLS,
@@ -1843,7 +1847,7 @@ class TestFetchServicesFromSubgraph:
             "data": {"services": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}
         }
 
-        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[Chain.BASE], "0xabc")
+        result = _fetch_services_from_subgraph(SUBGRAPH_URLS[chain], "0xabc")
 
         assert result == [1, 2, 3]
         assert mock_post.call_count == 1
@@ -1851,7 +1855,10 @@ class TestFetchServicesFromSubgraph:
     @pytest.mark.parametrize(
         ("chain", "url"),
         [
-            (Chain.POLYGON, "https://registry-polygon.subgraph.autonolas.tech"),
+            (
+                Chain.POLYGON,
+                "https://subgraph.autonolas.tech/squid/service-registry-polygon/graphql",
+            ),
             (
                 Chain.BASE,
                 "https://subgraph.autonolas.tech/squid/service-registry-base/graphql",
