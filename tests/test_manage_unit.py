@@ -815,8 +815,7 @@ class TestEnableRecoveryModule:
         """Run _enable_recovery_module against mocked chain state."""
         manager, service, _ = _make_manager_with_service(tmp_path, token=token)
         service.agent_addresses = [_AGENT]
-        if key_load_error is not None:
-            manager.keys_manager.get_crypto_instance.side_effect = key_load_error
+        manager.keys_manager.get_crypto_instance.side_effect = key_load_error
 
         sftxb = MagicMock()
         sftxb.info.return_value = {"multisig": multisig}
@@ -828,12 +827,9 @@ class TestEnableRecoveryModule:
         )
         agent_tx = MagicMock()
         agent_tx.add.return_value = agent_tx
-        if agent_settle_error is not None:
-            agent_tx.settle.side_effect = agent_settle_error
-        if master_settle_error is not None:
-            sftxb.new_tx.return_value.settle.side_effect = master_settle_error
-        if exec_messages_error is not None:
-            sftxb.get_safe_b_exec_messages.side_effect = exec_messages_error
+        agent_tx.settle.side_effect = agent_settle_error
+        sftxb.new_tx.return_value.settle.side_effect = master_settle_error
+        sftxb.get_safe_b_exec_messages.side_effect = exec_messages_error
 
         error: t.Optional[Exception] = None
         with (
@@ -1117,8 +1113,8 @@ class TestDeployRecoveryModuleGate:
 
         ``terminate_effect`` defaults to stopping at the stepwise terminate. A terminate
         that returns tears down unless ``terminate_tears_down`` is false: the registry
-        then reads PRE_REGISTRATION. The deploy is stopped where
-        ``get_deploy_data_from_safe`` would build the deploy.
+        then reads PRE_REGISTRATION. Unless ``deploy_goes_through``, the deploy is
+        stopped where ``get_deploy_data_from_safe`` would build it.
         """
 
         class _ReachedTeardown(Exception):
@@ -1135,6 +1131,7 @@ class TestDeployRecoveryModuleGate:
         service.service_public_id.return_value = "valory/trader:0.1.0"
         chain_config.chain_data.user_params.use_staking = False
         chain_config.chain_data.user_params.nft = _NFT_HASH
+        chain_config.chain_data.user_params.staking_program_id = "target_program"
         # The on-chain agent: only the description decides whether this is an update.
         chain_config.chain_data.user_params.agent_id = 25
         sftxb = MagicMock()
@@ -1185,7 +1182,11 @@ class TestDeployRecoveryModuleGate:
             patch.object(manager, "load", return_value=service),
             patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
             patch.object(manager, "_enable_recovery_module", enable),
-            patch.object(manager, "_get_current_staking_program", return_value=None),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                return_value="current_program",
+            ),
             patch.object(
                 manager,
                 "_get_on_chain_metadata",
@@ -1329,7 +1330,12 @@ class TestDeployRecoveryModuleGate:
         run = self._run_deployed_update(tmp_path, None, error, cannot_unstake=True)
 
         assert run["reached_teardown"]
-        run["cannot_unstake_yet"].assert_called_once()
+        run["cannot_unstake_yet"].assert_called_once_with(
+            chain=_CHAIN,
+            sftxb=run["sftxb"],
+            service_id=7,
+            current_staking_program="current_program",
+        )
         assert run["build_prefix"].call_args.kwargs["staking_locked"] is True
         assert run["terminate"].call_args.kwargs["staking_locked"] is True
 
@@ -1409,6 +1415,22 @@ class TestDeployRecoveryModuleGate:
         run["sftxb"].get_register_instances_data.assert_called_once()
         run["sftxb"].new_tx.return_value.settle.assert_not_called()
         run["sftxb"].get_deploy_data_from_safe.assert_not_called()
+
+    def test_batched_update_reuses_the_safe_once_the_module_is_on(
+        self, tmp_path: Path
+    ) -> None:
+        """An update folded into one batch deploys with the reused Safe and no initial funding."""
+        run = self._run_deployed_update(
+            tmp_path,
+            [({"to": "0x1"}, "unstake")],
+            None,
+            deploy_goes_through=True,
+        )
+
+        kwargs = run["sftxb"].get_deploy_data_from_safe.call_args.kwargs
+        assert kwargs["reuse_multisig"] is True
+        run["terminate"].assert_not_called()
+        run["manager"].funding_manager.fund_service_initial.assert_not_called()
 
 
 class TestExecuteRecoveryModuleFlowFromSafe:
