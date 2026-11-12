@@ -934,11 +934,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
     def _source_gas_shortfall(
         self, source: Chain, token: str, requests: t.List[ProviderRequest]
     ) -> int:
-        """Native the Master EOA lacks to send a token source leg nothing pays gas for.
-
-        Native sources pay gas from the deposit, and paymaster sources in the
-        token itself, so only the remaining token sources are checked.
-        """
+        """Native the Master EOA lacks to pay a token source leg's own gas."""
         if token == NATIVE or is_gas_abstracted(source, token) or not requests:
             return 0
         needed = sum(self._source_amount(request, NATIVE) for request in requests)
@@ -1095,22 +1091,18 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         )
         if self._quote_failed(run, source_requests):
             return
-        shortfall = self._source_gas_shortfall(source, token, source_requests)
-        # requirements() marks a request whose txs cannot be built as failed:
-        # that is the real cause, not the gas it then reports as 0.
-        if self._quote_failed(run, source_requests):
-            return
-        if shortfall:
-            raise _QuoteError(
-                self._source_gas_detail(source, shortfall),
-                self._source_gas_message(source),
-            )
 
         # (c) Required = source-leg inputs + direct amounts + buffer + gas allowance.
         amounts = {r.id: self._source_amount(r, token) for r in source_requests}
         required = direct + sum(amounts.values())
         if self._quote_failed(run, source_requests):
             return
+        shortfall = self._source_gas_shortfall(source, token, source_requests)
+        if shortfall:
+            raise _QuoteError(
+                self._source_gas_detail(source, shortfall),
+                self._source_gas_message(source),
+            )
         leg_kinds = [k for k, _ in leg]
         buffer = self._buffer(required, leg_kinds, swaps)
         required += buffer

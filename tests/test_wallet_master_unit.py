@@ -39,7 +39,11 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.funding_run.manager import LOCK_TIMEOUT
-from operate.ledger.profiles import CONTRACTS, DEFAULT_EOA_TOPUPS
+from operate.ledger.profiles import (
+    CONTRACTS,
+    DEFAULT_EOA_TOPUPS,
+    WRAPPED_NATIVE_ASSET,
+)
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import BatchResult, Transfer
 from operate.wallet.master import (
@@ -595,6 +599,30 @@ class TestEthereumDrain:
         assert call_kwargs["amount"] == 100
         assert call_kwargs["from_safe"] is False
         assert list(moved.values()) == [100]
+
+    def test_drain_on_celo_moves_native_once(self, tmp_path: Path) -> None:
+        """Native CELO's ERC-20 face holds the same coins: only native is drained."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.CELO: SAFE_ADDR}, safe_chains=[Chain.CELO]
+        )
+
+        def _balance(chain: Chain, asset: str, **_: t.Any) -> int:
+            return 100 if asset in (ZERO_ADDRESS, WRAPPED_NATIVE_ASSET[chain]) else 0
+
+        with (
+            patch.object(wallet, "get_balance", side_effect=_balance),
+            patch.object(
+                wallet,
+                "transfer_batch",
+                side_effect=lambda chain, transfers, rpc=None: BatchResult(
+                    tx_hash="0xbatch", sent=list(transfers)
+                ),
+            ) as mock_batch,
+        ):
+            moved = wallet.drain("0xWithdrawal", Chain.CELO)
+        transfers = mock_batch.call_args.kwargs["transfers"]
+        assert [transfer.asset for transfer in transfers] == [ZERO_ADDRESS]
+        assert moved == {ZERO_ADDRESS: 100}
 
 
 # ---------------------------------------------------------------------------

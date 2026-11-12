@@ -1076,7 +1076,7 @@ class TestSourceWithoutPaymaster:
         run = env.reload(run)
 
         assert env.bridge.executed == [remaining.params["to"]["token"]]
-        assert run.status != FundingRunStatus.FAILED
+        assert run.status == FundingRunStatus.PROCESSING
 
 
 class TestExactPath:
