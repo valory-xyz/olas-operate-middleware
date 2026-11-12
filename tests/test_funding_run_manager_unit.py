@@ -95,6 +95,7 @@ BASE_USDC = USDC[Chain.BASE]
 POLYGON_USDC = USDC[Chain.POLYGON]
 POLYGON_OLAS = OLAS[Chain.POLYGON]
 POLYGON_PUSD = PUSD[Chain.POLYGON]
+CELO_USDC = USDC[Chain.CELO]
 NATIVE = ZERO_ADDRESS
 GAS = 7  # native gas per quoted request, in wei, on every chain
 POLYGON_RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][NATIVE])
@@ -962,6 +963,67 @@ def _pusd_on_polygon(
         source_token=POLYGON_PUSD.lower(),
         amounts=amounts or {POLYGON_PUSD: 10},
     )
+
+
+class TestSourceWithoutPaymaster:
+    """Celo USDC: no Circle Paymaster, so the Master EOA pays source gas in CELO."""
+
+    def test_quote_fails_without_native_for_gas(self, tmp_path: Path) -> None:
+        """0 CELO on the Master EOA: QUOTE_FAILED asking for CELO, before any deposit."""
+        env = Env(tmp_path)
+
+        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert (
+            run.quote_message == "Add CELO to your Pearl Wallet on Celo to pay for gas"
+        )
+        assert _logged(env, "source-leg gas")
+
+    def test_quote_needs_gas_for_every_source_request(self, tmp_path: Path) -> None:
+        """One request's gas is not enough when the leg sends two."""
+        env = Env(tmp_path)
+        env.balances[(Chain.CELO, NATIVE)] = GAS
+
+        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+
+    def test_run_with_native_for_gas_sends_without_the_paymaster(
+        self, tmp_path: Path
+    ) -> None:
+        """Enough CELO: no USDC gas cap or clearing leg, and the leg goes through the bridge."""
+        env = Env(tmp_path)
+        env.balances[(Chain.CELO, NATIVE)] = 10 * GAS
+
+        run = _funded(env, source_chain="celo", source_token=CELO_USDC)
+        env.manager.tick()
+
+        assert run.usdc_gas_cap is None
+        assert all(s.kind != FundingStepKind.CLEAR_DELEGATION for s in run.steps)
+        assert env.bridge.executed
+        env.sender.prepare_batch.assert_not_called()
+
+    def test_send_rechecks_native_for_gas(self, tmp_path: Path) -> None:
+        """CELO spent after the quote: the source leg fails asking for CELO, nothing is sent."""
+        env = Env(tmp_path)
+        env.balances[(Chain.CELO, NATIVE)] = 10 * GAS
+        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
+        env.balances[(Chain.CELO, CELO_USDC)] = _required(run)
+        env.manager.tick()
+        env.balances[(Chain.CELO, NATIVE)] = 0
+
+        env.manager.tick()
+        run = env.reload(run)
+
+        assert env.bridge.executed == []
+        source_steps = [s for s in run.steps if s.id in (STEP_BRIDGE, STEP_NATIVE)]
+        assert source_steps
+        assert all(s.status == FundingStepStatus.FAILED for s in source_steps)
+        assert all(
+            s.message == "Add CELO to your Pearl Wallet on Celo to pay for gas"
+            for s in source_steps
+        )
 
 
 class TestExactPath:

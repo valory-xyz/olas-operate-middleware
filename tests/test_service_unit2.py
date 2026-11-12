@@ -1916,10 +1916,6 @@ class TestServiceGetBalances:
                 "operate.services.service.get_default_ledger_api",
                 return_value=MagicMock(),
             ),
-            patch(
-                "operate.services.service.make_chain_ledger_api",
-                return_value=MagicMock(),
-            ),
             # Both reads see the same coins: the ERC-20 face mirrors the native balance.
             patch("operate.services.service.get_asset_balance", return_value=100),
         ):

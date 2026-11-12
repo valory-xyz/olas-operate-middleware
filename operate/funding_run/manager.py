@@ -116,6 +116,8 @@ MESSAGE_MONITOR_FAILED = "Unable to check the deposit or refresh the quote."
 # only logged.
 MESSAGE_QUOTE_FAILED = "Couldn't get a quote"
 MESSAGE_TRANSFER_FAILED = "Couldn't finish the transfer"
+# A token source with no paymaster (Celo USDC) pays its own gas in native.
+MESSAGE_SOURCE_GAS = "Add {symbol} to your Pearl Wallet on {chain} to pay for gas"
 # Conservative destination gas budgets for the Safe step, priced at the
 # current gas price when quoting.
 SAFE_CREATION_GAS = 1_000_000
@@ -929,6 +931,26 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         except KeyError as e:
             raise _QuoteError(f"No {token} requirement for {request.id}.") from e
 
+    def _source_gas_shortfall(
+        self, source: Chain, token: str, requests: t.List[ProviderRequest]
+    ) -> int:
+        """Native the Master EOA lacks to send a token source leg nothing pays gas for.
+
+        Native sources pay gas from the deposit, and paymaster sources in the
+        token itself, so only the remaining token sources are checked.
+        """
+        if token == NATIVE or is_gas_abstracted(source, token) or not requests:
+            return 0
+        needed = sum(self._source_amount(request, NATIVE) for request in requests)
+        balance = int(self._wallet().get_balance(source, NATIVE, from_safe=False))
+        return max(0, needed - balance)
+
+    @staticmethod
+    def _source_gas_message(source: Chain) -> str:
+        return MESSAGE_SOURCE_GAS.format(
+            symbol=get_asset_name(source, NATIVE), chain=_chain_name(source)
+        )
+
     def _quote(self, run: FundingRun) -> None:
         """Quote the run, or mark it QUOTE_FAILED."""
         try:
@@ -1066,6 +1088,13 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         )
         if self._quote_failed(run, source_requests):
             return
+        shortfall = self._source_gas_shortfall(source, token, source_requests)
+        if shortfall:
+            raise _QuoteError(
+                f"Master EOA lacks {shortfall} native on {source.value} for "
+                "source-leg gas.",
+                self._source_gas_message(source),
+            )
 
         # (c) Required = source-leg inputs + direct amounts + buffer + gas allowance.
         amounts = {r.id: self._source_amount(r, token) for r in source_requests}
@@ -1453,6 +1482,16 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
             if is_gas_abstracted(source, run.source_token):
                 self._send_user_op(run, unsent)
             else:
+                # Gas can have risen, or native been spent, since the quote.
+                shortfall = self._source_gas_shortfall(source, run.source_token, unsent)
+                if shortfall:
+                    self.logger.warning(
+                        f"[FUNDING RUN] {run.id}: Master EOA lacks {shortfall} "
+                        f"native on {source.value} for source-leg gas."
+                    )
+                    self._fail_source_steps(run, self._source_gas_message(source))
+                    self._store(run)
+                    return
                 for request in unsent:
                     run.sending_request_ids = [request.id]
                     self._store(run)

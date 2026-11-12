@@ -235,7 +235,9 @@ with no user prompt. Custody properties:
 
 Chains without a Circle Paymaster accept native sources, which pay their own
 gas. Gnosis and Robinhood accept native only; Celo also accepts USDC, whose
-source leg pays its gas in native CELO.
+source leg pays its gas in native CELO from the Master EOA. The quote fails
+(asking the user to add CELO) when the Master EOA cannot cover that gas, and
+the check is repeated just before the leg is sent.
 
 ## Health and funding relationship
 
