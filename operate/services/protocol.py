@@ -1571,9 +1571,7 @@ class EthSafeTxBuilder(_ChainUtil):
             if _deployment_payload is None:
                 raise ValueError(error)
             deployment_payload = _deployment_payload
-            gnosis_safe_multisig = ContractConfigs.get(
-                RECOVERY_MODULE_CONTRACT.name
-            ).contracts[self.chain_type]
+            wrapper_contract = RECOVERY_MODULE_CONTRACT
         elif use_poly_safe:
             if not agent_eoa_crypto:
                 raise ValueError("Crypto object must be provided for Poly Safe.")
@@ -1582,14 +1580,14 @@ class EthSafeTxBuilder(_ChainUtil):
                 chain_type=self.chain_type,
                 crypto=agent_eoa_crypto,
             )
-            gnosis_safe_multisig = ContractConfigs.get(
-                POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name
-            ).contracts[self.chain_type]
+            wrapper_contract = POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT
         else:
             deployment_payload = get_deployment_with_recovery_payload()
-            gnosis_safe_multisig = ContractConfigs.get(
-                SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
-            ).contracts[self.chain_type]
+            wrapper_contract = SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT
+
+        gnosis_safe_multisig = ContractConfigs.get(wrapper_contract.name).contracts[
+            self.chain_type
+        ]
 
         deploy_data = self.service_manager_instance.encode_abi(
             abi_element_identifier="deploy",
