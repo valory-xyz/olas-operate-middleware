@@ -95,8 +95,6 @@ BASE_USDC = USDC[Chain.BASE]
 POLYGON_USDC = USDC[Chain.POLYGON]
 POLYGON_OLAS = OLAS[Chain.POLYGON]
 POLYGON_PUSD = PUSD[Chain.POLYGON]
-CELO_USDC = USDC[Chain.CELO]
-CELO_GAS_MESSAGE = "Add CELO to your Pearl Wallet on Celo to pay for gas"
 NATIVE = ZERO_ADDRESS
 GAS = 7  # native gas per quoted request, in wei, on every chain
 POLYGON_RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][NATIVE])
@@ -964,119 +962,6 @@ def _pusd_on_polygon(
         source_token=POLYGON_PUSD.lower(),
         amounts=amounts or {POLYGON_PUSD: 10},
     )
-
-
-class TestSourceWithoutPaymaster:
-    """Celo USDC: no Circle Paymaster, so the Master EOA pays source gas in CELO."""
-
-    def test_quote_fails_without_native_for_gas(self, tmp_path: Path) -> None:
-        """0 CELO on the Master EOA: QUOTE_FAILED asking for CELO, before any deposit."""
-        env = Env(tmp_path)
-
-        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
-
-        assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == CELO_GAS_MESSAGE
-        assert _logged(env, "source-leg gas")
-
-    def test_unbuildable_request_is_not_blamed_on_gas(self, tmp_path: Path) -> None:
-        """A source request that cannot be built fails the quote as such, not as gas."""
-        env = Env(tmp_path)
-        original = env.bridge.provider.requirements
-        broken: t.List[str] = []
-
-        def _requirements(request: ProviderRequest) -> t.Dict:
-            if request.params["from"]["chain"] == "celo" and (
-                not broken or broken[0] == request.id
-            ):
-                broken[:1] = [request.id]
-                request.status = ProviderRequestStatus.QUOTE_FAILED
-                return {"celo": {EOA: {NATIVE: 0, CELO_USDC: 0}}}
-            return original(request)
-
-        env.bridge.provider.requirements = _requirements  # type: ignore[method-assign]
-
-        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
-
-        assert run.status == FundingRunStatus.QUOTE_FAILED
-        assert run.quote_message == MESSAGE_QUOTE_FAILED
-
-    @pytest.mark.parametrize(
-        ("native", "status"),
-        [
-            (2 * GAS - 1, FundingRunStatus.QUOTE_FAILED),
-            (2 * GAS, FundingRunStatus.AWAITING_DEPOSIT),
-        ],
-    )
-    def test_quote_gas_boundary(
-        self, tmp_path: Path, native: int, status: FundingRunStatus
-    ) -> None:
-        """The two source requests need exactly 2 * GAS: one wei short fails, exact passes."""
-        env = Env(tmp_path)
-        env.balances[(Chain.CELO, NATIVE)] = native
-
-        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
-
-        assert run.status == status
-        if status == FundingRunStatus.QUOTE_FAILED:
-            assert run.quote_message == CELO_GAS_MESSAGE
-        else:
-            assert len(run.source_requests) == 2
-
-    def test_run_with_native_for_gas_sends_without_the_paymaster(
-        self, tmp_path: Path
-    ) -> None:
-        """Enough CELO: no USDC gas cap or clearing leg, and the leg goes through the bridge."""
-        env = Env(tmp_path)
-        env.balances[(Chain.CELO, NATIVE)] = 10 * GAS
-
-        run = _funded(env, source_chain="celo", source_token=CELO_USDC)
-        env.manager.tick()
-
-        assert run.usdc_gas_cap is None
-        assert all(s.kind != FundingStepKind.CLEAR_DELEGATION for s in run.steps)
-        assert env.bridge.executed
-        env.sender.prepare_batch.assert_not_called()
-
-    def test_send_rechecks_native_for_gas(self, tmp_path: Path) -> None:
-        """CELO spent after the quote: the source leg fails asking for CELO, nothing is sent."""
-        env = Env(tmp_path)
-        env.balances[(Chain.CELO, NATIVE)] = 10 * GAS
-        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
-        env.balances[(Chain.CELO, CELO_USDC)] = _required(run)
-        env.manager.tick()
-        env.balances[(Chain.CELO, NATIVE)] = 0
-
-        env.manager.tick()
-        run = env.reload(run)
-
-        assert env.bridge.executed == []
-        source_steps = [s for s in run.steps if s.id in (STEP_BRIDGE, STEP_NATIVE)]
-        assert source_steps
-        assert all(s.status == FundingStepStatus.FAILED for s in source_steps)
-        assert all(s.message == CELO_GAS_MESSAGE for s in source_steps)
-        assert run.status == FundingRunStatus.FAILED
-        assert run.error == {"step_id": STEP_BRIDGE, "message": CELO_GAS_MESSAGE}
-
-    def test_send_recheck_counts_only_unsent_requests(self, tmp_path: Path) -> None:
-        """A retry after a partial send needs gas for the remaining request only."""
-        env = Env(tmp_path)
-        env.balances[(Chain.CELO, NATIVE)] = 10 * GAS
-        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
-        env.balances[(Chain.CELO, CELO_USDC)] = _required(run)
-        env.manager.tick()
-        run = env.reload(run)
-        sent, remaining = run.source_requests
-        env.bridge.provider.execute(sent)
-        env.manager._store(run)  # pylint: disable=protected-access
-        env.bridge.executed.clear()
-        env.balances[(Chain.CELO, NATIVE)] = GAS
-
-        env.manager.tick()
-        run = env.reload(run)
-
-        assert env.bridge.executed == [remaining.params["to"]["token"]]
-        assert run.status == FundingRunStatus.PROCESSING
 
 
 class TestExactPath:

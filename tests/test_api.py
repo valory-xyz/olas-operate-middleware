@@ -913,7 +913,7 @@ class TestFundingRunRoutes:
         assert sources["gnosis"] == [ZERO_ADDRESS]
         assert sources["robinhood"] == [ZERO_ADDRESS]
         assert sources["base"] == [ZERO_ADDRESS, USDC[Chain.BASE]]
-        assert sources["celo"] == [ZERO_ADDRESS, USDC[Chain.CELO]]
+        assert sources["celo"] == [ZERO_ADDRESS]
         assert set(sources) == {
             "ethereum",
             "base",

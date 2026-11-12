@@ -172,8 +172,8 @@ end up; quoting, monitoring and execution are shared:
    buffer, the run re-quotes once more and freezes, unless the deposit no
    longer covers that fresh quote without its buffer.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
-   the Master EOA reserve moves to the Master Safe), then, for USDC sources on
-   a Circle Paymaster chain, **delegation clearing**. Before the source leg is sent, the request that
+   the Master EOA reserve moves to the Master Safe), then, for USDC sources,
+   **delegation clearing**. Before the source leg is sent, the request that
    delivers destination native is re-quoted as exact-input (Relay
    `EXACT_INPUT`) over its input plus whatever the deposit leaves beyond the
    raw quote, so that leftover leaves the origin Master EOA with the run and
@@ -233,11 +233,8 @@ with no user prompt. Custody properties:
   accepts calls only from itself
   or the EntryPoint, and only with the Master EOA's own signature.
 
-Chains without a Circle Paymaster accept native sources, which pay their own
-gas. Gnosis and Robinhood accept native only; Celo also accepts USDC, whose
-source leg pays its gas in native CELO from the Master EOA. The quote fails
-(asking the user to add CELO) when the Master EOA cannot cover that gas, and
-the check is repeated just before the leg is sent.
+Chains without a Circle Paymaster (Celo, Gnosis, Robinhood) accept native sources
+only, which pay their own gas.
 
 ## Health and funding relationship
 
