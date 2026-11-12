@@ -579,13 +579,9 @@ def normalize_tx_data_to_bytes(data: t.Union[str, bytes]) -> bytes:
     ``Contract.encode_abi()`` returns ``HexStr`` (``str``) under web3 7.x /
     open-aea 2.2.x, but the multisend contract's ``encode_data()`` requires
     ``bytes`` for concatenation. This helper handles both ``"0x..."`` and
-    raw-hex inputs as well as already-``bytes`` values.
-
-    Used through ``normalize_multisend_sub_tx`` and as the boundary
-    normalization in ``GnosisSafeTransaction.build`` in
-    ``operate.services.protocol``. Callers that build multisend tx dicts and
-    bypass ``build()`` must normalise them with ``normalize_multisend_sub_tx``
-    before the multisend call.
+    raw-hex inputs as well as already-``bytes`` values. Multisend tx dicts
+    that bypass ``GnosisSafeTransaction.build`` must be normalised before the
+    multisend call.
     """
     if isinstance(data, bytes):
         return data
@@ -598,8 +594,7 @@ def normalize_multisend_sub_tx(tx: MultiSendSubTx) -> MultiSendSubTx:
 
     ``data`` becomes ``bytes`` (see ``normalize_tx_data_to_bytes``), and a
     missing ``operation`` or ``value`` defaults to ``MultiSendOperation.CALL``
-    and ``0``. Used by ``send_safe_multisend_txs`` and
-    ``EthSafeTxBuilder.get_safe_b_exec_messages``.
+    and ``0``.
     """
     return {
         **tx,
@@ -618,9 +613,8 @@ def send_safe_multisend_txs(  # pylint: disable=too-many-locals
 ) -> str:
     """Send multiple sub-transactions as one Safe MultiSend transaction.
 
-    Each entry in ``txs`` is a dict with keys ``to``, ``data`` (bytes or hex
-    string) and optionally ``value`` (defaults to ``0``) and ``operation``
-    (defaults to ``MultiSendOperation.CALL``). The batch executes as a single Safe
+    Each entry in ``txs`` is prepared by ``normalize_multisend_sub_tx``,
+    which sets the defaults for its optional fields. The batch executes as a single Safe
     transaction that DELEGATE_CALLs into the MultiSend contract, so every
     sub-transaction runs with the Safe as ``msg.sender`` and the batch
     succeeds or reverts atomically.
