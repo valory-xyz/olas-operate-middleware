@@ -28,7 +28,7 @@ from autonomy.chain.exceptions import ChainInteractionError
 from hexbytes import HexBytes
 from web3 import Web3
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import TRANSFER_EVENT_TOPIC, ZERO_ADDRESS
 from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     InsufficientFundsException,
@@ -1889,7 +1889,6 @@ _REWARD_ERC20 = "0xce11e14225575945b8E6Dc0D4F2dD4C570f79d9f"
 _OTHER_ERC20 = "0x0e40000000000000000000000000000000000005"
 _RECEIVER_A = "0xa000000000000000000000000000000000000006"
 _RECEIVER_B = "0xb000000000000000000000000000000000000007"
-_TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)")
 
 
 def _topic(address: str) -> HexBytes:
@@ -1903,7 +1902,7 @@ def _transfer_log(
     """An ERC-20 Transfer log shaped like a web3 receipt entry."""
     return {
         "address": token,
-        "topics": [_TRANSFER_TOPIC, _topic(sender), _topic(receiver)],
+        "topics": [TRANSFER_EVENT_TOPIC, _topic(sender), _topic(receiver)],
         "data": HexBytes(amount.to_bytes(32, "big")),
     }
 
@@ -2004,7 +2003,7 @@ class TestClaimOnChainFromSafe:
             {
                 "address": _REWARD_ERC20,
                 "topics": [
-                    _TRANSFER_TOPIC,
+                    TRANSFER_EVENT_TOPIC,
                     _topic(_STAKING),
                     _topic(_RECEIVER_A),
                     HexBytes((5).to_bytes(32, "big")),

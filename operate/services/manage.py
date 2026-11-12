@@ -181,7 +181,8 @@ def _stop_refused_reuse_before_txs(
         if fixed_by_owner_swap and swap_plan is not _SwapPlan.NO_SWAP:
             return
         raise recovery_module_error
-    # A running service reuses its Safe only after a stepwise teardown.
+    # A running service reuses its Safe here only after a stepwise teardown;
+    # a batched update is refused later by _resolve_safe_reuse.
     if swap_plan is _SwapPlan.STEPWISE and not fixed_by_owner_swap:
         raise recovery_module_error
 
@@ -1830,7 +1831,10 @@ class ServiceManager:
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable the recovery module on the service Safe if missing; raises an ``_EnableFailure``."""
+        """Enable the recovery module on the service Safe if missing.
+
+        A failed enable attempt raises an ``_EnableFailure``.
+        """
         self.logger.info(f"_enable_recovery_module {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
