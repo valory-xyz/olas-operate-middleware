@@ -979,6 +979,28 @@ class TestSourceWithoutPaymaster:
         assert run.quote_message == CELO_GAS_MESSAGE
         assert _logged(env, "source-leg gas")
 
+    def test_unbuildable_request_is_not_blamed_on_gas(self, tmp_path: Path) -> None:
+        """A source request that cannot be built fails the quote as such, not as gas."""
+        env = Env(tmp_path)
+        original = env.bridge.provider.requirements
+        broken: t.List[str] = []
+
+        def _requirements(request: ProviderRequest) -> t.Dict:
+            if request.params["from"]["chain"] == "celo" and (
+                not broken or broken[0] == request.id
+            ):
+                broken[:1] = [request.id]
+                request.status = ProviderRequestStatus.QUOTE_FAILED
+                return {"celo": {EOA: {NATIVE: 0, CELO_USDC: 0}}}
+            return original(request)
+
+        env.bridge.provider.requirements = _requirements  # type: ignore[method-assign]
+
+        run = _deposit_run(env, source_chain="celo", source_token=CELO_USDC)
+
+        assert run.status == FundingRunStatus.QUOTE_FAILED
+        assert run.quote_message == MESSAGE_QUOTE_FAILED
+
     @pytest.mark.parametrize(
         ("native", "status"),
         [

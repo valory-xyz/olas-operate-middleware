@@ -1096,6 +1096,10 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         if self._quote_failed(run, source_requests):
             return
         shortfall = self._source_gas_shortfall(source, token, source_requests)
+        # requirements() marks a request whose txs cannot be built as failed:
+        # that is the real cause, not the gas it then reports as 0.
+        if self._quote_failed(run, source_requests):
+            return
         if shortfall:
             raise _QuoteError(
                 self._source_gas_detail(source, shortfall),
