@@ -1851,7 +1851,7 @@ class TestNormalizeMultisendSubTx:
 
     def test_keeps_given_fields_and_converts_hex_data(self) -> None:
         """Given operation and value are kept; hex data becomes bytes."""
-        tx = {
+        tx: MultiSendSubTx = {
             "to": "0xTo",
             "operation": MultiSendOperation.DELEGATE_CALL,
             "value": 7,
