@@ -21,6 +21,7 @@
 import json
 import os
 import shutil
+import sys
 import textwrap
 import time
 import typing as t
@@ -42,6 +43,7 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.exceptions import RecoveryModuleNotEnabledError
 from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
@@ -719,6 +721,16 @@ def _maybe_create_master_eoa(operate: "OperateApp") -> None:
         )
 
 
+def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> None:
+    """Deploy the service on-chain, exiting with status 1 if the deploy is refused."""
+    try:
+        manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
+    except RecoveryModuleNotEnabledError as e:
+        manager.logger.error(f"On-chain deploy refused: {e}", exc_info=True)
+        print(f"\n{e}\n")
+        sys.exit(1)
+
+
 def ensure_enough_funds(
     operate: "OperateApp", service: Service
 ) -> None:  # pragma: no cover
@@ -780,9 +792,7 @@ def run_service(  # pragma: no cover
     print(
         "Cancelling the on-chain service update prematurely could lead to an inconsistent state of the Safe or the on-chain service state, which may require manual intervention to resolve.\n"
     )
-    manager.deploy_service_onchain_from_safe(
-        service_config_id=service.service_config_id
-    )
+    _deploy_onchain_or_exit(manager, service.service_config_id)
 
     print_section("Funding the service")
     service = get_service(manager, template)

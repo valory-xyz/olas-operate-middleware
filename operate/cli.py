@@ -75,7 +75,10 @@ from operate.constants import (
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
 )
-from operate.exceptions import ServicePackageDownloadError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    ServicePackageDownloadError,
+)
 from operate.funding_run.manager import (
     FundingRunConflictError,
     FundingRunError,
@@ -1755,7 +1758,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @service_router.post("/api/v2/service/{service_config_id}")
-    async def _deploy_and_run_service(
+    async def _deploy_and_run_service(  # pylint: disable=too-many-return-statements
         service_config_id: Annotated[str, FastApiPath(pattern=SAFE_ID_PATTERN)],
     ) -> JSONResponse:
         """Deploy a service."""
@@ -1793,9 +1796,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except PortInUseError as e:
-            logger.error(f"Deploy failed: {e}")
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
+            )
+        except RecoveryModuleNotEnabledError as e:
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={"error": str(e), **e.to_error_fields()},
                 status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except

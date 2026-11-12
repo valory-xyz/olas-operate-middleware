@@ -19,7 +19,7 @@ The API uses appropriate HTTP status codes:
 - `400 Bad Request`: Invalid request parameters
 - `401 Unauthorized`: Authentication required or invalid credentials
 - `404 Not Found`: Resource not found
-- `409 Conflict`: Resource already exists
+- `409 Conflict`: Request conflicts with the current state of the resource
 - `500 Internal Server Error`: Server-side errors
 
 ## General API Information
@@ -2442,6 +2442,42 @@ Deploy and run a service.
 ```json
 {
   "error": "Port 8716 is in use by another program (PID 1234 python3.13), so the deployment cannot start. Stop that program and try again."
+}
+```
+
+**Response (Agent Safe cannot get the recovery module - 409):**
+
+A deployment that will reuse an Agent Safe stops when the Safe's recovery module is not enabled and cannot be enabled, and `error` says what to do.
+- These stop with this 409 before any teardown, bond or deploy transaction (only recovery-module enable attempts are sent), so no bond is posted: a deployment that is not an update, of a service not yet deployed on-chain; an update folded into one batch, which makes a second enable attempt for the Safe's current owners before refusing; and a step-by-step update whose error is `RECOVERY_MODULE_NOT_ENABLED`.
+- A step-by-step update whose Agent EOA's own enable transaction failed (`AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE`) runs its teardown (unstake, terminate, unbond, Safe swap) first, also when it resumes one that stopped before the swap, and can still end with this 409 after it.
+- A restart, or an update while the service cannot leave staking yet, sends no teardown and reuses no Safe, so neither a failed enable nor a gas shortfall on it stops it.
+
+This happens when:
+- the Agent EOA owns the Safe and its transaction to enable the module fails;
+- the Agent EOA owns the Safe but its key cannot be loaded;
+- the Master Safe owns the Safe and its transaction to enable the module fails;
+- the Safe's owners are not the Agent EOA alone or the Master Safe alone;
+- the module is still not enabled after a successful attempt.
+
+`error_code` is `AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE` for the first case, and `RECOVERY_MODULE_NOT_ENABLED` for the others. In the first case the message asks to fund the Agent EOA only when it could not pay for the transaction. The message names the Safe and the chain, and the account when one is involved. It never includes the underlying RPC or transaction error, which is logged only.
+
+```json
+{
+  "error": "Could not enable the recovery module on the Agent Safe 0x... on gnosis, so the agent cannot use it. Make sure the Agent EOA 0x... holds enough gas on this chain, then try again.",
+  "error_code": "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE"
+}
+```
+
+**Response (Insufficient signer gas - 400):**
+
+Returned when the Master EOA cannot pay for a transaction the deployment sends, including the Master Safe's transaction that enables the recovery module and, when the Agent Safe does not already have the recovery module, the Agent EOA's top-up before a step-by-step update swaps the Safe. If the Master Safe's own balance cannot cover that top-up, the top-up is skipped; the swap then fails with a 500, after the teardown, only if the Agent EOA cannot pay for it.
+
+```json
+{
+  "error": "Failed to deploy service due to insufficient funds.",
+  "error_code": "INSUFFICIENT_SIGNER_GAS",
+  "chain": "gnosis",
+  "prefill_amount_wei": "750000000000000000"
 }
 ```
 

@@ -55,3 +55,19 @@ class ServicePackageDownloadError(Exception):
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
         return {"error_code": "SERVICE_PACKAGE_DOWNLOAD_FAILED"}
+
+
+class RecoveryModuleNotEnabledError(Exception):
+    """The service Safe still lacks the recovery module, so it cannot be reused."""
+
+    error_code: t.ClassVar[str] = "RECOVERY_MODULE_NOT_ENABLED"
+
+    def to_error_fields(self) -> t.Dict:
+        """Return structured error fields for merging into a JSONResponse body."""
+        return {"error_code": self.error_code}
+
+
+class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
+    """The Agent EOA owns the service Safe and its enableModule failed."""
+
+    error_code = "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE"

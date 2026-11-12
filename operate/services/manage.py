@@ -19,6 +19,7 @@
 # ------------------------------------------------------------------------------
 """Service manager."""
 
+import enum
 import json
 import logging
 import os
@@ -45,12 +46,17 @@ from operate.constants import (
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
     POLY_SAFE_SERVICE_NAMES,
+    TRANSFER_EVENT_TOPIC,
     ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
+)
+from operate.exceptions import (
+    AgentCouldNotEnableRecoveryModuleError,
+    RecoveryModuleNotEnabledError,
 )
 from operate.keys import KeysManager
 from operate.ledger import UnsupportedChainError, get_default_rpc
@@ -126,6 +132,59 @@ _STATES_REQUIRING_UNBOND = (
     OnChainState.DEPLOYED,
     OnChainState.TERMINATED_BONDED,
 )
+
+
+def _sum_erc20_transfers_from(
+    logs: t.Iterable[t.Mapping[str, t.Any]], token: str, sender: str
+) -> int:
+    """Sum the amounts of ``token`` that ``sender`` transfers in ``logs``."""
+    sender_bytes = bytes.fromhex(sender[2:])
+    total = 0
+    for log in logs:
+        topics = log["topics"]
+        # An ERC-721 Transfer shares the signature but indexes a fourth topic.
+        if (
+            log["address"].lower() == token.lower()
+            and len(topics) == 3
+            and bytes(topics[0]) == TRANSFER_EVENT_TOPIC
+            and bytes(topics[1])[-20:] == sender_bytes
+        ):
+            total += int.from_bytes(bytes(log["data"]), "big")
+    return total
+
+
+_EnableFailure = t.Union[RecoveryModuleNotEnabledError, InsufficientFundsException]
+_ENABLE_ERRORS = t.get_args(_EnableFailure)
+
+
+class _SwapPlan(enum.Enum):
+    """Whether a stepwise teardown, which swaps the Agent Safe to the Master Safe, follows."""
+
+    UNDECIDED = "undecided"
+    NO_SWAP = "no_swap"
+    STEPWISE = "stepwise"
+
+
+def _stop_refused_reuse_before_txs(
+    recovery_module_error: t.Optional[_EnableFailure],
+    on_chain_state: OnChainState,
+    swap_plan: _SwapPlan,
+) -> None:
+    """Raise the enable error before any tx is sent if the deploy will reuse the Safe without the module."""
+    if recovery_module_error is None:
+        return
+    # After the swap the Master Safe owns the Safe and can enable the module itself.
+    fixed_by_owner_swap = isinstance(
+        recovery_module_error, AgentCouldNotEnableRecoveryModuleError
+    )
+    if on_chain_state != OnChainState.DEPLOYED:
+        if fixed_by_owner_swap and swap_plan is not _SwapPlan.NO_SWAP:
+            return
+        raise recovery_module_error
+    # A running service reuses its Safe here only after a stepwise teardown;
+    # a batched update is refused later by _resolve_safe_reuse.
+    if swap_plan is _SwapPlan.STEPWISE and not fixed_by_owner_swap:
+        raise recovery_module_error
 
 
 class ServiceManager:
@@ -466,7 +525,9 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-        self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
+        recovery_module_error = self._try_enable_recovery_module(
+            service_config_id=service_config_id, chain=chain
+        )
 
         current_agent_id = None
         on_chain_state = OnChainState.NON_EXISTENT
@@ -479,6 +540,11 @@ class ServiceManager:
             current_agent_id = info["canonical_agents"][0]  # TODO Allow multiple agents
             service.store()
         self.logger.info(f"Service state: {on_chain_state.name}")
+        _stop_refused_reuse_before_txs(
+            recovery_module_error=recovery_module_error,
+            on_chain_state=on_chain_state,
+            swap_plan=_SwapPlan.UNDECIDED,
+        )
 
         current_staking_program = self._get_current_staking_program(service, chain)
         fallback_params = dict(  # nosec
@@ -704,16 +770,34 @@ class ServiceManager:
         # but cannot be performed in-batch.
         update_teardown_prefix: t.Optional[t.List[t.Tuple[t.Dict, str]]] = None
         if is_update:
+            # Read once, so the teardown prefix, the reuse gate and terminate agree.
+            staking_locked = self._is_staking_locked(
+                chain=chain,
+                sftxb=sftxb,
+                service_id=chain_data.token,
+                current_staking_program=current_staking_program,
+            )
             update_teardown_prefix = self._build_update_teardown_prefix(
                 service=service,
                 chain=chain,
                 sftxb=sftxb,
                 chain_data=chain_data,
                 master_safe=safe,
+                staking_locked=staking_locked,
             )
             if update_teardown_prefix is None:
+                # Inside the staking lock window terminate sends nothing: no teardown, no reuse.
+                _stop_refused_reuse_before_txs(
+                    recovery_module_error=recovery_module_error,
+                    on_chain_state=on_chain_state,
+                    swap_plan=(
+                        _SwapPlan.NO_SWAP if staking_locked else _SwapPlan.STEPWISE
+                    ),
+                )
                 self.terminate_service_on_chain_from_safe(
-                    service_config_id=service_config_id, chain=chain
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    staking_locked=staking_locked,
                 )
                 if (
                     self._get_on_chain_state(service=service, chain=chain)
@@ -724,6 +808,13 @@ class ServiceManager:
                         service_config_id=service_config_id, chain=chain
                     )
                     # Update mint is included in the mega-batch below
+        if not is_update or update_teardown_prefix is not None:
+            # No stepwise swap follows, so a failure it would have fixed stops here.
+            _stop_refused_reuse_before_txs(
+                recovery_module_error=recovery_module_error,
+                on_chain_state=on_chain_state,
+                swap_plan=_SwapPlan.NO_SWAP,
+            )
 
         # Mint service
         if (
@@ -923,22 +1014,13 @@ class ServiceManager:
             mega_tx.add(register_data, label="register_instances")
 
             # --- Deploy ---
-            info = sftxb.info(token_id=chain_data.token)
-            service_safe_address = info["multisig"]
-            if service_safe_address == ZERO_ADDRESS:
-                reuse_multisig = False
-                is_initial_funding = True
-                is_recovery_module_enabled = True
-            else:
-                reuse_multisig = True
-                is_recovery_module_enabled = (
-                    registry_contracts.gnosis_safe.is_module_enabled(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=service_safe_address,
-                        module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                    ).get("enabled")
-                )
-            self.logger.info(f"{reuse_multisig=}")
+            reuse_multisig = self._resolve_safe_reuse(
+                sftxb=sftxb,
+                service_config_id=service_config_id,
+                chain=chain,
+                token_id=chain_data.token,
+            )
+            is_initial_funding = not reuse_multisig
 
             service_public_id = PublicId.from_str(service.service_public_id())
             use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -946,7 +1028,6 @@ class ServiceManager:
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
-                use_recovery_module=is_recovery_module_enabled,
                 use_poly_safe=use_poly_safe,
                 agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
@@ -1141,25 +1222,13 @@ class ServiceManager:
             ):
                 self.logger.info("Deploying service")
 
-                info = sftxb.info(token_id=chain_data.token)
-                service_safe_address = info["multisig"]
-                if service_safe_address == ZERO_ADDRESS:
-                    reuse_multisig = False
-                    is_initial_funding = True
-                    is_recovery_module_enabled = True
-                else:
-                    reuse_multisig = True
-                    is_initial_funding = False
-                    is_recovery_module_enabled = (
-                        registry_contracts.gnosis_safe.is_module_enabled(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=service_safe_address,
-                            module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                        ).get("enabled")
-                    )
-
-                self.logger.info(f"{reuse_multisig=}")
-                self.logger.info(f"{is_recovery_module_enabled=}")
+                reuse_multisig = self._resolve_safe_reuse(
+                    sftxb=sftxb,
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    token_id=chain_data.token,
+                )
+                is_initial_funding = not reuse_multisig
 
                 service_public_id = PublicId.from_str(service.service_public_id())
                 use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
@@ -1169,7 +1238,6 @@ class ServiceManager:
                     service_id=chain_data.token,
                     reuse_multisig=reuse_multisig,
                     master_safe=safe,
-                    use_recovery_module=is_recovery_module_enabled,
                     use_poly_safe=use_poly_safe,
                     agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                         service.agent_addresses[0]
@@ -1358,13 +1426,32 @@ class ServiceManager:
                 )
             ).settle()
 
-    def _build_update_teardown_prefix(  # pylint: disable=too-many-locals,too-many-return-statements  # pragma: no cover
+    @staticmethod
+    def _is_staking_locked(
+        chain: str,
+        sftxb: EthSafeTxBuilder,
+        service_id: int,
+        current_staking_program: t.Optional[str],
+    ) -> bool:
+        """Whether the service is staked but cannot be unstaked yet (e.g. its lock window)."""
+        if current_staking_program is None:
+            return False
+        return not sftxb.can_unstake(
+            service_id=service_id,
+            staking_contract=get_staking_contract(
+                chain=Chain(chain),
+                staking_program_id=current_staking_program,
+            ),
+        )
+
+    def _build_update_teardown_prefix(  # pylint: disable=too-many-arguments,too-many-locals,too-many-return-statements  # pragma: no cover
         self,
         service: Service,
         chain: str,
         sftxb: EthSafeTxBuilder,
         chain_data: t.Any,
         master_safe: str,
+        staking_locked: bool,
     ) -> t.Optional[t.List[t.Tuple[t.Dict, str]]]:
         """Build the in-batch teardown prefix for an update mega-batch.
 
@@ -1376,7 +1463,8 @@ class ServiceManager:
         Returns ``None`` when the combined path is not applicable and the
         caller must fall back to the legacy stepwise terminate + swap/recovery
         flow. That happens in three cases: there is no prior service Safe to
-        reuse; the service is staked but cannot be unstaked yet; or
+        reuse; the service is staked but cannot be unstaked yet
+        (``staking_locked``, decided by the caller); or
         ``recover_access`` is needed (the Master Safe is not the service Safe
         owner) but cannot be performed in-batch (recovery module not enabled, or
         the agent is not the sole service Safe owner). When ``recover_access``
@@ -1399,12 +1487,8 @@ class ServiceManager:
             else None
         )
 
-        if is_staked and not sftxb.can_unstake(
-            service_id=service_id, staking_contract=staking_contract
-        ):
-            # Cannot unstake yet (e.g. still within the staking lock window) ->
-            # the service cannot be torn down, so the update cannot proceed this
-            # cycle. The legacy fallback only claims rewards and returns.
+        if staking_locked:
+            # The legacy fallback then returns without sending anything.
             self.logger.warning(
                 "Update teardown: service is staked and cannot be unstaked yet; "
                 "the update will not be applied until it becomes unstakeable."
@@ -1418,11 +1502,9 @@ class ServiceManager:
         agent_is_owner = service_safe_owners == [service.agent_addresses[0]]
         need_recover = not master_is_owner
         if need_recover:
-            recovery_enabled = registry_contracts.gnosis_safe.is_module_enabled(
-                ledger_api=sftxb.ledger_api,
-                contract_address=chain_data.multisig,
-                module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-            ).get("enabled")
+            recovery_enabled = self._is_recovery_module_enabled(
+                sftxb, chain, chain_data.multisig
+            )
             if not (agent_is_owner and recovery_enabled):
                 self.logger.info(
                     "Update teardown: recover_access needed but not feasible "
@@ -1475,8 +1557,9 @@ class ServiceManager:
         self,
         service_config_id: str,
         chain: str,
+        staking_locked: t.Optional[bool] = None,
     ) -> None:
-        """Terminate service on-chain"""
+        """Terminate service on-chain; ``staking_locked`` is read when omitted."""
 
         self.logger.info("terminate_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
@@ -1497,19 +1580,16 @@ class ServiceManager:
             chain,
         )
         is_staked = current_staking_program is not None
-
-        can_unstake = False
-        if current_staking_program is not None:
-            can_unstake = sftxb.can_unstake(
+        if staking_locked is None:
+            staking_locked = self._is_staking_locked(
+                chain=chain,
+                sftxb=sftxb,
                 service_id=chain_data.token,
-                staking_contract=get_staking_contract(
-                    chain=ledger_config.chain,
-                    staking_program_id=current_staking_program,
-                ),
+                current_staking_program=current_staking_program,
             )
 
         # Cannot unstake, terminate flow.
-        if is_staked and not can_unstake:
+        if is_staked and staking_locked:
             # Cannot unstake yet (e.g. still within the staking lock window):
             # skip termination entirely; the caller retries on a later cycle.
             self.logger.warning(
@@ -1517,7 +1597,7 @@ class ServiceManager:
             )
             return
 
-        if is_staked and can_unstake:
+        if is_staked:
             # Claim + reward transfer stays separate (different signer
             # for the reward transfer from service safe).
             self.claim_on_chain_from_safe(
@@ -1608,22 +1688,17 @@ class ServiceManager:
                 try:
                     self.funding_manager.fund_chain_amounts(shortfalls)
                 except InsufficientFundsException as e:
-                    recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-                    is_recovery_module_enabled = (
-                        registry_contracts.gnosis_safe.is_module_enabled(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=chain_data.multisig,
-                            module_address=recovery_module_address,
-                        ).get("enabled")
-                    )
-                    if is_recovery_module_enabled:
+                    if self._is_recovery_module_enabled(
+                        sftxb, chain, chain_data.multisig
+                    ):
                         self.logger.info(
                             "[SERVICE MANAGER] Could not fund Agent EOA for service swap, but recovery module is enabled."
                         )
                         return
                     raise e
 
-            self._enable_recovery_module(
+            # The swap does not need the module; see _stop_refused_reuse_before_txs.
+            self._try_enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
             self.logger.info("[SERVICE MANAGER] Swapping Safe owners")
@@ -1639,7 +1714,7 @@ class ServiceManager:
                 ),  # TODO it should always be safe address
             )
 
-    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
+    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
         chain: str,
@@ -1666,12 +1741,9 @@ class ServiceManager:
             self.logger.info("Service Safe is not deployed.")
             return
 
-        recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
-            ledger_api=sftxb.ledger_api,
-            contract_address=service_safe_address,
-            module_address=recovery_module_address,
-        ).get("enabled")
+        is_recovery_module_enabled = self._is_recovery_module_enabled(
+            sftxb, chain, service_safe_address
+        )
 
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         master_safe_is_service_safe_owner = service_safe_owners == [safe]
@@ -1702,12 +1774,67 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
-    def _enable_recovery_module(  # pylint: disable=too-many-locals  # pragma: no cover
+    @staticmethod
+    def _is_recovery_module_enabled(
+        sftxb: EthSafeTxBuilder, chain: str, safe_address: str
+    ) -> bool:
+        """Whether the recovery module is enabled on the given Safe."""
+        return bool(
+            registry_contracts.gnosis_safe.is_module_enabled(
+                ledger_api=sftxb.ledger_api,
+                contract_address=safe_address,
+                module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+            ).get("enabled")
+        )
+
+    def _resolve_safe_reuse(
+        self,
+        sftxb: EthSafeTxBuilder,
+        service_config_id: str,
+        chain: str,
+        token_id: int,
+    ) -> bool:
+        """Return whether the deploy reuses the Agent Safe, enabling its recovery module first."""
+        service_safe_address = sftxb.info(token_id=token_id)["multisig"]
+        self.logger.info(f"Agent Safe to reuse: {service_safe_address}")
+        if service_safe_address == ZERO_ADDRESS:
+            return False
+
+        if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
+            return True
+        # A fresh attempt, so the error matches the Safe's current owners.
+        self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
+        if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
+            return True
+        raise RecoveryModuleNotEnabledError(
+            f"The Agent Safe {service_safe_address} on {chain} does not have the "
+            "recovery module enabled, so it cannot be reused for this deployment. Try "
+            "again; if it keeps failing, contact Pearl support with this message."
+        )
+
+    def _try_enable_recovery_module(
+        self, service_config_id: str, chain: str
+    ) -> t.Optional[_EnableFailure]:
+        """Enable the recovery module if possible, returning the error instead of raising it."""
+        try:
+            self._enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
+        except _ENABLE_ERRORS as e:
+            # A restart goes on without the module, so this log is the only record of it.
+            self.logger.error(f"[SERVICE MANAGER] {e}", exc_info=True)
+            return e
+        return None
+
+    def _enable_recovery_module(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable recovery module"""
+        """Enable the recovery module on the service Safe if missing.
+
+        A failed enable attempt raises an ``_EnableFailure``.
+        """
         self.logger.info(f"_enable_recovery_module {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
@@ -1729,13 +1856,7 @@ class ServiceManager:
             return
 
         recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
-            ledger_api=sftxb.ledger_api,
-            contract_address=service_safe_address,
-            module_address=recovery_module_address,
-        ).get("enabled")
-
-        if is_recovery_module_enabled:
+        if self._is_recovery_module_enabled(sftxb, chain, service_safe_address):
             self.logger.info("Recovery module is already enabled in service Safe.")
             return
 
@@ -1744,41 +1865,76 @@ class ServiceManager:
         # NOTE Recovery from agent only works for single-agent services
         agent_address = service.agent_addresses[0]
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
-        agent_is_service_safe_owner = service_safe_owners == [agent_address]
-        master_safe_is_service_safe_owner = service_safe_owners == [safe]
+        enable_module_data = sftxb.get_enable_module_data(
+            module_address=recovery_module_address,
+            safe_address=service_safe_address,
+        )
 
-        if agent_is_service_safe_owner:
+        if service_safe_owners == [agent_address]:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
             try:
                 crypto = self.keys_manager.get_crypto_instance(address=agent_address)
+            except Exception as e:  # pylint: disable=broad-except
+                # Not an AgentCouldNot... error: the owner swap needs this same key.
+                raise RecoveryModuleNotEnabledError(
+                    f"Could not load the key of the Agent EOA {agent_address}, so the "
+                    f"recovery module cannot be enabled on the Agent Safe "
+                    f"{service_safe_address} on {chain}. Contact Pearl support with "
+                    "this message."
+                ) from e
+            try:
                 EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
                     ledger_api=sftxb.ledger_api,
                     crypto=crypto,
                     chain_type=ChainType(chain),
                     safe=service_safe_address,
-                ).add(
-                    sftxb.get_enable_module_data(
-                        module_address=recovery_module_address,
-                        safe_address=service_safe_address,
-                    )
-                ).settle()
-                self.logger.info(
-                    "(Agent) Recovery module enabled successfully in service Safe."
-                )
+                ).add(enable_module_data).settle()
+            except InsufficientFundsException as e:
+                raise AgentCouldNotEnableRecoveryModuleError(
+                    f"Could not enable the recovery module on the Agent Safe "
+                    f"{service_safe_address} on {chain}, so the agent cannot use "
+                    f"it. Make sure the Agent EOA {agent_address} holds enough gas "
+                    "on this chain, then try again."
+                ) from e
             except Exception as e:  # pylint: disable=broad-except
-                self.logger.error(
-                    f"Failed to enable recovery module in service Safe. Exception {e}: {traceback.format_exc()}"
-                )
-        elif master_safe_is_service_safe_owner:
-            # TODO Enable recovery module when Safe owner = master Safe.
-            # This should be similar to the above code, but
-            # requires implement a transaction where the owner is another Safe.
+                raise AgentCouldNotEnableRecoveryModuleError(
+                    f"The Agent EOA {agent_address} could not enable the recovery "
+                    f"module on the Agent Safe {service_safe_address} on {chain}, "
+                    "so the agent cannot use it. Try again; if it keeps failing, "
+                    "contact Pearl support with this message."
+                ) from e
             self.logger.info(
-                "(Service owner) Enabling recovery module in service Safe. [Not implemented]"
+                "(Agent) Recovery module enabled successfully in service Safe."
+            )
+        elif service_safe_owners == [safe]:
+            self.logger.info("(Master Safe) Enabling recovery module in service Safe.")
+            try:
+                tx = sftxb.new_tx()
+                for message in sftxb.get_safe_b_exec_messages(
+                    safe_b_address=service_safe_address,
+                    txs=[enable_module_data],
+                ):
+                    tx.add(message)
+                tx.settle()
+            except InsufficientFundsException:
+                raise
+            except Exception as e:  # pylint: disable=broad-except
+                raise RecoveryModuleNotEnabledError(
+                    f"Could not enable the recovery module on the Agent Safe "
+                    f"{service_safe_address} on {chain} through the Master Safe "
+                    f"{safe}, so the agent cannot use it. Try again; if it keeps "
+                    "failing, contact Pearl support with this message."
+                ) from e
+            self.logger.info(
+                "(Master Safe) Recovery module enabled successfully in service Safe."
             )
         else:
-            self.logger.error(
-                f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
+            raise RecoveryModuleNotEnabledError(
+                f"Cannot enable the recovery module on the Agent Safe "
+                f"{service_safe_address} on {chain}: its owners {service_safe_owners} "
+                f"are not the Agent EOA {agent_address} alone or the Master Safe "
+                f"{safe} alone, so the agent cannot use it. Contact Pearl support with "
+                "this message."
             )
 
     def _get_current_staking_program(
@@ -2223,12 +2379,12 @@ class ServiceManager:
                 chain=service.home_chain,
             )
 
-    def claim_on_chain_from_safe(  # pragma: no cover
+    def claim_on_chain_from_safe(
         self,
         service_config_id: str,
         chain: str,
     ) -> int:
-        """Claim rewards from staking and returns the claimed amount"""
+        """Claim rewards; return the total reward-token amount transferred by the staking contract."""
         self.logger.info("claim_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
@@ -2269,6 +2425,11 @@ class ServiceManager:
             self.logger.info("No staking rewards claimable")
             return 0
 
+        # Read before claiming so an RPC failure cannot strand the rewards
+        # between the claim and the Agent Safe sweep.
+        reward_token = sftxb.get_staking_params(staking_contract=staking_contract)[
+            "staking_token"
+        ]
         receipt = (
             sftxb.new_tx()
             .add(
@@ -2280,16 +2441,12 @@ class ServiceManager:
             .settle()
         )
 
-        if receipt.status != 1:
-            self.logger.error(
-                f"Failed to claim staking rewards. Tx hash: {receipt.tx_hash}"
-            )
-            return 0
-
-        # transfer reward token balance from agents safe to master safe
-        # TODO: remove after staking contract directly starts sending the rewards to master safe
-        reward_token = receipt["logs"][0]["address"]
-        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
+        # A claim can pay several receivers, so every reward transfer counts.
+        amount_claimed = _sum_erc20_transfers_from(
+            logs=receipt["logs"], token=reward_token, sender=staking_contract
+        )
+        # Staking contracts that predate direct Master Safe payouts still pay
+        # rewards into the Agent Safe, so sweep it.
         amount_to_transfer = get_asset_balance(
             ledger_api=ledger_api,
             asset_address=reward_token,

@@ -38,8 +38,6 @@ from aea.helpers.base import IPFSHash, cd
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainConfigs, ChainType, ContractConfigs
 from autonomy.chain.constants import (
-    GNOSIS_SAFE_PROXY_FACTORY_CONTRACT,
-    GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
     POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
@@ -49,7 +47,6 @@ from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
-    get_deployment_payload,
     get_deployment_with_recovery_payload,
     get_poly_safe_deployment_payload,
     get_service_info,
@@ -86,8 +83,10 @@ from operate.utils import concurrent_execute
 from operate.utils.gas import wrap_gas_spike_as_insufficient_funds
 from operate.utils.gnosis import (
     MultiSendOperation,
+    MultiSendSubTx,
     SafeOperation,
     hash_payload_to_hex,
+    normalize_multisend_sub_tx,
     normalize_tx_data_to_bytes,
     skill_input_hex_to_payload,
 )
@@ -1549,75 +1548,46 @@ class EthSafeTxBuilder(_ChainUtil):
         service_id: int,
         master_safe: str,
         reuse_multisig: bool = False,
-        use_recovery_module: bool = True,
         use_poly_safe: bool = False,
         agent_eoa_crypto: t.Optional[Crypto] = None,
         skip_owner_check: bool = False,
     ) -> t.List[t.Dict[str, t.Any]]:
-        """Get the deploy data instructions for a safe"""
-        approve_hash_message = None
-        if reuse_multisig:
-            if not use_recovery_module:
-                (
-                    _deployment_payload,
-                    approve_hash_message,
-                    error,
-                ) = get_reuse_multisig_from_safe_payload(
-                    ledger_api=self.ledger_api,
-                    chain_type=self.chain_type,
-                    service_id=service_id,
-                    master_safe=master_safe,
-                )
-                if _deployment_payload is None:
-                    raise ValueError(error)
-                deployment_payload = _deployment_payload
-                gnosis_safe_multisig = ContractConfigs.get(
-                    GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
-                ).contracts[self.chain_type]
-            else:
-                (
-                    _deployment_payload,
-                    error,
-                ) = get_reuse_multisig_with_recovery_from_safe_payload(
-                    ledger_api=self.ledger_api,
-                    chain_type=self.chain_type,
-                    service_id=service_id,
-                    master_safe=master_safe,
-                    skip_owner_check=skip_owner_check,
-                )
-                if _deployment_payload is None:
-                    raise ValueError(error)
-                deployment_payload = _deployment_payload
-                gnosis_safe_multisig = ContractConfigs.get(
-                    RECOVERY_MODULE_CONTRACT.name
-                ).contracts[self.chain_type]
-        else:  # Deploy a new multisig
-            if not use_recovery_module and not use_poly_safe:
-                deployment_payload = get_deployment_payload()
-                gnosis_safe_multisig = ContractConfigs.get(
-                    GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
-                ).contracts[self.chain_type]
-            elif use_recovery_module and use_poly_safe:
-                if not agent_eoa_crypto:
-                    raise ValueError("Crypto object must be provided for Poly Safe.")
+        """Get the deploy data instructions for a safe.
 
-                deployment_payload = get_poly_safe_deployment_payload(
-                    ledger_api=self.ledger_api,
-                    chain_type=self.chain_type,
-                    crypto=agent_eoa_crypto,
-                )
-                gnosis_safe_multisig = ContractConfigs.get(
-                    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name
-                ).contracts[self.chain_type]
-            elif not use_recovery_module and use_poly_safe:
-                raise ValueError(
-                    "Poly Safe deployment without recovery module is not supported."
-                )
-            else:  # Normal case: use_recovery_module and not use_poly_safe
-                deployment_payload = get_deployment_with_recovery_payload()
-                gnosis_safe_multisig = ContractConfigs.get(
-                    SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
-                ).contracts[self.chain_type]
+        Every deploy goes through the recovery module: a reused Safe must have it
+        enabled, and a new Safe is created with it.
+        """
+        if reuse_multisig:
+            (
+                _deployment_payload,
+                error,
+            ) = get_reuse_multisig_with_recovery_from_safe_payload(
+                ledger_api=self.ledger_api,
+                chain_type=self.chain_type,
+                service_id=service_id,
+                master_safe=master_safe,
+                skip_owner_check=skip_owner_check,
+            )
+            if _deployment_payload is None:
+                raise ValueError(error)
+            deployment_payload = _deployment_payload
+            wrapper_contract = RECOVERY_MODULE_CONTRACT
+        elif use_poly_safe:
+            if not agent_eoa_crypto:
+                raise ValueError("Crypto object must be provided for Poly Safe.")
+            deployment_payload = get_poly_safe_deployment_payload(
+                ledger_api=self.ledger_api,
+                chain_type=self.chain_type,
+                crypto=agent_eoa_crypto,
+            )
+            wrapper_contract = POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT
+        else:
+            deployment_payload = get_deployment_with_recovery_payload()
+            wrapper_contract = SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT
+
+        gnosis_safe_multisig = ContractConfigs.get(wrapper_contract.name).contracts[
+            self.chain_type
+        ]
 
         deploy_data = self.service_manager_instance.encode_abi(
             abi_element_identifier="deploy",
@@ -1627,29 +1597,27 @@ class EthSafeTxBuilder(_ChainUtil):
                 deployment_payload,
             ],
         )
-        deploy_message = {
-            "to": self.service_manager_address,
-            "data": deploy_data[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-        if approve_hash_message is None:
-            return [deploy_message]
-        return [approve_hash_message, deploy_message]
+        return [
+            {
+                "to": self.service_manager_address,
+                "data": deploy_data[2:],
+                "operation": MultiSendOperation.CALL,
+                "value": 0,
+            }
+        ]
 
-    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
+    def get_safe_b_exec_messages(
         self,
         safe_b_address: str,
-        to: str,
-        amount: int,
+        txs: t.List[MultiSendSubTx],
         nonce: t.Optional[int] = None,
-    ) -> t.Tuple[t.Dict, t.Dict]:
+    ) -> t.Tuple[MultiSendSubTx, MultiSendSubTx]:
         """
-        Build the two messages (Safe calls) to withdraw native ETH from Safe B via this Safe (owner of Safe B).
+        Build the two messages (Safe calls) to execute ``txs`` on Safe B via this Safe (owner of Safe B).
 
         Builds the messages to be settled by this Safe:
         1) approveHash(inner_tx_hash)
-        2) execTransaction(...) to transfer ETH
+        2) execTransaction(...) running ``txs`` through a MultiSend delegate call
 
         ``nonce`` is the Safe B nonce the inner tx hash is computed with;
         ``None`` reads the current nonce on-chain.
@@ -1658,24 +1626,14 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=safe_b_address,
         )
-
-        txs = []
-        txs.append(
-            {
-                "to": to,
-                "data": b"",
-                "operation": MultiSendOperation.CALL,
-                "value": amount,
-            }
-        )
-
         multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
             self.chain_type
         ]
+        # Bypasses GnosisSafeTransaction.build(), so normalise each sub-tx here.
         multisend_tx = registry_contracts.multisend.get_multisend_tx(
             ledger_api=self.ledger_api,
             contract_address=multisend_address,
-            txs=txs,
+            txs=[normalize_multisend_sub_tx(tx) for tx in txs],
         )
 
         # Compute inner Safe transaction hash.
@@ -1692,19 +1650,17 @@ class EthSafeTxBuilder(_ChainUtil):
             safe_nonce=nonce,
         ).get("tx_hash")
 
-        # Build approveHash message
         approve_hash_data = safe_b_instance.encode_abi(
             abi_element_identifier="approveHash",
             args=[safe_tx_hash],
         )
-        approve_hash_message = {
+        approve_hash_message: MultiSendSubTx = {
             "to": safe_b_address,
             "data": approve_hash_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
 
-        # Build execTransaction message
         exec_data = safe_b_instance.encode_abi(
             abi_element_identifier="execTransaction",
             args=[
@@ -1720,7 +1676,7 @@ class EthSafeTxBuilder(_ChainUtil):
                 get_packed_signature_for_approved_hash(owners=(self.safe,)),
             ],
         )
-        exec_message = {
+        exec_message: MultiSendSubTx = {
             "to": safe_b_address,
             "data": exec_data[2:],
             "operation": MultiSendOperation.CALL,
@@ -1729,112 +1685,42 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
+    def get_safe_b_native_transfer_messages(
+        self,
+        safe_b_address: str,
+        to: str,
+        amount: int,
+        nonce: t.Optional[int] = None,
+    ) -> t.Tuple[MultiSendSubTx, MultiSendSubTx]:
+        """Build the messages to withdraw native ETH from Safe B via this Safe (owner of Safe B)."""
+        return self.get_safe_b_exec_messages(
+            safe_b_address=safe_b_address,
+            txs=[{"to": to, "value": amount}],
+            nonce=nonce,
+        )
+
+    def get_safe_b_erc20_transfer_messages(
         self,
         safe_b_address: str,
         token: str,
         to: str,
         amount: int,
         nonce: t.Optional[int] = None,
-    ) -> t.Tuple[t.Dict, t.Dict]:
-        """
-        Build the two messages (Safe calls) to withdraw ERC20 from Safe B via this Safe (owner of Safe B).
-
-        Builds the messages to be settled by this Safe:
-        1) approveHash(inner_tx_hash)
-        2) execTransaction(...) to transfer ERC20 tokens
-
-        ``nonce`` is the Safe B nonce the inner tx hash is computed with;
-        ``None`` reads the current nonce on-chain.
-        """
-        safe_b_instance = registry_contracts.gnosis_safe.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=safe_b_address,
-        )
+    ) -> t.Tuple[MultiSendSubTx, MultiSendSubTx]:
+        """Build the messages to withdraw ERC20 from Safe B via this Safe (owner of Safe B)."""
         erc20_instance = registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
             contract_address=token,
         )
-
-        # Per-callsite normalization: this multisend call bypasses
-        # GnosisSafeTransaction.build() (the boundary), so the tx dict
-        # must be coerced to bytes here. See normalize_tx_data_to_bytes.
-        transfer_data = normalize_tx_data_to_bytes(
-            erc20_instance.encode_abi(
-                abi_element_identifier="transfer",
-                args=[to, amount],
-            )
+        transfer_data = erc20_instance.encode_abi(
+            abi_element_identifier="transfer",
+            args=[to, amount],
         )
-
-        txs = []
-        txs.append(
-            {
-                "to": token,
-                "data": transfer_data,
-                "operation": MultiSendOperation.CALL,
-                "value": 0,
-            }
+        return self.get_safe_b_exec_messages(
+            safe_b_address=safe_b_address,
+            txs=[{"to": token, "data": transfer_data}],
+            nonce=nonce,
         )
-
-        multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
-            self.chain_type
-        ]
-        multisend_tx = registry_contracts.multisend.get_multisend_tx(
-            ledger_api=self.ledger_api,
-            contract_address=multisend_address,
-            txs=txs,
-        )
-
-        # Compute inner Safe transaction hash.
-        # operation must match what execTransaction will use (DELEGATE_CALL),
-        # because the Safe hashes all parameters including operation to verify
-        # the approved hash.
-        safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
-            ledger_api=self.ledger_api,
-            contract_address=safe_b_address,
-            to_address=multisend_address,
-            value=multisend_tx["value"],
-            data=multisend_tx["data"],
-            operation=SafeOperation.DELEGATE_CALL.value,
-            safe_nonce=nonce,
-        ).get("tx_hash")
-
-        # Build approveHash message
-        approve_hash_data = safe_b_instance.encode_abi(
-            abi_element_identifier="approveHash",
-            args=[safe_tx_hash],
-        )
-        approve_hash_message = {
-            "to": safe_b_address,
-            "data": approve_hash_data[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-
-        # Build execTransaction message
-        exec_data = safe_b_instance.encode_abi(
-            abi_element_identifier="execTransaction",
-            args=[
-                multisend_address,
-                multisend_tx["value"],
-                multisend_tx["data"],
-                SafeOperation.DELEGATE_CALL.value,
-                0,  # safeTxGas
-                0,  # baseGas
-                0,  # gasPrice
-                ZERO_ADDRESS,  # gasToken
-                ZERO_ADDRESS,  # refundReceiver
-                get_packed_signature_for_approved_hash(owners=(self.safe,)),
-            ],
-        )
-        exec_message = {
-            "to": safe_b_address,
-            "data": exec_data[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-
-        return approve_hash_message, exec_message
 
     def get_terminate_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get terminate tx data."""
@@ -2010,7 +1896,7 @@ class EthSafeTxBuilder(_ChainUtil):
         self,
         safe_address: str,
         module_address: str,
-    ) -> t.Dict:
+    ) -> MultiSendSubTx:
         """Get enable module tx data"""
         self._patch()
         instance = registry_contracts.gnosis_safe.get_instance(
@@ -2096,139 +1982,6 @@ def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
         signatures += packed_signature
 
     return signatures
-
-
-def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
-    ledger_api: LedgerApi,
-    chain_type: ChainType,
-    service_id: int,
-    master_safe: str,
-) -> t.Tuple[Optional[str], Optional[t.Dict[str, t.Any]], Optional[str]]:
-    """Reuse multisig."""
-    _, multisig_address, _, threshold, *_ = get_service_info(
-        ledger_api=ledger_api,
-        chain_type=chain_type,
-        token_id=service_id,
-    )
-    if multisig_address == ZERO_ADDRESS:
-        return None, None, "Cannot reuse multisig, No previous deployment exist!"
-
-    multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
-        chain_type
-    ]
-    multisig_instance = registry_contracts.gnosis_safe.get_instance(
-        ledger_api=ledger_api,
-        contract_address=multisig_address,
-    )
-
-    # Verify if the service was terminated properly or not
-    old_owners = multisig_instance.functions.getOwners().call()
-    if len(old_owners) != 1 or master_safe not in old_owners:
-        return (
-            None,
-            None,
-            "Service was not terminated properly, the service owner should be the only owner of the safe",
-        )
-
-    # Build multisend tx to add new instances as owners
-    txs = []
-    new_owners = t.cast(
-        t.List[str],
-        get_agent_instances(
-            ledger_api=ledger_api,
-            chain_type=chain_type,
-            token_id=service_id,
-        ).get("agentInstances"),
-    )
-
-    for _owner in new_owners:
-        txs.append(
-            {
-                "to": multisig_address,
-                "data": normalize_tx_data_to_bytes(
-                    multisig_instance.encode_abi(
-                        abi_element_identifier="addOwnerWithThreshold",
-                        args=[_owner, 1],
-                    )
-                ),
-                "operation": MultiSendOperation.CALL,
-                "value": 0,
-            }
-        )
-
-    txs.append(
-        {
-            "to": multisig_address,
-            "data": normalize_tx_data_to_bytes(
-                multisig_instance.encode_abi(
-                    abi_element_identifier="removeOwner",
-                    args=[new_owners[0], master_safe, 1],
-                )
-            ),
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-    )
-
-    txs.append(
-        {
-            "to": multisig_address,
-            "data": normalize_tx_data_to_bytes(
-                multisig_instance.encode_abi(
-                    abi_element_identifier="changeThreshold",
-                    args=[threshold],
-                )
-            ),
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-    )
-
-    multisend_tx = registry_contracts.multisend.get_multisend_tx(
-        ledger_api=ledger_api,
-        contract_address=multisend_address,
-        txs=txs,
-    )
-    signature_bytes = get_packed_signature_for_approved_hash(owners=(master_safe,))
-
-    safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
-        ledger_api=ledger_api,
-        contract_address=multisig_address,
-        to_address=multisend_address,
-        value=multisend_tx["value"],
-        data=multisend_tx["data"],
-        operation=1,
-    ).get("tx_hash")
-    approve_hash_data = multisig_instance.encode_abi(
-        abi_element_identifier="approveHash",
-        args=[
-            safe_tx_hash,
-        ],
-    )
-    approve_hash_message = {
-        "to": multisig_address,
-        "data": approve_hash_data[2:],
-        "operation": MultiSendOperation.CALL,
-        "value": 0,
-    }
-
-    safe_exec_data = multisig_instance.encode_abi(
-        abi_element_identifier="execTransaction",
-        args=[
-            multisend_address,  # to address
-            multisend_tx["value"],  # value
-            multisend_tx["data"],  # data
-            1,  # operation
-            0,  # safe tx gas
-            0,  # bas gas
-            0,  # safe gas price
-            ZERO_ADDRESS,  # gas token
-            ZERO_ADDRESS,  # refund receiver
-            signature_bytes,  # signatures
-        ],
-    )
-    payload = multisig_address + safe_exec_data[2:]
-    return payload, approve_hash_message, None
 
 
 def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover

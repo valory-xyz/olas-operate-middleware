@@ -30,6 +30,7 @@ import pytest
 import requests
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
+from operate.exceptions import RecoveryModuleNotEnabledError
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.quickstart.analyse_logs import (
     analyse_logs,
@@ -44,6 +45,7 @@ from operate.quickstart.run_service import (
     CUSTOM_PROGRAM_ID,
     DEPRECATED_QS_STAKING_PROGRAMS,
     _ask_funds_from_requirements,
+    _deploy_onchain_or_exit,
     _deprecated_program_warning,
     _maybe_create_master_eoa,
     ask_confirm_password,
@@ -856,6 +858,36 @@ class TestMaybeCreateMasterEoa:
 # ============================================================
 # Tests for operate/quickstart/analyse_logs.py
 # ============================================================
+
+
+class TestDeployOnchainOrExit:
+    """Tests for _deploy_onchain_or_exit."""
+
+    def test_refused_deploy_prints_the_message_and_exits_1(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A refused reuse ends the quickstart with status 1 and the actionable message."""
+        manager = MagicMock()
+        manager.deploy_service_onchain_from_safe.side_effect = (
+            RecoveryModuleNotEnabledError("enable the module")
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            _deploy_onchain_or_exit(manager, "sc-1")
+
+        assert exc_info.value.code == 1
+        assert "enable the module" in capsys.readouterr().out
+        manager.logger.error.assert_called_once()
+
+    def test_successful_deploy_returns(self) -> None:
+        """A deploy that goes through does not exit."""
+        manager = MagicMock()
+
+        _deploy_onchain_or_exit(manager, "sc-1")
+
+        manager.deploy_service_onchain_from_safe.assert_called_once_with(
+            service_config_id="sc-1"
+        )
 
 
 class TestFindBuildDirectory:
