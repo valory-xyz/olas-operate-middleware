@@ -49,6 +49,7 @@ from operate.ledger.profiles import (
     ERC20_TOKENS,
     ERC20_TOKENS_BY_CHAIN_ID,
     EXPLORER_URL,
+    NATIVE_ERC20_CHAINS,
     OLAS,
     PUSD,
     STAKING,
@@ -306,6 +307,24 @@ class TestPUSDRegistration:
         """The pUSD address must appear in ERC20_TOKENS_BY_CHAIN_ID for the Polygon chain ID."""
         polygon_id = Chain.POLYGON.id
         assert PUSD_ADDRESS in ERC20_TOKENS_BY_CHAIN_ID[polygon_id]
+
+
+class TestNativeERC20Chains:
+    """Celo's wrapped native is native CELO's own ERC-20 interface."""
+
+    def test_celo_dual_token_not_listed_as_erc20(self) -> None:
+        """Token lists must not hold native CELO a second time as an ERC-20."""
+        celo_erc20 = WRAPPED_NATIVE_ASSET[Chain.CELO]
+        assert Chain.CELO in NATIVE_ERC20_CHAINS
+        assert Chain.CELO not in ERC20_TOKENS["WRAPPED_NATIVE"]
+        assert celo_erc20 not in ERC20_TOKENS_BY_CHAIN_ID[Chain.CELO.id]
+
+    def test_other_wrapped_natives_still_listed(self) -> None:
+        """Separate wrapped-native tokens stay in the token lists."""
+        assert (
+            ERC20_TOKENS["WRAPPED_NATIVE"][Chain.GNOSIS]
+            == WRAPPED_NATIVE_ASSET[Chain.GNOSIS]
+        )
 
 
 USDG_ADDRESSES = {

@@ -88,7 +88,7 @@ from operate.ledger import (
     get_default_rpc,
     make_chain_ledger_api,
 )
-from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
+from operate.ledger.profiles import NATIVE_ERC20_CHAINS, WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     AchievementNotification,
@@ -1554,6 +1554,8 @@ class Service(LocalResource):
         if unify_wrapped_native_tokens:
             for chain_str, addresses in absolute_balances.items():
                 chain = Chain.from_string(chain_str)
+                if chain in NATIVE_ERC20_CHAINS:
+                    continue
                 wrapped_asset = WRAPPED_NATIVE_ASSET[chain]
                 for address, assets in addresses.items():
                     if ZERO_ADDRESS in assets or wrapped_asset in assets:

@@ -74,6 +74,7 @@ from operate.ledger.profiles import (
     OLAS,
     PUSD,
     USDC,
+    WRAPPED_NATIVE_ASSET,
 )
 from operate.operate_types import Chain
 from operate.serialization import BigInt
@@ -1585,6 +1586,13 @@ class TestTargets:
         }
         with pytest.raises(FundingRunError):
             env.manager.create_run(**params)
+
+    def test_celo_native_erc20_face_is_not_a_deposit_token(self) -> None:
+        """Native CELO's ERC-20 face is the same coins as native: not a second token."""
+        with pytest.raises(FundingRunError, match="Unsupported deposit tokens"):
+            FundingRunManager._deposit_targets(  # pylint: disable=protected-access
+                Chain.CELO, {WRAPPED_NATIVE_ASSET[Chain.CELO]: 1}
+            )
 
     @pytest.mark.parametrize("service_config_id", ["../../keys", "sc 1", 123])
     def test_unsafe_service_config_id_is_rejected_before_any_lookup(

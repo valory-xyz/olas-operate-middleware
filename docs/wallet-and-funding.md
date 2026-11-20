@@ -233,7 +233,7 @@ with no user prompt. Custody properties:
   accepts calls only from itself
   or the EntryPoint, and only with the Master EOA's own signature.
 
-Chains without a Circle Paymaster (Gnosis, Robinhood) accept native sources
+Chains without a Circle Paymaster (Celo, Gnosis, Robinhood) accept native sources
 only, which pay their own gas.
 
 ## Health and funding relationship
