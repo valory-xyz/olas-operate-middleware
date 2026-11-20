@@ -1,6 +1,6 @@
 [project]
 name = "olas-operate-middleware"
-version = "0.15.53"
+version = "0.15.54"
 description = ""
 license = "Apache-2.0"
 authors = [
@@ -15,7 +15,7 @@ dependencies = [
     "open-aea-ledger-ethereum>=2.2.10,<3",
     "open-aea-cli-ipfs>=2.2.10,<3",
     "clea==0.1.0rc4",
-    "fastapi>=0.120,<0.121",
+    "fastapi>=0.120,<1",
     "uvicorn>=0.30",
     "psutil>=5.9.8,<6",
     "deepdiff>=8.6.2,<9",

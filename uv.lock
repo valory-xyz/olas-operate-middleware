@@ -1846,7 +1846,7 @@ wheels = [
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.15.53"
+version = "0.15.54"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -1890,7 +1890,7 @@ requires-dist = [
     { name = "clea", specifier = "==0.1.0rc4" },
     { name = "cryptography", specifier = ">=46.0.7,<47" },
     { name = "deepdiff", specifier = ">=8.6.2,<9" },
-    { name = "fastapi", specifier = ">=0.120,<0.121" },
+    { name = "fastapi", specifier = ">=0.120,<1" },
     { name = "flask", specifier = ">=3.0,<4" },
     { name = "halo", specifier = "==0.0.31" },
     { name = "open-aea-cli-ipfs", specifier = ">=2.2.10,<3" },
