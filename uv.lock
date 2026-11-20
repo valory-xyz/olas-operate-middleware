@@ -1846,7 +1846,7 @@ wheels = [
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.15.53"
+version = "0.15.54"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -1890,7 +1890,7 @@ requires-dist = [
     { name = "clea", specifier = "==0.1.0rc4" },
     { name = "cryptography", specifier = ">=46.0.7,<47" },
     { name = "deepdiff", specifier = ">=8.6.2,<9" },
-    { name = "fastapi", specifier = ">=0.120,<0.121" },
+    { name = "fastapi", specifier = ">=0.120,<1" },
     { name = "flask", specifier = ">=3.0,<4" },
     { name = "halo", specifier = "==0.0.31" },
     { name = "open-aea-cli-ipfs", specifier = ">=2.2.10,<3" },
@@ -1912,7 +1912,7 @@ development = [
     { name = "pytest-recording", specifier = ">=0.13.4,<0.14" },
     { name = "pytest-xdist", specifier = ">=3.8.0,<4" },
     { name = "requests-mock", specifier = ">=1.12.1,<2" },
-    { name = "tomte", extras = ["cli"], specifier = "==0.7.0" },
+    { name = "tomte", extras = ["cli"], specifier = "==0.7.4" },
     { name = "viztracer", specifier = ">=1.1.1,<2" },
     { name = "yappi", specifier = ">=1.6.10,<2" },
 ]
@@ -3067,11 +3067,11 @@ wheels = [
 
 [[package]]
 name = "tomte"
-version = "0.7.0"
+version = "0.7.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f4/aa/da37ab224e5c244df1814da6a33c48a7f17c4a26675b5beadff66412ad20/tomte-0.7.0.tar.gz", hash = "sha256:863e2144aefb13dd988b1c6650167469a82945aa445320d4a4ade41b2edf75e5", size = 45004, upload-time = "2026-05-01T14:56:29.879Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/05/7ec88bed44e641f0044546d0f76dac8f94f9f91eec1d6273ad5ec085db8a/tomte-0.7.4.tar.gz", hash = "sha256:6ad5df591f1b5252ed47103f671594feec9f3db504de3cafbc8a33a84168355c", size = 49345, upload-time = "2026-11-18T11:56:45.798Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/17/2c04fb63831600594ee173243ea470abcab04a325387f88822fbb720eb05/tomte-0.7.0-py3-none-any.whl", hash = "sha256:b127c7a14ca07a89d5fbb2c82b9d9ba581f13aee4f082a98261c794e589e1ab4", size = 53070, upload-time = "2026-05-01T14:56:28.539Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/b2/8657ba25887a5ba281ca9803be84694b712d5672d11487674ddfab77997f/tomte-0.7.4-py3-none-any.whl", hash = "sha256:1a7634141db7ed5fd21728b036b17e741509c8eb16b0d64a097195c647ab345e", size = 57584, upload-time = "2026-11-18T11:56:44.735Z" },
 ]
 
 [package.optional-dependencies]
