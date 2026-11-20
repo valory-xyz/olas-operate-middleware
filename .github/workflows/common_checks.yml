@@ -35,7 +35,7 @@ jobs:
         sudo apt-get update --fix-missing
         sudo apt-get autoremove
         sudo apt-get autoclean
-        uv pip install --system tomte[tox,cli]==0.7.0 tox-uv
+        uv pip install --system tomte[tox,cli]==0.7.4 tox-uv
         uv pip install --system --upgrade setuptools
     - name: All pre-test checks
       run: |
@@ -74,7 +74,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          uv pip install --system tomte[tox,cli]==0.7.0 tox-uv
+          uv pip install --system tomte[tox,cli]==0.7.4 tox-uv
           tox -e unit-tests
 
   coverage:
@@ -94,7 +94,7 @@ jobs:
 
       - name: Run unit tests with coverage
         run: |
-          uv pip install --system tomte[tox,cli]==0.7.0 tox-uv
+          uv pip install --system tomte[tox,cli]==0.7.4 tox-uv
           tox -e unit-tests-coverage
 
       - name: Upload coverage to Codecov
@@ -143,7 +143,7 @@ jobs:
         env:
           PYTEST_XDIST_WORKERS: "8"
         run: |
-          uv pip install --system tomte[tox,cli]==0.7.0 tox-uv
+          uv pip install --system tomte[tox,cli]==0.7.4 tox-uv
           tox -e integration-tests
 
   all-checks-passed:

@@ -34,7 +34,7 @@ operate = "operate.cli:main"
 
 [dependency-groups]
 development = [
-    "tomte[cli]==0.7.0",
+    "tomte[cli]==0.7.4",
     "build==1.2.2.post1",
     "yappi>=1.6.10,<2",
     "viztracer>=1.1.1,<2",
