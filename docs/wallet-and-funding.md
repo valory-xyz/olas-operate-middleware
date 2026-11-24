@@ -165,7 +165,8 @@ end up; quoting, monitoring and execution are shared:
    run). When the source
    chain is the destination chain, the targets were already netted against
    that same balance, so the part the netting used (`eoa_used` from
-   `FundingManager.destination_targets`, never less than the native reserve)
+   `FundingManager.destination_targets`; for a native source, never less
+   than the Master EOA reserve)
    is excluded; in `deposit` runs the whole balance at run creation is, and in
    `signer_gas` runs the whole native balance. Source-token funds the Master EOA held
    before the run count toward the quote but are not a deposit

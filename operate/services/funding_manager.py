@@ -931,8 +931,8 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
                     if master_safe == MASTER_SAFE_PLACEHOLDER:
-                        remaining = min(
-                            amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0)
+                        remaining = self._eoa_retained(
+                            chain, asset, amount
                         )  # When transferring, the Master Safe will be already created, that is why we are only retaining DEFAULT_EOA_TOPUPS
                         excess = amount - remaining
                     else:
@@ -947,6 +947,11 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     ] = remaining
 
         return excess_balance, remaining_balance
+
+    @staticmethod
+    def _eoa_retained(chain: Chain, asset: str, amount: int) -> int:
+        """Part of a Master EOA balance it keeps as its own reserve."""
+        return min(amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0))
 
     @staticmethod
     def _split_critical_eoa_shortfalls(
@@ -1307,8 +1312,9 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             "agent_funding_in_progress": funding_in_progress,
         }, eoa_used
 
-    @staticmethod
+    @classmethod
     def _eoa_used(
+        cls,
         chain: Chain,
         eoa_balances: ChainAmounts,
         excess_balances: ChainAmounts,
@@ -1324,9 +1330,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         used: t.Dict[str, int] = defaultdict(int)
         for assets in eoa_balances.get(chain_str, {}).values():
             for asset, amount in assets.items():
-                used[asset] += min(
-                    int(amount), int(DEFAULT_EOA_TOPUPS[chain].get(asset, 0))
-                )
+                used[asset] += int(cls._eoa_retained(chain, asset, amount))
         safe_thresholds = master_safe_thresholds.get(chain_str, {})
         for safe, assets in excess_balances.get(chain_str, {}).items():
             for asset, excess in assets.items():

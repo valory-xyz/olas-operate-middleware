@@ -1019,11 +1019,7 @@ class TestExactPath:
         """A service needing only pUSD on Polygon is funded with pUSD into the Safe."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
         env.funding_manager.destination_targets.return_value = DestinationTargets(
-            {
-                POLYGON_PUSD: 10,
-                NATIVE: 0,
-            },
-            {},
+            {POLYGON_PUSD: 10, NATIVE: 0}, {}
         )
 
         run = env.manager.create_run(

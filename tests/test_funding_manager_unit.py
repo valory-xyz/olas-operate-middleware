@@ -1514,7 +1514,7 @@ class TestDestinationTargetsEoaUsed:
 
     _RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][ZERO_ADDRESS])
 
-    def _targets(self, master_safe: str, eoa_native: int) -> t.Any:
+    def _targets(self, master_safe: str, eoa_native: int, eoa_erc20: int = 0) -> t.Any:
         manager = _make_manager()
         service = MagicMock()
         service.home_chain = "polygon"
@@ -1556,7 +1556,7 @@ class TestDestinationTargetsEoaUsed:
                             "polygon": {
                                 EOA_ADDR: {
                                     ZERO_ADDRESS: BigInt(eoa_native),
-                                    ERC20_TOKEN: BigInt(0),
+                                    ERC20_TOKEN: BigInt(eoa_erc20),
                                 }
                             },
                             # Another chain's balance never counts.
@@ -1599,6 +1599,21 @@ class TestDestinationTargetsEoaUsed:
         result = self._targets(SAFE_ADDR, self._RESERVE + 1000)
 
         assert result.eoa_used == {ZERO_ADDRESS: self._RESERVE, ERC20_TOKEN: 0}
+
+    @pytest.mark.parametrize(("eoa_erc20", "used"), [(30, 30), (40, 40), (100, 40)])
+    def test_without_safe_erc20_excess_is_capped_at_the_safe_threshold(
+        self, eoa_erc20: int, used: int
+    ) -> None:
+        """No Safe: an ERC20 has no reserve, so it is used up to its Safe threshold (40)."""
+        result = self._targets(MASTER_SAFE_PLACEHOLDER, self._RESERVE, eoa_erc20)
+
+        assert result.eoa_used[ERC20_TOKEN] == used
+
+    def test_with_safe_erc20_balance_is_not_used(self) -> None:
+        """With a Safe, an ERC20 held by the Master EOA covers nothing."""
+        result = self._targets(SAFE_ADDR, self._RESERVE, eoa_erc20=50)
+
+        assert result.eoa_used[ERC20_TOKEN] == 0
 
     def test_public_funding_requirements_is_unchanged(self) -> None:
         """funding_requirements keeps returning only the requirements dict."""
