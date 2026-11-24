@@ -1604,7 +1604,7 @@ class TestDestinationTargetsEoaUsed:
         """funding_requirements keeps returning only the requirements dict."""
         manager = _make_manager()
         service = MagicMock()
-        requirements = {"refill_requirements": {}}
+        requirements: t.Dict = {"refill_requirements": {}}
         with patch.object(
             manager, "_funding_requirements", return_value=(requirements, {})
         ):
