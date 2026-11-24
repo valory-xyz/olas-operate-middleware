@@ -95,6 +95,15 @@ class FundingInProgressError(RuntimeError):
     """Raised when an attempt is made to fund a service that is already being funded."""
 
 
+class DestinationTargets(t.NamedTuple):
+    """What a service still needs on its home chain, and what already covers it."""
+
+    targets: t.Dict[str, int]
+    """Per-token net shortfall on the home chain (zero entry = covered)."""
+    eoa_used: t.Dict[str, int]
+    """Per-token home-chain Master EOA balance the requirements counted."""
+
+
 class FundingManager:  # pylint: disable=too-many-instance-attributes
     """FundingManager"""
 
@@ -1110,6 +1119,12 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
 
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""
+        return self._funding_requirements(service)[0]
+
+    def _funding_requirements(  # pylint: disable=too-many-locals
+        self, service: Service
+    ) -> t.Tuple[t.Dict, t.Dict[str, int]]:
+        """Funding requirements, and the home-chain Master EOA balance they counted."""
         balances: ChainAmounts
         protocol_bonded_assets: ChainAmounts
         protocol_asset_requirements: ChainAmounts
@@ -1272,6 +1287,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         ):
             allow_start_agent = False
 
+        eoa_used = self._eoa_used(
+            Chain(service.home_chain),
+            master_eoa_balances,
+            excess_master_eoa_balances,
+            master_safe_thresholds,
+        )
+
         return {
             "balances": balances.json,
             "bonded_assets": protocol_bonded_assets.json,
@@ -1283,9 +1305,36 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             "agent_funding_requests": funding_requests.json,
             "agent_funding_requests_cooldown": funding_requests_cooldown,
             "agent_funding_in_progress": funding_in_progress,
-        }
+        }, eoa_used
 
-    def destination_targets(self, service: Service) -> t.Dict[str, int]:
+    @staticmethod
+    def _eoa_used(
+        chain: Chain,
+        eoa_balances: ChainAmounts,
+        excess_balances: ChainAmounts,
+        master_safe_thresholds: ChainAmounts,
+    ) -> t.Dict[str, int]:
+        """Master EOA balance on `chain` that the requirements counted, per token.
+
+        The EOA covers its own reserve; on a chain without a Master Safe its
+        excess also stands in for the Safe balance, but only up to the Safe
+        threshold.
+        """
+        chain_str = chain.value
+        used: t.Dict[str, int] = defaultdict(int)
+        for assets in eoa_balances.get(chain_str, {}).values():
+            for asset, amount in assets.items():
+                used[asset] += min(
+                    int(amount), int(DEFAULT_EOA_TOPUPS[chain].get(asset, 0))
+                )
+        safe_thresholds = master_safe_thresholds.get(chain_str, {})
+        for safe, assets in excess_balances.get(chain_str, {}).items():
+            for asset, excess in assets.items():
+                threshold = int(safe_thresholds.get(safe, {}).get(asset, 0))
+                used[asset] += min(int(excess), threshold)
+        return dict(used)
+
+    def destination_targets(self, service: Service) -> DestinationTargets:
         """Per-token net shortfall on the service's home chain.
 
         Folds the Master Safe and Master EOA entries of `refill_requirements`
@@ -1293,12 +1342,14 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         one target per token. Already net of balances. A zero entry marks a
         token whose balances were netted and already cover it.
         """
-        refill_requirements = self.funding_requirements(service)["refill_requirements"]
+        requirements, eoa_used = self._funding_requirements(service)
         targets: t.Dict[str, int] = defaultdict(int)
-        for assets in refill_requirements.get(service.home_chain, {}).values():
+        for assets in (
+            requirements["refill_requirements"].get(service.home_chain, {}).values()
+        ):
             for asset, amount in assets.items():
                 targets[asset] += int(amount)
-        return dict(targets)
+        return DestinationTargets(dict(targets), eoa_used)
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
