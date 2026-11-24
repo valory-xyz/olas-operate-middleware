@@ -614,18 +614,15 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
         )
         if run.mode == FundingRunMode.DEPOSIT:
             return BigInt(balance)
-        used = min(
-            balance,
-            sum(
-                int(amount)
-                for token, amount in netted.items()
-                if token.lower() == run.source_token.lower()
-            ),
+        used = sum(
+            int(amount)
+            for token, amount in netted.items()
+            if token.lower() == run.source_token.lower()
         )
         if run.source_token == NATIVE:
             # The reserve is never a deposit; the quote asks for its shortfall.
-            used = max(used, min(balance, int(DEFAULT_EOA_TOPUPS[source][NATIVE])))
-        return BigInt(used)
+            used = max(used, int(DEFAULT_EOA_TOPUPS[source][NATIVE]))
+        return BigInt(min(balance, used))
 
     def cancel(self, run_id: str) -> FundingRun:
         """Cancel a run that is waiting, or FAILED with nothing still in flight.
