@@ -165,7 +165,8 @@ end up; quoting, monitoring and execution are shared:
    run). When the source
    chain is the destination chain, the targets were already netted against
    that same balance, so the part of it at run creation that must not count
-   is excluded: in `onboard` runs, what the netting used (`eoa_used` from
+   is excluded: on an exact `onboard`/`deposit` run, the whole Master Safe
+   balance; otherwise, in `onboard` runs, what the netting used (`eoa_used` from
    `FundingManager.destination_targets`; for a native source, at least
    whatever of the Master EOA reserve it holds); in `deposit` runs, the whole
    balance; in `signer_gas` runs, the whole native balance. Source-token funds the Master EOA held

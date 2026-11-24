@@ -1346,10 +1346,9 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         one target per token.
         """
         requirements, eoa_used = self._funding_requirements(service)
+        refill_requirements = requirements["refill_requirements"]
         targets: t.Dict[str, int] = defaultdict(int)
-        for assets in (
-            requirements["refill_requirements"].get(service.home_chain, {}).values()
-        ):
+        for assets in refill_requirements.get(service.home_chain, {}).values():
             for asset, amount in assets.items():
                 targets[asset] += int(amount)
         return DestinationTargets(dict(targets), eoa_used)
