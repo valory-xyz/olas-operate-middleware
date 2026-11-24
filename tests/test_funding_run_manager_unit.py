@@ -3017,6 +3017,31 @@ class TestEdgeCases:
         assert run.receive_baseline == 20
         assert run.prior_received == 10
 
+    def test_same_chain_onboard_baseline_never_exceeds_the_balance(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: a netted amount above the balance read still counts deposits."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_USDC: 0, POLYGON_OLAS: 5}, {POLYGON_USDC: 50}
+        )
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=POLYGON_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+        assert run.receive_baseline == 30
+        assert run.prior_received == 0
+
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 37
+        env.manager.tick()
+
+        assert int(env.reload(run).received_amount) == 7
+
     def test_same_chain_deposit_baseline_is_the_full_balance(
         self, tmp_path: Path
     ) -> None:

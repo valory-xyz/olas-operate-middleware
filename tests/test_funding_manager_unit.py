@@ -1558,7 +1558,9 @@ class TestDestinationTargetsEoaUsed:
                                     ZERO_ADDRESS: BigInt(eoa_native),
                                     ERC20_TOKEN: BigInt(0),
                                 }
-                            }
+                            },
+                            # Another chain's balance never counts.
+                            "gnosis": {EOA_ADDR: {ZERO_ADDRESS: BigInt(10**21)}},
                         }
                     )
                 ),

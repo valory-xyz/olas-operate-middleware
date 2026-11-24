@@ -1335,12 +1335,11 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         return dict(used)
 
     def destination_targets(self, service: Service) -> DestinationTargets:
-        """Per-token net shortfall on the service's home chain.
+        """Net shortfall on the home chain, and the Master EOA balance it netted.
 
         Folds the Master Safe and Master EOA entries of `refill_requirements`
         (placeholders included, so it also works before the Safe exists) into
-        one target per token. Already net of balances. A zero entry marks a
-        token whose balances were netted and already cover it.
+        one target per token.
         """
         requirements, eoa_used = self._funding_requirements(service)
         targets: t.Dict[str, int] = defaultdict(int)
