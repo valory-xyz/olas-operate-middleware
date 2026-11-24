@@ -164,8 +164,10 @@ end up; quoting, monitoring and execution are shared:
    bookkeeping (the Master Safe balance on an exact `onboard`/`deposit`
    run). When the source
    chain is the destination chain, the targets were already netted against
-   that same balance, so only its growth above the balance at run creation
-   counts. Source-token funds the Master EOA held
+   that same balance, so the part the netting used (`eoa_used` from
+   `FundingManager.destination_targets`, never less than the native reserve)
+   is excluded; in `deposit` and `signer_gas` runs the whole balance at run
+   creation is. Source-token funds the Master EOA held
    before the run count toward the quote but are not a deposit
    (`prior_received`): once a deposit arrives, a waiting run can no longer be
    cancelled or replaced. Once the deposit covers the quote without its
