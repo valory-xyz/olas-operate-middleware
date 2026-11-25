@@ -1320,12 +1320,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         excess_balances: ChainAmounts,
         master_safe_thresholds: ChainAmounts,
     ) -> t.Dict[str, int]:
-        """Master EOA balance on `chain` that the requirements counted, per token.
-
-        The EOA covers its own reserve; on a chain without a Master Safe its
-        excess also stands in for the Safe balance, but only up to the Safe
-        threshold.
-        """
+        """Master EOA balance on `chain` that the requirements counted, per token."""
         chain_str = chain.value
         used: t.Dict[str, int] = defaultdict(int)
         for assets in eoa_balances.get(chain_str, {}).values():
@@ -1339,7 +1334,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         return dict(used)
 
     def destination_targets(self, service: Service) -> DestinationTargets:
-        """Net shortfall on the home chain, and the Master EOA balance it netted.
+        """Return the service's `DestinationTargets`.
 
         Folds the Master Safe and Master EOA entries of `refill_requirements`
         (placeholders included, so it also works before the Safe exists) into

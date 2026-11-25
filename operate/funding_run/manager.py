@@ -526,7 +526,6 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
         reserve = int(DEFAULT_EOA_TOPUPS[destination][NATIVE])
         balance = int(self._wallet().get_balance(destination, NATIVE, from_safe=False))
-        # The whole balance is netted against the reserve.
         return (
             {NATIVE: reserve},
             {NATIVE: max(0, reserve - balance)},
@@ -599,8 +598,7 @@ class FundingRunManager:  # pylint: disable=too-many-instance-attributes,too-man
 
         Only same-chain runs need one: "received" is measured on the wallet's
         own balance, part of which was netted against the targets already or,
-        in deposit mode, must not pay for the deposit. The rest is held
-        surplus and counts toward the quote.
+        in deposit mode, must not pay for the deposit.
         """
         if run.source_chain != run.destination_chain:
             return None
