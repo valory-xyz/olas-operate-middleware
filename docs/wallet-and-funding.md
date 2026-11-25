@@ -160,21 +160,23 @@ end up; quoting, monitoring and execution are shared:
    which deposits to the Master EOA.
 2. **Receive**: the user sends the quoted amount to the Master EOA on the
    source chain, in one transfer or several. "Received" is derived from the
-   current Master EOA balance, so partial deposits and restarts need no
-   bookkeeping (the Master Safe balance on an exact `onboard`/`deposit`
-   run). When the source
-   chain is the destination chain, the targets were already netted against
-   that same balance, so the part of it at run creation that must not count
-   is excluded: on an exact `onboard`/`deposit` run, the whole Master Safe
-   balance; otherwise, in `onboard` runs, what the netting used (`eoa_used` from
-   `FundingManager.destination_targets`; for a native source, at least
-   whatever of the Master EOA reserve it holds); in `deposit` runs, the whole
-   balance; in `signer_gas` runs, the whole native balance. Source-token funds the Master EOA held
-   before the run count toward the quote but are not a deposit
-   (`prior_received`): once a deposit arrives, a waiting run can no longer be
-   cancelled or replaced. Once the deposit covers the quote without its
-   buffer, the run re-quotes once more and freezes, unless the deposit no
-   longer covers that fresh quote without its buffer.
+   current Master EOA balance (the Master Safe balance on an exact
+   `onboard`/`deposit` run), so partial deposits and restarts need no
+   bookkeeping. On a same-chain run the targets were already netted against
+   that balance, so part of the balance at run creation does not count:
+   - exact `onboard`/`deposit`: the whole Master Safe balance.
+   - `onboard`: what the netting used (`eoa_used` from
+     `FundingManager.destination_targets`); for a native source, at least
+     the Master EOA reserve it holds.
+   - `deposit`: the whole Master EOA balance.
+   - `signer_gas`: the whole native Master EOA balance.
+
+   The rest of the source-token balance held before the run counts toward
+   the quote but is not a deposit (`prior_received`). Once a deposit arrives,
+   a waiting run can no longer be cancelled or replaced. Once the deposit
+   covers the quote without its buffer, the run re-quotes once more and
+   freezes, unless the deposit no longer covers that fresh quote without its
+   buffer.
 3. **Source leg**, **swaps** and **Safe create + transfer** (everything above
    the Master EOA reserve moves to the Master Safe), then, for USDC sources,
    **delegation clearing**. Before the source leg is sent, the request that
