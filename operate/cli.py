@@ -1811,7 +1811,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.CONFLICT,
             )
         except RetiredStakingProgramError as e:
-            logger.error(f"Deploy refused: {e}")
+            logger.error(f"Deploy refused for {safe_id}: {e}")
             return JSONResponse(
                 content={"error": str(e)},
                 status_code=HTTPStatus.CONFLICT,

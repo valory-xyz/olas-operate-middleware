@@ -634,6 +634,11 @@ def get_staking_contract(
     )
 
 
+def has_retired_staking_programs(chain: t.Union[Chain, str]) -> bool:
+    """Whether any program on this chain is retired."""
+    return bool(RETIRED_STAKING_PROGRAMS.get(Chain(chain)))
+
+
 def is_retired_staking_program(
     chain: t.Union[Chain, str], staking_program_id: t.Optional[str]
 ) -> bool:

@@ -74,7 +74,7 @@ class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
 
 
 class RetiredStakingProgramError(Exception):
-    """A deploy would keep the service staked on a retired staking program."""
+    """A staked deploy would use a retired staking program, either the current one or the target one."""
 
     def __init__(self, staking_program_id: str) -> None:
         """Initialize the error."""

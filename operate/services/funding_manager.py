@@ -87,7 +87,7 @@ _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 # nested Gnosis Safe execTransaction calls; this fallback is applied instead.
 _GAS_PER_SAFE_B_TRANSFER = 500_000
 
-# Services on a retired staking program are checked for unstaking this often.
+# A minimum staking period lasts days, so checking retired programs more often only adds RPC load.
 RETIRED_STAKING_CHECK_INTERVAL_SECONDS = 600
 
 if t.TYPE_CHECKING:  # pragma: no cover

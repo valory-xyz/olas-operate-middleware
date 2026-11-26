@@ -60,6 +60,7 @@ from operate.ledger.profiles import (
     get_asset_name,
     get_asset_symbol,
     get_staking_contract,
+    has_retired_staking_programs,
     is_retired_staking_program,
     uses_decoupled_activity,
 )
@@ -234,6 +235,78 @@ class TestGetStakingContract:
 
 class TestRetiredStakingPrograms:
     """Tests for RETIRED_STAKING_PROGRAMS and is_retired_staking_program."""
+
+    def test_retired_list_is_exactly_the_scoped_one(self) -> None:
+        """Pins all 41 ids; the app's `retired` flag must hold the same ones."""
+        assert RETIRED_STAKING_PROGRAMS == {
+            Chain.GNOSIS: frozenset(
+                {
+                    "pearl_alpha",
+                    "pearl_beta",
+                    "pearl_beta_2",
+                    "pearl_beta_3",
+                    "pearl_beta_4",
+                    "pearl_beta_5",
+                    "pearl_beta_6",
+                    "pearl_beta_mech_marketplace",
+                    "pearl_beta_mech_marketplace_1",
+                    "pearl_beta_mech_marketplace_2",
+                    "pearl_beta_mech_marketplace_3",
+                    "pearl_beta_mech_marketplace_4",
+                    "pearl_beta_mech_marketplace_5",
+                    "pearl_beta_mech_marketplace_6",
+                    "pearl_beta_mech_marketplace_7",
+                    "pearl_beta_mech_marketplace_8",
+                    "omenstrat_i",
+                    "omenstrat_ii",
+                    "omenstrat_iii",
+                    "omenstrat_iv",
+                    "omenstrat_v",
+                    "omenstrat_vi",
+                    "omenstrat_vii",
+                }
+            ),
+            Chain.POLYGON: frozenset(
+                {
+                    "polygon_beta_1",
+                    "polygon_beta_2",
+                    "polygon_beta_3",
+                    "polystrat_i",
+                    "polystrat_ii",
+                    "polystrat_iii",
+                    "polystrat_iv",
+                    "polystrat_v",
+                    "polystrat_vi",
+                }
+            ),
+            Chain.OPTIMISM: frozenset(
+                {
+                    "optimus_alpha_2",
+                    "optimus_alpha_3",
+                    "optimus_alpha_4",
+                    "optimus_i",
+                    "optimus_ii",
+                    "optimus_iii",
+                }
+            ),
+            Chain.BASE: frozenset({"basius_i", "basius_ii", "basius_iii"}),
+        }
+        assert sum(len(ids) for ids in RETIRED_STAKING_PROGRAMS.values()) == 41
+
+    @pytest.mark.parametrize(
+        ("chain", "expected"),
+        [
+            (Chain.GNOSIS, True),
+            ("polygon", True),
+            (Chain.MODE, False),
+            (Chain.ETHEREUM, False),
+        ],
+    )
+    def test_has_retired_staking_programs(
+        self, chain: t.Union[Chain, str], expected: bool
+    ) -> None:
+        """Only chains with a retired program report one."""
+        assert has_retired_staking_programs(chain) is expected
 
     def test_retired_ids_are_real_programs(self) -> None:
         """Every retired id is a registered program on its chain."""

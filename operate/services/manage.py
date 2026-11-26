@@ -67,8 +67,8 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_PRIORITY_MECH,
     OLAS,
-    RETIRED_STAKING_PROGRAMS,
     get_staking_contract,
+    has_retired_staking_programs,
     is_retired_staking_program,
     uses_decoupled_activity,
 )
@@ -2159,7 +2159,7 @@ class ServiceManager:
 
     def _unstake_from_retired_program(self, service: Service, chain: str) -> None:
         """Unstake the service on this chain if it sits on a retired program."""
-        if Chain(chain) not in RETIRED_STAKING_PROGRAMS:
+        if not has_retired_staking_programs(chain):
             return
 
         current_staking_program = self._get_current_staking_program(service, chain)

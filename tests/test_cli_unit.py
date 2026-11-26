@@ -2001,7 +2001,7 @@ class TestServiceRoutes:
             }
 
     def test_deploy_service_retired_staking_program(self) -> None:
-        """Deploy returns 409 naming the retired program, and runs no healthcheck."""
+        """Deploy returns 409 naming the retired program, before pausing anything or deploying."""
         m = self._basic_with_password()
         m.service_manager.return_value.exists.return_value = True
         m.service_manager.return_value.refuse_retired_staking_programs.side_effect = (
@@ -2016,7 +2016,6 @@ class TestServiceRoutes:
                 pauses_after = validate_services.call_count
             assert resp.status_code == HTTPStatus.CONFLICT
             assert resp.json() == {"error": "Staking program omenstrat_iii is retired."}
-            # Refused before pausing the running agents and before any deploy.
             assert pauses_after == pauses_before
             m.service_manager.return_value.deploy_service_onchain_from_safe.assert_not_called()
 

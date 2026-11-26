@@ -51,6 +51,7 @@ from operate.quickstart.run_service import (
     _deploy_onchain_or_exit,
     _deprecated_program_warning,
     _maybe_create_master_eoa,
+    _refuse_retired_or_exit,
     ask_confirm_password,
     ask_password_if_needed,
     get_service,
@@ -861,6 +862,40 @@ class TestMaybeCreateMasterEoa:
 # ============================================================
 # Tests for operate/quickstart/analyse_logs.py
 # ============================================================
+
+
+class TestRefuseRetiredOrExit:
+    """Tests for _refuse_retired_or_exit, run before any funding."""
+
+    def test_retired_program_exits_1_naming_it(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A retired program ends the quickstart with the fix to run."""
+        manager = MagicMock()
+        manager.refuse_retired_staking_programs.side_effect = (
+            RetiredStakingProgramError(staking_program_id="optimus_alpha_2")
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            _refuse_retired_or_exit(manager, "sc-1")
+
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "Staking program optimus_alpha_2 is retired." in out
+        assert "operate reset-staking" in out
+        manager.refuse_retired_staking_programs.assert_called_once_with(
+            service_config_id="sc-1"
+        )
+
+    def test_live_program_returns(self) -> None:
+        """Nothing retired: the quickstart goes on to funding."""
+        manager = MagicMock()
+
+        _refuse_retired_or_exit(manager, "sc-1")
+
+        manager.refuse_retired_staking_programs.assert_called_once_with(
+            service_config_id="sc-1"
+        )
 
 
 class TestDeployOnchainOrExit:

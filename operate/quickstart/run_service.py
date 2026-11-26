@@ -48,7 +48,11 @@ from operate.exceptions import (
     RetiredStakingProgramError,
 )
 from operate.ledger import DEFAULT_RPCS
-from operate.ledger.profiles import STAKING, get_staking_contract
+from operate.ledger.profiles import (
+    STAKING,
+    get_staking_contract,
+    is_retired_staking_program,
+)
 from operate.operate_types import (
     Chain,
     ChainAmounts,
@@ -293,6 +297,7 @@ def configure_local_config(  # pragma: no cover
                 for id in STAKING[home_chain]
                 if id in QS_STAKING_PROGRAMS[home_chain]
                 and QS_STAKING_PROGRAMS[home_chain][id] in template["name"].lower()
+                and not is_retired_staking_program(home_chain, id)
             ]
             + [CUSTOM_PROGRAM_ID]
         )
@@ -734,6 +739,16 @@ def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> 
         sys.exit(1)
 
 
+def _refuse_retired_or_exit(manager: ServiceManager, service_config_id: str) -> None:
+    """Exit with status 1 before any funding if the deploy would stay on a retired program."""
+    try:
+        manager.refuse_retired_staking_programs(service_config_id=service_config_id)
+    except RetiredStakingProgramError as e:
+        manager.logger.error(f"On-chain deploy refused: {e}")
+        print(f"\n{e} Run `operate reset-staking` to pick another staking program.\n")
+        sys.exit(1)
+
+
 def ensure_enough_funds(
     operate: "OperateApp", service: Service
 ) -> None:  # pragma: no cover
@@ -788,6 +803,7 @@ def run_service(  # pragma: no cover
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
+    _refuse_retired_or_exit(manager, service.service_config_id)
     ensure_enough_funds(operate, service)
 
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")

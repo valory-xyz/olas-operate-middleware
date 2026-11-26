@@ -316,6 +316,9 @@ class OnFork:
         self, monkeypatch: pytest.MonkeyPatch, anvil_forks: AnvilForks
     ) -> None:
         anvil_forks.isolate()
+        # Fork tests stake on programs Pearl has since retired; a test that
+        # exercises retirement sets its own list.
+        monkeypatch.setattr("operate.ledger.profiles.RETIRED_STAKING_PROGRAMS", {})
         monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", anvil_forks)
         monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
         # The agent env lists every chain's RPC; that must not fork them all.
