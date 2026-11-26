@@ -2232,9 +2232,6 @@ class TestFundingJob:
             ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            # Poll until logger.exception is called rather than using a fixed
-            # sleep — the two sequential run_in_executor calls (claim then
-            # fund_master_eoa) may need more wall-clock time on slow CI runners.
             await _wait_until(lambda: manager.logger.exception.call_count > 0)  # type: ignore[attr-defined]
             task.cancel()
             try:

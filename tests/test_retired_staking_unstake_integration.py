@@ -220,9 +220,11 @@ class TestRetiredProgramDeployIntegration(OnFork):
         target_contract = t.cast(
             str, get_staking_contract(TRADER_SERVICE_CHAIN.value, OTHER_PROGRAM)
         )
+        # The original token left the retired contract; the target holds the
+        # service's token, which a re-registration may have replaced.
         assert (
             trader_staking_status(
-                service_manager, service_config_id, moved_token_id, staking_contract
+                service_manager, service_config_id, token_id, staking_contract
             )
             == StakingState.UNSTAKED
         )
