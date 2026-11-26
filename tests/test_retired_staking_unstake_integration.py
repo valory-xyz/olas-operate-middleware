@@ -19,6 +19,7 @@
 
 """Fork tests for retired staking programs: the background unstake and the deploy guard."""
 
+import typing as t
 from unittest.mock import MagicMock
 
 import pytest
@@ -26,6 +27,7 @@ import pytest
 from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.exceptions import RetiredStakingProgramError
 from operate.ledger import get_default_ledger_api
+from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import StakeFlowOutcome
 from operate.services.protocol import StakingState
 from operate.utils.gnosis import get_owners
@@ -39,7 +41,6 @@ from tests.conftest import (
     fork_empty_reward_pool,
     fork_increase_time,
     master_eoa_nonce,
-    trader_sftxb,
     trader_staking_status,
 )
 
@@ -53,11 +54,6 @@ def _retire(monkeypatch: pytest.MonkeyPatch, staking_program_id: str) -> None:
         "operate.ledger.profiles.RETIRED_STAKING_PROGRAMS",
         {TRADER_SERVICE_CHAIN: frozenset({staking_program_id})},
     )
-
-
-def _retire_trader_program(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mark the program the Trader template stakes on as retired."""
-    _retire(monkeypatch, TRADER_STAKING_PROGRAM)
 
 
 def _logged(logger: MagicMock, level: str, fragment: str) -> bool:
@@ -88,7 +84,7 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
             token_id,
             staking_contract,
         ) = deploy_and_stake_trader(test_env)
-        _retire_trader_program(monkeypatch)
+        _retire(monkeypatch, TRADER_STAKING_PROGRAM)
         deployment_stop = MagicMock()
         deployment_start = MagicMock()
         monkeypatch.setattr("operate.services.service.Deployment.stop", deployment_stop)
@@ -102,7 +98,6 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
         ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
         service = service_manager.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[TRADER_SERVICE_CHAIN.value]
-        sftxb = trader_sftxb(service_manager, service_config_id)
         service_safe = chain_config.chain_data.multisig
         owners_before = get_owners(ledger_api=ledger_api, safe=service_safe)
         nonce_before = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
@@ -115,18 +110,21 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
             master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce_before
         ), "nothing may be sent inside the minimum staking period"
         assert (
-            sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
+            trader_staking_status(
+                service_manager, service_config_id, token_id, staking_contract
+            )
             == StakingState.STAKED
         )
 
-        # Default warp is minStakingDuration + 1.
         fork_increase_time(TRADER_SERVICE_CHAIN)
         service_manager.unstake_services_on_retired_programs()
 
         logger.error.assert_not_called()
         assert _logged(logger, "info", "from the retired staking program")
         assert (
-            sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
+            trader_staking_status(
+                service_manager, service_config_id, token_id, staking_contract
+            )
             == StakingState.UNSTAKED
         )
         assert get_owners(ledger_api=ledger_api, safe=service_safe) == owners_before
@@ -177,6 +175,65 @@ class TestRetiredProgramDeployIntegration(OnFork):
         )
 
     @pytest.mark.integration
+    def test_a_deploy_moves_a_retired_program_to_a_live_target_once_allowed(
+        self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Retired current program, live target: the deploy passes, and moves it after the period.
+
+        Inside the minimum period the deploy runs it on the retired program;
+        after it, the next deploy unstakes it there and stakes it on the target.
+        """
+        (
+            service_manager,
+            service_config_id,
+            token_id,
+            staking_contract,
+        ) = deploy_and_stake_trader(test_env)
+        _retire(monkeypatch, TRADER_STAKING_PROGRAM)
+        service = service_manager.load(service_config_id=service_config_id)
+        service.chain_configs[
+            TRADER_SERVICE_CHAIN.value
+        ].chain_data.user_params.staking_program_id = OTHER_PROGRAM
+        service.store()
+
+        service_manager.deploy_service_onchain_from_safe(
+            service_config_id=service_config_id
+        )
+        assert (
+            trader_staking_status(
+                service_manager, service_config_id, token_id, staking_contract
+            )
+            == StakingState.STAKED
+        ), "inside the period the service stays on the retired program"
+
+        fork_increase_time(TRADER_SERVICE_CHAIN)
+        service_manager.deploy_service_onchain_from_safe(
+            service_config_id=service_config_id
+        )
+
+        # An update may re-register the service, so read its token again.
+        moved_token_id = (
+            service_manager.load(service_config_id=service_config_id)
+            .chain_configs[TRADER_SERVICE_CHAIN.value]
+            .chain_data.token
+        )
+        target_contract = t.cast(
+            str, get_staking_contract(TRADER_SERVICE_CHAIN.value, OTHER_PROGRAM)
+        )
+        assert (
+            trader_staking_status(
+                service_manager, service_config_id, moved_token_id, staking_contract
+            )
+            == StakingState.UNSTAKED
+        )
+        assert (
+            trader_staking_status(
+                service_manager, service_config_id, moved_token_id, target_contract
+            )
+            == StakingState.STAKED
+        )
+
+    @pytest.mark.integration
     def test_a_no_staking_deploy_runs_and_unstakes_once_allowed(
         self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -191,7 +248,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
             token_id,
             staking_contract,
         ) = deploy_and_stake_trader(test_env)
-        _retire_trader_program(monkeypatch)
+        _retire(monkeypatch, TRADER_STAKING_PROGRAM)
         service = service_manager.load(service_config_id=service_config_id)
         service.chain_configs[
             TRADER_SERVICE_CHAIN.value
@@ -242,7 +299,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
             )
             == StakingState.UNSTAKED
         )
-        _retire_trader_program(monkeypatch)
+        _retire(monkeypatch, TRADER_STAKING_PROGRAM)
         nonce_before = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
 
         outcome = service_manager.stake_service_on_chain_from_safe(
