@@ -1106,6 +1106,7 @@ class TestDeployRecoveryModuleGate:
         is_update: bool = True,
         multisig: str = _SERVICE_SAFE,
         deploy_goes_through: bool = False,
+        home_chain: str = "ethereum",
     ) -> t.Dict[str, t.Any]:
         """Run an update of a service (DEPLOYED by default), ``enable_effect`` driving each enable.
 
@@ -1124,7 +1125,7 @@ class TestDeployRecoveryModuleGate:
             """Raised where the deploy data would be built."""
 
         manager, service, chain_config = _make_manager_with_service(
-            tmp_path, home_chain="ethereum"
+            tmp_path, home_chain=home_chain
         )
         service.path = tmp_path
         service.description = "new description"
@@ -1228,6 +1229,7 @@ class TestDeployRecoveryModuleGate:
             "cannot_unstake_yet": cannot_unstake_yet,
             "recovery_flow": recovery_flow,
             "manager": manager,
+            "service": service,
             "build_prefix": build_prefix,
             "reached_teardown": isinstance(raised, _ReachedTeardown),
             "reached_deploy": isinstance(raised, _ReachedDeploy),
@@ -1256,6 +1258,34 @@ class TestDeployRecoveryModuleGate:
         kwargs = run["sftxb"].get_deploy_data_from_safe.call_args.kwargs
         assert kwargs["reuse_multisig"] is (not funded)
         assert run["manager"].funding_manager.fund_service_initial.called is funded
+
+    @pytest.mark.parametrize(
+        ("home_chain", "expected"),
+        [(_CHAIN, 7), ("ethereum", None)],
+        ids=["home-chain", "other-chain"],
+    )
+    def test_a_deploy_passes_the_service_id_on_its_home_chain(
+        self, tmp_path: Path, home_chain: str, expected: t.Optional[int]
+    ) -> None:
+        """SERVICE_ID is the minted token, and is set only for the home chain."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            terminate_effect=lambda **_: None,
+            terminate_tears_down=False,
+            service_state=OnChainState.FINISHED_REGISTRATION,
+            deploy_goes_through=True,
+            home_chain=home_chain,
+        )
+
+        assert run["raised"] is None
+        service_ids = [
+            call.args[0]["SERVICE_ID"]
+            for call in run["service"].update_env_variables_values.call_args_list
+            if "SERVICE_ID" in call.args[0]
+        ]
+        assert service_ids == ([] if expected is None else [expected])
 
     @pytest.mark.parametrize("module_turns_on", [True, False])
     def test_a_resumed_deploy_decides_reuse_at_the_legacy_deploy_step(
