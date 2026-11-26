@@ -385,20 +385,57 @@ class TestRetiredStakingPrograms:
         """Service configs key chains by their string value."""
         assert is_retired_staking_program("gnosis", "omenstrat_i") is True
 
-    def test_new_programs_are_registered(self) -> None:
+    @pytest.mark.parametrize(
+        ("chain", "program_id", "address"),
+        [
+            # The scope's table of new programs.
+            (
+                Chain.GNOSIS,
+                "omenstrat_viii",
+                "0x9C254A169D71cFF6766D9702425Ec467B62B95EC",
+            ),
+            (
+                Chain.GNOSIS,
+                "omenstrat_ix",
+                "0x36CB5b4e6befc5Cc3f6801Cc290C3d9148f6D7Cf",
+            ),
+            (Chain.GNOSIS, "omenstrat_x", "0xd467492f65FCA11786982b9743ed4E1F79cE81A1"),
+            (
+                Chain.POLYGON,
+                "polystrat_vii",
+                "0x1eFb70d9e7ec63F7CC51BF684E3e4AF54eF3CE46",
+            ),
+            (
+                Chain.POLYGON,
+                "polystrat_viii",
+                "0x003685C1F4B978e4D975D2457f707e8d6Eedc62E",
+            ),
+            (
+                Chain.POLYGON,
+                "polystrat_ix",
+                "0x1674997dA73Bfb3116aC251fF9E1dB2905D18223",
+            ),
+            (
+                Chain.OPTIMISM,
+                "optimus_iv",
+                "0xaDa8AFB446576483B791f58Da33b20ebd217c1fE",
+            ),
+            (Chain.OPTIMISM, "optimus_v", "0x767F4101183Ca56325270facbF0FcdDFEfd043aA"),
+            (
+                Chain.OPTIMISM,
+                "optimus_vi",
+                "0x307a23a821f7B837308cfd7673650674B5780b36",
+            ),
+            (Chain.BASE, "basius_iv", "0x180E4A9A59BA5B6817fA0668A864343147E8A63b"),
+            (Chain.BASE, "basius_v", "0xad7f7DE6909f1DE49c14F4003d37485A02012159"),
+            (Chain.BASE, "basius_vi", "0x3639E1C2F9a7FF11aAdD239Cd778A7b5af39820b"),
+        ],
+    )
+    def test_new_programs_are_registered(
+        self, chain: Chain, program_id: str, address: str
+    ) -> None:
         """The replacement programs are registered at their contract addresses."""
-        assert STAKING[Chain.GNOSIS]["omenstrat_viii"] == (
-            "0x9C254A169D71cFF6766D9702425Ec467B62B95EC"
-        )
-        assert STAKING[Chain.POLYGON]["polystrat_vii"] == (
-            "0x1eFb70d9e7ec63F7CC51BF684E3e4AF54eF3CE46"
-        )
-        assert STAKING[Chain.OPTIMISM]["optimus_iv"] == (
-            "0xaDa8AFB446576483B791f58Da33b20ebd217c1fE"
-        )
-        assert STAKING[Chain.BASE]["basius_iv"] == (
-            "0x180E4A9A59BA5B6817fA0668A864343147E8A63b"
-        )
+        assert STAKING[chain][program_id] == address
 
 
 class TestUsesDecoupledActivity:

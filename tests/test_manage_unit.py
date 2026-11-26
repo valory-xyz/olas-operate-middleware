@@ -1774,35 +1774,15 @@ class TestRefuseRetiredStakingPrograms:
         assert exc_info.value.staking_program_id == refused
         assert str(exc_info.value) == f"Staking program {refused} is retired."
 
-    def test_deploy_refuses_before_any_transaction(self, tmp_path: Path) -> None:
-        """The refusal comes before the first Safe transaction, the module enable."""
-        manager, service, _ = _make_manager_with_service(tmp_path)
-        user_params = service.chain_configs[_CHAIN].chain_data.user_params
-        user_params.staking_program_id = "omenstrat_viii"
-        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
-        manager._try_enable_recovery_module = MagicMock()  # type: ignore[method-assign]
-
-        with (
-            patch.object(manager, "get_eth_safe_tx_builder"),
-            patch.object(
-                manager, "_get_current_staking_program", return_value="omenstrat_iii"
-            ),
-            pytest.raises(RetiredStakingProgramError),
-        ):
-            manager._deploy_service_onchain_from_safe(
-                service_config_id="sc-test-id", chain=_CHAIN
-            )
-
-        manager._try_enable_recovery_module.assert_not_called()  # type: ignore[attr-defined]
-
     @pytest.mark.parametrize(
         ("current", "target", "refused"),
         [
             (None, "omenstrat_i", "omenstrat_i"),
+            ("omenstrat_iii", "omenstrat_viii", "omenstrat_iii"),
             # The app's withdrawal-only payload, on a still-staked service.
             ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
         ],
-        ids=["retired-target", "withdrawal-only"],
+        ids=["retired-target", "retired-current", "withdrawal-only"],
     )
     def test_deploy_passes_the_service_programs_to_the_guard(
         self,
@@ -1811,7 +1791,7 @@ class TestRefuseRetiredStakingPrograms:
         target: str,
         refused: t.Optional[str],
     ) -> None:
-        """The deploy checks the chain's current and target program."""
+        """The deploy checks the chain's current and target program, before its first transaction."""
 
         class _ReachedModuleEnable(Exception):
             """Raised by the first transaction step, past the guard."""
