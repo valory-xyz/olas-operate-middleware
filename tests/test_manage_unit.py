@@ -1810,6 +1810,36 @@ class TestRefuseRetiredStakingPrograms:
         if refused:
             assert exc_info.value.staking_program_id == target  # type: ignore[attr-defined]
 
+    def test_deploy_stops_before_any_transaction_when_the_current_program_read_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """An RPC failure on the current-program read propagates before the first transaction."""
+        manager, service, _ = _make_manager_with_service(tmp_path)
+        service.chain_configs[_CHAIN].chain_data.user_params = OnChainUserParams(
+            staking_program_id="omenstrat_viii",
+            nft="bafybei-nft",
+            agent_id=25,
+            cost_of_bond=1,
+            fund_requirements={},
+        )
+        manager._try_enable_recovery_module = MagicMock()  # type: ignore[method-assign]
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder"),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                side_effect=Web3RPCError("rate limited"),
+            ),
+            pytest.raises(Web3RPCError),
+        ):
+            manager._deploy_service_onchain_from_safe(
+                service_config_id="sc-test-id", chain=_CHAIN
+            )
+
+        manager._try_enable_recovery_module.assert_not_called()  # type: ignore[attr-defined]
+
     def test_public_check_reads_every_chain_from_config(self, tmp_path: Path) -> None:
         """The route's pre-pause check refuses a retired target on any chain, with no RPC."""
         manager = _make_manager(tmp_path)

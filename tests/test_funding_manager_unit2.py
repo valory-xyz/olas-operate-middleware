@@ -2108,6 +2108,14 @@ async def _instant_sleep(_seconds: float) -> None:
     await _REAL_SLEEP(0)
 
 
+async def _wait_until(condition: Callable[[], bool]) -> None:
+    """Poll ``condition`` for up to about 2 s, on the real clock."""
+    for _ in range(200):
+        if condition():
+            return
+        await _REAL_SLEEP(0.01)
+
+
 async def _sweep_times_on_a_fake_clock(
     sweep: Callable[[], None],
 ) -> list[float]:
@@ -2141,10 +2149,7 @@ async def _sweep_times_on_a_fake_clock(
         patch("operate.services.funding_manager.asyncio.sleep", side_effect=_advance),
     ):
         task = asyncio.create_task(manager.funding_job(mock_service_manager))
-        for _ in range(200):
-            if len(sweeps) >= 2:
-                break
-            await _REAL_SLEEP(0.01)
+        await _wait_until(lambda: len(sweeps) >= 2)
         task.cancel()
         try:
             await task
@@ -2200,14 +2205,16 @@ class TestFundingJob:
             ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            await _REAL_SLEEP(0.1)
+            await _wait_until(lambda: manager.logger.exception.call_count > 0)  # type: ignore[attr-defined]
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
 
-        manager.logger.exception.assert_called()  # type: ignore[attr-defined]
+        manager.logger.exception.assert_called_once_with(  # type: ignore[attr-defined]
+            "Error occurred while claiming rewards"
+        )
 
     @pytest.mark.asyncio
     async def test_funding_job_logs_fund_master_eoa_exception(self) -> None:
@@ -2228,17 +2235,16 @@ class TestFundingJob:
             # Poll until logger.exception is called rather than using a fixed
             # sleep — the two sequential run_in_executor calls (claim then
             # fund_master_eoa) may need more wall-clock time on slow CI runners.
-            for _ in range(40):
-                if manager.logger.exception.call_count > 0:  # type: ignore[attr-defined]
-                    break
-                await _REAL_SLEEP(0.05)
+            await _wait_until(lambda: manager.logger.exception.call_count > 0)  # type: ignore[attr-defined]
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
 
-        manager.logger.exception.assert_called()  # type: ignore[attr-defined]
+        manager.logger.exception.assert_called_once_with(  # type: ignore[attr-defined]
+            "Error occurred while funding Master EOA"
+        )
 
     @pytest.mark.asyncio
     async def test_funding_job_unstakes_retired_programs_right_away_then_periodically(
@@ -2290,10 +2296,7 @@ class TestFundingJob:
 
         with patch.object(manager, "fund_master_eoa"):
             first = asyncio.create_task(manager.funding_job(first_service_manager))
-            for _ in range(200):
-                if first_started.is_set():
-                    break
-                await _REAL_SLEEP(0.01)
+            await _wait_until(first_started.is_set)
             assert first_started.is_set()
             first.cancel()
             try:
@@ -2305,10 +2308,7 @@ class TestFundingJob:
             await _REAL_SLEEP(0.1)
             assert events == [], "the second job must not start while the sweep runs"
             release_first.set()
-            for _ in range(200):
-                if len(events) >= 2:
-                    break
-                await _REAL_SLEEP(0.01)
+            await _wait_until(lambda: len(events) >= 2)
             second.cancel()
             try:
                 await second
@@ -2337,10 +2337,7 @@ class TestFundingJob:
 
         with patch.object(manager, "fund_master_eoa"):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            for _ in range(200):
-                if started.is_set():
-                    break
-                await _REAL_SLEEP(0.01)
+            await _wait_until(started.is_set)
             assert started.is_set()
             task.cancel()
             begin = monotonic()
@@ -2374,10 +2371,7 @@ class TestFundingJob:
 
         with patch.object(manager, "fund_master_eoa"):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            for _ in range(200):
-                if started.is_set():
-                    break
-                await _REAL_SLEEP(0.01)
+            await _wait_until(started.is_set)
             assert started.is_set()
             task.cancel()
             try:
@@ -2385,10 +2379,7 @@ class TestFundingJob:
             except asyncio.CancelledError:
                 pass
             release.set()
-            for _ in range(200):
-                if manager.logger.exception.call_count > 0:  # type: ignore[attr-defined]
-                    break
-                await _REAL_SLEEP(0.01)
+            await _wait_until(lambda: manager.logger.exception.call_count > 0)  # type: ignore[attr-defined]
 
         manager.logger.exception.assert_called_once_with(  # type: ignore[attr-defined]
             "Error occurred while unstaking from retired staking programs"
@@ -2411,10 +2402,7 @@ class TestFundingJob:
             ),
         ):
             task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            for _ in range(40):
-                if manager.logger.exception.call_count > 0:  # type: ignore[attr-defined]
-                    break
-                await _REAL_SLEEP(0.05)
+            await _wait_until(lambda: manager.logger.exception.call_count > 0)  # type: ignore[attr-defined]
             task.cancel()
             try:
                 await task
