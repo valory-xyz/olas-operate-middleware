@@ -535,6 +535,15 @@ def _onchain_activity_checker(chain: Chain, address: str) -> str:
     return contract.functions.activityChecker().call()
 
 
+def _onchain_mech_marketplace(chain: Chain, address: str) -> str:
+    """Read mechMarketplace() off the activity checker."""
+    w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(address), abi=_MECH_MARKETPLACE_ABI
+    )
+    return contract.functions.mechMarketplace().call()
+
+
 class TestDecoupledActivityCheckers:
     """Pin DECOUPLED_ACTIVITY_CHECKERS against the real staking programs."""
 
@@ -597,12 +606,8 @@ class TestDefaultPriorityMech:
         self, chain: Chain, checker: str
     ) -> None:
         """A missing key makes get_mech_configs fall back to no marketplace, silently."""
-        w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
-        contract = w3.eth.contract(
-            address=Web3.to_checksum_address(checker), abi=_MECH_MARKETPLACE_ABI
-        )
         try:
-            marketplace = contract.functions.mechMarketplace().call()
+            marketplace = _onchain_mech_marketplace(chain, checker)
         except requests.exceptions.RequestException as error:
             pytest.skip(f"RPC unreachable for {chain.value}: {error}")
 

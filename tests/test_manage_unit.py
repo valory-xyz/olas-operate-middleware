@@ -1302,7 +1302,7 @@ class TestDeployRecoveryModuleGate:
     def test_a_first_deploy_passes_the_newly_minted_service_id(
         self, tmp_path: Path
     ) -> None:
-        """A service minted during the deploy gets its new token, never -1."""
+        """A service minted during the deploy gets its new token, never NON_EXISTENT_TOKEN."""
         run = self._run_deployed_update(
             tmp_path,
             None,
