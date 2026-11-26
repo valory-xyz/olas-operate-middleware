@@ -47,6 +47,8 @@ from web3 import Web3
 from operate.bridge.bridge_manager import BridgeManager
 from operate.cli import OperateApp, create_app
 from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, OPERATE, ZERO_ADDRESS
+from operate.data import DATA_DIR
+from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC, get_staking_contract
@@ -241,16 +243,20 @@ def fork_empty_reward_pool(chain: Chain, staking_contract: str) -> None:
     another slot holding the same value (such as ``balance``) is left alone.
     """
     rpc = get_default_rpc(chain)
-    selector = "0x" + Web3.keccak(text="availableRewards()")[:4].hex().removeprefix(
-        "0x"
+    ledger_api = get_default_ledger_api(chain)
+    staking_ctr = t.cast(
+        StakingTokenContract,
+        StakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "staking_token")
+        ),
     )
 
     def available_rewards() -> int:
-        return int(
-            json_rpc(
-                rpc, "eth_call", {"to": staking_contract, "data": selector}, "latest"
-            ),
-            16,
+        return t.cast(
+            int,
+            staking_ctr.available_rewards(
+                ledger_api=ledger_api, contract_address=staking_contract
+            )["data"],
         )
 
     target = available_rewards()
