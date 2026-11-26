@@ -2354,6 +2354,47 @@ class TestFundingJob:
         assert elapsed < 1
 
     @pytest.mark.asyncio
+    async def test_a_cancelled_jobs_running_sweep_still_logs_its_error(
+        self,
+    ) -> None:
+        """Nothing awaits the work of a cancelled job, so its worker logs the error."""
+        manager = _make_manager()
+        mock_service_manager = MagicMock()
+        started = threading.Event()
+        release = threading.Event()
+
+        def _sweep_failing_after_cancel() -> None:
+            started.set()
+            release.wait(timeout=5)
+            raise RuntimeError("rpc down")
+
+        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
+            _sweep_failing_after_cancel
+        )
+
+        with patch.object(manager, "fund_master_eoa"):
+            task = asyncio.create_task(manager.funding_job(mock_service_manager))
+            for _ in range(200):
+                if started.is_set():
+                    break
+                await _REAL_SLEEP(0.01)
+            assert started.is_set()
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            release.set()
+            for _ in range(200):
+                if manager.logger.exception.call_count > 0:  # type: ignore[attr-defined]
+                    break
+                await _REAL_SLEEP(0.01)
+
+        manager.logger.exception.assert_called_once_with(  # type: ignore[attr-defined]
+            "Error occurred while unstaking from retired staking programs"
+        )
+
+    @pytest.mark.asyncio
     async def test_funding_job_logs_retired_unstake_exception(self) -> None:
         """A failing sweep is logged and the job keeps running."""
         manager = _make_manager()
@@ -2390,12 +2431,12 @@ class TestFundingJob:
         manager = _make_manager()
         mock_service_manager = MagicMock()
         mock_loop = MagicMock()
-        # Make run_in_executor return an awaitable that completes immediately
+        # Make run_in_executor return a fresh awaitable that completes immediately
 
         async def _awaitable(*args: Any, **kwargs: Any) -> None:
             return None
 
-        mock_loop.run_in_executor = MagicMock(return_value=_awaitable())
+        mock_loop.run_in_executor = MagicMock(side_effect=_awaitable)
 
         with patch(
             "operate.services.funding_manager.asyncio.sleep",

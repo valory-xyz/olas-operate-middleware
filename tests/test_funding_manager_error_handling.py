@@ -7,80 +7,37 @@ in the funding job background task.
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from operate.services.funding_manager import FundingManager
 
 
 class TestFundingJobExceptionHandlingBehavior:
-    """Document the exception handling patterns in funding_job.
+    """Each funding-job task logs its own error and lets the job go on.
 
-    The funding_job method has two broad exception handlers:
-
-    1. Line 1028: Catches exceptions during reward claiming
-       - Logs error via logger.exception (includes exc_info automatically)
-       - Does NOT re-raise
-       - Allows background job to continue
-
-    2. Line 1042: Catches exceptions during Master EOA funding
-       - Logs error via logger.exception (includes exc_info automatically)
-       - Does NOT re-raise
-       - Allows background job to continue
-
-    Both handlers swallow exceptions to keep the background job running. This is
-    a semi-acceptable pattern for background jobs (you don't want one failure to
-    crash the entire job), but has issues:
-    - No distinction between retryable vs fatal errors
-    - Could mask persistent failures
-
-    Recommended improvements:
-    - Add specific exception handling for known errors (network, permissions)
-    - Consider implementing exponential backoff for retries
-    - Add metrics/alerting for repeated failures
-    - Distinguish between transient errors (retry) and fatal errors (alert)
+    The handler runs in the worker thread (`FundingManager._run_logging_errors`),
+    so the error is logged even after a re-login cancelled the job awaiting it.
     """
 
-    def test_claim_rewards_exception_handler_pattern(self) -> None:
-        """Document that claim_rewards exception handler (line 1028) swallows errors.
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "Error occurred while claiming rewards",
+            "Error occurred while funding Master EOA",
+        ],
+    )
+    def test_a_task_error_is_logged_not_raised(self, message: str) -> None:
+        """The error is logged with the task's message and exc_info, and swallowed."""
+        logger = MagicMock()
+        manager = FundingManager(
+            keys_manager=MagicMock(), wallet_manager=MagicMock(), logger=logger
+        )
 
-        The exception handler:
-        - Catches all exceptions during reward claiming
-        - Logs with logger.exception (correct severity, includes exc_info)
-        - Does NOT re-raise (allows job to continue)
+        manager._run_logging_errors(  # pylint: disable=protected-access
+            MagicMock(side_effect=RuntimeError("rpc down")), message
+        )
 
-        This is semi-acceptable for a background job but could be improved by:
-        1. Adding specific handling for known exceptions (network, RPC errors)
-        """
-        import inspect
-
-        from operate.services.funding_manager import FundingManager
-
-        source = inspect.getsource(FundingManager.funding_job)
-
-        # Verify the pattern exists
-        assert "except Exception:" in source
-        assert "Error occurred while claiming rewards" in source
-        # Note: Does NOT re-raise after the except block
-        # This allows the background job to continue running
-
-    def test_fund_master_eoa_exception_handler_pattern(self) -> None:
-        """Document that fund_master_eoa exception handler (line 1042) swallows errors.
-
-        The exception handler:
-        - Catches all exceptions during Master EOA funding
-        - Logs with logger.exception (correct severity, includes exc_info)
-        - Does NOT re-raise (allows job to continue)
-
-        Same issues as claim_rewards handler - could benefit from specific exception types.
-        """
-        import inspect
-
-        from operate.services.funding_manager import FundingManager
-
-        source = inspect.getsource(FundingManager.funding_job)
-
-        # Verify the pattern exists
-        assert "Error occurred while funding Master EOA" in source
-        # Both handlers now use logger.exception instead of logger.info
-        assert source.count("logger.exception") >= 2
+        logger.exception.assert_called_once_with(message)
 
     def test_funding_manager_can_be_instantiated(self) -> None:
         """Verify FundingManager can be created for testing."""

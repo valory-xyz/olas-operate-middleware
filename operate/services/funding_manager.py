@@ -87,6 +87,8 @@ _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 # nested Gnosis Safe execTransaction calls; this fallback is applied instead.
 _GAS_PER_SAFE_B_TRANSFER = 500_000
 
+CLAIM_INTERVAL_SECONDS = 3600
+MASTER_EOA_FUNDING_INTERVAL_SECONDS = 3600
 # A minimum staking period lasts days, so checking retired programs more often only adds RPC load.
 RETIRED_STAKING_CHECK_INTERVAL_SECONDS = 600
 
@@ -1457,6 +1459,20 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     time() + self.funding_requests_cooldown_seconds
                 )
 
+    def _run_logging_errors(
+        self, task: t.Callable[[], t.Any], error_message: str
+    ) -> None:
+        """Run ``task``, logging its error from the worker thread.
+
+        Logged here rather than where it is awaited: a job cancelled on
+        re-login no longer awaits its running task, and the error of a future
+        nobody awaits is dropped.
+        """
+        try:
+            task()
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception(error_message)
+
     async def funding_job(
         self,
         service_manager: "ServiceManager",
@@ -1468,46 +1484,31 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         # running work (cancelling happens on every re-login), and the next
         # job reuses the executor.
         executor = self._job_executor
-        last_claim = 0.0
-        last_master_eoa_funding = 0.0
-        last_retired_staking_check = 0.0
+        tasks: t.Tuple[t.Tuple[int, t.Callable[[], t.Any], str], ...] = (
+            (
+                CLAIM_INTERVAL_SECONDS,
+                service_manager.claim_all_on_chain_from_safe,
+                "Error occurred while claiming rewards",
+            ),
+            (
+                MASTER_EOA_FUNDING_INTERVAL_SECONDS,
+                self.fund_master_eoa,
+                "Error occurred while funding Master EOA",
+            ),
+            (
+                RETIRED_STAKING_CHECK_INTERVAL_SECONDS,
+                service_manager.unstake_services_on_retired_programs,
+                "Error occurred while unstaking from retired staking programs",
+            ),
+        )
+        last_run = [0.0] * len(tasks)
         while True:
-            # try claiming rewards every hour
-            if last_claim + 3600 < time():
-                try:
+            for index, (interval, task, error_message) in enumerate(tasks):
+                if last_run[index] + interval < time():
                     await loop.run_in_executor(
-                        executor,
-                        service_manager.claim_all_on_chain_from_safe,
+                        executor, self._run_logging_errors, task, error_message
                     )
-                except Exception:  # pylint: disable=broad-except
-                    self.logger.exception("Error occurred while claiming rewards")
-                last_claim = time()
-
-            # fund Master EOA every hour
-            if last_master_eoa_funding + 3600 < time():
-                try:
-                    await loop.run_in_executor(
-                        executor,
-                        self.fund_master_eoa,
-                    )
-                except Exception:  # pylint: disable=broad-except
-                    self.logger.exception("Error occurred while funding Master EOA")
-                last_master_eoa_funding = time()
-
-            if (
-                last_retired_staking_check + RETIRED_STAKING_CHECK_INTERVAL_SECONDS
-                < time()
-            ):
-                try:
-                    await loop.run_in_executor(
-                        executor,
-                        service_manager.unstake_services_on_retired_programs,
-                    )
-                except Exception:  # pylint: disable=broad-except
-                    self.logger.exception(
-                        "Error occurred while unstaking from retired staking programs"
-                    )
-                last_retired_staking_check = time()
+                    last_run[index] = time()
 
             await asyncio.sleep(60)
 
