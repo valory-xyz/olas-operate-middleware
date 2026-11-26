@@ -21,6 +21,7 @@
 import json
 import os
 import subprocess  # nosec
+import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
@@ -30,7 +31,11 @@ import pytest
 import requests
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.exceptions import RecoveryModuleNotEnabledError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
+)
+from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.quickstart.analyse_logs import (
     analyse_logs,
@@ -44,14 +49,18 @@ from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import (
     CUSTOM_PROGRAM_ID,
     DEPRECATED_QS_STAKING_PROGRAMS,
+    QS_STAKING_PROGRAMS,
     _ask_funds_from_requirements,
     _deploy_onchain_or_exit,
     _deprecated_program_warning,
     _maybe_create_master_eoa,
+    _refuse_retired_or_exit,
+    _staking_menu_program_ids,
     ask_confirm_password,
     ask_password_if_needed,
     get_service,
     load_local_config,
+    run_service,
 )
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
@@ -860,6 +869,147 @@ class TestMaybeCreateMasterEoa:
 # ============================================================
 
 
+class TestRefuseRetiredOrExit:
+    """Tests for _refuse_retired_or_exit, run before any funding."""
+
+    def test_retired_program_exits_1_naming_it(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A retired program ends the quickstart with the fix to run."""
+        manager = MagicMock()
+        manager.refuse_retired_staking_programs.side_effect = (
+            RetiredStakingProgramError(staking_program_id="optimus_alpha_2")
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            _refuse_retired_or_exit(manager, "sc-1")
+
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "Staking program optimus_alpha_2 is retired." in out
+        assert "operate reset-staking" in out
+        manager.refuse_retired_staking_programs.assert_called_once_with(
+            service_config_id="sc-1"
+        )
+
+    def test_live_program_returns(self) -> None:
+        """Nothing retired: the quickstart goes on to funding."""
+        manager = MagicMock()
+
+        _refuse_retired_or_exit(manager, "sc-1")
+
+        manager.refuse_retired_staking_programs.assert_called_once_with(
+            service_config_id="sc-1"
+        )
+
+
+class TestRunServiceRefusesBeforeFunding:
+    """run_service runs the retired-program refusal before funding or deploying."""
+
+    def test_refusal_runs_with_the_reloaded_manager_before_the_deploy(
+        self, tmp_path: Path
+    ) -> None:
+        """The call site, which sits in the uncovered run_service."""
+
+        class _StopAtDeploy(Exception):
+            """Ends run_service at the on-chain deploy."""
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"name": "Trader"}))
+        calls: t.List[str] = []
+        operate = MagicMock()
+        first_manager, reloaded_manager = MagicMock(), MagicMock()
+        operate.service_manager.side_effect = [first_manager, reloaded_manager]
+        service = MagicMock(service_config_id="sc-1")
+        module = "operate.quickstart.run_service"
+
+        with (
+            patch(f"{module}.print_title"),
+            patch(f"{module}.print_box"),
+            patch(f"{module}.print_section"),
+            patch(f"{module}.ask_password_if_needed"),
+            patch(f"{module}._maybe_create_master_eoa"),
+            patch(f"{module}.configure_local_config"),
+            patch(f"{module}.get_service", return_value=service),
+            patch(f"{module}.load_local_config"),
+            patch(
+                f"{module}.ensure_enough_funds",
+                side_effect=lambda *_: calls.append("fund"),
+            ),
+            patch(
+                f"{module}._refuse_retired_or_exit",
+                side_effect=lambda *_: calls.append("refuse"),
+            ) as refuse,
+            patch(
+                f"{module}._deploy_onchain_or_exit",
+                side_effect=_StopAtDeploy,
+            ) as deploy,
+            pytest.raises(_StopAtDeploy),
+        ):
+            run_service(operate=operate, config_path=str(config_path))
+
+        refuse.assert_called_once_with(reloaded_manager, "sc-1")
+        assert calls == ["refuse", "fund"]
+        deploy.assert_called_once_with(reloaded_manager, "sc-1")
+
+
+class TestStakingMenuProgramIds:
+    """Tests for _staking_menu_program_ids."""
+
+    def test_leaves_out_retired_programs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A retired program is not offered; a live one and the fixed entries are."""
+        monkeypatch.setitem(
+            QS_STAKING_PROGRAMS,
+            Chain.OPTIMISM,
+            {"optimus_alpha_2": "optimus", "optimus_iv": "optimus"},
+        )
+
+        assert _staking_menu_program_ids(Chain.OPTIMISM, "Optimus") == [
+            NO_STAKING_PROGRAM_ID,
+            "optimus_iv",
+            CUSTOM_PROGRAM_ID,
+        ]
+
+    @pytest.mark.parametrize(
+        ("chain", "agent"),
+        sorted(
+            {
+                (chain, agent)
+                for chain, programs in QS_STAKING_PROGRAMS.items()
+                for agent in programs.values()
+            },
+            key=str,
+        ),
+    )
+    def test_every_quickstart_agent_keeps_a_live_program(
+        self, chain: Chain, agent: str
+    ) -> None:
+        """Every agent with a registered program keeps at least one live program after the retired filter."""
+        registered = [
+            program_id
+            for program_id, program_agent in QS_STAKING_PROGRAMS[chain].items()
+            if program_agent == agent and program_id in STAKING[chain]
+        ]
+        if not registered:
+            pytest.skip(f"no {agent} program on {chain.value} is in STAKING")
+        ids = _staking_menu_program_ids(chain, agent)
+
+        assert [
+            program_id
+            for program_id in ids
+            if program_id not in (NO_STAKING_PROGRAM_ID, CUSTOM_PROGRAM_ID)
+        ], f"{agent} on {chain.value} has no live staking program"
+
+    def test_only_this_agents_programs(self) -> None:
+        """Programs for another agent on the chain are not offered."""
+        ids = _staking_menu_program_ids(Chain.GNOSIS, "Mech agent")
+
+        assert ids[0] == NO_STAKING_PROGRAM_ID
+        assert ids[-1] == CUSTOM_PROGRAM_ID
+        assert "mech_marketplace" in ids
+        assert "quickstart_beta_expert_2" not in ids
+
+
 class TestDeployOnchainOrExit:
     """Tests for _deploy_onchain_or_exit."""
 
@@ -876,8 +1026,29 @@ class TestDeployOnchainOrExit:
             _deploy_onchain_or_exit(manager, "sc-1")
 
         assert exc_info.value.code == 1
-        assert "enable the module" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "enable the module" in out
+        assert "reset-staking" not in out
         manager.logger.error.assert_called_once()
+
+    def test_retired_program_prints_the_message_and_exits_1(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A deploy on a retired program ends the quickstart with the program named."""
+        manager = MagicMock()
+        manager.deploy_service_onchain_from_safe.side_effect = (
+            RetiredStakingProgramError(staking_program_id="optimus_alpha_2")
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            _deploy_onchain_or_exit(manager, "sc-1")
+
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        # The same message and hint as the pre-funding refusal.
+        assert "Staking program optimus_alpha_2 is retired." in out
+        assert "operate reset-staking" in out
+        assert "minimum staking period is over" in out
 
     def test_successful_deploy_returns(self) -> None:
         """A deploy that goes through does not exit."""

@@ -43,9 +43,16 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.exceptions import RecoveryModuleNotEnabledError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
+)
 from operate.ledger import DEFAULT_RPCS
-from operate.ledger.profiles import STAKING, get_staking_contract
+from operate.ledger.profiles import (
+    STAKING,
+    get_staking_contract,
+    is_retired_staking_program,
+)
 from operate.operate_types import (
     Chain,
     ChainAmounts,
@@ -120,6 +127,10 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "optimus_alpha_2": "optimus",
         "optimus_alpha_3": "optimus",
         "optimus_alpha_4": "optimus",
+        # The live replacements for the retired programs above.
+        "optimus_iv": "optimus",
+        "optimus_v": "optimus",
+        "optimus_vi": "optimus",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
@@ -235,6 +246,21 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
     return config
 
 
+def _staking_menu_program_ids(home_chain: Chain, template_name: str) -> t.List[str]:
+    """Staking menu entries: no staking, this agent's live programs, then custom."""
+    return (
+        [NO_STAKING_PROGRAM_ID]
+        + [
+            program_id
+            for program_id in STAKING[home_chain]
+            if program_id in QS_STAKING_PROGRAMS[home_chain]
+            and QS_STAKING_PROGRAMS[home_chain][program_id] in template_name.lower()
+            and not is_retired_staking_program(home_chain, program_id)
+        ]
+        + [CUSTOM_PROGRAM_ID]
+    )
+
+
 def configure_local_config(  # pragma: no cover
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
@@ -283,16 +309,7 @@ def configure_local_config(  # pragma: no cover
     if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
         available_choices = {}
-        ids = (
-            [NO_STAKING_PROGRAM_ID]
-            + [
-                id
-                for id in STAKING[home_chain]
-                if id in QS_STAKING_PROGRAMS[home_chain]
-                and QS_STAKING_PROGRAMS[home_chain][id] in template["name"].lower()
-            ]
-            + [CUSTOM_PROGRAM_ID]
-        )
+        ids = _staking_menu_program_ids(home_chain, template["name"])
 
         for index, program_id in enumerate(ids):
             if program_id == NO_STAKING_PROGRAM_ID:
@@ -721,14 +738,33 @@ def _maybe_create_master_eoa(operate: "OperateApp") -> None:
         )
 
 
+def _exit_refused_deploy(manager: ServiceManager, error: Exception) -> t.NoReturn:
+    """Log and print a refused on-chain deploy, then exit with status 1."""
+    manager.logger.error(f"On-chain deploy refused: {error}", exc_info=error)
+    hint = (
+        " Run `operate reset-staking` to pick another staking program. It can"
+        " switch only once the current program's minimum staking period is over."
+        if isinstance(error, RetiredStakingProgramError)
+        else ""
+    )
+    print(f"\n{error}{hint}\n")
+    sys.exit(1)
+
+
 def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> None:
     """Deploy the service on-chain, exiting with status 1 if the deploy is refused."""
     try:
         manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
-    except RecoveryModuleNotEnabledError as e:
-        manager.logger.error(f"On-chain deploy refused: {e}", exc_info=True)
-        print(f"\n{e}\n")
-        sys.exit(1)
+    except (RecoveryModuleNotEnabledError, RetiredStakingProgramError) as e:
+        _exit_refused_deploy(manager, e)
+
+
+def _refuse_retired_or_exit(manager: ServiceManager, service_config_id: str) -> None:
+    """Exit with status 1 if a staked deploy would use a retired staking program."""
+    try:
+        manager.refuse_retired_staking_programs(service_config_id=service_config_id)
+    except RetiredStakingProgramError as e:
+        _exit_refused_deploy(manager, e)
 
 
 def ensure_enough_funds(
@@ -785,6 +821,8 @@ def run_service(  # pragma: no cover
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
+    # Refuse a retired program first, so no funds move for a refused deploy.
+    _refuse_retired_or_exit(manager, service.service_config_id)
     ensure_enough_funds(operate, service)
 
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")

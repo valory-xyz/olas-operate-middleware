@@ -77,6 +77,7 @@ from operate.constants import (
 )
 from operate.exceptions import (
     RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
     ServicePackageDownloadError,
 )
 from operate.funding_run.manager import (
@@ -118,6 +119,7 @@ from operate.services.prestart_check import run_prestart_check
 from operate.services.service import Service
 from operate.settings import Settings
 from operate.utils.gnosis import Transfer
+from operate.utils.locks import KeyedLocks
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
@@ -285,6 +287,9 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             logger=logger,
         )
         self._funding_run_manager: t.Optional[FundingRunManager] = None
+        # One set for the process: every request, the health checker and the
+        # funding job build their own ServiceManager but share the master Safes.
+        self._chain_tx_locks: KeyedLocks[str] = KeyedLocks()
 
         self._migration_manager = MigrationManager(self._path, logger)
         self._migration_manager.migrate_user_account()
@@ -474,6 +479,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             funding_manager=self.funding_manager,
             logger=logger,
             skip_dependency_check=skip_dependency_check,
+            chain_tx_locks=self._chain_tx_locks,
         )
 
     @property
@@ -1774,6 +1780,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         safe_id = validated_safe_id(service_config_id)
 
         def _fn() -> None:
+            # Refuse before pausing, or a refused start leaves no agent running.
+            manager.refuse_retired_staking_programs(service_config_id=safe_id)
             pause_all_services()
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             logger.info("Deploy onchain")
@@ -1805,6 +1813,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={"error": str(e), **e.to_error_fields()},
+                status_code=HTTPStatus.CONFLICT,
+            )
+        except RetiredStakingProgramError as e:
+            logger.error(f"Deploy refused for {safe_id}: {e}")
+            # The body is rebuilt from the program id, so no exception text leaks.
+            return JSONResponse(
+                content=e.to_response_body(),
                 status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except

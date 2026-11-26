@@ -51,6 +51,7 @@ from operate.ledger.profiles import (
     EXPLORER_URL,
     OLAS,
     PUSD,
+    RETIRED_STAKING_PROGRAMS,
     STAKING,
     USDG,
     WRAPPED_NATIVE_ASSET,
@@ -59,6 +60,8 @@ from operate.ledger.profiles import (
     get_asset_name,
     get_asset_symbol,
     get_staking_contract,
+    has_retired_staking_programs,
+    is_retired_staking_program,
     uses_decoupled_activity,
 )
 from operate.operate_types import Chain
@@ -228,6 +231,211 @@ class TestGetStakingContract:
         """Test an unknown staking program ID is returned unchanged."""
         result = get_staking_contract("gnosis", "not_a_real_program_xyz")
         assert result == "not_a_real_program_xyz"
+
+
+class TestRetiredStakingPrograms:
+    """Tests for RETIRED_STAKING_PROGRAMS and is_retired_staking_program."""
+
+    def test_retired_list_is_exactly_the_scoped_one(self) -> None:
+        """Pins the retired list so an id can't be added or dropped unnoticed."""
+        assert RETIRED_STAKING_PROGRAMS == {
+            Chain.GNOSIS: frozenset(
+                {
+                    "pearl_alpha",
+                    "pearl_beta",
+                    "pearl_beta_2",
+                    "pearl_beta_3",
+                    "pearl_beta_4",
+                    "pearl_beta_5",
+                    "pearl_beta_6",
+                    "pearl_beta_mech_marketplace",
+                    "pearl_beta_mech_marketplace_1",
+                    "pearl_beta_mech_marketplace_2",
+                    "pearl_beta_mech_marketplace_3",
+                    "pearl_beta_mech_marketplace_4",
+                    "pearl_beta_mech_marketplace_5",
+                    "pearl_beta_mech_marketplace_6",
+                    "pearl_beta_mech_marketplace_7",
+                    "pearl_beta_mech_marketplace_8",
+                    "omenstrat_i",
+                    "omenstrat_ii",
+                    "omenstrat_iii",
+                    "omenstrat_iv",
+                    "omenstrat_v",
+                    "omenstrat_vi",
+                    "omenstrat_vii",
+                }
+            ),
+            Chain.POLYGON: frozenset(
+                {
+                    "polygon_beta_1",
+                    "polygon_beta_2",
+                    "polygon_beta_3",
+                    "polystrat_i",
+                    "polystrat_ii",
+                    "polystrat_iii",
+                    "polystrat_iv",
+                    "polystrat_v",
+                    "polystrat_vi",
+                }
+            ),
+            Chain.OPTIMISM: frozenset(
+                {
+                    "optimus_alpha_2",
+                    "optimus_alpha_3",
+                    "optimus_alpha_4",
+                    "optimus_i",
+                    "optimus_ii",
+                    "optimus_iii",
+                }
+            ),
+            Chain.BASE: frozenset({"basius_i", "basius_ii", "basius_iii"}),
+        }
+
+    @pytest.mark.parametrize(
+        ("chain", "expected"),
+        [
+            (Chain.GNOSIS, True),
+            ("polygon", True),
+            (Chain.MODE, False),
+            (Chain.ETHEREUM, False),
+        ],
+    )
+    def test_has_retired_staking_programs(
+        self, chain: t.Union[Chain, str], expected: bool
+    ) -> None:
+        """Only chains with a retired program report one."""
+        assert has_retired_staking_programs(chain) is expected
+
+    def test_retired_ids_are_real_programs(self) -> None:
+        """Every retired id is a registered program on its chain."""
+        for chain, retired in RETIRED_STAKING_PROGRAMS.items():
+            unknown = retired - set(STAKING[chain])
+            assert not unknown, f"{chain.value}: {sorted(unknown)}"
+
+    @pytest.mark.parametrize(
+        ("chain", "program_id", "expected"),
+        [
+            (Chain.GNOSIS, "pearl_alpha", True),
+            (Chain.GNOSIS, "pearl_beta_mech_marketplace_8", True),
+            (Chain.GNOSIS, "omenstrat_vii", True),
+            (Chain.GNOSIS, "omenstrat_viii", False),
+            (Chain.GNOSIS, "quickstart_beta_expert_1", False),
+            (Chain.POLYGON, "polygon_beta_3", True),
+            (Chain.POLYGON, "polystrat_vi", True),
+            (Chain.POLYGON, "polystrat_vii", False),
+            (Chain.OPTIMISM, "optimus_alpha_1", False),
+            (Chain.OPTIMISM, "optimus_alpha_2", True),
+            (Chain.OPTIMISM, "optimus_iii", True),
+            (Chain.OPTIMISM, "optimus_iv", False),
+            (Chain.BASE, "basius_iii", True),
+            (Chain.BASE, "basius_iv", False),
+            (Chain.BASE, "agents_fun_1", False),
+            (Chain.MODE, "modius_alpha", False),
+            (Chain.GNOSIS, None, False),
+            # Retired, but on another chain.
+            (Chain.POLYGON, "omenstrat_i", False),
+            (Chain.BASE, "optimus_iii", False),
+        ],
+    )
+    def test_is_retired_staking_program(
+        self, chain: Chain, program_id: t.Optional[str], expected: bool
+    ) -> None:
+        """Only the listed programs are retired, on their own chain."""
+        assert is_retired_staking_program(chain, program_id) is expected
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            # omenstrat_vii, as entered in quickstart's custom contract prompt.
+            "0xB801FD1728Eef27418FE03720b1FF3E769F35152",
+            "0xb801fd1728eef27418fe03720b1ff3e769f35152",
+        ],
+    )
+    def test_matches_a_retired_program_by_its_address(self, address: str) -> None:
+        """A retired program given by its contract address is retired too."""
+        assert STAKING[Chain.GNOSIS]["omenstrat_vii"].lower() == address.lower()
+        assert is_retired_staking_program(Chain.GNOSIS, address) is True
+
+    def test_a_retired_address_counts_only_on_its_own_chain(self) -> None:
+        """Another chain's retired program address is not retired here."""
+        assert (
+            is_retired_staking_program(
+                Chain.POLYGON, STAKING[Chain.GNOSIS]["omenstrat_vii"]
+            )
+            is False
+        )
+
+    def test_a_live_program_address_is_not_retired(self) -> None:
+        """A live program's address, or an unknown one, is not retired."""
+        assert (
+            is_retired_staking_program(
+                Chain.GNOSIS, STAKING[Chain.GNOSIS]["omenstrat_viii"]
+            )
+            is False
+        )
+        assert (
+            is_retired_staking_program(
+                Chain.GNOSIS, "0x0000000000000000000000000000000000000001"
+            )
+            is False
+        )
+
+    def test_accepts_the_chain_as_a_string(self) -> None:
+        """Service configs key chains by their string value."""
+        assert is_retired_staking_program("gnosis", "omenstrat_i") is True
+
+    @pytest.mark.parametrize(
+        ("chain", "program_id", "address"),
+        [
+            # The scope's table of new programs.
+            (
+                Chain.GNOSIS,
+                "omenstrat_viii",
+                "0x9C254A169D71cFF6766D9702425Ec467B62B95EC",
+            ),
+            (
+                Chain.GNOSIS,
+                "omenstrat_ix",
+                "0x36CB5b4e6befc5Cc3f6801Cc290C3d9148f6D7Cf",
+            ),
+            (Chain.GNOSIS, "omenstrat_x", "0xd467492f65FCA11786982b9743ed4E1F79cE81A1"),
+            (
+                Chain.POLYGON,
+                "polystrat_vii",
+                "0x1eFb70d9e7ec63F7CC51BF684E3e4AF54eF3CE46",
+            ),
+            (
+                Chain.POLYGON,
+                "polystrat_viii",
+                "0x003685C1F4B978e4D975D2457f707e8d6Eedc62E",
+            ),
+            (
+                Chain.POLYGON,
+                "polystrat_ix",
+                "0x1674997dA73Bfb3116aC251fF9E1dB2905D18223",
+            ),
+            (
+                Chain.OPTIMISM,
+                "optimus_iv",
+                "0xaDa8AFB446576483B791f58Da33b20ebd217c1fE",
+            ),
+            (Chain.OPTIMISM, "optimus_v", "0x767F4101183Ca56325270facbF0FcdDFEfd043aA"),
+            (
+                Chain.OPTIMISM,
+                "optimus_vi",
+                "0x307a23a821f7B837308cfd7673650674B5780b36",
+            ),
+            (Chain.BASE, "basius_iv", "0x180E4A9A59BA5B6817fA0668A864343147E8A63b"),
+            (Chain.BASE, "basius_v", "0xad7f7DE6909f1DE49c14F4003d37485A02012159"),
+            (Chain.BASE, "basius_vi", "0x3639E1C2F9a7FF11aAdD239Cd778A7b5af39820b"),
+        ],
+    )
+    def test_new_programs_are_registered(
+        self, chain: Chain, program_id: str, address: str
+    ) -> None:
+        """The replacement programs are registered at their contract addresses."""
+        assert STAKING[chain][program_id] == address
 
 
 class TestUsesDecoupledActivity:
@@ -492,9 +700,26 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
         "omenstrat_v",
         "omenstrat_vi",
         "omenstrat_vii",
+        "omenstrat_viii",
+        "omenstrat_ix",
+        "omenstrat_x",
     },
-    Chain.BASE: {"basius_i", "basius_ii", "basius_iii"},
-    Chain.OPTIMISM: {"optimus_i", "optimus_ii", "optimus_iii"},
+    Chain.BASE: {
+        "basius_i",
+        "basius_ii",
+        "basius_iii",
+        "basius_iv",
+        "basius_v",
+        "basius_vi",
+    },
+    Chain.OPTIMISM: {
+        "optimus_i",
+        "optimus_ii",
+        "optimus_iii",
+        "optimus_iv",
+        "optimus_v",
+        "optimus_vi",
+    },
     Chain.POLYGON: {
         "polystrat_i",
         "polystrat_ii",
@@ -502,6 +727,9 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
         "polystrat_iv",
         "polystrat_v",
         "polystrat_vi",
+        "polystrat_vii",
+        "polystrat_viii",
+        "polystrat_ix",
     },
 }
 

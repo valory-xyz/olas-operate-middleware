@@ -71,3 +71,27 @@ class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
     """The Agent EOA owns the service Safe and its enableModule failed."""
 
     error_code = "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE"
+
+
+class RetiredStakingProgramError(Exception):
+    """The staking program is retired."""
+
+    error_code: t.ClassVar[str] = "RETIRED_STAKING_PROGRAM"
+
+    def __init__(self, staking_program_id: str) -> None:
+        """Initialize the error."""
+        super().__init__(self.message_for(staking_program_id))
+        self.staking_program_id = staking_program_id
+
+    @staticmethod
+    def message_for(staking_program_id: str) -> str:
+        """Return the message, shared by ``str(e)`` and the response body."""
+        return f"Staking program {staking_program_id} is retired."
+
+    def to_response_body(self) -> t.Dict:
+        """Return the full response body, `error` included, unlike `to_error_fields`."""
+        return {
+            "error": self.message_for(self.staking_program_id),
+            "error_code": self.error_code,
+            "staking_program_id": self.staking_program_id,
+        }

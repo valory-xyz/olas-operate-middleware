@@ -87,6 +87,11 @@ _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 # nested Gnosis Safe execTransaction calls; this fallback is applied instead.
 _GAS_PER_SAFE_B_TRANSFER = 500_000
 
+CLAIM_INTERVAL_SECONDS = 3600
+MASTER_EOA_FUNDING_INTERVAL_SECONDS = 3600
+# A minimum staking period lasts days, so checking retired programs more often only adds RPC load.
+RETIRED_STAKING_CHECK_INTERVAL_SECONDS = 600
+
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
@@ -123,6 +128,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         # Held by a funding run while it moves Master EOA funds, so the
         # funding job cannot spend them mid-run.
         self.master_eoa_lock = threading.Lock()
+        # One worker, shared by every funding_job: a job cancelled on re-login
+        # leaves its running claim or sweep to finish, and the next job's work
+        # queues behind it instead of racing it. The chain tx lock doesn't
+        # cover claims or Master EOA funding.
+        self._job_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="funding-job"
+        )
         self._withdrawal_locks: KeyedLocks[t.Tuple[str, str]] = KeyedLocks()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
@@ -1447,6 +1459,20 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     time() + self.funding_requests_cooldown_seconds
                 )
 
+    def _run_logging_errors(
+        self, task: t.Callable[[], t.Any], error_message: str
+    ) -> None:
+        """Run ``task``, logging its error from the worker thread.
+
+        Logged here rather than where it is awaited: a job cancelled on
+        re-login no longer awaits its running task, and the error of a future
+        nobody awaits is dropped.
+        """
+        try:
+            task()
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception(error_message)
+
     async def funding_job(
         self,
         service_manager: "ServiceManager",
@@ -1454,33 +1480,37 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
     ) -> None:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
-            last_claim = 0.0
-            last_master_eoa_funding = 0.0
-            while True:
-                # try claiming rewards every hour
-                if last_claim + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            service_manager.claim_all_on_chain_from_safe,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception("Error occurred while claiming rewards")
-                    last_claim = time()
+        # Never shut down here: that would wait on the event-loop thread for
+        # running work (cancelling happens on every re-login), and the next
+        # job reuses the executor.
+        executor = self._job_executor
+        tasks: t.Tuple[t.Tuple[int, t.Callable[[], t.Any], str], ...] = (
+            (
+                CLAIM_INTERVAL_SECONDS,
+                service_manager.claim_all_on_chain_from_safe,
+                "Error occurred while claiming rewards",
+            ),
+            (
+                MASTER_EOA_FUNDING_INTERVAL_SECONDS,
+                self.fund_master_eoa,
+                "Error occurred while funding Master EOA",
+            ),
+            (
+                RETIRED_STAKING_CHECK_INTERVAL_SECONDS,
+                service_manager.unstake_services_on_retired_programs,
+                "Error occurred while unstaking from retired staking programs",
+            ),
+        )
+        last_run = [0.0] * len(tasks)
+        while True:
+            for index, (interval, task, error_message) in enumerate(tasks):
+                if last_run[index] + interval < time():
+                    await loop.run_in_executor(
+                        executor, self._run_logging_errors, task, error_message
+                    )
+                    last_run[index] = time()
 
-                # fund Master EOA every hour
-                if last_master_eoa_funding + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            self.fund_master_eoa,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception("Error occurred while funding Master EOA")
-                    last_master_eoa_funding = time()
-
-                await asyncio.sleep(60)
+            await asyncio.sleep(60)
 
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.
