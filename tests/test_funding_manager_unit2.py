@@ -99,6 +99,7 @@ def _mock_service(
     service.agent_addresses = agent_addresses or [AGENT_ADDR]
     chain_config = _mock_chain_config(chain=chain, token=token)
     service.chain_configs = {chain: chain_config}
+    service.home_chain = chain
     return service
 
 
