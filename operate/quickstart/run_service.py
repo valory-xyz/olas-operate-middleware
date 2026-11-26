@@ -127,6 +127,10 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "optimus_alpha_2": "optimus",
         "optimus_alpha_3": "optimus",
         "optimus_alpha_4": "optimus",
+        # The live replacements for the retired programs above.
+        "optimus_iv": "optimus",
+        "optimus_v": "optimus",
+        "optimus_vi": "optimus",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {

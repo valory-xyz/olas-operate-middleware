@@ -35,6 +35,7 @@ from operate.exceptions import (
     RecoveryModuleNotEnabledError,
     RetiredStakingProgramError,
 )
+from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.quickstart.analyse_logs import (
     analyse_logs,
@@ -60,6 +61,7 @@ from operate.quickstart.run_service import (
     ask_password_if_needed,
     get_service,
     load_local_config,
+    run_service,
 )
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
@@ -942,6 +944,57 @@ class TestRefuseRetiredThenFund:
         ensure_enough_funds.assert_called_once_with(operate, service)
 
 
+class TestRunServiceRefusesBeforeFunding:
+    """run_service runs the retired-program refusal before funding or deploying."""
+
+    def test_refusal_runs_with_the_reloaded_manager_before_the_deploy(
+        self, tmp_path: Path
+    ) -> None:
+        """The call site, which sits in the uncovered run_service."""
+
+        class _StopAtDeploy(Exception):
+            """Ends run_service at the on-chain deploy."""
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"name": "Trader"}))
+        calls: t.List[str] = []
+        operate = MagicMock()
+        first_manager, reloaded_manager = MagicMock(), MagicMock()
+        operate.service_manager.side_effect = [first_manager, reloaded_manager]
+        service = MagicMock(service_config_id="sc-1")
+        module = "operate.quickstart.run_service"
+
+        with (
+            patch(f"{module}.print_title"),
+            patch(f"{module}.print_box"),
+            patch(f"{module}.print_section"),
+            patch(f"{module}.ask_password_if_needed"),
+            patch(f"{module}._maybe_create_master_eoa"),
+            patch(f"{module}.configure_local_config"),
+            patch(f"{module}.get_service", return_value=service),
+            patch(f"{module}.load_local_config"),
+            patch(
+                f"{module}.ensure_enough_funds",
+                side_effect=lambda *_: calls.append("fund"),
+            ),
+            patch(
+                f"{module}._refuse_retired_then_fund",
+                side_effect=lambda *_: calls.append("refuse_then_fund"),
+            ) as refuse_then_fund,
+            patch(
+                f"{module}._deploy_onchain_or_exit",
+                side_effect=_StopAtDeploy,
+            ) as deploy,
+            pytest.raises(_StopAtDeploy),
+        ):
+            run_service(operate=operate, config_path=str(config_path))
+
+        refuse_then_fund.assert_called_once_with(operate, reloaded_manager, service)
+        # Funding goes only through the helper, which refuses first.
+        assert calls == ["refuse_then_fund"]
+        deploy.assert_called_once_with(reloaded_manager, "sc-1")
+
+
 class TestStakingMenuProgramIds:
     """Tests for _staking_menu_program_ids."""
 
@@ -958,6 +1011,40 @@ class TestStakingMenuProgramIds:
             "optimus_iv",
             CUSTOM_PROGRAM_ID,
         ]
+
+    @pytest.mark.parametrize(
+        ("chain", "agent"),
+        sorted(
+            {
+                (chain, agent)
+                for chain, programs in QS_STAKING_PROGRAMS.items()
+                for agent in programs.values()
+            },
+            key=str,
+        ),
+    )
+    def test_every_quickstart_agent_keeps_a_live_program(
+        self, chain: Chain, agent: str
+    ) -> None:
+        """The retired filter leaves each agent at least one live program.
+
+        Only agents with a registered program at all: `pett_ai_agent` was never
+        an id in `STAKING`, before this filter too.
+        """
+        registered = [
+            program_id
+            for program_id, program_agent in QS_STAKING_PROGRAMS[chain].items()
+            if program_agent == agent and program_id in STAKING[chain]
+        ]
+        if not registered:
+            pytest.skip(f"no {agent} program on {chain.value} is in STAKING")
+        ids = _staking_menu_program_ids(chain, agent)
+
+        assert [
+            program_id
+            for program_id in ids
+            if program_id not in (NO_STAKING_PROGRAM_ID, CUSTOM_PROGRAM_ID)
+        ], f"{agent} on {chain.value} has no live staking program"
 
     def test_only_this_agents_programs(self) -> None:
         """Programs for another agent on the chain are not offered."""
