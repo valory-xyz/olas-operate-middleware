@@ -55,7 +55,6 @@ from operate.quickstart.run_service import (
     _deprecated_program_warning,
     _maybe_create_master_eoa,
     _refuse_retired_or_exit,
-    _refuse_retired_then_fund,
     _staking_menu_program_ids,
     ask_confirm_password,
     ask_password_if_needed,
@@ -904,46 +903,6 @@ class TestRefuseRetiredOrExit:
         )
 
 
-class TestRefuseRetiredThenFund:
-    """Tests for _refuse_retired_then_fund: the refusal comes before any funding."""
-
-    def test_retired_program_exits_before_funding(self) -> None:
-        """A refused deploy moves no funds."""
-        manager = MagicMock()
-        manager.refuse_retired_staking_programs.side_effect = (
-            RetiredStakingProgramError(staking_program_id="optimus_alpha_2")
-        )
-        service = MagicMock(service_config_id="sc-1")
-
-        with patch(
-            "operate.quickstart.run_service.ensure_enough_funds"
-        ) as ensure_enough_funds:
-            with pytest.raises(SystemExit) as exc_info:
-                _refuse_retired_then_fund(MagicMock(), manager, service)
-
-        assert exc_info.value.code == 1
-        ensure_enough_funds.assert_not_called()
-
-    def test_live_program_is_checked_then_funded(self) -> None:
-        """Nothing retired: the check runs, then the funding."""
-        calls: t.List[str] = []
-        manager = MagicMock()
-        manager.refuse_retired_staking_programs.side_effect = lambda **_: calls.append(
-            "refuse"
-        )
-        operate = MagicMock()
-        service = MagicMock(service_config_id="sc-1")
-
-        with patch(
-            "operate.quickstart.run_service.ensure_enough_funds",
-            side_effect=lambda *_: calls.append("fund"),
-        ) as ensure_enough_funds:
-            _refuse_retired_then_fund(operate, manager, service)
-
-        assert calls == ["refuse", "fund"]
-        ensure_enough_funds.assert_called_once_with(operate, service)
-
-
 class TestRunServiceRefusesBeforeFunding:
     """run_service runs the retired-program refusal before funding or deploying."""
 
@@ -978,9 +937,9 @@ class TestRunServiceRefusesBeforeFunding:
                 side_effect=lambda *_: calls.append("fund"),
             ),
             patch(
-                f"{module}._refuse_retired_then_fund",
-                side_effect=lambda *_: calls.append("refuse_then_fund"),
-            ) as refuse_then_fund,
+                f"{module}._refuse_retired_or_exit",
+                side_effect=lambda *_: calls.append("refuse"),
+            ) as refuse,
             patch(
                 f"{module}._deploy_onchain_or_exit",
                 side_effect=_StopAtDeploy,
@@ -989,9 +948,8 @@ class TestRunServiceRefusesBeforeFunding:
         ):
             run_service(operate=operate, config_path=str(config_path))
 
-        refuse_then_fund.assert_called_once_with(operate, reloaded_manager, service)
-        # Funding goes only through the helper, which refuses first.
-        assert calls == ["refuse_then_fund"]
+        refuse.assert_called_once_with(reloaded_manager, "sc-1")
+        assert calls == ["refuse", "fund"]
         deploy.assert_called_once_with(reloaded_manager, "sc-1")
 
 
@@ -1026,11 +984,7 @@ class TestStakingMenuProgramIds:
     def test_every_quickstart_agent_keeps_a_live_program(
         self, chain: Chain, agent: str
     ) -> None:
-        """The retired filter leaves each agent at least one live program.
-
-        Only agents with a registered program at all: `pett_ai_agent` was never
-        an id in `STAKING`, before this filter too.
-        """
+        """The retired filter leaves each agent with a registered program at least one live program."""
         registered = [
             program_id
             for program_id, program_agent in QS_STAKING_PROGRAMS[chain].items()
@@ -1088,7 +1042,10 @@ class TestDeployOnchainOrExit:
             _deploy_onchain_or_exit(manager, "sc-1")
 
         assert exc_info.value.code == 1
-        assert "Staking program optimus_alpha_2 is retired." in capsys.readouterr().out
+        out = capsys.readouterr().out
+        # The same message and hint as the pre-funding refusal.
+        assert "Staking program optimus_alpha_2 is retired." in out
+        assert "operate reset-staking" in out
 
     def test_successful_deploy_returns(self) -> None:
         """A deploy that goes through does not exit."""

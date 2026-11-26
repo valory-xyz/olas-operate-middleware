@@ -738,24 +738,32 @@ def _maybe_create_master_eoa(operate: "OperateApp") -> None:
         )
 
 
+def _exit_refused_deploy(manager: ServiceManager, error: Exception) -> t.NoReturn:
+    """Log and print a refused on-chain deploy, then exit with status 1."""
+    manager.logger.error(f"On-chain deploy refused: {error}", exc_info=error)
+    hint = (
+        " Run `operate reset-staking` to pick another staking program."
+        if isinstance(error, RetiredStakingProgramError)
+        else ""
+    )
+    print(f"\n{error}{hint}\n")
+    sys.exit(1)
+
+
 def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> None:
     """Deploy the service on-chain, exiting with status 1 if the deploy is refused."""
     try:
         manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
     except (RecoveryModuleNotEnabledError, RetiredStakingProgramError) as e:
-        manager.logger.error(f"On-chain deploy refused: {e}", exc_info=True)
-        print(f"\n{e}\n")
-        sys.exit(1)
+        _exit_refused_deploy(manager, e)
 
 
 def _refuse_retired_or_exit(manager: ServiceManager, service_config_id: str) -> None:
-    """Exit 1 if the deploy would be refused."""
+    """Exit with status 1 if a staked deploy would use a retired staking program."""
     try:
         manager.refuse_retired_staking_programs(service_config_id=service_config_id)
     except RetiredStakingProgramError as e:
-        manager.logger.error(f"On-chain deploy refused: {e}")
-        print(f"\n{e} Run `operate reset-staking` to pick another staking program.\n")
-        sys.exit(1)
+        _exit_refused_deploy(manager, e)
 
 
 def ensure_enough_funds(
@@ -788,14 +796,6 @@ def ensure_enough_funds(
                 )
 
 
-def _refuse_retired_then_fund(
-    operate: "OperateApp", manager: ServiceManager, service: Service
-) -> None:
-    """Refuse a retired program first, so no funds move for a deploy that would be refused."""
-    _refuse_retired_or_exit(manager, service.service_config_id)
-    ensure_enough_funds(operate, service)
-
-
 def run_service(  # pragma: no cover
     operate: "OperateApp",
     config_path: str,
@@ -820,7 +820,9 @@ def run_service(  # pragma: no cover
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
-    _refuse_retired_then_fund(operate, manager, service)
+    # Refuse a retired program first, so no funds move for a refused deploy.
+    _refuse_retired_or_exit(manager, service.service_config_id)
+    ensure_enough_funds(operate, service)
 
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")
     print_section(f"Deploying on-chain service on {config.principal_chain}...")
