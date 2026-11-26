@@ -221,9 +221,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
 }
 
 
-#: Programs Pearl no longer stakes on. Mirrors the frontend's ``retired`` flag in
-#: ``frontend/config/stakingPrograms``; both lists must hold the same ids. See
-#: docs/staking-and-onchain-model.md#retired-staking-programs.
+#: Programs Pearl no longer stakes on; see docs/staking-and-onchain-model.md#retired-staking-programs.
 RETIRED_STAKING_PROGRAMS: t.Dict[Chain, t.FrozenSet[str]] = {
     Chain.GNOSIS: frozenset(
         {
@@ -642,20 +640,19 @@ def has_retired_staking_programs(chain: t.Union[Chain, str]) -> bool:
 def is_retired_staking_program(
     chain: t.Union[Chain, str], staking_program_id: t.Optional[str]
 ) -> bool:
-    """Whether Pearl no longer stakes on this program.
+    """Whether Pearl no longer stakes on this program, given by id or by address.
 
-    ``staking_program_id`` may also be a contract address, as quickstart's custom
-    contract option stores it (``get_staking_contract`` reads it the same way).
-    It is matched case-insensitively against the retired programs' addresses.
+    Quickstart's custom contract option stores a raw address as the id.
     """
-    retired = RETIRED_STAKING_PROGRAMS.get(Chain(chain), frozenset())
+    chain_enum = Chain(chain)
+    retired = RETIRED_STAKING_PROGRAMS.get(chain_enum, frozenset())
     if staking_program_id is None:
         return False
     if staking_program_id in retired:
         return True
     address = staking_program_id.lower()
     return any(
-        STAKING[Chain(chain)].get(program_id, "").lower() == address
+        STAKING[chain_enum].get(program_id, "").lower() == address
         for program_id in retired
     )
 

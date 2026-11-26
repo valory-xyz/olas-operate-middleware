@@ -291,7 +291,6 @@ class TestRetiredStakingPrograms:
             ),
             Chain.BASE: frozenset({"basius_i", "basius_ii", "basius_iii"}),
         }
-        assert sum(len(ids) for ids in RETIRED_STAKING_PROGRAMS.values()) == 41
 
     @pytest.mark.parametrize(
         ("chain", "expected"),
@@ -334,6 +333,9 @@ class TestRetiredStakingPrograms:
             (Chain.BASE, "agents_fun_1", False),
             (Chain.MODE, "modius_alpha", False),
             (Chain.GNOSIS, None, False),
+            # Retired, but on another chain.
+            (Chain.POLYGON, "omenstrat_i", False),
+            (Chain.BASE, "optimus_iii", False),
         ],
     )
     def test_is_retired_staking_program(
@@ -354,6 +356,15 @@ class TestRetiredStakingPrograms:
         """A retired program given by its contract address is retired too."""
         assert STAKING[Chain.GNOSIS]["omenstrat_vii"].lower() == address.lower()
         assert is_retired_staking_program(Chain.GNOSIS, address) is True
+
+    def test_a_retired_address_counts_only_on_its_own_chain(self) -> None:
+        """Another chain's retired program address is not retired here."""
+        assert (
+            is_retired_staking_program(
+                Chain.POLYGON, STAKING[Chain.GNOSIS]["omenstrat_vii"]
+            )
+            is False
+        )
 
     def test_a_live_program_address_is_not_retired(self) -> None:
         """A live program's address, or an unknown one, is not retired."""
