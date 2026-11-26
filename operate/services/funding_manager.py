@@ -1409,7 +1409,11 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
     ) -> None:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
+        # Not a `with` block: its exit waits for running work on the event-loop
+        # thread, so cancelling the job (on every re-login) would block the
+        # daemon until an in-flight claim or sweep finished.
+        executor = ThreadPoolExecutor()
+        try:
             last_claim = 0.0
             last_master_eoa_funding = 0.0
             last_retired_staking_check = 0.0
@@ -1452,6 +1456,8 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     last_retired_staking_check = time()
 
                 await asyncio.sleep(60)
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.

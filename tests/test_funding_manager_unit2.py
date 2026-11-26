@@ -20,7 +20,8 @@
 """Unit tests for operate/services/funding_manager.py – part 2, targeting uncovered lines."""
 
 import asyncio
-from time import time
+import threading
+from time import monotonic, time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -2232,6 +2233,88 @@ class TestFundingJob:
         assert sweeps[0] == 10_000.0
         assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL_SECONDS
         assert sweeps[1] - sweeps[0] <= RETIRED_STAKING_CHECK_INTERVAL_SECONDS + 60
+
+    @pytest.mark.asyncio
+    async def test_funding_job_waits_the_interval_after_a_failed_sweep(
+        self,
+    ) -> None:
+        """A failing sweep is not retried on every 60 s loop."""
+        manager = _make_manager()
+        mock_service_manager = MagicMock()
+        clock = {"now": 10_000.0}
+        sweeps: list[float] = []
+
+        def _failing_sweep() -> None:
+            sweeps.append(clock["now"])
+            raise RuntimeError("rpc down")
+
+        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
+            _failing_sweep
+        )
+
+        async def _advance(_seconds: float) -> None:
+            clock["now"] += 60
+            await _REAL_SLEEP(0)
+
+        with (
+            patch.object(manager, "fund_master_eoa"),
+            patch(
+                "operate.services.funding_manager.time",
+                side_effect=lambda: clock["now"],
+            ),
+            patch(
+                "operate.services.funding_manager.asyncio.sleep", side_effect=_advance
+            ),
+        ):
+            task = asyncio.create_task(manager.funding_job(mock_service_manager))
+            for _ in range(200):
+                if len(sweeps) >= 2:
+                    break
+                await _REAL_SLEEP(0.01)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        assert len(sweeps) >= 2
+        assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL_SECONDS
+
+    @pytest.mark.asyncio
+    async def test_cancelling_the_job_does_not_wait_for_running_work(
+        self,
+    ) -> None:
+        """Cancelling the job returns while a sweep is still running."""
+        manager = _make_manager()
+        mock_service_manager = MagicMock()
+        started = threading.Event()
+        release = threading.Event()
+
+        def _slow_sweep() -> None:
+            started.set()
+            release.wait(timeout=5)
+
+        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
+            _slow_sweep
+        )
+
+        with patch.object(manager, "fund_master_eoa"):
+            task = asyncio.create_task(manager.funding_job(mock_service_manager))
+            for _ in range(200):
+                if started.is_set():
+                    break
+                await _REAL_SLEEP(0.01)
+            assert started.is_set()
+            task.cancel()
+            begin = monotonic()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            elapsed = monotonic() - begin
+            release.set()
+
+        assert elapsed < 1
 
     @pytest.mark.asyncio
     async def test_funding_job_logs_retired_unstake_exception(self) -> None:
