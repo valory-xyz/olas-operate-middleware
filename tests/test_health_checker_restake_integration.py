@@ -40,24 +40,19 @@ from web3 import Web3
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import get_default_ledger_api
-from operate.ledger.profiles import get_staking_contract
-from operate.operate_types import (
-    Chain,
-    LedgerType,
-    OnChainState,
-    StakingReconcileOutcome,
-)
+from operate.operate_types import LedgerType, StakingReconcileOutcome
 from operate.services.protocol import StakingState
 
-from tests.conftest import OnFork, OperateTestEnv, fork_increase_time
+from tests.conftest import (
+    OnFork,
+    OperateTestEnv,
+    TRADER_SERVICE_CHAIN,
+    TRADER_STAKING_PROGRAM,
+    deploy_and_stake_trader,
+    fork_increase_time,
+)
 from tests.constants import LOGGER
 
-SERVICE_CHAIN = Chain.GNOSIS
-# The Trader template in conftest stakes here on first deploy. Its parameters on
-# Gnosis — livenessPeriod 86400, maxNumInactivityPeriods 2, minStakingDuration
-# 259200, availableRewards > 0 — put eviction (~2 days) inside the unstaking lock
-# (3 days), which is what makes the locked-eviction case below reachable at all.
-STAKING_PROGRAM = "pearl_beta_2"
 # Eviction needs maxNumInactivityPeriods consecutive misses; allow a couple of
 # spare rounds so a contract that counts differently still converges.
 MAX_CHECKPOINTS = 8
@@ -85,7 +80,7 @@ def _staking_params(ledger_api: t.Any, staking_contract: str) -> t.Dict[str, int
 
 def _send_checkpoint(service_manager: t.Any, staking_contract: str) -> None:
     """Call the permissionless `checkpoint()` from the master EOA."""
-    ledger_api = get_default_ledger_api(SERVICE_CHAIN)
+    ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
     wallet = service_manager.wallet_manager.load(LedgerType.ETHEREUM)
     calldata = t.cast(
         bytes,
@@ -100,7 +95,7 @@ def _send_checkpoint(service_manager: t.Any, staking_contract: str) -> None:
             "to": Web3.to_checksum_address(staking_contract),
             "data": "0x" + calldata.hex(),
             "value": 0,
-            "chainId": SERVICE_CHAIN.id,
+            "chainId": TRADER_SERVICE_CHAIN.id,
             "nonce": ledger_api.api.eth.get_transaction_count(wallet.crypto.address),
             # `update_with_gas_estimate` drops this key before estimating and
             # raises `KeyError` if it is absent, so it has to be seeded.
@@ -111,45 +106,9 @@ def _send_checkpoint(service_manager: t.Any, staking_contract: str) -> None:
     TxSettler(
         ledger_api=ledger_api,
         crypto=wallet.crypto,
-        chain_type=SERVICE_CHAIN,
+        chain_type=TRADER_SERVICE_CHAIN,
         tx_builder=_build_tx,
     ).transact().settle()
-
-
-def _deploy_and_stake(test_env: OperateTestEnv) -> t.Tuple[t.Any, str, int, str]:
-    """Deploy the Trader service on-chain and return its staking handles."""
-    operate = test_env.operate
-    operate.password = test_env.password
-    service_manager = operate.service_manager()
-
-    services, _ = service_manager.get_all_services()
-    service_config_id = next(
-        svc.service_config_id for svc in services if "trader" in svc.name.lower()
-    )
-    service_manager.deploy_service_onchain_from_safe(
-        service_config_id=service_config_id
-    )
-
-    service = service_manager.load(service_config_id=service_config_id)
-    chain_str = SERVICE_CHAIN.value
-    token_id = service.chain_configs[chain_str].chain_data.token
-    staking_contract = get_staking_contract(SERVICE_CHAIN, STAKING_PROGRAM)
-
-    assert (
-        service_manager._get_on_chain_state(  # noqa: SLF001
-            service=service, chain=chain_str
-        )
-        == OnChainState.DEPLOYED
-    )
-    sftxb = service_manager.get_eth_safe_tx_builder(
-        ledger_config=service.chain_configs[chain_str].ledger_config
-    )
-    assert (
-        sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
-        == StakingState.STAKED
-    ), "service should be staked after the first deploy"
-
-    return service_manager, service_config_id, token_id, staking_contract
 
 
 def _evict(
@@ -166,7 +125,7 @@ def _evict(
     params = _staking_params(ledger_api, staking_contract)
     warped = 0
     for _ in range(MAX_CHECKPOINTS):
-        fork_increase_time(SERVICE_CHAIN, params["liveness_period"] + 1)
+        fork_increase_time(TRADER_SERVICE_CHAIN, params["liveness_period"] + 1)
         warped += params["liveness_period"] + 1
         _send_checkpoint(service_manager, staking_contract)
         if (
@@ -195,16 +154,18 @@ class TestHealthCheckerRestakeIntegration(OnFork):
             service_config_id,
             token_id,
             staking_contract,
-        ) = _deploy_and_stake(test_env)
-        ledger_api = get_default_ledger_api(SERVICE_CHAIN)
+        ) = deploy_and_stake_trader(test_env)
+        ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
         service = service_manager.load(service_config_id=service_config_id)
         sftxb = service_manager.get_eth_safe_tx_builder(
-            ledger_config=service.chain_configs[SERVICE_CHAIN.value].ledger_config
+            ledger_config=service.chain_configs[
+                TRADER_SERVICE_CHAIN.value
+            ].ledger_config
         )
 
         _evict(service_manager, sftxb, token_id, staking_contract, ledger_api)
         # Default warp is minStakingDuration + 1, so unstaking becomes possible.
-        fork_increase_time(SERVICE_CHAIN)
+        fork_increase_time(TRADER_SERVICE_CHAIN)
 
         outcome = service_manager.reconcile_staking_for_restart(
             service_config_id=service_config_id
@@ -230,11 +191,13 @@ class TestHealthCheckerRestakeIntegration(OnFork):
             service_config_id,
             token_id,
             staking_contract,
-        ) = _deploy_and_stake(test_env)
-        ledger_api = get_default_ledger_api(SERVICE_CHAIN)
+        ) = deploy_and_stake_trader(test_env)
+        ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
         service = service_manager.load(service_config_id=service_config_id)
         sftxb = service_manager.get_eth_safe_tx_builder(
-            ledger_config=service.chain_configs[SERVICE_CHAIN.value].ledger_config
+            ledger_config=service.chain_configs[
+                TRADER_SERVICE_CHAIN.value
+            ].ledger_config
         )
 
         warped = _evict(service_manager, sftxb, token_id, staking_contract, ledger_api)
@@ -243,11 +206,11 @@ class TestHealthCheckerRestakeIntegration(OnFork):
         # it claims to, and the contract has to be swapped for one that can
         # produce the state.
         assert warped < params["min_staking_duration"], (
-            f"{STAKING_PROGRAM} evicts only past minStakingDuration, so unstaking "
+            f"{TRADER_STAKING_PROGRAM} evicts only past minStakingDuration, so unstaking "
             f"is never locked: {params}, evicted after {warped}s"
         )
         assert params["available_rewards"], (
-            f"{STAKING_PROGRAM} has no rewards outstanding, so unstaking is never "
+            f"{TRADER_STAKING_PROGRAM} has no rewards outstanding, so unstaking is never "
             f"locked: {params}"
         )
 

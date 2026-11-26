@@ -19,18 +19,23 @@
 
 """Integration test for the background unstake from a retired staking program."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from operate.ledger import get_default_ledger_api
-from operate.operate_types import Chain
+from operate.operate_types import Chain, LedgerType
 from operate.services.protocol import StakingState
 from operate.utils.gnosis import get_owners
 
-from tests.conftest import OnFork, OperateTestEnv, fork_increase_time
-from tests.test_health_checker_restake_integration import (
-    SERVICE_CHAIN,
-    STAKING_PROGRAM,
-    _deploy_and_stake,
+from tests.conftest import (
+    OnFork,
+    OperateTestEnv,
+    TRADER_SERVICE_CHAIN,
+    TRADER_STAKING_PROGRAM,
+    deploy_and_stake_trader,
+    fork_empty_reward_pool,
+    fork_increase_time,
 )
 
 
@@ -41,39 +46,56 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
     def test_unstakes_once_the_minimum_period_is_over(
         self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Inside the period nothing moves; after it the service is unstaked.
+        """Inside the period nothing is sent; after it the service is unstaked.
 
-        The unstake must leave the Safe owners and the local deployment as they were.
+        The reward pool is emptied first: the contract then allows an unstake
+        inside the period, so only the middleware's own minimum-period check
+        keeps the service staked. The unstake must leave the Safe owners and
+        the local deployment alone.
         """
         (
             service_manager,
             service_config_id,
             token_id,
             staking_contract,
-        ) = _deploy_and_stake(test_env)
+        ) = deploy_and_stake_trader(test_env)
         monkeypatch.setattr(
             "operate.ledger.profiles.RETIRED_STAKING_PROGRAMS",
-            {Chain.GNOSIS: frozenset({STAKING_PROGRAM})},
+            {Chain.GNOSIS: frozenset({TRADER_STAKING_PROGRAM})},
         )
-        ledger_api = get_default_ledger_api(SERVICE_CHAIN)
+        deployment_stop = MagicMock()
+        deployment_start = MagicMock()
+        monkeypatch.setattr("operate.services.service.Deployment.stop", deployment_stop)
+        monkeypatch.setattr(
+            "operate.services.service.Deployment.start", deployment_start
+        )
+        fork_empty_reward_pool(TRADER_SERVICE_CHAIN, staking_contract)
+
+        ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
         service = service_manager.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[SERVICE_CHAIN.value]
+        chain_config = service.chain_configs[TRADER_SERVICE_CHAIN.value]
         sftxb = service_manager.get_eth_safe_tx_builder(
             ledger_config=chain_config.ledger_config
         )
         service_safe = chain_config.chain_data.multisig
         owners_before = get_owners(ledger_api=ledger_api, safe=service_safe)
-        deployment_status_before = service.deployment.status
+        # Every write in the staking flow is broadcast by the master EOA, so its
+        # transaction count tells whether anything was sent.
+        master_eoa = service_manager.wallet_manager.load(LedgerType.ETHEREUM).address
+        nonce_before = ledger_api.api.eth.get_transaction_count(master_eoa)
 
         service_manager.unstake_services_on_retired_programs()
 
         assert (
+            ledger_api.api.eth.get_transaction_count(master_eoa) == nonce_before
+        ), "nothing may be sent inside the minimum staking period"
+        assert (
             sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
             == StakingState.STAKED
-        ), "a service inside its minimum staking period must stay staked"
+        )
 
         # Default warp is minStakingDuration + 1.
-        fork_increase_time(SERVICE_CHAIN)
+        fork_increase_time(TRADER_SERVICE_CHAIN)
         service_manager.unstake_services_on_retired_programs()
 
         assert (
@@ -81,5 +103,5 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
             == StakingState.UNSTAKED
         )
         assert get_owners(ledger_api=ledger_api, safe=service_safe) == owners_before
-        reloaded = service_manager.load(service_config_id=service_config_id)
-        assert reloaded.deployment.status == deployment_status_before
+        deployment_stop.assert_not_called()
+        deployment_start.assert_not_called()

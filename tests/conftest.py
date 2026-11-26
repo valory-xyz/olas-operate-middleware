@@ -49,17 +49,19 @@ from operate.cli import OperateApp, create_app
 from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, OPERATE, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
-from operate.ledger.profiles import OLAS, USDC
+from operate.ledger.profiles import OLAS, USDC, get_staking_contract
 from operate.operate_types import (
     Chain,
     ConfigurationTemplate,
     FundRequirementsTemplate,
     LedgerType,
+    OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
 from operate.services.agent_assets import clear_release_metadata_cache
 from operate.services.manage import ServiceManager
+from operate.services.protocol import StakingState
 from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
@@ -230,6 +232,93 @@ def fork_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
     rpc = get_default_rpc(chain)
     json_rpc(rpc, "evm_increaseTime", hex(time))
     json_rpc(rpc, "evm_mine")
+
+
+def fork_empty_reward_pool(chain: Chain, staking_contract: str) -> None:
+    """Set the staking contract's ``availableRewards`` to 0 on the chain's fork.
+
+    The storage slot is found by its value and confirmed through the getter, so
+    another slot holding the same value (such as ``balance``) is left alone.
+    """
+    rpc = get_default_rpc(chain)
+    selector = "0x" + Web3.keccak(text="availableRewards()")[:4].hex().removeprefix(
+        "0x"
+    )
+
+    def available_rewards() -> int:
+        return int(
+            json_rpc(
+                rpc, "eth_call", {"to": staking_contract, "data": selector}, "latest"
+            ),
+            16,
+        )
+
+    target = available_rewards()
+    if target == 0:
+        return
+    zero = "0x" + "00" * 32
+    for slot in range(256):
+        slot_key = "0x" + format(slot, "064x")
+        value = json_rpc(rpc, "eth_getStorageAt", staking_contract, slot_key, "latest")
+        if int(value, 16) != target:
+            continue
+        json_rpc(rpc, "anvil_setStorageAt", staking_contract, slot_key, zero)
+        if available_rewards() == 0:
+            return
+        json_rpc(rpc, "anvil_setStorageAt", staking_contract, slot_key, value)
+    raise AssertionError(f"availableRewards slot not found on {staking_contract}")
+
+
+#: The Trader template below stakes here on first deploy. Its parameters on
+#: Gnosis — livenessPeriod 86400, maxNumInactivityPeriods 2, minStakingDuration
+#: 259200, availableRewards > 0 — put eviction (~2 days) inside the unstaking
+#: lock (3 days), which the health-checker re-stake fork test relies on.
+TRADER_SERVICE_CHAIN = Chain.GNOSIS
+TRADER_STAKING_PROGRAM = "pearl_beta_2"
+
+
+def deploy_and_stake_trader(
+    test_env: "OperateTestEnv",
+) -> t.Tuple[t.Any, str, int, str]:
+    """Deploy the Trader service on-chain and return its staking handles.
+
+    Returns the service manager, the service config id, the token id and the
+    staking contract address.
+    """
+    operate = test_env.operate
+    operate.password = test_env.password
+    service_manager = operate.service_manager()
+
+    services, _ = service_manager.get_all_services()
+    service_config_id = next(
+        svc.service_config_id for svc in services if "trader" in svc.name.lower()
+    )
+    service_manager.deploy_service_onchain_from_safe(
+        service_config_id=service_config_id
+    )
+
+    service = service_manager.load(service_config_id=service_config_id)
+    chain_str = TRADER_SERVICE_CHAIN.value
+    token_id = service.chain_configs[chain_str].chain_data.token
+    staking_contract = t.cast(
+        str, get_staking_contract(chain_str, TRADER_STAKING_PROGRAM)
+    )
+
+    assert (
+        service_manager._get_on_chain_state(  # noqa: SLF001
+            service=service, chain=chain_str
+        )
+        == OnChainState.DEPLOYED
+    )
+    sftxb = service_manager.get_eth_safe_tx_builder(
+        ledger_config=service.chain_configs[chain_str].ledger_config
+    )
+    assert (
+        sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
+        == StakingState.STAKED
+    ), "service should be staked after the first deploy"
+
+    return service_manager, service_config_id, token_id, staking_contract
 
 
 @pytest.fixture(autouse=True)
