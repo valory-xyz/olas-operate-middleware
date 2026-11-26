@@ -237,7 +237,7 @@ class TestRetiredStakingPrograms:
     """Tests for RETIRED_STAKING_PROGRAMS and is_retired_staking_program."""
 
     def test_retired_list_is_exactly_the_scoped_one(self) -> None:
-        """Pins all 41 ids; the app's `retired` flag must hold the same ones."""
+        """Pins the retired list so an id can't be added or dropped unnoticed."""
         assert RETIRED_STAKING_PROGRAMS == {
             Chain.GNOSIS: frozenset(
                 {
@@ -341,6 +341,34 @@ class TestRetiredStakingPrograms:
     ) -> None:
         """Only the listed programs are retired, on their own chain."""
         assert is_retired_staking_program(chain, program_id) is expected
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            # omenstrat_vii, as entered in quickstart's custom contract prompt.
+            "0xB801FD1728Eef27418FE03720b1FF3E769F35152",
+            "0xb801fd1728eef27418fe03720b1ff3e769f35152",
+        ],
+    )
+    def test_matches_a_retired_program_by_its_address(self, address: str) -> None:
+        """A retired program given by its contract address is retired too."""
+        assert STAKING[Chain.GNOSIS]["omenstrat_vii"].lower() == address.lower()
+        assert is_retired_staking_program(Chain.GNOSIS, address) is True
+
+    def test_a_live_program_address_is_not_retired(self) -> None:
+        """A live program's address, or an unknown one, is not retired."""
+        assert (
+            is_retired_staking_program(
+                Chain.GNOSIS, STAKING[Chain.GNOSIS]["omenstrat_viii"]
+            )
+            is False
+        )
+        assert (
+            is_retired_staking_program(
+                Chain.GNOSIS, "0x0000000000000000000000000000000000000001"
+            )
+            is False
+        )
 
     def test_accepts_the_chain_as_a_string(self) -> None:
         """Service configs key chains by their string value."""

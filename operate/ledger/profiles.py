@@ -642,8 +642,22 @@ def has_retired_staking_programs(chain: t.Union[Chain, str]) -> bool:
 def is_retired_staking_program(
     chain: t.Union[Chain, str], staking_program_id: t.Optional[str]
 ) -> bool:
-    """Whether Pearl no longer stakes on this program."""
-    return staking_program_id in RETIRED_STAKING_PROGRAMS.get(Chain(chain), frozenset())
+    """Whether Pearl no longer stakes on this program.
+
+    ``staking_program_id`` may also be a contract address, as quickstart's custom
+    contract option stores it (``get_staking_contract`` reads it the same way).
+    It is matched case-insensitively against the retired programs' addresses.
+    """
+    retired = RETIRED_STAKING_PROGRAMS.get(Chain(chain), frozenset())
+    if staking_program_id is None:
+        return False
+    if staking_program_id in retired:
+        return True
+    address = staking_program_id.lower()
+    return any(
+        STAKING[Chain(chain)].get(program_id, "").lower() == address
+        for program_id in retired
+    )
 
 
 def uses_decoupled_activity(chain: Chain, activity_checker: t.Optional[str]) -> bool:
