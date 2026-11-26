@@ -126,6 +126,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         # Held by a funding run while it moves Master EOA funds, so the
         # funding job cannot spend them mid-run.
         self.master_eoa_lock = threading.Lock()
+        # One worker, shared by every funding_job: a job cancelled on re-login
+        # leaves its running claim or sweep to finish, and the next job's work
+        # queues behind it instead of racing it. The chain tx lock can't do
+        # this, as each job gets its own ServiceManager and so its own locks.
+        self._job_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="funding-job"
+        )
         self._withdrawal_locks: KeyedLocks[t.Tuple[str, str]] = KeyedLocks()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
@@ -1457,55 +1464,52 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
     ) -> None:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
-        # Not a `with` block: its exit waits for running work on the event-loop
-        # thread, so cancelling the job (on every re-login) would block the
-        # daemon until an in-flight claim or sweep finished.
-        executor = ThreadPoolExecutor()
-        try:
-            last_claim = 0.0
-            last_master_eoa_funding = 0.0
-            last_retired_staking_check = 0.0
-            while True:
-                # try claiming rewards every hour
-                if last_claim + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            service_manager.claim_all_on_chain_from_safe,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception("Error occurred while claiming rewards")
-                    last_claim = time()
+        # Never shut down here: that would wait on the event-loop thread for
+        # running work (cancelling happens on every re-login), and the next
+        # job reuses the executor.
+        executor = self._job_executor
+        last_claim = 0.0
+        last_master_eoa_funding = 0.0
+        last_retired_staking_check = 0.0
+        while True:
+            # try claiming rewards every hour
+            if last_claim + 3600 < time():
+                try:
+                    await loop.run_in_executor(
+                        executor,
+                        service_manager.claim_all_on_chain_from_safe,
+                    )
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception("Error occurred while claiming rewards")
+                last_claim = time()
 
-                # fund Master EOA every hour
-                if last_master_eoa_funding + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            self.fund_master_eoa,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception("Error occurred while funding Master EOA")
-                    last_master_eoa_funding = time()
+            # fund Master EOA every hour
+            if last_master_eoa_funding + 3600 < time():
+                try:
+                    await loop.run_in_executor(
+                        executor,
+                        self.fund_master_eoa,
+                    )
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception("Error occurred while funding Master EOA")
+                last_master_eoa_funding = time()
 
-                if (
-                    last_retired_staking_check + RETIRED_STAKING_CHECK_INTERVAL_SECONDS
-                    < time()
-                ):
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            service_manager.unstake_services_on_retired_programs,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception(
-                            "Error occurred while unstaking from retired staking programs"
-                        )
-                    last_retired_staking_check = time()
+            if (
+                last_retired_staking_check + RETIRED_STAKING_CHECK_INTERVAL_SECONDS
+                < time()
+            ):
+                try:
+                    await loop.run_in_executor(
+                        executor,
+                        service_manager.unstake_services_on_retired_programs,
+                    )
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.exception(
+                        "Error occurred while unstaking from retired staking programs"
+                    )
+                last_retired_staking_check = time()
 
-                await asyncio.sleep(60)
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            await asyncio.sleep(60)
 
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.

@@ -22,7 +22,7 @@
 import asyncio
 import threading
 from time import monotonic, time
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -2108,6 +2108,53 @@ async def _instant_sleep(_seconds: float) -> None:
     await _REAL_SLEEP(0)
 
 
+async def _sweep_times_on_a_fake_clock(
+    sweep: Callable[[], None],
+) -> list[float]:
+    """Run funding_job on a clock that advances 60 s a loop; return when the sweep ran.
+
+    Stops after the second sweep.
+    """
+    manager = _make_manager()
+    mock_service_manager = MagicMock()
+    clock = {"now": 10_000.0}
+    sweeps: list[float] = []
+
+    def _recorded_sweep() -> None:
+        sweeps.append(clock["now"])
+        sweep()
+
+    mock_service_manager.unstake_services_on_retired_programs.side_effect = (
+        _recorded_sweep
+    )
+
+    async def _advance(_seconds: float) -> None:
+        clock["now"] += 60
+        await _REAL_SLEEP(0)
+
+    with (
+        patch.object(manager, "fund_master_eoa"),
+        patch(
+            "operate.services.funding_manager.time",
+            side_effect=lambda: clock["now"],
+        ),
+        patch("operate.services.funding_manager.asyncio.sleep", side_effect=_advance),
+    ):
+        task = asyncio.create_task(manager.funding_job(mock_service_manager))
+        for _ in range(200):
+            if len(sweeps) >= 2:
+                break
+            await _REAL_SLEEP(0.01)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    assert len(sweeps) >= 2
+    return sweeps
+
+
 class TestFundingJob:
     """Tests for FundingManager.funding_job (lines 1017-1048)."""
 
@@ -2198,38 +2245,7 @@ class TestFundingJob:
         self,
     ) -> None:
         """The first loop after login sweeps; the next waits RETIRED_STAKING_CHECK_INTERVAL_SECONDS."""
-        manager = _make_manager()
-        mock_service_manager = MagicMock()
-        clock = {"now": 10_000.0}
-        sweeps: list[float] = []
-        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
-            lambda: sweeps.append(clock["now"])
-        )
-
-        async def _advance(_seconds: float) -> None:
-            clock["now"] += 60
-            await _REAL_SLEEP(0)
-
-        with (
-            patch.object(manager, "fund_master_eoa"),
-            patch(
-                "operate.services.funding_manager.time",
-                side_effect=lambda: clock["now"],
-            ),
-            patch(
-                "operate.services.funding_manager.asyncio.sleep", side_effect=_advance
-            ),
-        ):
-            task = asyncio.create_task(manager.funding_job(mock_service_manager))
-            for _ in range(200):
-                if len(sweeps) >= 2:
-                    break
-                await _REAL_SLEEP(0.01)
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        sweeps = await _sweep_times_on_a_fake_clock(lambda: None)
 
         assert sweeps[0] == 10_000.0
         assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL_SECONDS
@@ -2240,46 +2256,66 @@ class TestFundingJob:
         self,
     ) -> None:
         """A failing sweep is not retried on every 60 s loop."""
-        manager = _make_manager()
-        mock_service_manager = MagicMock()
-        clock = {"now": 10_000.0}
-        sweeps: list[float] = []
 
         def _failing_sweep() -> None:
-            sweeps.append(clock["now"])
             raise RuntimeError("rpc down")
 
-        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
-            _failing_sweep
+        sweeps = await _sweep_times_on_a_fake_clock(_failing_sweep)
+
+        assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL_SECONDS
+
+    @pytest.mark.asyncio
+    async def test_a_new_job_waits_for_the_cancelled_jobs_running_sweep(
+        self,
+    ) -> None:
+        """After a re-login, the next job's work queues behind the old job's."""
+        manager = _make_manager()
+        first_started = threading.Event()
+        release_first = threading.Event()
+        events: list[str] = []
+
+        def _first_sweep() -> None:
+            first_started.set()
+            release_first.wait(timeout=5)
+            events.append("first sweep done")
+
+        first_service_manager = MagicMock()
+        first_service_manager.unstake_services_on_retired_programs.side_effect = (
+            _first_sweep
+        )
+        second_service_manager = MagicMock()
+        second_service_manager.claim_all_on_chain_from_safe.side_effect = (
+            lambda: events.append("second job's first call")
         )
 
-        async def _advance(_seconds: float) -> None:
-            clock["now"] += 60
-            await _REAL_SLEEP(0)
-
-        with (
-            patch.object(manager, "fund_master_eoa"),
-            patch(
-                "operate.services.funding_manager.time",
-                side_effect=lambda: clock["now"],
-            ),
-            patch(
-                "operate.services.funding_manager.asyncio.sleep", side_effect=_advance
-            ),
-        ):
-            task = asyncio.create_task(manager.funding_job(mock_service_manager))
+        with patch.object(manager, "fund_master_eoa"):
+            first = asyncio.create_task(manager.funding_job(first_service_manager))
             for _ in range(200):
-                if len(sweeps) >= 2:
+                if first_started.is_set():
                     break
                 await _REAL_SLEEP(0.01)
-            task.cancel()
+            assert first_started.is_set()
+            first.cancel()
             try:
-                await task
+                await first
             except asyncio.CancelledError:
                 pass
 
-        assert len(sweeps) >= 2
-        assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL_SECONDS
+            second = asyncio.create_task(manager.funding_job(second_service_manager))
+            await _REAL_SLEEP(0.1)
+            assert events == [], "the second job must not start while the sweep runs"
+            release_first.set()
+            for _ in range(200):
+                if len(events) >= 2:
+                    break
+                await _REAL_SLEEP(0.01)
+            second.cancel()
+            try:
+                await second
+            except asyncio.CancelledError:
+                pass
+
+        assert events[:2] == ["first sweep done", "second job's first call"]
 
     @pytest.mark.asyncio
     async def test_cancelling_the_job_does_not_wait_for_running_work(
