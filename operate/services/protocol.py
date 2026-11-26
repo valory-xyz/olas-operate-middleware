@@ -772,6 +772,9 @@ class StakingManager:
                 service_id=service_id, staking_contract=service_owner
             )
 
+        except json.JSONDecodeError:
+            # A ValueError, but a malformed RPC response, not an answer.
+            raise
         except (ContractLogicError, BadFunctionCallOutput, ValueError):
             # The owner is not a staking contract: it reverts, has no code
             # (an EOA returns empty data) or returns no valid state. RPC

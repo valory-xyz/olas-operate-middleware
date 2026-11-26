@@ -18,6 +18,7 @@
 # ------------------------------------------------------------------------------
 """Unit tests for operate/services/protocol.py."""
 
+import json
 import typing as t
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -851,6 +852,13 @@ class TestGetCurrentStakingProgram:
         """An RPC failure is not read as "not staked"."""
         with pytest.raises(Web3RPCError):
             self._read_with_staking_state_error(Web3RPCError("rate limited"))
+
+    def test_a_malformed_rpc_response_is_raised(self) -> None:
+        """A non-JSON response is a ValueError, but not an answer."""
+        with pytest.raises(json.JSONDecodeError):
+            self._read_with_staking_state_error(
+                json.JSONDecodeError("Expecting value", "<html>", 0)
+            )
 
     def _read_with_staking_state_error(self, error: Exception) -> t.Optional[str]:
         """Read the current program of service 1 with ``staking_state`` raising."""
