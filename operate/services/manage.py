@@ -196,7 +196,7 @@ def _refuse_retired_staking_programs(
     current_staking_program: t.Optional[str],
     target_staking_program: t.Optional[str],
 ) -> None:
-    """Raise if the deploy would keep the service staked on a retired program."""
+    """Raise if a staked deploy would use a retired program, current or target."""
     if not use_staking:
         return
     for staking_program_id in (current_staking_program, target_staking_program):
@@ -2126,7 +2126,7 @@ class ServiceManager:
         return StakingReconcileOutcome.RECONCILED
 
     def refuse_retired_staking_programs(self, service_config_id: str) -> None:
-        """Raise RetiredStakingProgramError if a deploy would stay staked on a retired program."""
+        """Raise RetiredStakingProgramError if a staked deploy would use a retired program, current or target."""
         service = self.load(service_config_id=service_config_id)
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
