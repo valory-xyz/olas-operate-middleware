@@ -492,6 +492,8 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
         "omenstrat_v",
         "omenstrat_vi",
         "omenstrat_vii",
+        "connect_i",
+        "connect_ii",
     },
     Chain.BASE: {"basius_i", "basius_ii", "basius_iii"},
     Chain.OPTIMISM: {"optimus_i", "optimus_ii", "optimus_iii"},
@@ -503,6 +505,7 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
         "polystrat_v",
         "polystrat_vi",
     },
+    Chain.ROBINHOOD: {"connect_i", "connect_ii", "connect_iii"},
 }
 
 _DECOUPLED_ENTRIES = [

@@ -154,6 +154,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "omenstrat_v": "0x93aAA7155942700cad74c250263fB2D0c6F72B27",
         "omenstrat_vi": "0xB7ab6F7e6993Df1f0c6A9B177B169Faf4b0C9CCa",
         "omenstrat_vii": "0xB801FD1728Eef27418FE03720b1FF3E769F35152",
+        "connect_i": "0xe09B0b884A0d483f52BE854CdaaA59e0150bF9c2",
+        "connect_ii": "0xC6860D6127fa605403f1567513D9c6ebfB8A278A",
     },
     Chain.OPTIMISM: {
         "optimus_alpha_1": "0x88996bbdE7f982D93214881756840cE2c77C4992",
@@ -205,7 +207,11 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "polystrat_v": "0x4c367f1Df1e16263d55A896c0909cCa7333D835F",
         "polystrat_vi": "0xf7F371f2E72E326d42323562a14ED01fF5a53D12",
     },
-    Chain.ROBINHOOD: {},
+    Chain.ROBINHOOD: {
+        "connect_i": "0x228DC61b838D6eD82347a93aA2cd3e28544808Ea",
+        "connect_ii": "0x009Cda4D71c56Db6A1bac850483DB8E01D32884E",
+        "connect_iii": "0x7Bb72fa48b274672Cb6A362045cdCf470aEe99b2",
+    },
 }
 
 
@@ -218,6 +224,7 @@ DECOUPLED_ACTIVITY_CHECKERS: t.Dict[Chain, str] = {
     Chain.BASE: "0xE73C4e90983aa65d42b2de968E0C8F25Ced835A8",
     Chain.OPTIMISM: "0x408dCA2b565f5eC7779C181870feFb51Ed67C3F4",
     Chain.POLYGON: "0x5B70A66fe68c4c86FFd724B58cc56049c70e9D3D",
+    Chain.ROBINHOOD: "0x8d790f3ac75fD9c0F7fdB84fd09FE8CF7D0dBB6B",
 }
 
 
@@ -241,6 +248,10 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
     "0x46C0D07F55d4F9B5Eed2Fc9680B5953e5fd7b461": (
         "0x650C77F49cFa69e2AC1990A6B4585C322B012D0d",
         194,
+    ),
+    "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8": (
+        "0x7aB7034285FB57610053125c9E71f9F3738eB1F7",
+        3,
     ),
 }
 
