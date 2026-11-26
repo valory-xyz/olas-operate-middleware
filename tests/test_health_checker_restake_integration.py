@@ -37,8 +37,6 @@ import pytest
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
 
-from operate.data import DATA_DIR
-from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import LedgerType, StakingReconcileOutcome
 from operate.services.protocol import StakingState
@@ -46,10 +44,12 @@ from operate.services.protocol import StakingState
 from tests.conftest import (
     OnFork,
     OperateTestEnv,
+    STAKING_TOKEN_CTR,
     TRADER_SERVICE_CHAIN,
     TRADER_STAKING_PROGRAM,
     deploy_and_stake_trader,
     fork_increase_time,
+    master_eoa_nonce,
 )
 from tests.constants import LOGGER
 
@@ -57,17 +57,10 @@ from tests.constants import LOGGER
 # spare rounds so a contract that counts differently still converges.
 MAX_CHECKPOINTS = 8
 
-_STAKING_CTR = t.cast(
-    StakingTokenContract,
-    StakingTokenContract.from_dir(
-        directory=str(DATA_DIR / "contracts" / "staking_token")
-    ),
-)
-
 
 def _staking_params(ledger_api: t.Any, staking_contract: str) -> t.Dict[str, int]:
     """Read the eviction-relevant parameters off the staking contract."""
-    instance = _STAKING_CTR.get_instance(
+    instance = STAKING_TOKEN_CTR.get_instance(
         ledger_api=ledger_api, contract_address=staking_contract
     )
     return {
@@ -84,7 +77,7 @@ def _send_checkpoint(service_manager: t.Any, staking_contract: str) -> None:
     wallet = service_manager.wallet_manager.load(LedgerType.ETHEREUM)
     calldata = t.cast(
         bytes,
-        _STAKING_CTR.build_checkpoint_tx(
+        STAKING_TOKEN_CTR.build_checkpoint_tx(
             ledger_api=ledger_api, contract_address=staking_contract
         )["data"],
     )
@@ -214,17 +207,14 @@ class TestHealthCheckerRestakeIntegration(OnFork):
             f"locked: {params}"
         )
 
-        # Every write in the staking flow is broadcast by the master EOA, so its
-        # transaction count tells whether anything was sent.
-        master_eoa = service_manager.wallet_manager.load(LedgerType.ETHEREUM).address
-        nonce_before = ledger_api.api.eth.get_transaction_count(master_eoa)
+        nonce_before = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
         outcome = service_manager.reconcile_staking_for_restart(
             service_config_id=service_config_id
         )
 
         assert outcome == StakingReconcileOutcome.EVICTED_CANNOT_RESTAKE
         assert (
-            ledger_api.api.eth.get_transaction_count(master_eoa) == nonce_before
+            master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce_before
         ), "no transaction should be sent for an eviction that cannot be cleared"
         assert (
             sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)

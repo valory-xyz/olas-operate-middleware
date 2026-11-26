@@ -236,6 +236,26 @@ def fork_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
     json_rpc(rpc, "evm_mine")
 
 
+#: The staking-token contract wrapper, loaded once for the fork helpers and tests.
+STAKING_TOKEN_CTR = t.cast(
+    StakingTokenContract,
+    StakingTokenContract.from_dir(
+        directory=str(DATA_DIR / "contracts" / "staking_token")
+    ),
+)
+
+
+def master_eoa_nonce(service_manager: t.Any, chain: Chain) -> int:
+    """The master EOA's transaction count on the chain's fork.
+
+    Every write in the staking flows is broadcast by the master EOA, so an
+    unchanged count means nothing was sent.
+    """
+    ledger_api = get_default_ledger_api(chain)
+    master_eoa = service_manager.wallet_manager.load(LedgerType.ETHEREUM).address
+    return ledger_api.api.eth.get_transaction_count(master_eoa)
+
+
 def fork_empty_reward_pool(chain: Chain, staking_contract: str) -> None:
     """Set the staking contract's ``availableRewards`` to 0 on the chain's fork.
 
@@ -244,17 +264,11 @@ def fork_empty_reward_pool(chain: Chain, staking_contract: str) -> None:
     """
     rpc = get_default_rpc(chain)
     ledger_api = get_default_ledger_api(chain)
-    staking_ctr = t.cast(
-        StakingTokenContract,
-        StakingTokenContract.from_dir(
-            directory=str(DATA_DIR / "contracts" / "staking_token")
-        ),
-    )
 
     def available_rewards() -> int:
         return t.cast(
             int,
-            staking_ctr.available_rewards(
+            STAKING_TOKEN_CTR.available_rewards(
                 ledger_api=ledger_api, contract_address=staking_contract
             )["data"],
         )
@@ -275,10 +289,11 @@ def fork_empty_reward_pool(chain: Chain, staking_contract: str) -> None:
     raise AssertionError(f"availableRewards slot not found on {staking_contract}")
 
 
-#: The Trader template below stakes here on first deploy. Its parameters on
-#: Gnosis — livenessPeriod 86400, maxNumInactivityPeriods 2, minStakingDuration
-#: 259200, availableRewards > 0 — put eviction (~2 days) inside the unstaking
-#: lock (3 days), which the health-checker re-stake fork test relies on.
+#: The Trader template below stakes here on first deploy. The health-checker
+#: re-stake fork test relies on its eviction falling inside the unstaking lock,
+#: and asserts the parameters that make it so. The retired-program fork tests
+#: rely on its minimum staking duration fitting `fork_increase_time`'s default
+#: warp.
 TRADER_SERVICE_CHAIN = Chain.GNOSIS
 TRADER_STAKING_PROGRAM = "pearl_beta_2"
 
