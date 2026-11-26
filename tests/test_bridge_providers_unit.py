@@ -1110,7 +1110,13 @@ class TestRelayProviderUnit:
         )
         req.quote_data = _make_quote_data(provider_data=provider_data)
 
-        with patch("operate.bridge.providers.relay_provider.requests.get") as get:
+        with (
+            patch("operate.bridge.providers.relay_provider.requests.get") as get,
+            patch("operate.bridge.providers.provider.get_default_ledger_api") as api,
+        ):
+            api.return_value.api.eth.get_transaction_receipt.side_effect = (
+                TransactionNotFound("not found")
+            )
             provider._update_execution_status(req)  # pylint: disable=protected-access
 
         get.assert_not_called()
