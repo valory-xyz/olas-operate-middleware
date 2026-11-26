@@ -1036,17 +1036,14 @@ class TestDeployRecoveryModuleGate:
             "multisig": _SERVICE_SAFE,
             "canonical_agents": [25],
         }
+        sftxb.get_staking_params.side_effect = _ReachedStakingRead
 
         raised: t.Optional[BaseException] = None
         with (
             patch.object(manager, "load", return_value=service),
             patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
             patch.object(manager, "_enable_recovery_module", side_effect=error),
-            patch.object(
-                manager,
-                "_get_current_staking_program",
-                side_effect=_ReachedStakingRead,
-            ),
+            patch.object(manager, "_get_current_staking_program", return_value=None),
             patch.dict("os.environ", {}),
         ):
             try:
