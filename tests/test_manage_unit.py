@@ -45,6 +45,7 @@ from operate.operate_types import (
     LedgerConfig,
     OnChainState,
     OnChainUserParams,
+    StakeFlowOutcome,
     StakingEvictionState,
     StakingReconcileOutcome,
 )
@@ -3307,9 +3308,11 @@ class TestStakeBatching:
             ),
             patch.object(manager, "_get_current_staking_program", return_value=None),
         ):
-            manager.stake_service_on_chain_from_safe(
+            outcome = manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-test", chain=_CHAIN
             )
+
+        assert outcome == StakeFlowOutcome.RETIRED_TARGET
 
         sftxb.get_staking_data.assert_not_called()
         sftxb.new_tx.assert_not_called()
@@ -3477,7 +3480,7 @@ class TestReconcileStakingForRestart:
         tmp_path: Path,
         eviction_states: t.Dict[str, StakingEvictionState],
         after_restake: t.Optional[t.Dict[str, StakingEvictionState]] = None,
-        target_staking_program: str = "omenstrat_viii",
+        stake_outcome: StakeFlowOutcome = StakeFlowOutcome.RAN,
     ) -> ServiceManager:
         """Create a manager whose eviction read returns the given states.
 
@@ -3496,24 +3499,18 @@ class TestReconcileStakingForRestart:
             side_effect=lambda **_kwargs: next(first_read, cleared)
         )
         manager.stake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
-            return_value=True
+            return_value=stake_outcome
         )
-        service = _make_staking_service(chains=list(eviction_states))
-        for chain_config in service.chain_configs.values():
-            chain_config.chain_data.user_params.staking_program_id = (
-                target_staking_program
-            )
-        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
         return manager
 
     def test_a_retired_target_is_reported_as_unstaked_not_restaked(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """The flow unstakes but won't stake on a retired target; say so."""
+        """The stake flow's own outcome decides: unstaked, not re-staked."""
         manager = self._manager(
             tmp_path,
             {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE},
-            target_staking_program="omenstrat_iii",
+            stake_outcome=StakeFlowOutcome.RETIRED_TARGET,
         )
 
         with caplog.at_level(logging.INFO, logger="test"):
@@ -3526,24 +3523,6 @@ class TestReconcileStakingForRestart:
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warnings) == 1
         assert "not re-staked on ['gnosis']" in warnings[0].getMessage()
-
-    def test_an_unreadable_target_is_reported_as_restaked(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """A failed config read costs only the precise log line."""
-        manager = self._manager(
-            tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
-        )
-        manager.load = MagicMock(side_effect=FileNotFoundError("config.json"))  # type: ignore[method-assign]
-
-        with caplog.at_level(logging.INFO, logger="test"):
-            outcome = manager.reconcile_staking_for_restart(
-                service_config_id="sc-test-id"
-            )
-
-        assert outcome == StakingReconcileOutcome.RECONCILED
-        assert "re-staked on ['gnosis']" in caplog.text
-        assert "Failed to read the target staking program" in caplog.text
 
     def test_not_evicted_touches_nothing(self, tmp_path: Path) -> None:
         """A healthy service must not reach a wallet at all."""
@@ -3619,7 +3598,9 @@ class TestReconcileStakingForRestart:
         manager = self._manager(
             tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
         )
-        manager.stake_service_on_chain_from_safe.return_value = False  # type: ignore[attr-defined]
+        manager.stake_service_on_chain_from_safe.return_value = (  # type: ignore[attr-defined]
+            StakeFlowOutcome.LOCK_BUSY
+        )
 
         outcome = manager.reconcile_staking_for_restart(service_config_id="sc-test-id")
 
@@ -3710,13 +3691,15 @@ class TestChainTransactionLock:
     def test_blocking_caller_runs_the_staking_flow(self, tmp_path: Path) -> None:
         """The deploy path must never silently skip staking."""
         manager = _make_manager(tmp_path)
-        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            return_value=StakeFlowOutcome.RAN
+        )
 
         assert (
             manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-a", chain=_CHAIN
             )
-            is True
+            == StakeFlowOutcome.RAN
         )
         manager._stake_service_on_chain_from_safe_unlocked.assert_called_once_with(  # type: ignore[attr-defined]
             service_config_id="sc-a", chain=_CHAIN
@@ -3725,14 +3708,16 @@ class TestChainTransactionLock:
     def test_non_blocking_caller_skips_on_contention(self, tmp_path: Path) -> None:
         """A background reconciliation must not queue behind a foreground start."""
         manager = _make_manager(tmp_path)
-        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            return_value=StakeFlowOutcome.RAN
+        )
 
         with manager.get_chain_tx_lock(_CHAIN):
             ran = manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-a", chain=_CHAIN, blocking=False
             )
 
-        assert ran is False
+        assert ran == StakeFlowOutcome.LOCK_BUSY
         manager._stake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]
 
     def test_non_blocking_unstake_skips_on_contention(self, tmp_path: Path) -> None:
@@ -3770,26 +3755,30 @@ class TestChainTransactionLock:
     def test_another_service_on_the_same_chain_is_blocked(self, tmp_path: Path) -> None:
         """The Safe is shared, so a different service is still a collision."""
         manager = _make_manager(tmp_path)
-        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            return_value=StakeFlowOutcome.RAN
+        )
 
         with manager.get_chain_tx_lock(_CHAIN):
             ran = manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-b", chain=_CHAIN, blocking=False
             )
 
-        assert ran is False
+        assert ran == StakeFlowOutcome.LOCK_BUSY
 
     def test_another_chain_is_not_blocked(self, tmp_path: Path) -> None:
         """Different chain, different Safe, different nonce."""
         manager = _make_manager(tmp_path)
-        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            return_value=StakeFlowOutcome.RAN
+        )
 
         with manager.get_chain_tx_lock(_CHAIN):
             ran = manager.stake_service_on_chain_from_safe(
                 service_config_id="sc-a", chain="base", blocking=False
             )
 
-        assert ran is True
+        assert ran == StakeFlowOutcome.RAN
 
     def test_lock_is_released_when_the_staking_flow_raises(
         self, tmp_path: Path
@@ -3842,14 +3831,16 @@ class TestChainTransactionLock:
         """
         manager = _make_manager(tmp_path)
         manager._unstake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
-        manager._stake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+        manager._stake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            return_value=StakeFlowOutcome.RAN
+        )
 
         def _unstake(**_kwargs: object) -> None:
             assert (
                 manager.stake_service_on_chain_from_safe(
                     service_config_id="sc-b", chain=_CHAIN, blocking=False
                 )
-                is False
+                == StakeFlowOutcome.LOCK_BUSY
             )
 
         manager._unstake_service_on_chain_from_safe_unlocked.side_effect = (  # type: ignore[attr-defined]

@@ -12,7 +12,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from operate.operate_types import StakingEvictionState, StakingReconcileOutcome
+from operate.operate_types import (
+    StakeFlowOutcome,
+    StakingEvictionState,
+    StakingReconcileOutcome,
+)
 from operate.services.health_checker import HealthChecker
 from operate.services.manage import ServiceManager
 
@@ -337,7 +341,7 @@ class TestStakingReconciliationRaceConditions:
                 manager.stake_service_on_chain_from_safe(
                     service_config_id="sc-a", chain="base", blocking=False
                 )
-                is True
+                != StakeFlowOutcome.LOCK_BUSY
             )
         finally:
             release.set()
