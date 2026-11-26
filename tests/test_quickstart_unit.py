@@ -984,7 +984,7 @@ class TestStakingMenuProgramIds:
     def test_every_quickstart_agent_keeps_a_live_program(
         self, chain: Chain, agent: str
     ) -> None:
-        """The retired filter leaves each agent with a registered program at least one live program."""
+        """Every agent with a registered program keeps at least one live program after the retired filter."""
         registered = [
             program_id
             for program_id, program_agent in QS_STAKING_PROGRAMS[chain].items()
@@ -1026,7 +1026,9 @@ class TestDeployOnchainOrExit:
             _deploy_onchain_or_exit(manager, "sc-1")
 
         assert exc_info.value.code == 1
-        assert "enable the module" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "enable the module" in out
+        assert "reset-staking" not in out
         manager.logger.error.assert_called_once()
 
     def test_retired_program_prints_the_message_and_exits_1(

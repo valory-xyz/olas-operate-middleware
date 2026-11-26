@@ -1817,7 +1817,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         except RetiredStakingProgramError as e:
             logger.error(f"Deploy refused for {safe_id}: {e}")
-            # Built from the program id alone, not the exception text.
+            # The body is rebuilt from the program id, so no exception text leaks.
             return JSONResponse(
                 content=e.to_error_fields(),
                 status_code=HTTPStatus.CONFLICT,

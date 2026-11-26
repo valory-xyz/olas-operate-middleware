@@ -80,13 +80,18 @@ class RetiredStakingProgramError(Exception):
 
     def __init__(self, staking_program_id: str) -> None:
         """Initialize the error."""
-        super().__init__(f"Staking program {staking_program_id} is retired.")
+        super().__init__(self.message_for(staking_program_id))
         self.staking_program_id = staking_program_id
+
+    @staticmethod
+    def message_for(staking_program_id: str) -> str:
+        """Return the message, shared by ``str(e)`` and the 409 body."""
+        return f"Staking program {staking_program_id} is retired."
 
     def to_error_fields(self) -> t.Dict:
         """Return the full JSONResponse body: message, code and program id."""
         return {
-            "error": f"Staking program {self.staking_program_id} is retired.",
+            "error": self.message_for(self.staking_program_id),
             "error_code": self.error_code,
             "staking_program_id": self.staking_program_id,
         }

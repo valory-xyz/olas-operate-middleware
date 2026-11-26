@@ -2108,7 +2108,7 @@ class ServiceManager:
         )
         if unstaked_only:
             self.logger.warning(
-                f"Service {service_config_id} was unstaked but not re-staked on "
+                f"Service {service_config_id} is not re-staked on "
                 f"{unstaked_only}: its target staking program is retired. It "
                 "runs unstaked and earns no rewards until it switches program."
             )
@@ -2233,7 +2233,7 @@ class ServiceManager:
         )
         if not ran:
             return StakeFlowOutcome.LOCK_BUSY
-        return outcome if outcome is not None else StakeFlowOutcome.RAN
+        return t.cast(StakeFlowOutcome, outcome)
 
     def _run_under_chain_tx_lock(
         self,
