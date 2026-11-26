@@ -51,6 +51,7 @@ from operate.ledger.profiles import (
     EXPLORER_URL,
     OLAS,
     PUSD,
+    RETIRED_STAKING_PROGRAMS,
     STAKING,
     USDG,
     WRAPPED_NATIVE_ASSET,
@@ -59,6 +60,7 @@ from operate.ledger.profiles import (
     get_asset_name,
     get_asset_symbol,
     get_staking_contract,
+    is_retired_staking_program,
     uses_decoupled_activity,
 )
 from operate.operate_types import Chain
@@ -228,6 +230,63 @@ class TestGetStakingContract:
         """Test an unknown staking program ID is returned unchanged."""
         result = get_staking_contract("gnosis", "not_a_real_program_xyz")
         assert result == "not_a_real_program_xyz"
+
+
+class TestRetiredStakingPrograms:
+    """Tests for RETIRED_STAKING_PROGRAMS and is_retired_staking_program."""
+
+    def test_retired_ids_are_real_programs(self) -> None:
+        """Every retired id is a registered program on its chain."""
+        for chain, retired in RETIRED_STAKING_PROGRAMS.items():
+            unknown = retired - set(STAKING[chain])
+            assert not unknown, f"{chain.value}: {sorted(unknown)}"
+
+    @pytest.mark.parametrize(
+        ("chain", "program_id", "expected"),
+        [
+            (Chain.GNOSIS, "pearl_alpha", True),
+            (Chain.GNOSIS, "pearl_beta_mech_marketplace_8", True),
+            (Chain.GNOSIS, "omenstrat_vii", True),
+            (Chain.GNOSIS, "omenstrat_viii", False),
+            (Chain.GNOSIS, "quickstart_beta_expert_1", False),
+            (Chain.POLYGON, "polygon_beta_3", True),
+            (Chain.POLYGON, "polystrat_vi", True),
+            (Chain.POLYGON, "polystrat_vii", False),
+            (Chain.OPTIMISM, "optimus_alpha_1", False),
+            (Chain.OPTIMISM, "optimus_alpha_2", True),
+            (Chain.OPTIMISM, "optimus_iii", True),
+            (Chain.OPTIMISM, "optimus_iv", False),
+            (Chain.BASE, "basius_iii", True),
+            (Chain.BASE, "basius_iv", False),
+            (Chain.BASE, "agents_fun_1", False),
+            (Chain.MODE, "modius_alpha", False),
+            (Chain.GNOSIS, None, False),
+        ],
+    )
+    def test_is_retired_staking_program(
+        self, chain: Chain, program_id: t.Optional[str], expected: bool
+    ) -> None:
+        """Only the listed programs are retired, on their own chain."""
+        assert is_retired_staking_program(chain, program_id) is expected
+
+    def test_accepts_the_chain_as_a_string(self) -> None:
+        """Service configs key chains by their string value."""
+        assert is_retired_staking_program("gnosis", "omenstrat_i") is True
+
+    def test_new_programs_are_registered(self) -> None:
+        """The replacement programs are registered at their contract addresses."""
+        assert STAKING[Chain.GNOSIS]["omenstrat_viii"] == (
+            "0x9C254A169D71cFF6766D9702425Ec467B62B95EC"
+        )
+        assert STAKING[Chain.POLYGON]["polystrat_vii"] == (
+            "0x1eFb70d9e7ec63F7CC51BF684E3e4AF54eF3CE46"
+        )
+        assert STAKING[Chain.OPTIMISM]["optimus_iv"] == (
+            "0xaDa8AFB446576483B791f58Da33b20ebd217c1fE"
+        )
+        assert STAKING[Chain.BASE]["basius_iv"] == (
+            "0x180E4A9A59BA5B6817fA0668A864343147E8A63b"
+        )
 
 
 class TestUsesDecoupledActivity:
@@ -492,9 +551,26 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
         "omenstrat_v",
         "omenstrat_vi",
         "omenstrat_vii",
+        "omenstrat_viii",
+        "omenstrat_ix",
+        "omenstrat_x",
     },
-    Chain.BASE: {"basius_i", "basius_ii", "basius_iii"},
-    Chain.OPTIMISM: {"optimus_i", "optimus_ii", "optimus_iii"},
+    Chain.BASE: {
+        "basius_i",
+        "basius_ii",
+        "basius_iii",
+        "basius_iv",
+        "basius_v",
+        "basius_vi",
+    },
+    Chain.OPTIMISM: {
+        "optimus_i",
+        "optimus_ii",
+        "optimus_iii",
+        "optimus_iv",
+        "optimus_v",
+        "optimus_vi",
+    },
     Chain.POLYGON: {
         "polystrat_i",
         "polystrat_ii",
@@ -502,6 +578,9 @@ _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
         "polystrat_iv",
         "polystrat_v",
         "polystrat_vi",
+        "polystrat_vii",
+        "polystrat_viii",
+        "polystrat_ix",
     },
 }
 
