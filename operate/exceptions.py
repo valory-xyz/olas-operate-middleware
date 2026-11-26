@@ -84,8 +84,9 @@ class RetiredStakingProgramError(Exception):
         self.staking_program_id = staking_program_id
 
     def to_error_fields(self) -> t.Dict:
-        """Return structured error fields for merging into a JSONResponse body."""
+        """Return the full JSONResponse body: message, code and program id."""
         return {
+            "error": f"Staking program {self.staking_program_id} is retired.",
             "error_code": self.error_code,
             "staking_program_id": self.staking_program_id,
         }
