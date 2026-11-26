@@ -21,6 +21,7 @@
 import json
 import os
 import subprocess  # nosec
+import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
@@ -47,11 +48,14 @@ from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import (
     CUSTOM_PROGRAM_ID,
     DEPRECATED_QS_STAKING_PROGRAMS,
+    QS_STAKING_PROGRAMS,
     _ask_funds_from_requirements,
     _deploy_onchain_or_exit,
     _deprecated_program_warning,
     _maybe_create_master_eoa,
     _refuse_retired_or_exit,
+    _refuse_retired_then_fund,
+    _staking_menu_program_ids,
     ask_confirm_password,
     ask_password_if_needed,
     get_service,
@@ -896,6 +900,73 @@ class TestRefuseRetiredOrExit:
         manager.refuse_retired_staking_programs.assert_called_once_with(
             service_config_id="sc-1"
         )
+
+
+class TestRefuseRetiredThenFund:
+    """Tests for _refuse_retired_then_fund: the refusal comes before any funding."""
+
+    def test_retired_program_exits_before_funding(self) -> None:
+        """A refused deploy moves no funds."""
+        manager = MagicMock()
+        manager.refuse_retired_staking_programs.side_effect = (
+            RetiredStakingProgramError(staking_program_id="optimus_alpha_2")
+        )
+        service = MagicMock(service_config_id="sc-1")
+
+        with patch(
+            "operate.quickstart.run_service.ensure_enough_funds"
+        ) as ensure_enough_funds:
+            with pytest.raises(SystemExit) as exc_info:
+                _refuse_retired_then_fund(MagicMock(), manager, service)
+
+        assert exc_info.value.code == 1
+        ensure_enough_funds.assert_not_called()
+
+    def test_live_program_is_checked_then_funded(self) -> None:
+        """Nothing retired: the check runs, then the funding."""
+        calls: t.List[str] = []
+        manager = MagicMock()
+        manager.refuse_retired_staking_programs.side_effect = lambda **_: calls.append(
+            "refuse"
+        )
+        operate = MagicMock()
+        service = MagicMock(service_config_id="sc-1")
+
+        with patch(
+            "operate.quickstart.run_service.ensure_enough_funds",
+            side_effect=lambda *_: calls.append("fund"),
+        ) as ensure_enough_funds:
+            _refuse_retired_then_fund(operate, manager, service)
+
+        assert calls == ["refuse", "fund"]
+        ensure_enough_funds.assert_called_once_with(operate, service)
+
+
+class TestStakingMenuProgramIds:
+    """Tests for _staking_menu_program_ids."""
+
+    def test_leaves_out_retired_programs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A retired program is not offered; a live one and the fixed entries are."""
+        monkeypatch.setitem(
+            QS_STAKING_PROGRAMS,
+            Chain.OPTIMISM,
+            {"optimus_alpha_2": "optimus", "optimus_iv": "optimus"},
+        )
+
+        assert _staking_menu_program_ids(Chain.OPTIMISM, "Optimus") == [
+            NO_STAKING_PROGRAM_ID,
+            "optimus_iv",
+            CUSTOM_PROGRAM_ID,
+        ]
+
+    def test_only_this_agents_programs(self) -> None:
+        """Programs for another agent on the chain are not offered."""
+        ids = _staking_menu_program_ids(Chain.GNOSIS, "Mech agent")
+
+        assert ids[0] == NO_STAKING_PROGRAM_ID
+        assert ids[-1] == CUSTOM_PROGRAM_ID
+        assert "mech_marketplace" in ids
+        assert "quickstart_beta_expert_2" not in ids
 
 
 class TestDeployOnchainOrExit:

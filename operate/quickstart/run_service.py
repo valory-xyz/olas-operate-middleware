@@ -242,6 +242,21 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
     return config
 
 
+def _staking_menu_program_ids(home_chain: Chain, template_name: str) -> t.List[str]:
+    """Staking menu entries: no staking, this agent's live programs, then custom."""
+    return (
+        [NO_STAKING_PROGRAM_ID]
+        + [
+            program_id
+            for program_id in STAKING[home_chain]
+            if program_id in QS_STAKING_PROGRAMS[home_chain]
+            and QS_STAKING_PROGRAMS[home_chain][program_id] in template_name.lower()
+            and not is_retired_staking_program(home_chain, program_id)
+        ]
+        + [CUSTOM_PROGRAM_ID]
+    )
+
+
 def configure_local_config(  # pragma: no cover
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
@@ -290,17 +305,7 @@ def configure_local_config(  # pragma: no cover
     if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
         available_choices = {}
-        ids = (
-            [NO_STAKING_PROGRAM_ID]
-            + [
-                id
-                for id in STAKING[home_chain]
-                if id in QS_STAKING_PROGRAMS[home_chain]
-                and QS_STAKING_PROGRAMS[home_chain][id] in template["name"].lower()
-                and not is_retired_staking_program(home_chain, id)
-            ]
-            + [CUSTOM_PROGRAM_ID]
-        )
+        ids = _staking_menu_program_ids(home_chain, template["name"])
 
         for index, program_id in enumerate(ids):
             if program_id == NO_STAKING_PROGRAM_ID:
@@ -740,7 +745,7 @@ def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> 
 
 
 def _refuse_retired_or_exit(manager: ServiceManager, service_config_id: str) -> None:
-    """Exit with status 1 before any funding if the deploy would stay on a retired program."""
+    """Exit with status 1 before any funding if a staked deploy would use a retired program, current or target."""
     try:
         manager.refuse_retired_staking_programs(service_config_id=service_config_id)
     except RetiredStakingProgramError as e:
@@ -779,6 +784,14 @@ def ensure_enough_funds(
                 )
 
 
+def _refuse_retired_then_fund(
+    operate: "OperateApp", manager: ServiceManager, service: Service
+) -> None:
+    """Refuse a retired program first, so no funds move for a deploy that would be refused."""
+    _refuse_retired_or_exit(manager, service.service_config_id)
+    ensure_enough_funds(operate, service)
+
+
 def run_service(  # pragma: no cover
     operate: "OperateApp",
     config_path: str,
@@ -803,8 +816,7 @@ def run_service(  # pragma: no cover
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
-    _refuse_retired_or_exit(manager, service.service_config_id)
-    ensure_enough_funds(operate, service)
+    _refuse_retired_then_fund(operate, manager, service)
 
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")
     print_section(f"Deploying on-chain service on {config.principal_chain}...")
