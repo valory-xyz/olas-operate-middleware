@@ -71,3 +71,12 @@ class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
     """The Agent EOA owns the service Safe and its enableModule failed."""
 
     error_code = "AGENT_COULD_NOT_ENABLE_RECOVERY_MODULE"
+
+
+class RetiredStakingProgramError(Exception):
+    """A deploy would keep the service staked on a retired staking program."""
+
+    def __init__(self, staking_program_id: str) -> None:
+        """Initialize the error."""
+        super().__init__(f"Staking program {staking_program_id} is retired.")
+        self.staking_program_id = staking_program_id

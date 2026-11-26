@@ -49,6 +49,7 @@ from operate.constants import DEPLOYMENT_DIR, OPERATE, SERVICES_DIR, ZERO_ADDRES
 from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
     ServicePackageDownloadError,
 )
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
@@ -1998,6 +1999,21 @@ class TestServiceRoutes:
                 "error": "Fix it this way.",
                 "error_code": error_code,
             }
+
+    def test_deploy_service_retired_staking_program(self) -> None:
+        """Deploy returns 409 naming the retired program, and runs no healthcheck."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            RetiredStakingProgramError(staking_program_id="omenstrat_iii")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.CONFLICT
+            assert resp.json() == {"error": "Staking program omenstrat_iii is retired."}
+            m.service_manager.return_value.deploy_service_locally.assert_not_called()
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""
