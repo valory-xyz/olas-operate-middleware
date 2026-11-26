@@ -2039,6 +2039,25 @@ class ServiceManager:
             )
             return None
 
+    def _has_retired_target(self, service_config_id: str, chain: str) -> bool:
+        """Whether the service's target program on this chain is retired.
+
+        A failed read is logged and reported as not retired, so it only costs
+        the more precise log line, never the reconciliation.
+        """
+        try:
+            service = self.load(service_config_id=service_config_id)
+            target = service.chain_configs[
+                chain
+            ].chain_data.user_params.staking_program_id
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"Failed to read the target staking program of {service_config_id} "
+                f"on {chain}. Exception {e}"
+            )
+            return False
+        return is_retired_staking_program(chain, target)
+
     def reconcile_staking_for_restart(  # pylint: disable=too-many-return-statements
         self, service_config_id: str
     ) -> StakingReconcileOutcome:
@@ -2071,17 +2090,6 @@ class ServiceManager:
         if not unstakable:
             return StakingReconcileOutcome.NOTHING_TO_DO
 
-        # The staking flow unstakes these but won't stake on a retired target.
-        service = self.load(service_config_id=service_config_id)
-        retired_target = {
-            chain
-            for chain in unstakable
-            if is_retired_staking_program(
-                chain,
-                service.chain_configs[chain].chain_data.user_params.staking_program_id,
-            )
-        }
-
         restaked: t.List[str] = []
         unstaked_only: t.List[str] = []
         skipped: t.List[str] = []
@@ -2096,9 +2104,11 @@ class ServiceManager:
                 if self.stake_service_on_chain_from_safe(
                     service_config_id=service_config_id, chain=chain, blocking=False
                 ):
-                    (unstaked_only if chain in retired_target else restaked).append(
-                        chain
-                    )
+                    # The flow unstakes but won't stake on a retired target.
+                    if self._has_retired_target(service_config_id, chain):
+                        unstaked_only.append(chain)
+                    else:
+                        restaked.append(chain)
                 else:
                     skipped.append(chain)
             except Exception as e:  # pylint: disable=broad-except

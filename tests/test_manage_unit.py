@@ -3527,6 +3527,24 @@ class TestReconcileStakingForRestart:
         assert len(warnings) == 1
         assert "not re-staked on ['gnosis']" in warnings[0].getMessage()
 
+    def test_an_unreadable_target_is_reported_as_restaked(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A failed config read costs only the precise log line."""
+        manager = self._manager(
+            tmp_path, {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE}
+        )
+        manager.load = MagicMock(side_effect=FileNotFoundError("config.json"))  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.INFO, logger="test"):
+            outcome = manager.reconcile_staking_for_restart(
+                service_config_id="sc-test-id"
+            )
+
+        assert outcome == StakingReconcileOutcome.RECONCILED
+        assert "re-staked on ['gnosis']" in caplog.text
+        assert "Failed to read the target staking program" in caplog.text
+
     def test_not_evicted_touches_nothing(self, tmp_path: Path) -> None:
         """A healthy service must not reach a wallet at all."""
         manager = self._manager(tmp_path, {_CHAIN: StakingEvictionState.NOT_EVICTED})
