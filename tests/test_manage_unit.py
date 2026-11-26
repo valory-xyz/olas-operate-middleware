@@ -27,6 +27,7 @@ import pytest
 from autonomy.chain.exceptions import ChainInteractionError
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import Web3RPCError
 
 from operate.constants import (
     NO_STAKING_PROGRAM_ID,
@@ -1949,6 +1950,66 @@ class TestUnstakeServicesOnRetiredPrograms:
         assert manager.unstake_service_on_chain_from_safe.call_count == 2  # type: ignore[attr-defined]
         log_error.assert_called_once()
         assert "sc-test-id" in log_error.call_args.args[0]
+
+    def test_a_failing_chain_does_not_skip_the_service_s_other_chains(
+        self, tmp_path: Path
+    ) -> None:
+        """Each chain of a service is attempted, and a failure is logged per chain."""
+        manager = _make_manager(tmp_path)
+        service = _make_staking_service(chains=[_CHAIN, "base"])
+        manager.get_all_services = MagicMock(  # type: ignore[method-assign]
+            return_value=([service], True)
+        )
+        manager.unstake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
+            side_effect=[InsufficientFundsException("no gas", chain=_CHAIN), True]
+        )
+        current = {_CHAIN: "omenstrat_iii", "base": "basius_ii"}
+        staking_manager = MagicMock()
+        staking_manager.has_served_minimum_staking_duration.return_value = True
+        with (
+            patch(
+                "operate.services.manage.StakingManager", return_value=staking_manager
+            ),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                side_effect=lambda _service, chain: current[chain],
+            ),
+            patch.object(manager.logger, "error") as log_error,
+        ):
+            manager.unstake_services_on_retired_programs()
+
+        attempted = [
+            call.kwargs["chain"]
+            for call in manager.unstake_service_on_chain_from_safe.call_args_list  # type: ignore[attr-defined]
+        ]
+        assert attempted == [_CHAIN, "base"]
+        log_error.assert_called_once()
+        assert _CHAIN in log_error.call_args.args[0]
+
+    def test_an_rpc_failure_is_logged_not_read_as_unstaked(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed current-program read reaches the sweep's log, not a silent skip."""
+        manager = _make_manager(tmp_path)
+        service = _make_staking_service()
+        manager.get_all_services = MagicMock(  # type: ignore[method-assign]
+            return_value=([service], True)
+        )
+        manager.unstake_service_on_chain_from_safe = MagicMock()  # type: ignore[method-assign]
+        with (
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                side_effect=Web3RPCError("rate limited"),
+            ),
+            patch.object(manager.logger, "error") as log_error,
+        ):
+            manager.unstake_services_on_retired_programs()
+
+        manager.unstake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
+        log_error.assert_called_once()
+        assert "rate limited" in log_error.call_args.args[0]
 
 
 class TestResolveSafeReuse:

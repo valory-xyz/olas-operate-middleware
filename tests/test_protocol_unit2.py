@@ -30,6 +30,7 @@ from autonomy.chain.constants import (
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
 from autonomy.chain.exceptions import ChainInteractionError
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError, Web3RPCError
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
@@ -831,8 +832,28 @@ class TestGetCurrentStakingProgram:
         result = mgr.get_current_staking_program(service_id=NON_EXISTENT_TOKEN)
         assert result is None
 
-    def test_returns_none_when_staking_state_raises(self) -> None:
-        """Returns None when staking_state raises (service owner not a staking contract)."""
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ContractLogicError("execution reverted"),
+            BadFunctionCallOutput("empty data"),
+            ValueError("99 is not a valid StakingState"),
+        ],
+        ids=["revert", "no-code", "invalid-state"],
+    )
+    def test_returns_none_when_owner_is_not_a_staking_contract(
+        self, error: Exception
+    ) -> None:
+        """A staking-state read the owner can't answer means "not staked"."""
+        assert self._read_with_staking_state_error(error) is None
+
+    def test_an_rpc_failure_is_raised(self) -> None:
+        """An RPC failure is not read as "not staked"."""
+        with pytest.raises(Web3RPCError):
+            self._read_with_staking_state_error(Web3RPCError("rate limited"))
+
+    def _read_with_staking_state_error(self, error: Exception) -> t.Optional[str]:
+        """Read the current program of service 1 with ``staking_state`` raising."""
         mgr = self._make_manager()
         mock_ledger_api = MagicMock()
         mock_sr_instance = MagicMock()
@@ -850,12 +871,10 @@ class TestGetCurrentStakingProgram:
                 "operate.services.protocol.CONTRACTS",
                 {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
             ),
-            patch.object(mgr, "staking_state", side_effect=Exception("not staking")),
+            patch.object(mgr, "staking_state", side_effect=error),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
-            result = mgr.get_current_staking_program(service_id=1)
-
-        assert result is None
+            return mgr.get_current_staking_program(service_id=1)
 
     def test_returns_none_when_unstaked(self) -> None:
         """Returns None when staking state is UNSTAKED."""

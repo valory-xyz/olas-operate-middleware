@@ -57,6 +57,7 @@ from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from web3.contract import Contract
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 from web3.types import TxReceipt
 
 from operate.constants import (
@@ -771,16 +772,11 @@ class StakingManager:
                 service_id=service_id, staking_contract=service_owner
             )
 
-        except Exception:  # pylint: disable=broad-except
-            # Service owner is not a staking contract
-
-            # TODO The exception caught here should be ContractLogicError.
-            # This exception is typically raised when the contract reverts with
-            # a reason string. However, in some cases, the error message
-            # does not contain a reason string, which means web3.py raises
-            # a generic ValueError instead. It should be properly analyzed
-            # what exceptions might be raised by web3.py in this case. To
-            # avoid any issues we are simply catching all exceptions.
+        except (ContractLogicError, BadFunctionCallOutput, ValueError):
+            # The owner is not a staking contract: it reverts, has no code
+            # (an EOA returns empty data) or returns no valid state. RPC
+            # failures are not caught, so callers never read them as
+            # "not staked".
             return None
 
         if state == StakingState.UNSTAKED:
