@@ -44,6 +44,7 @@ from operate.ledger.profiles import (
     DECOUPLED_ACTIVITY_CHECKERS,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
+    DEFAULT_PRIORITY_MECH,
     DEFAULT_RECOVERY_TOPUPS,
     DUST,
     ERC20_TOKENS,
@@ -483,6 +484,16 @@ _ACTIVITY_CHECKER_ABI = [
     }
 ]
 
+_MECH_MARKETPLACE_ABI = [
+    {
+        "inputs": [],
+        "name": "mechMarketplace",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
 _DECOUPLED_PROGRAMS: t.Dict[Chain, t.Set[str]] = {
     Chain.GNOSIS: {
         "omenstrat_i",
@@ -570,6 +581,34 @@ class TestDecoupledActivityCheckers:
             f"{chain.value} {program_id} on-chain activity checker {checker} "
             f"{'does not match' if expected_decoupled else 'unexpectedly matches'} "
             f"the configured V2 checker {DECOUPLED_ACTIVITY_CHECKERS[chain]}."
+        )
+
+
+class TestDefaultPriorityMech:
+    """Pin DEFAULT_PRIORITY_MECH against the marketplaces the V2 checkers use."""
+
+    @pytest.mark.integration
+    @pytest.mark.parametrize(
+        ("chain", "checker"),
+        list(DECOUPLED_ACTIVITY_CHECKERS.items()),
+        ids=[chain.value for chain in DECOUPLED_ACTIVITY_CHECKERS],
+    )
+    def test_checker_marketplace_has_a_default_priority_mech(
+        self, chain: Chain, checker: str
+    ) -> None:
+        """A missing key makes get_mech_configs fall back to no marketplace, silently."""
+        w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain)))
+        contract = w3.eth.contract(
+            address=Web3.to_checksum_address(checker), abi=_MECH_MARKETPLACE_ABI
+        )
+        try:
+            marketplace = contract.functions.mechMarketplace().call()
+        except requests.exceptions.RequestException as error:
+            pytest.skip(f"RPC unreachable for {chain.value}: {error}")
+
+        assert marketplace in DEFAULT_PRIORITY_MECH, (
+            f"{chain.value} checker {checker} uses marketplace {marketplace}, "
+            "which has no DEFAULT_PRIORITY_MECH entry."
         )
 
 
