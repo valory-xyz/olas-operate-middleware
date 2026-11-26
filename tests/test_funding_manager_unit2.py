@@ -37,7 +37,7 @@ from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.serialization import BigInt
 from operate.services.funding_manager import (
     FundingManager,
-    RETIRED_STAKING_CHECK_INTERVAL,
+    RETIRED_STAKING_CHECK_INTERVAL_SECONDS,
 )
 from operate.services.protocol import StakingState
 from operate.services.service import NON_EXISTENT_TOKEN
@@ -2192,10 +2192,10 @@ class TestFundingJob:
         manager.logger.exception.assert_called()  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
-    async def test_funding_job_unstakes_retired_programs_right_away_then_every_10_min(
+    async def test_funding_job_unstakes_retired_programs_right_away_then_periodically(
         self,
     ) -> None:
-        """The first loop after login sweeps; the next sweep waits 600 s."""
+        """The first loop after login sweeps; the next waits RETIRED_STAKING_CHECK_INTERVAL_SECONDS."""
         manager = _make_manager()
         mock_service_manager = MagicMock()
         clock = {"now": 10_000.0}
@@ -2230,8 +2230,8 @@ class TestFundingJob:
                 pass
 
         assert sweeps[0] == 10_000.0
-        assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL
-        assert sweeps[1] - sweeps[0] <= RETIRED_STAKING_CHECK_INTERVAL + 60
+        assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL_SECONDS
+        assert sweeps[1] - sweeps[0] <= RETIRED_STAKING_CHECK_INTERVAL_SECONDS + 60
 
     @pytest.mark.asyncio
     async def test_funding_job_logs_retired_unstake_exception(self) -> None:

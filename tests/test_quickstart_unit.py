@@ -30,7 +30,10 @@ import pytest
 import requests
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.exceptions import RecoveryModuleNotEnabledError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
+)
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.quickstart.analyse_logs import (
     analyse_logs,
@@ -878,6 +881,21 @@ class TestDeployOnchainOrExit:
         assert exc_info.value.code == 1
         assert "enable the module" in capsys.readouterr().out
         manager.logger.error.assert_called_once()
+
+    def test_retired_program_prints_the_message_and_exits_1(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A deploy on a retired program ends the quickstart with the program named."""
+        manager = MagicMock()
+        manager.deploy_service_onchain_from_safe.side_effect = (
+            RetiredStakingProgramError(staking_program_id="optimus_alpha_2")
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            _deploy_onchain_or_exit(manager, "sc-1")
+
+        assert exc_info.value.code == 1
+        assert "Staking program optimus_alpha_2 is retired." in capsys.readouterr().out
 
     def test_successful_deploy_returns(self) -> None:
         """A deploy that goes through does not exit."""

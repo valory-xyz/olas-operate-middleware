@@ -2004,16 +2004,21 @@ class TestServiceRoutes:
         """Deploy returns 409 naming the retired program, and runs no healthcheck."""
         m = self._basic_with_password()
         m.service_manager.return_value.exists.return_value = True
-        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+        m.service_manager.return_value.refuse_retired_staking_programs.side_effect = (
             RetiredStakingProgramError(staking_program_id="omenstrat_iii")
         )
         stack, app, _, _ = _open_app(m)
         with stack:
+            validate_services = m.service_manager.return_value.validate_services
             with TestClient(app) as c:
+                pauses_before = validate_services.call_count
                 resp = c.post("/api/v2/service/svc1", json={})
+                pauses_after = validate_services.call_count
             assert resp.status_code == HTTPStatus.CONFLICT
             assert resp.json() == {"error": "Staking program omenstrat_iii is retired."}
-            m.service_manager.return_value.deploy_service_locally.assert_not_called()
+            # Refused before pausing the running agents and before any deploy.
+            assert pauses_after == pauses_before
+            m.service_manager.return_value.deploy_service_onchain_from_safe.assert_not_called()
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""

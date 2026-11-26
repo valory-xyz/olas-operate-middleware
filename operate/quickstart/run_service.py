@@ -43,7 +43,10 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.exceptions import RecoveryModuleNotEnabledError
+from operate.exceptions import (
+    RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
+)
 from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
@@ -725,7 +728,7 @@ def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> 
     """Deploy the service on-chain, exiting with status 1 if the deploy is refused."""
     try:
         manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
-    except RecoveryModuleNotEnabledError as e:
+    except (RecoveryModuleNotEnabledError, RetiredStakingProgramError) as e:
         manager.logger.error(f"On-chain deploy refused: {e}", exc_info=True)
         print(f"\n{e}\n")
         sys.exit(1)

@@ -88,7 +88,7 @@ _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 _GAS_PER_SAFE_B_TRANSFER = 500_000
 
 # Services on a retired staking program are checked for unstaking this often.
-RETIRED_STAKING_CHECK_INTERVAL = 600
+RETIRED_STAKING_CHECK_INTERVAL_SECONDS = 600
 
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
@@ -1436,7 +1436,10 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                         self.logger.exception("Error occurred while funding Master EOA")
                     last_master_eoa_funding = time()
 
-                if last_retired_staking_check + RETIRED_STAKING_CHECK_INTERVAL < time():
+                if (
+                    last_retired_staking_check + RETIRED_STAKING_CHECK_INTERVAL_SECONDS
+                    < time()
+                ):
                     try:
                         await loop.run_in_executor(
                             executor,

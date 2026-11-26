@@ -1795,6 +1795,83 @@ class TestRefuseRetiredStakingPrograms:
 
         manager._try_enable_recovery_module.assert_not_called()  # type: ignore[attr-defined]
 
+    @pytest.mark.parametrize(
+        ("use_staking", "current", "target", "refused"),
+        [
+            (True, None, "omenstrat_i", "omenstrat_i"),
+            (False, "omenstrat_iii", "omenstrat_iii", None),
+        ],
+        ids=["retired-target", "withdrawal-only"],
+    )
+    def test_deploy_passes_the_service_programs_to_the_guard(
+        self,
+        tmp_path: Path,
+        use_staking: bool,
+        current: t.Optional[str],
+        target: str,
+        refused: t.Optional[str],
+    ) -> None:
+        """The deploy checks the chain's use_staking, current and target program."""
+
+        class _ReachedModuleEnable(Exception):
+            """Raised by the first transaction step, past the guard."""
+
+        manager, service, _ = _make_manager_with_service(tmp_path)
+        user_params = service.chain_configs[_CHAIN].chain_data.user_params
+        user_params.use_staking = use_staking
+        user_params.staking_program_id = target
+        manager._try_enable_recovery_module = MagicMock(  # type: ignore[method-assign]
+            side_effect=_ReachedModuleEnable
+        )
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder"),
+            patch.object(manager, "_get_current_staking_program", return_value=current),
+            pytest.raises(
+                RetiredStakingProgramError if refused else _ReachedModuleEnable
+            ) as exc_info,
+        ):
+            manager._deploy_service_onchain_from_safe(
+                service_config_id="sc-test-id", chain=_CHAIN
+            )
+
+        if refused:
+            assert exc_info.value.staking_program_id == refused  # type: ignore[attr-defined]
+
+    def test_public_check_reads_every_chain(self, tmp_path: Path) -> None:
+        """The route's pre-pause check refuses a retired program on any chain."""
+        manager = _make_manager(tmp_path)
+        service = _make_staking_service(chains=["base", _CHAIN])
+        for chain_config in service.chain_configs.values():
+            chain_config.chain_data.user_params.staking_program_id = "basius_iv"
+        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
+        current = {"base": None, _CHAIN: "omenstrat_ii"}
+
+        with (
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                side_effect=lambda _service, chain: current[chain],
+            ),
+            pytest.raises(RetiredStakingProgramError) as exc_info,
+        ):
+            manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
+
+        assert exc_info.value.staking_program_id == "omenstrat_ii"
+
+    def test_public_check_lets_a_new_program_through(self, tmp_path: Path) -> None:
+        """Nothing retired: no error."""
+        manager = _make_manager(tmp_path)
+        service = _make_staking_service()
+        service.chain_configs[_CHAIN].chain_data.user_params.staking_program_id = (
+            "omenstrat_viii"
+        )
+        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
+
+        with patch.object(manager, "_get_current_staking_program", return_value=None):
+            manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
+
 
 class TestUnstakeServicesOnRetiredPrograms:
     """Tests for unstake_services_on_retired_programs()."""
@@ -3144,7 +3221,7 @@ class TestStakeBatching:
         chain_data = MagicMock()
         chain_data.token = 42
         chain_data.user_params.use_staking = True
-        chain_data.user_params.staking_program_id = "pearl_beta"
+        chain_data.user_params.staking_program_id = "omenstrat_viii"
         chain_config = MagicMock()
         chain_config.chain_data = chain_data
         chain_config.ledger_config = _make_ledger_config()
@@ -3196,6 +3273,36 @@ class TestStakeBatching:
         tx = sftxb.new_tx.return_value
         assert tx.add.call_count == 3
         tx.settle.assert_called_once()
+
+    def test_does_not_stake_on_a_retired_target(self, tmp_path: Path) -> None:
+        """An evicted re-stake must not put the service back on a retired program."""
+        manager = _make_manager(tmp_path)
+        service = MagicMock()
+        chain_config = MagicMock()
+        chain_config.chain_data.token = 42
+        chain_config.chain_data.user_params.use_staking = True
+        chain_config.chain_data.user_params.staking_program_id = "omenstrat_vii"
+        chain_config.ledger_config = _make_ledger_config()
+        service.chain_configs = {_CHAIN: chain_config}
+        sftxb = MagicMock()
+        sftxb.staking_status.return_value = StakingState.UNSTAKED
+        sftxb.staking_rewards_available.return_value = True
+        sftxb.staking_slots_available.return_value = True
+
+        with (
+            patch.object(manager, "load", return_value=service),
+            patch.object(manager, "get_eth_safe_tx_builder", return_value=sftxb),
+            patch.object(
+                manager, "_get_on_chain_state", return_value=OnChainState.DEPLOYED
+            ),
+            patch.object(manager, "_get_current_staking_program", return_value=None),
+        ):
+            manager.stake_service_on_chain_from_safe(
+                service_config_id="sc-test", chain=_CHAIN
+            )
+
+        sftxb.get_staking_data.assert_not_called()
+        sftxb.new_tx.assert_not_called()
 
 
 def _make_staking_service(

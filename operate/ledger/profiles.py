@@ -222,9 +222,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
 
 
 #: Programs Pearl no longer stakes on. Mirrors the frontend's ``retired`` flag in
-#: ``frontend/config/stakingPrograms``; both lists must hold the same ids. A
-#: service on one is unstaked in the background once its minimum staking period
-#: is over, and a deploy that would stay staked on one is refused.
+#: ``frontend/config/stakingPrograms``; both lists must hold the same ids. See
+#: docs/staking-and-onchain-model.md#retired-staking-programs.
 RETIRED_STAKING_PROGRAMS: t.Dict[Chain, t.FrozenSet[str]] = {
     Chain.GNOSIS: frozenset(
         {

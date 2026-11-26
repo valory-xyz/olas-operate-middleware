@@ -2125,6 +2125,20 @@ class ServiceManager:
 
         return StakingReconcileOutcome.RECONCILED
 
+    def refuse_retired_staking_programs(self, service_config_id: str) -> None:
+        """Raise RetiredStakingProgramError if a deploy would stay staked on a retired program."""
+        service = self.load(service_config_id=service_config_id)
+        for chain, chain_config in service.chain_configs.items():
+            user_params = chain_config.chain_data.user_params
+            _refuse_retired_staking_programs(
+                chain=chain,
+                use_staking=user_params.use_staking,
+                current_staking_program=self._get_current_staking_program(
+                    service, chain
+                ),
+                target_staking_program=user_params.staking_program_id,
+            )
+
     def unstake_services_on_retired_programs(self) -> None:
         """Unstake every service whose current staking program is retired.
 
@@ -2176,7 +2190,6 @@ class ServiceManager:
             f"Unstaking {service.service_config_id} from the retired staking "
             f"program {current_staking_program} on {chain}."
         )
-        # Non-blocking: a background thread must not queue behind a foreground transaction.
         self.unstake_service_on_chain_from_safe(
             service_config_id=service.service_config_id,
             chain=chain,
@@ -2199,18 +2212,33 @@ class ServiceManager:
         :param blocking: wait for the lock; background callers pass False to skip instead.
         :return: True if the staking flow ran, False if another caller held the lock.
         """
+        return self._run_under_chain_tx_lock(
+            chain=chain,
+            blocking=blocking,
+            skipped=f"staking for {service_config_id}",
+            flow=lambda: self._stake_service_on_chain_from_safe_unlocked(
+                service_config_id=service_config_id, chain=chain
+            ),
+        )
+
+    def _run_under_chain_tx_lock(
+        self,
+        chain: str,
+        blocking: bool,
+        skipped: str,
+        flow: t.Callable[[], None],
+    ) -> bool:
+        """Run ``flow`` holding this chain's lock; False if it was busy and not waited for."""
         lock = self.get_chain_tx_lock(chain=chain)
         if not lock.acquire(blocking=blocking):  # pylint: disable=consider-using-with
             self.logger.info(
                 f"A deploy, stake or unstake flow is already in progress on {chain}. "
-                f"Skipping staking for {service_config_id}."
+                f"Skipping {skipped}."
             )
             return False
 
         try:
-            self._stake_service_on_chain_from_safe_unlocked(
-                service_config_id=service_config_id, chain=chain
-            )
+            flow()
         finally:
             lock.release()
         return True
@@ -2339,7 +2367,12 @@ class ServiceManager:
         self.logger.info(f"{staking_rewards_available=}")
         self.logger.info(f"{staking_slots_available=}")
 
-        if (
+        if is_retired_staking_program(chain, target_staking_program):
+            self.logger.info(
+                f"Not staking {chain_config.chain_data.token}: its target staking "
+                f"program {target_staking_program} is retired."
+            )
+        elif (
             chain_config.chain_data.user_params.use_staking  # pylint: disable=too-many-boolean-expressions
             and staking_state == StakingState.UNSTAKED
             and target_program_staking_state == StakingState.UNSTAKED
@@ -2400,24 +2433,17 @@ class ServiceManager:
         :param blocking: wait for the lock; background callers pass False to skip instead.
         :return: True if the unstaking flow ran, False if another caller held the lock.
         """
-        lock = self.get_chain_tx_lock(chain=chain)
-        if not lock.acquire(blocking=blocking):  # pylint: disable=consider-using-with
-            self.logger.info(
-                f"A deploy, stake or unstake flow is already in progress on {chain}. "
-                f"Skipping unstaking for {service_config_id}."
-            )
-            return False
-
-        try:
-            self._unstake_service_on_chain_from_safe_unlocked(
+        return self._run_under_chain_tx_lock(
+            chain=chain,
+            blocking=blocking,
+            skipped=f"unstaking for {service_config_id}",
+            flow=lambda: self._unstake_service_on_chain_from_safe_unlocked(
                 service_config_id=service_config_id,
                 chain=chain,
                 staking_program_id=staking_program_id,
                 force=force,
-            )
-        finally:
-            lock.release()
-        return True
+            ),
+        )
 
     def _unstake_service_on_chain_from_safe_unlocked(  # pragma: no cover
         self,

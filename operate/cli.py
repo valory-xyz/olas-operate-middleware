@@ -1775,6 +1775,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         safe_id = validated_safe_id(service_config_id)
 
         def _fn() -> None:
+            # Refuse before pausing, or a refused start leaves no agent running.
+            manager.refuse_retired_staking_programs(service_config_id=safe_id)
             pause_all_services()
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             logger.info("Deploy onchain")

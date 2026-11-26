@@ -118,7 +118,7 @@ This is why the middleware includes dedicated claim, terminate, unstake, and res
 ## Retired staking programs
 
 `RETIRED_STAKING_PROGRAMS` in `operate/ledger/profiles.py` lists the programs Pearl no longer stakes on. The frontend keeps the same ids under its `retired` flag.
-- The funding job checks every service once right after login, then every 10 minutes. A service whose current on-chain program is retired is unstaked once it has been staked for the program's minimum staking period, even when the reward pool is empty. The unstake claims first and swaps no owners. A running deployment is not stopped.
+- The funding job checks every service once right after login, then every `RETIRED_STAKING_CHECK_INTERVAL_SECONDS` (`operate/services/funding_manager.py`). A service whose current on-chain program is retired is unstaked once it has been staked for the program's minimum staking period, even when the reward pool is empty. The unstake claims first and swaps no owners. A running deployment is not stopped.
 - An unstake that fails, for example for lack of gas, is logged and retried on the next check. A check that finds the chain's transaction lock held skips that service until the next check.
 - A deploy with `use_staking` true is refused with `RetiredStakingProgramError` (HTTP 409) when the current or target program is retired. A deploy with `use_staking` false still runs, and unstakes when the contract allows it.
 
