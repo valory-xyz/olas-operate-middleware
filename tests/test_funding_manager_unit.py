@@ -28,6 +28,7 @@ from autonomy.chain.exceptions import ChainInteractionError
 from operate.constants import (
     MASTER_EOA_PLACEHOLDER,
     MASTER_SAFE_PLACEHOLDER,
+    SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
@@ -1484,12 +1485,13 @@ class TestDestinationTargets:
         }
         with patch.object(
             manager,
-            "funding_requirements",
-            return_value={"refill_requirements": requirements},
+            "_funding_requirements",
+            return_value=({"refill_requirements": requirements}, {ZERO_ADDRESS: 9}),
         ):
-            targets = manager.destination_targets(service)
+            result = manager.destination_targets(service)
 
-        assert targets == {ZERO_ADDRESS: 8, ERC20_TOKEN: 7}
+        assert result.targets == {ZERO_ADDRESS: 8, ERC20_TOKEN: 7}
+        assert result.eoa_used == {ZERO_ADDRESS: 9}
 
     def test_zero_requirements_are_kept(self) -> None:
         """Covered tokens stay as zero entries: their balances were netted."""
@@ -1498,12 +1500,130 @@ class TestDestinationTargets:
         service.home_chain = "polygon"
         with patch.object(
             manager,
-            "funding_requirements",
-            return_value={
-                "refill_requirements": {"polygon": {SAFE_ADDR: {ZERO_ADDRESS: 0}}}
-            },
+            "_funding_requirements",
+            return_value=(
+                {"refill_requirements": {"polygon": {SAFE_ADDR: {ZERO_ADDRESS: 0}}}},
+                {},
+            ),
         ):
-            assert manager.destination_targets(service) == {ZERO_ADDRESS: 0}
+            assert manager.destination_targets(service).targets == {ZERO_ADDRESS: 0}
+
+
+class TestDestinationTargetsEoaUsed:
+    """destination_targets reports the home-chain Master EOA balance netted."""
+
+    _RESERVE = int(DEFAULT_EOA_TOPUPS[Chain.POLYGON][ZERO_ADDRESS])
+
+    def _targets(self, master_safe: str, eoa_native: int, eoa_erc20: int = 0) -> t.Any:
+        manager = _make_manager()
+        service = MagicMock()
+        service.home_chain = "polygon"
+        service.chain_configs = {"polygon": MagicMock()}
+        service.service_config_id = "sc-1"
+        service.get_initial_funding_amounts.return_value = ChainAmounts(
+            {"polygon": {SERVICE_SAFE_PLACEHOLDER: {ZERO_ADDRESS: BigInt(200)}}}
+        )
+        service.get_funding_requests.return_value = ChainAmounts()
+        protocol_thresholds = ChainAmounts(
+            {
+                "polygon": {
+                    master_safe: {
+                        ZERO_ADDRESS: BigInt(300),
+                        ERC20_TOKEN: BigInt(40),
+                    }
+                }
+            }
+        )
+        protocol_bonded = ChainAmounts(
+            {
+                "polygon": {
+                    master_safe: {ZERO_ADDRESS: BigInt(0), ERC20_TOKEN: BigInt(0)}
+                }
+            }
+        )
+        with (
+            patch(
+                "operate.services.funding_manager.concurrent_execute",
+                return_value=(protocol_thresholds, protocol_bonded),
+            ),
+            patch.multiple(
+                manager,
+                _resolve_master_eoa=MagicMock(return_value=EOA_ADDR),
+                _resolve_master_safe=MagicMock(return_value=master_safe),
+                _get_master_eoa_balances=MagicMock(
+                    return_value=ChainAmounts(
+                        {
+                            "polygon": {
+                                EOA_ADDR: {
+                                    ZERO_ADDRESS: BigInt(eoa_native),
+                                    ERC20_TOKEN: BigInt(eoa_erc20),
+                                }
+                            },
+                            # Another chain's balance never counts.
+                            "gnosis": {EOA_ADDR: {ZERO_ADDRESS: BigInt(10**21)}},
+                        }
+                    )
+                ),
+                _get_master_safe_balances=MagicMock(
+                    return_value=ChainAmounts(
+                        {
+                            "polygon": {
+                                master_safe: {
+                                    ZERO_ADDRESS: BigInt(0),
+                                    ERC20_TOKEN: BigInt(0),
+                                }
+                            }
+                        }
+                    )
+                ),
+            ),
+        ):
+            return manager.destination_targets(service)
+
+    def test_without_safe_counts_reserve_and_safe_threshold_only(self) -> None:
+        """No Safe: the excess over the reserve is used only up to the Safe threshold."""
+        result = self._targets(MASTER_SAFE_PLACEHOLDER, self._RESERVE + 1000)
+
+        # Safe threshold for native: 300 protocol + 200 service initial.
+        assert result.eoa_used == {ZERO_ADDRESS: self._RESERVE + 500, ERC20_TOKEN: 0}
+        assert result.targets == {ZERO_ADDRESS: 0, ERC20_TOKEN: 40}
+
+    def test_without_safe_never_uses_more_than_the_balance(self) -> None:
+        """No Safe, excess below the Safe threshold: the whole balance is used."""
+        result = self._targets(MASTER_SAFE_PLACEHOLDER, self._RESERVE + 100)
+
+        assert result.eoa_used[ZERO_ADDRESS] == self._RESERVE + 100
+
+    def test_with_safe_counts_the_reserve_only(self) -> None:
+        """With a Safe, the Master EOA only covers its own reserve."""
+        result = self._targets(SAFE_ADDR, self._RESERVE + 1000)
+
+        assert result.eoa_used == {ZERO_ADDRESS: self._RESERVE, ERC20_TOKEN: 0}
+
+    @pytest.mark.parametrize(("eoa_erc20", "used"), [(30, 30), (40, 40), (100, 40)])
+    def test_without_safe_erc20_excess_is_capped_at_the_safe_threshold(
+        self, eoa_erc20: int, used: int
+    ) -> None:
+        """No Safe: an ERC20 has no reserve, so it is used up to its Safe threshold (40)."""
+        result = self._targets(MASTER_SAFE_PLACEHOLDER, self._RESERVE, eoa_erc20)
+
+        assert result.eoa_used[ERC20_TOKEN] == used
+
+    def test_with_safe_erc20_balance_is_not_used(self) -> None:
+        """With a Safe, an ERC20 held by the Master EOA covers nothing."""
+        result = self._targets(SAFE_ADDR, self._RESERVE, eoa_erc20=50)
+
+        assert result.eoa_used[ERC20_TOKEN] == 0
+
+    def test_public_funding_requirements_is_unchanged(self) -> None:
+        """funding_requirements keeps returning only the requirements dict."""
+        manager = _make_manager()
+        service = MagicMock()
+        requirements: t.Dict = {"refill_requirements": {}}
+        with patch.object(
+            manager, "_funding_requirements", return_value=(requirements, {})
+        ):
+            assert manager.funding_requirements(service) is requirements
 
 
 class TestMasterEoaLock:

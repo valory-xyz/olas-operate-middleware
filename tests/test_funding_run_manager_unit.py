@@ -77,6 +77,7 @@ from operate.ledger.profiles import (
 )
 from operate.operate_types import Chain
 from operate.serialization import BigInt
+from operate.services.funding_manager import DestinationTargets
 from operate.wallet.gas_abstraction import (
     Call,
     GasAbstractedSender,
@@ -754,7 +755,9 @@ class TestQuote:
         """Onboarding: same-chain source funds no target counted still count."""
         env = Env(tmp_path)
         env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 5}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -771,7 +774,9 @@ class TestQuote:
     ) -> None:
         """Onboarding adds only transfer gas: the reserve and Safe gas are in the targets."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 5}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -790,7 +795,9 @@ class TestQuote:
     def test_run_json_names_the_onboarded_service(self, tmp_path: Path) -> None:
         """An onboard run reports its service; other modes report none."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 5}, {}
+        )
 
         onboard = env.manager.create_run(
             mode="onboard",
@@ -913,7 +920,9 @@ class TestQuote:
         """Onboarding a Gnosis staker routes OLAS through the native pool too."""
         env = Env(tmp_path)
         env.service.home_chain = "gnosis"
-        env.funding_manager.destination_targets.return_value = {OLAS[Chain.GNOSIS]: 10}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {OLAS[Chain.GNOSIS]: 10}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -1009,10 +1018,9 @@ class TestExactPath:
     def test_onboard_single_requirement_is_exact(self, tmp_path: Path) -> None:
         """A service needing only pUSD on Polygon is funded with pUSD into the Safe."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
-        env.funding_manager.destination_targets.return_value = {
-            POLYGON_PUSD: 10,
-            NATIVE: 0,
-        }
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_PUSD: 10, NATIVE: 0}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -1045,7 +1053,9 @@ class TestExactPath:
     def test_native_target_is_never_exact(self, tmp_path: Path, mode: str) -> None:
         """Native may include the Master EOA reserve, so it is not sent to the Safe."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
-        env.funding_manager.destination_targets.return_value = {NATIVE: 10}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {NATIVE: 10}, {}
+        )
 
         run = env.manager.create_run(
             mode=mode,
@@ -1398,7 +1408,9 @@ class TestTargets:
     def test_onboard_uses_service_targets_on_home_chain(self, tmp_path: Path) -> None:
         """Onboarding nets through FundingManager.destination_targets."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 5}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -1416,7 +1428,9 @@ class TestTargets:
     ) -> None:
         """Signer funds cover onboarding but no Safe exists: a Safe-only run creates it."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 0}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -1447,7 +1461,9 @@ class TestTargets:
     ) -> None:
         """A failed Safe creation leaves the run FAILED, and retry finishes it."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {}, {}
+        )
         env.wallet.create_safe_and_transfer_excess.return_value = {
             "status": CreateSafeStatus.SAFE_CREATION_FAILED,
             "safe": None,
@@ -1485,7 +1501,9 @@ class TestTargets:
     ) -> None:
         """With a Safe on the destination, nothing to add still completes at once."""
         env = Env(tmp_path, safes={Chain.POLYGON: SAFE})
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 0}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -2842,7 +2860,9 @@ class TestEdgeCases:
         """A token outside the known maps never shows as a raw address."""
         unknown = "0x" + "c" * 40
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {unknown: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {unknown: 5}, {}
+        )
         _all_succeed(env)
         env.bridge.outcomes[unknown] = ProviderRequestStatus.EXECUTION_FAILED
 
@@ -2884,7 +2904,9 @@ class TestEdgeCases:
         """Onboarding: native held up to the reserve is not a deposit; above it is."""
         env = Env(tmp_path)
         env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE + 500
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 40}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 40}, {}
+        )
 
         run = env.manager.create_run(
             mode="onboard",
@@ -2896,6 +2918,125 @@ class TestEdgeCases:
 
         assert run.receive_baseline == POLYGON_RESERVE
         assert int(run.received_amount) == 500
+
+    def test_same_chain_onboard_counts_held_native_surplus(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: native above what the netting used lowers the quote."""
+        env = Env(tmp_path)
+        used = POLYGON_RESERVE + 300
+        env.balances[(Chain.POLYGON, NATIVE)] = used + 500
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {NATIVE: 0, POLYGON_OLAS: 40}, {NATIVE: used, POLYGON_OLAS: 0}
+        )
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+        body = env.manager.run_json(run)
+
+        assert run.receive_baseline == used
+        assert run.prior_received == 500
+        to_send = str(_required(run) - 500)
+        assert body["quote"]["required_amount"] == to_send
+        assert body["quote"]["received_amount"] == "0"
+        assert body["quote"]["outstanding_amount"] == to_send
+        assert run.status == FundingRunStatus.AWAITING_DEPOSIT
+
+    def test_same_chain_onboard_held_surplus_covering_the_quote_processes(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: a held surplus that covers the quote needs no transfer."""
+        env = Env(tmp_path)
+        used = POLYGON_RESERVE + 300
+        env.balances[(Chain.POLYGON, NATIVE)] = used + 10**24
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {NATIVE: 0, POLYGON_OLAS: 40}, {NATIVE: used}
+        )
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+        assert env.manager.run_json(run)["quote"]["outstanding_amount"] == "0"
+
+        env.manager.tick()
+
+        assert env.reload(run).status == FundingRunStatus.PROCESSING
+
+    def test_same_chain_onboard_native_baseline_keeps_the_reserve(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: the reserve is never a deposit, even if the netting used less."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, NATIVE)] = POLYGON_RESERVE + 500
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {NATIVE: 0, POLYGON_OLAS: 40}, {NATIVE: 0}
+        )
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=NATIVE,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        assert run.receive_baseline == POLYGON_RESERVE
+        assert run.prior_received == 500
+
+    def test_same_chain_onboard_erc20_baseline_is_what_the_netting_used(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: an ERC20 source counts only its balance beyond the netted part."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_USDC: 0, POLYGON_OLAS: 5}, {POLYGON_USDC.lower(): 20}
+        )
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=POLYGON_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+
+        assert run.receive_baseline == 20
+        assert run.prior_received == 10
+
+    def test_same_chain_onboard_baseline_never_exceeds_the_balance(
+        self, tmp_path: Path
+    ) -> None:
+        """Onboarding: a netted amount above the balance read still counts deposits."""
+        env = Env(tmp_path)
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 30
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_USDC: 0, POLYGON_OLAS: 5}, {POLYGON_USDC: 50}
+        )
+
+        run = env.manager.create_run(
+            mode="onboard",
+            source_chain="polygon",
+            source_token=POLYGON_USDC,
+            destination_chain="polygon",
+            service_config_id="sc-1",
+        )
+        assert run.receive_baseline == 30
+        assert run.prior_received == 0
+
+        env.balances[(Chain.POLYGON, POLYGON_USDC)] = 37
+        env.manager.tick()
+
+        assert int(env.reload(run).received_amount) == 7
 
     def test_same_chain_deposit_baseline_is_the_full_balance(
         self, tmp_path: Path
@@ -3619,7 +3760,9 @@ class TestBackgroundLoop:
 def _completed_onboard_run(env: Env, service_config_id: str = "sc-1") -> FundingRun:
     """An onboard run with nothing missing and a Safe: COMPLETED at creation."""
     env.wallet.safes = {Chain.POLYGON: SAFE}
-    env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+    env.funding_manager.destination_targets.return_value = DestinationTargets(
+        {POLYGON_OLAS: 0}, {}
+    )
     run = env.manager.create_run(
         mode="onboard",
         source_chain="base",
@@ -3667,7 +3810,9 @@ class TestCompletedOnboardRuns:
     ) -> None:
         """A run finished off-screen by tick() is indexed, long after the 5-min window."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 0}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 0}, {}
+        )
         run = env.manager.create_run(
             mode="onboard",
             source_chain="base",
@@ -3689,7 +3834,9 @@ class TestCompletedOnboardRuns:
     ) -> None:
         """Only COMPLETED runs count: a waiting or cancelled run leaves setup open."""
         env = Env(tmp_path)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 5}, {}
+        )
         run = env.manager.create_run(
             mode="onboard",
             source_chain="base",
@@ -3784,7 +3931,9 @@ class TestCompletedOnboardRuns:
         # Written out of order: the backfill must not rely on file order.
         _set_finished_at(env, older, 2_000)
         _set_finished_at(env, newer, 1_000)
-        env.funding_manager.destination_targets.return_value = {POLYGON_OLAS: 5}
+        env.funding_manager.destination_targets.return_value = DestinationTargets(
+            {POLYGON_OLAS: 5}, {}
+        )
         cancelled = env.manager.create_run(
             mode="onboard",
             source_chain="base",
