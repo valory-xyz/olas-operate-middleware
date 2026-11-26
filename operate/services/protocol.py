@@ -581,24 +581,35 @@ class StakingManager:
         ) not in {StakingState.STAKED, StakingState.EVICTED}:
             raise ValueError("Service not staked.")
 
-        ts_start = t.cast(int, self.service_info(staking_contract, service_id)[3])
         available_rewards = t.cast(
             int,
             self.staking_ctr.available_rewards(self.ledger_api, staking_contract).get(
                 "data"
             ),
         )
+        if (
+            not self.has_served_minimum_staking_duration(
+                service_id=service_id, staking_contract=staking_contract
+            )
+            and available_rewards > 0
+        ):
+            raise ValueError("Service cannot be unstaked yet.")
+
+    def has_served_minimum_staking_duration(
+        self,
+        service_id: int,
+        staking_contract: str,
+    ) -> bool:
+        """Whether the service has been staked for at least minStakingDuration."""
+        ts_start = t.cast(int, self.service_info(staking_contract, service_id)[3])
         minimum_staking_duration = t.cast(
             int,
             self.staking_ctr.get_min_staking_duration(
                 self.ledger_api, staking_contract
             ).get("data"),
         )
-        current_block = self.ledger_api.api.eth.get_block("latest")
-        current_timestamp = current_block.timestamp
-        staked_duration = current_timestamp - ts_start
-        if staked_duration < minimum_staking_duration and available_rewards > 0:
-            raise ValueError("Service cannot be unstaked yet.")
+        current_timestamp = self.ledger_api.api.eth.get_block("latest").timestamp
+        return current_timestamp - ts_start >= minimum_staking_duration
 
     # TODO To be deprecated, only used in on-chain manager
     def unstake(  # pragma: no cover

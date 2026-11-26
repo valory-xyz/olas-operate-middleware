@@ -516,6 +516,74 @@ class TestCheckIfUnstakingPossible:
             )
 
 
+class TestHasServedMinimumStakingDuration:
+    """Tests for StakingManager.has_served_minimum_staking_duration."""
+
+    @pytest.mark.parametrize(
+        ("current_ts", "expected"),
+        [(1499, False), (1500, True), (1501, True)],
+        ids=["one-second-short", "exactly-minimum", "past-minimum"],
+    )
+    def test_compares_staked_duration_with_minimum(
+        self, current_ts: int, expected: bool
+    ) -> None:
+        """Staked at 1000 with a 500 s minimum: served from 1500 on."""
+        mgr = StakingManager(chain=OperateChain.GNOSIS)
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.eth.get_block.return_value.timestamp = current_ts
+        mock_staking_ctr = MagicMock()
+        mock_staking_ctr.get_min_staking_duration.return_value = {"data": 500}
+
+        with (
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr,
+            ),
+        ):
+            result = mgr.has_served_minimum_staking_duration(
+                service_id=1, staking_contract=_STAKING_CONTRACT
+            )
+
+        assert result is expected
+
+    def test_ignores_an_empty_reward_pool(self) -> None:
+        """An empty pool does not count as served, unlike check_if_unstaking_possible."""
+        mgr = StakingManager(chain=OperateChain.GNOSIS)
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.eth.get_block.return_value.timestamp = 1001
+        mock_staking_ctr = MagicMock()
+        mock_staking_ctr.available_rewards.return_value = {"data": 0}
+        mock_staking_ctr.get_min_staking_duration.return_value = {"data": 9999}
+
+        with (
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr,
+            ),
+        ):
+            assert not mgr.has_served_minimum_staking_duration(
+                service_id=1, staking_contract=_STAKING_CONTRACT
+            )
+
+
 # ---------------------------------------------------------------------------
 # tests for StakingManager get_stake/unstake/claim tx data methods
 # ---------------------------------------------------------------------------
