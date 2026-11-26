@@ -18,6 +18,7 @@
 # ------------------------------------------------------------------------------
 """Unit tests for operate/services/protocol.py."""
 
+import json
 import typing as t
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -30,6 +31,7 @@ from autonomy.chain.constants import (
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
 from autonomy.chain.exceptions import ChainInteractionError
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError, Web3RPCError
 
 from operate.constants import ZERO_ADDRESS
 from operate.exceptions import InsufficientFundsException
@@ -516,6 +518,74 @@ class TestCheckIfUnstakingPossible:
             )
 
 
+class TestHasServedMinimumStakingDuration:
+    """Tests for StakingManager.has_served_minimum_staking_duration."""
+
+    @pytest.mark.parametrize(
+        ("current_ts", "expected"),
+        [(1499, False), (1500, True), (1501, True)],
+        ids=["one-second-short", "exactly-minimum", "past-minimum"],
+    )
+    def test_compares_staked_duration_with_minimum(
+        self, current_ts: int, expected: bool
+    ) -> None:
+        """Staked at 1000 with a 500 s minimum: served from 1500 on."""
+        mgr = StakingManager(chain=OperateChain.GNOSIS)
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.eth.get_block.return_value.timestamp = current_ts
+        mock_staking_ctr = MagicMock()
+        mock_staking_ctr.get_min_staking_duration.return_value = {"data": 500}
+
+        with (
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr,
+            ),
+        ):
+            result = mgr.has_served_minimum_staking_duration(
+                service_id=1, staking_contract=_STAKING_CONTRACT
+            )
+
+        assert result is expected
+
+    def test_ignores_an_empty_reward_pool(self) -> None:
+        """An empty pool does not count as served, unlike check_if_unstaking_possible."""
+        mgr = StakingManager(chain=OperateChain.GNOSIS)
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.api.eth.get_block.return_value.timestamp = 1001
+        mock_staking_ctr = MagicMock()
+        mock_staking_ctr.available_rewards.return_value = {"data": 0}
+        mock_staking_ctr.get_min_staking_duration.return_value = {"data": 9999}
+
+        with (
+            patch.object(mgr, "service_info", return_value=[None, None, None, 1000]),
+            patch.object(
+                type(mgr),
+                "ledger_api",
+                new_callable=PropertyMock,
+                return_value=mock_ledger_api,
+            ),
+            patch.object(
+                type(mgr),
+                "staking_ctr",
+                new_callable=PropertyMock,
+                return_value=mock_staking_ctr,
+            ),
+        ):
+            assert not mgr.has_served_minimum_staking_duration(
+                service_id=1, staking_contract=_STAKING_CONTRACT
+            )
+
+
 # ---------------------------------------------------------------------------
 # tests for StakingManager get_stake/unstake/claim tx data methods
 # ---------------------------------------------------------------------------
@@ -763,8 +833,35 @@ class TestGetCurrentStakingProgram:
         result = mgr.get_current_staking_program(service_id=NON_EXISTENT_TOKEN)
         assert result is None
 
-    def test_returns_none_when_staking_state_raises(self) -> None:
-        """Returns None when staking_state raises (service owner not a staking contract)."""
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ContractLogicError("execution reverted"),
+            BadFunctionCallOutput("empty data"),
+            ValueError("99 is not a valid StakingState"),
+        ],
+        ids=["revert", "no-code", "invalid-state"],
+    )
+    def test_returns_none_when_owner_is_not_a_staking_contract(
+        self, error: Exception
+    ) -> None:
+        """A staking-state read the owner can't answer means "not staked"."""
+        assert self._read_with_staking_state_error(error) is None
+
+    def test_an_rpc_failure_is_raised(self) -> None:
+        """An RPC failure is not read as "not staked"."""
+        with pytest.raises(Web3RPCError):
+            self._read_with_staking_state_error(Web3RPCError("rate limited"))
+
+    def test_a_malformed_rpc_response_is_raised(self) -> None:
+        """A non-JSON response is a ValueError, but not an answer."""
+        with pytest.raises(json.JSONDecodeError):
+            self._read_with_staking_state_error(
+                json.JSONDecodeError("Expecting value", "<html>", 0)
+            )
+
+    def _read_with_staking_state_error(self, error: Exception) -> t.Optional[str]:
+        """Read the current program of service 1 with ``staking_state`` raising."""
         mgr = self._make_manager()
         mock_ledger_api = MagicMock()
         mock_sr_instance = MagicMock()
@@ -782,12 +879,10 @@ class TestGetCurrentStakingProgram:
                 "operate.services.protocol.CONTRACTS",
                 {OperateChain.GNOSIS: {"service_registry": "0xSR"}},
             ),
-            patch.object(mgr, "staking_state", side_effect=Exception("not staking")),
+            patch.object(mgr, "staking_state", side_effect=error),
         ):
             mock_rc.service_registry.get_instance.return_value = mock_sr_instance
-            result = mgr.get_current_staking_program(service_id=1)
-
-        assert result is None
+            return mgr.get_current_staking_program(service_id=1)
 
     def test_returns_none_when_unstaked(self) -> None:
         """Returns None when staking state is UNSTAKED."""

@@ -85,6 +85,17 @@ class StakingEvictionState(str, enum.Enum):
     EVICTED_LOCKED = "evicted_locked"
 
 
+class StakeFlowOutcome(str, enum.Enum):
+    """Outcome of one run of the on-chain staking flow for a service and chain."""
+
+    LOCK_BUSY = "lock_busy"
+    """Another flow held the chain lock and the caller did not wait."""
+    RAN = "ran"
+    """The flow ran; it staked if the service could be staked."""
+    RETIRED_TARGET = "retired_target"
+    """The flow ran but did not stake: the target program is retired."""
+
+
 class StakingReconcileOutcome(str, enum.Enum):
     """Outcome of reconciling the on-chain staking state of a service."""
 

@@ -47,19 +47,23 @@ from web3 import Web3
 from operate.bridge.bridge_manager import BridgeManager
 from operate.cli import OperateApp, create_app
 from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, OPERATE, ZERO_ADDRESS
+from operate.data import DATA_DIR
+from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
-from operate.ledger.profiles import OLAS, USDC
+from operate.ledger.profiles import OLAS, USDC, get_staking_contract
 from operate.operate_types import (
     Chain,
     ConfigurationTemplate,
     FundRequirementsTemplate,
     LedgerType,
+    OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
 from operate.services.agent_assets import clear_release_metadata_cache
 from operate.services.manage import ServiceManager
+from operate.services.protocol import StakingState
 from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
@@ -232,6 +236,131 @@ def fork_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
     json_rpc(rpc, "evm_mine")
 
 
+#: The staking-token contract wrapper, loaded once for the fork helpers and tests.
+STAKING_TOKEN_CTR = t.cast(
+    StakingTokenContract,
+    StakingTokenContract.from_dir(
+        directory=str(DATA_DIR / "contracts" / "staking_token")
+    ),
+)
+
+
+def master_eoa_nonce(service_manager: t.Any, chain: Chain) -> int:
+    """The master EOA's transaction count on the chain's fork.
+
+    Every write in the staking flows is broadcast by the master EOA, so an
+    unchanged count means nothing was sent.
+    """
+    ledger_api = get_default_ledger_api(chain)
+    master_eoa = service_manager.wallet_manager.load(LedgerType.ETHEREUM).address
+    return ledger_api.api.eth.get_transaction_count(master_eoa)
+
+
+def fork_empty_reward_pool(chain: Chain, staking_contract: str) -> None:
+    """Set the staking contract's ``availableRewards`` to 0 on the chain's fork.
+
+    The storage slot is found by its value and confirmed through the getter, so
+    another slot holding the same value (such as ``balance``) is left alone.
+    """
+    rpc = get_default_rpc(chain)
+    ledger_api = get_default_ledger_api(chain)
+
+    def available_rewards() -> int:
+        return t.cast(
+            int,
+            STAKING_TOKEN_CTR.available_rewards(
+                ledger_api=ledger_api, contract_address=staking_contract
+            )["data"],
+        )
+
+    target = available_rewards()
+    if target == 0:
+        return
+    zero = "0x" + "00" * 32
+    for slot in range(256):
+        slot_key = "0x" + format(slot, "064x")
+        value = json_rpc(rpc, "eth_getStorageAt", staking_contract, slot_key, "latest")
+        if int(value, 16) != target:
+            continue
+        json_rpc(rpc, "anvil_setStorageAt", staking_contract, slot_key, zero)
+        if available_rewards() == 0:
+            return
+        json_rpc(rpc, "anvil_setStorageAt", staking_contract, slot_key, value)
+    raise AssertionError(f"availableRewards slot not found on {staking_contract}")
+
+
+#: The Trader template below stakes here on first deploy. The health-checker
+#: re-stake fork test relies on its eviction falling inside the unstaking lock,
+#: and asserts the parameters that make it so. The retired-program fork tests
+#: rely on its minimum staking duration fitting `fork_increase_time`'s default
+#: warp.
+TRADER_SERVICE_CHAIN = Chain.GNOSIS
+TRADER_STAKING_PROGRAM = "pearl_beta_2"
+
+
+def deploy_and_stake_trader(
+    test_env: "OperateTestEnv",
+) -> t.Tuple[t.Any, str, int, str]:
+    """Deploy the Trader service on-chain and return its staking handles.
+
+    Returns the service manager, the service config id, the token id and the
+    staking contract address.
+    """
+    operate = test_env.operate
+    operate.password = test_env.password
+    service_manager = operate.service_manager()
+
+    services, _ = service_manager.get_all_services()
+    service_config_id = next(
+        svc.service_config_id for svc in services if "trader" in svc.name.lower()
+    )
+    service_manager.deploy_service_onchain_from_safe(
+        service_config_id=service_config_id
+    )
+
+    service = service_manager.load(service_config_id=service_config_id)
+    chain_str = TRADER_SERVICE_CHAIN.value
+    token_id = service.chain_configs[chain_str].chain_data.token
+    staking_contract = t.cast(
+        str, get_staking_contract(chain_str, TRADER_STAKING_PROGRAM)
+    )
+
+    assert (
+        service_manager._get_on_chain_state(  # noqa: SLF001
+            service=service, chain=chain_str
+        )
+        == OnChainState.DEPLOYED
+    )
+    assert (
+        trader_staking_status(
+            service_manager, service_config_id, token_id, staking_contract
+        )
+        == StakingState.STAKED
+    ), "service should be staked after the first deploy"
+
+    return service_manager, service_config_id, token_id, staking_contract
+
+
+def trader_sftxb(service_manager: t.Any, service_config_id: str) -> t.Any:
+    """Return the Safe tx builder for the Trader service's chain."""
+    service = service_manager.load(service_config_id=service_config_id)
+    return service_manager.get_eth_safe_tx_builder(
+        ledger_config=service.chain_configs[TRADER_SERVICE_CHAIN.value].ledger_config
+    )
+
+
+def trader_staking_status(
+    service_manager: t.Any,
+    service_config_id: str,
+    token_id: int,
+    staking_contract: str,
+) -> StakingState:
+    """Read the Trader service's on-chain staking state on ``staking_contract``."""
+    return trader_sftxb(service_manager, service_config_id).staking_status(
+        service_id=token_id, staking_contract=staking_contract
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_release_metadata_cache() -> Generator[None, None, None]:
     """Keep the in-process release metadata cache from leaking across tests."""
@@ -316,6 +445,9 @@ class OnFork:
         self, monkeypatch: pytest.MonkeyPatch, anvil_forks: AnvilForks
     ) -> None:
         anvil_forks.isolate()
+        # Fork tests stake on programs Pearl has since retired; a test that
+        # exercises retirement sets its own list.
+        monkeypatch.setattr("operate.ledger.profiles.RETIRED_STAKING_PROGRAMS", {})
         monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", anvil_forks)
         monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
         # The agent env lists every chain's RPC; that must not fork them all.

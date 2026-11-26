@@ -154,6 +154,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "omenstrat_v": "0x93aAA7155942700cad74c250263fB2D0c6F72B27",
         "omenstrat_vi": "0xB7ab6F7e6993Df1f0c6A9B177B169Faf4b0C9CCa",
         "omenstrat_vii": "0xB801FD1728Eef27418FE03720b1FF3E769F35152",
+        "omenstrat_viii": "0x9C254A169D71cFF6766D9702425Ec467B62B95EC",
+        "omenstrat_ix": "0x36CB5b4e6befc5Cc3f6801Cc290C3d9148f6D7Cf",
+        "omenstrat_x": "0xd467492f65FCA11786982b9743ed4E1F79cE81A1",
         "connect_i": "0xe09B0b884A0d483f52BE854CdaaA59e0150bF9c2",
         "connect_ii": "0xC6860D6127fa605403f1567513D9c6ebfB8A278A",
     },
@@ -165,6 +168,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "optimus_i": "0xCDA7deEf16f6b1BfC1bB5C89B7E4FAa91D9ebF7b",
         "optimus_ii": "0x746281b8fbDbd008729Dc9382392810F771B1BfD",
         "optimus_iii": "0x5a4317A5695aD6E86744eFC824414cF899f07C68",
+        "optimus_iv": "0xaDa8AFB446576483B791f58Da33b20ebd217c1fE",
+        "optimus_v": "0x767F4101183Ca56325270facbF0FcdDFEfd043aA",
+        "optimus_vi": "0x307a23a821f7B837308cfd7673650674B5780b36",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
@@ -185,6 +191,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "basius_i": "0x0fB55CEf7B12B76ea52900325461a5443F51B43F",
         "basius_ii": "0x728ca3b024Ba4c273695Df6e45e79DB675B8c756",
         "basius_iii": "0x9593C4524DF86f46935aa0eC996B4ccBe71c8234",
+        "basius_iv": "0x180E4A9A59BA5B6817fA0668A864343147E8A63b",
+        "basius_v": "0xad7f7DE6909f1DE49c14F4003d37485A02012159",
+        "basius_vi": "0x3639E1C2F9a7FF11aAdD239Cd778A7b5af39820b",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
@@ -206,12 +215,71 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "polystrat_iv": "0xb7D3Bad3a08889838096b4B583fA6785c614d0a5",
         "polystrat_v": "0x4c367f1Df1e16263d55A896c0909cCa7333D835F",
         "polystrat_vi": "0xf7F371f2E72E326d42323562a14ED01fF5a53D12",
+        "polystrat_vii": "0x1eFb70d9e7ec63F7CC51BF684E3e4AF54eF3CE46",
+        "polystrat_viii": "0x003685C1F4B978e4D975D2457f707e8d6Eedc62E",
+        "polystrat_ix": "0x1674997dA73Bfb3116aC251fF9E1dB2905D18223",
     },
     Chain.ROBINHOOD: {
         "connect_i": "0x228DC61b838D6eD82347a93aA2cd3e28544808Ea",
         "connect_ii": "0x009Cda4D71c56Db6A1bac850483DB8E01D32884E",
         "connect_iii": "0x7Bb72fa48b274672Cb6A362045cdCf470aEe99b2",
     },
+}
+
+
+#: Programs Pearl no longer stakes on; see docs/staking-and-onchain-model.md#retired-staking-programs.
+RETIRED_STAKING_PROGRAMS: t.Dict[Chain, t.FrozenSet[str]] = {
+    Chain.GNOSIS: frozenset(
+        {
+            "pearl_alpha",
+            "pearl_beta",
+            "pearl_beta_2",
+            "pearl_beta_3",
+            "pearl_beta_4",
+            "pearl_beta_5",
+            "pearl_beta_6",
+            "pearl_beta_mech_marketplace",
+            "pearl_beta_mech_marketplace_1",
+            "pearl_beta_mech_marketplace_2",
+            "pearl_beta_mech_marketplace_3",
+            "pearl_beta_mech_marketplace_4",
+            "pearl_beta_mech_marketplace_5",
+            "pearl_beta_mech_marketplace_6",
+            "pearl_beta_mech_marketplace_7",
+            "pearl_beta_mech_marketplace_8",
+            "omenstrat_i",
+            "omenstrat_ii",
+            "omenstrat_iii",
+            "omenstrat_iv",
+            "omenstrat_v",
+            "omenstrat_vi",
+            "omenstrat_vii",
+        }
+    ),
+    Chain.POLYGON: frozenset(
+        {
+            "polygon_beta_1",
+            "polygon_beta_2",
+            "polygon_beta_3",
+            "polystrat_i",
+            "polystrat_ii",
+            "polystrat_iii",
+            "polystrat_iv",
+            "polystrat_v",
+            "polystrat_vi",
+        }
+    ),
+    Chain.OPTIMISM: frozenset(
+        {
+            "optimus_alpha_2",
+            "optimus_alpha_3",
+            "optimus_alpha_4",
+            "optimus_i",
+            "optimus_ii",
+            "optimus_iii",
+        }
+    ),
+    Chain.BASE: frozenset({"basius_i", "basius_ii", "basius_iii"}),
 }
 
 
@@ -572,6 +640,31 @@ def get_staking_contract(
     return STAKING[Chain(chain)].get(
         staking_program_id,
         staking_program_id,
+    )
+
+
+def has_retired_staking_programs(chain: t.Union[Chain, str]) -> bool:
+    """Whether any program on this chain is retired."""
+    return bool(RETIRED_STAKING_PROGRAMS.get(Chain(chain)))
+
+
+def is_retired_staking_program(
+    chain: t.Union[Chain, str], staking_program_id: t.Optional[str]
+) -> bool:
+    """Whether Pearl no longer stakes on this program, given by id or by address.
+
+    Quickstart's custom contract option stores a raw address as the id.
+    """
+    chain_enum = Chain(chain)
+    retired = RETIRED_STAKING_PROGRAMS.get(chain_enum, frozenset())
+    if staking_program_id is None:
+        return False
+    if staking_program_id in retired:
+        return True
+    address = staking_program_id.lower()
+    return any(
+        STAKING[chain_enum].get(program_id, "").lower() == address
+        for program_id in retired
     )
 
 

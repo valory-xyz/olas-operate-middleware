@@ -397,6 +397,16 @@ class TestOperateApp:
                 for agent_runner_path in service_path.glob(f"{AGENT_RUNNER_PREFIX}_*"):
                     assert not agent_runner_path.exists()
 
+    def test_service_managers_share_the_chain_tx_locks(self, tmp_path: Path) -> None:
+        """Each request builds its own manager; they must still share each chain's lock."""
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+
+        first, second = operate.service_manager(), operate.service_manager()
+
+        assert first is not second
+        assert first.get_chain_tx_lock("gnosis") is second.get_chain_tx_lock("gnosis")
+
 
 class TestMnemonicReencryptionOnPasswordChange:
     """The mnemonic blob must stay in sync with the user's current password."""

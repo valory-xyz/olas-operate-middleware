@@ -87,12 +87,26 @@ _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 # nested Gnosis Safe execTransaction calls; this fallback is applied instead.
 _GAS_PER_SAFE_B_TRANSFER = 500_000
 
+CLAIM_INTERVAL_SECONDS = 3600
+MASTER_EOA_FUNDING_INTERVAL_SECONDS = 3600
+# A minimum staking period lasts days, so checking retired programs more often only adds RPC load.
+RETIRED_STAKING_CHECK_INTERVAL_SECONDS = 600
+
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 
 class FundingInProgressError(RuntimeError):
     """Raised when an attempt is made to fund a service that is already being funded."""
+
+
+class DestinationTargets(t.NamedTuple):
+    """What a service still needs on its home chain, and what already covers it."""
+
+    targets: t.Dict[str, int]
+    """Per-token net shortfall on the home chain (zero entry = covered)."""
+    eoa_used: t.Dict[str, int]
+    """Per-token home-chain Master EOA balance the requirements counted."""
 
 
 class FundingManager:  # pylint: disable=too-many-instance-attributes
@@ -114,6 +128,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         # Held by a funding run while it moves Master EOA funds, so the
         # funding job cannot spend them mid-run.
         self.master_eoa_lock = threading.Lock()
+        # One worker, shared by every funding_job: a job cancelled on re-login
+        # leaves its running claim or sweep to finish, and the next job's work
+        # queues behind it instead of racing it. The chain tx lock doesn't
+        # cover claims or Master EOA funding.
+        self._job_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="funding-job"
+        )
         self._withdrawal_locks: KeyedLocks[t.Tuple[str, str]] = KeyedLocks()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
@@ -922,8 +943,8 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
                     if master_safe == MASTER_SAFE_PLACEHOLDER:
-                        remaining = min(
-                            amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0)
+                        remaining = self._eoa_retained(
+                            chain, asset, amount
                         )  # When transferring, the Master Safe will be already created, that is why we are only retaining DEFAULT_EOA_TOPUPS
                         excess = amount - remaining
                     else:
@@ -938,6 +959,11 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     ] = remaining
 
         return excess_balance, remaining_balance
+
+    @staticmethod
+    def _eoa_retained(chain: Chain, asset: str, amount: int) -> int:
+        """Part of a Master EOA balance it keeps as its own reserve."""
+        return min(amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0))
 
     @staticmethod
     def _split_critical_eoa_shortfalls(
@@ -1110,6 +1136,12 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
 
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""
+        return self._funding_requirements(service)[0]
+
+    def _funding_requirements(  # pylint: disable=too-many-locals
+        self, service: Service
+    ) -> t.Tuple[t.Dict, t.Dict[str, int]]:
+        """Funding requirements, and the home-chain Master EOA balance they counted."""
         balances: ChainAmounts
         protocol_bonded_assets: ChainAmounts
         protocol_asset_requirements: ChainAmounts
@@ -1272,6 +1304,13 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         ):
             allow_start_agent = False
 
+        eoa_used = self._eoa_used(
+            Chain(service.home_chain),
+            master_eoa_balances,
+            excess_master_eoa_balances,
+            master_safe_thresholds,
+        )
+
         return {
             "balances": balances.json,
             "bonded_assets": protocol_bonded_assets.json,
@@ -1283,22 +1322,43 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
             "agent_funding_requests": funding_requests.json,
             "agent_funding_requests_cooldown": funding_requests_cooldown,
             "agent_funding_in_progress": funding_in_progress,
-        }
+        }, eoa_used
 
-    def destination_targets(self, service: Service) -> t.Dict[str, int]:
-        """Per-token net shortfall on the service's home chain.
+    @classmethod
+    def _eoa_used(
+        cls,
+        chain: Chain,
+        eoa_balances: ChainAmounts,
+        excess_balances: ChainAmounts,
+        master_safe_thresholds: ChainAmounts,
+    ) -> t.Dict[str, int]:
+        """Master EOA balance on `chain` that the requirements counted, per token."""
+        chain_str = chain.value
+        used: t.Dict[str, int] = defaultdict(int)
+        for assets in eoa_balances.get(chain_str, {}).values():
+            for asset, amount in assets.items():
+                used[asset] += int(cls._eoa_retained(chain, asset, amount))
+        safe_thresholds = master_safe_thresholds.get(chain_str, {})
+        for safe, assets in excess_balances.get(chain_str, {}).items():
+            for asset, excess in assets.items():
+                threshold = int(safe_thresholds.get(safe, {}).get(asset, 0))
+                used[asset] += min(int(excess), threshold)
+        return dict(used)
+
+    def destination_targets(self, service: Service) -> DestinationTargets:
+        """Return the service's `DestinationTargets`.
 
         Folds the Master Safe and Master EOA entries of `refill_requirements`
         (placeholders included, so it also works before the Safe exists) into
-        one target per token. Already net of balances. A zero entry marks a
-        token whose balances were netted and already cover it.
+        one target per token.
         """
-        refill_requirements = self.funding_requirements(service)["refill_requirements"]
+        requirements, eoa_used = self._funding_requirements(service)
+        refill_requirements = requirements["refill_requirements"]
         targets: t.Dict[str, int] = defaultdict(int)
         for assets in refill_requirements.get(service.home_chain, {}).values():
             for asset, amount in assets.items():
                 targets[asset] += int(amount)
-        return dict(targets)
+        return DestinationTargets(dict(targets), eoa_used)
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
@@ -1399,6 +1459,20 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     time() + self.funding_requests_cooldown_seconds
                 )
 
+    def _run_logging_errors(
+        self, task: t.Callable[[], t.Any], error_message: str
+    ) -> None:
+        """Run ``task``, logging its error from the worker thread.
+
+        Logged here rather than where it is awaited: a job cancelled on
+        re-login no longer awaits its running task, and the error of a future
+        nobody awaits is dropped.
+        """
+        try:
+            task()
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception(error_message)
+
     async def funding_job(
         self,
         service_manager: "ServiceManager",
@@ -1406,33 +1480,37 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
     ) -> None:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
-            last_claim = 0.0
-            last_master_eoa_funding = 0.0
-            while True:
-                # try claiming rewards every hour
-                if last_claim + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            service_manager.claim_all_on_chain_from_safe,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception("Error occurred while claiming rewards")
-                    last_claim = time()
+        # Never shut down here: that would wait on the event-loop thread for
+        # running work (cancelling happens on every re-login), and the next
+        # job reuses the executor.
+        executor = self._job_executor
+        tasks: t.Tuple[t.Tuple[int, t.Callable[[], t.Any], str], ...] = (
+            (
+                CLAIM_INTERVAL_SECONDS,
+                service_manager.claim_all_on_chain_from_safe,
+                "Error occurred while claiming rewards",
+            ),
+            (
+                MASTER_EOA_FUNDING_INTERVAL_SECONDS,
+                self.fund_master_eoa,
+                "Error occurred while funding Master EOA",
+            ),
+            (
+                RETIRED_STAKING_CHECK_INTERVAL_SECONDS,
+                service_manager.unstake_services_on_retired_programs,
+                "Error occurred while unstaking from retired staking programs",
+            ),
+        )
+        last_run = [0.0] * len(tasks)
+        while True:
+            for index, (interval, task, error_message) in enumerate(tasks):
+                if last_run[index] + interval < time():
+                    await loop.run_in_executor(
+                        executor, self._run_logging_errors, task, error_message
+                    )
+                    last_run[index] = time()
 
-                # fund Master EOA every hour
-                if last_master_eoa_funding + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            self.fund_master_eoa,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        self.logger.exception("Error occurred while funding Master EOA")
-                    last_master_eoa_funding = time()
-
-                await asyncio.sleep(60)
+            await asyncio.sleep(60)
 
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.

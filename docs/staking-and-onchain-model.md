@@ -115,6 +115,16 @@ The durable architectural point is:
 
 This is why the middleware includes dedicated claim, terminate, unstake, and reset behaviors instead of treating staking as a simple preference flip.
 
+## Retired staking programs
+
+`RETIRED_STAKING_PROGRAMS` in `operate/ledger/profiles.py` lists the programs Pearl no longer stakes on. The frontend must mark the same programs retired.
+- The funding job checks every service once right after login, then every `RETIRED_STAKING_CHECK_INTERVAL_SECONDS` (`operate/services/funding_manager.py`). A service whose current on-chain program is retired is unstaked once it has been staked for the program's minimum staking period, even when the reward pool is empty. The unstake claims first and swaps no owners. A running deployment is not stopped.
+- An unstake that fails, for example for lack of gas, is logged and retried on the next check. A check that finds the chain's transaction lock held skips that service until the next check.
+- A deploy whose target program is retired, by id or contract address, is refused with `RetiredStakingProgramError` (HTTP 409) before any transaction. Only the target is checked, from local config. A `no_staking` target unstakes the service when the contract allows. A service on a retired current program with a live target moves only through a deploy:
+  - inside the minimum staking period, the deploy runs it on the retired program, since it can't be unstaked yet;
+  - once the period is over, the funding job unstakes it and does not stake it on the target, so it runs unstaked and earns nothing;
+  - the next deploy (the user's next start) stakes it on the target, re-registering it first if the target needs a different bond.
+
 ## Relationship to service lifecycle
 
 Staking should be understood together with the OLAS service lifecycle.

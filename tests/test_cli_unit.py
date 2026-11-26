@@ -49,6 +49,7 @@ from operate.constants import DEPLOYMENT_DIR, OPERATE, SERVICES_DIR, ZERO_ADDRES
 from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
     ServicePackageDownloadError,
 )
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
@@ -1998,6 +1999,29 @@ class TestServiceRoutes:
                 "error": "Fix it this way.",
                 "error_code": error_code,
             }
+
+    def test_deploy_service_retired_staking_program(self) -> None:
+        """Deploy returns 409 naming the retired program, before pausing anything or deploying."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.refuse_retired_staking_programs.side_effect = (
+            RetiredStakingProgramError(staking_program_id="omenstrat_iii")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            validate_services = m.service_manager.return_value.validate_services
+            with TestClient(app) as c:
+                pauses_before = validate_services.call_count
+                resp = c.post("/api/v2/service/svc1", json={})
+                pauses_after = validate_services.call_count
+            assert resp.status_code == HTTPStatus.CONFLICT
+            assert resp.json() == {
+                "error": "Staking program omenstrat_iii is retired.",
+                "error_code": "RETIRED_STAKING_PROGRAM",
+                "staking_program_id": "omenstrat_iii",
+            }
+            assert pauses_after == pauses_before
+            m.service_manager.return_value.deploy_service_onchain_from_safe.assert_not_called()
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""
