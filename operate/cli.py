@@ -119,6 +119,7 @@ from operate.services.prestart_check import run_prestart_check
 from operate.services.service import Service
 from operate.settings import Settings
 from operate.utils.gnosis import Transfer
+from operate.utils.locks import KeyedLocks
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.validators import (
     SAFE_ID_PATTERN,
@@ -286,6 +287,9 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             logger=logger,
         )
         self._funding_run_manager: t.Optional[FundingRunManager] = None
+        # One set for the process: every request, the health checker and the
+        # funding job build their own ServiceManager but share the master Safes.
+        self._chain_tx_locks: KeyedLocks[str] = KeyedLocks()
 
         self._migration_manager = MigrationManager(self._path, logger)
         self._migration_manager.migrate_user_account()
@@ -475,6 +479,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             funding_manager=self.funding_manager,
             logger=logger,
             skip_dependency_check=skip_dependency_check,
+            chain_tx_locks=self._chain_tx_locks,
         )
 
     @property

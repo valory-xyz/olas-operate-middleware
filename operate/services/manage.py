@@ -220,6 +220,7 @@ class ServiceManager:
         funding_manager: FundingManager,
         logger: logging.Logger,
         skip_dependency_check: t.Optional[bool] = False,
+        chain_tx_locks: t.Optional[KeyedLocks[str]] = None,
     ) -> None:
         """
         Initialze service manager
@@ -228,6 +229,8 @@ class ServiceManager:
         :param keys_manager: Keys manager.
         :param wallet_manager: Wallet manager instance.
         :param logger: logging.Logger object.
+        :param chain_tx_locks: Chain transaction locks shared with every other
+            manager sending from the same master Safes. A new set if omitted.
         """
         self.path = path
         self.keys_manager = keys_manager
@@ -236,7 +239,9 @@ class ServiceManager:
         self.logger = logger
         self.skip_depencency_check = skip_dependency_check
         self._maintenance_lock = threading.Lock()
-        self._chain_tx_locks: KeyedLocks[str] = KeyedLocks()
+        self._chain_tx_locks: KeyedLocks[str] = (
+            chain_tx_locks if chain_tx_locks is not None else KeyedLocks()
+        )
 
     def setup(self) -> None:
         """Setup service manager."""
