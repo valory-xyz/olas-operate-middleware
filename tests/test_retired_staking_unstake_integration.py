@@ -19,7 +19,6 @@
 
 """Fork tests for retired staking programs: the background unstake and the deploy guard."""
 
-import typing as t
 from unittest.mock import MagicMock
 
 import pytest
@@ -40,19 +39,25 @@ from tests.conftest import (
     fork_empty_reward_pool,
     fork_increase_time,
     master_eoa_nonce,
+    trader_sftxb,
+    trader_staking_status,
 )
 
-#: A live Gnosis program to switch to; any live id works, since the current
-#: program alone is enough for the refusal.
-LIVE_TARGET_PROGRAM = "omenstrat_viii"
+#: A Gnosis program, other than the Trader's, to switch to.
+OTHER_PROGRAM = "omenstrat_viii"
+
+
+def _retire(monkeypatch: pytest.MonkeyPatch, staking_program_id: str) -> None:
+    """Mark ``staking_program_id`` as the only retired program on the Trader's chain."""
+    monkeypatch.setattr(
+        "operate.ledger.profiles.RETIRED_STAKING_PROGRAMS",
+        {TRADER_SERVICE_CHAIN: frozenset({staking_program_id})},
+    )
 
 
 def _retire_trader_program(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mark the program the Trader template stakes on as retired."""
-    monkeypatch.setattr(
-        "operate.ledger.profiles.RETIRED_STAKING_PROGRAMS",
-        {TRADER_SERVICE_CHAIN: frozenset({TRADER_STAKING_PROGRAM})},
-    )
+    _retire(monkeypatch, TRADER_STAKING_PROGRAM)
 
 
 def _logged(logger: MagicMock, level: str, fragment: str) -> bool:
@@ -97,9 +102,7 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
         ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
         service = service_manager.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[TRADER_SERVICE_CHAIN.value]
-        sftxb = service_manager.get_eth_safe_tx_builder(
-            ledger_config=chain_config.ledger_config
-        )
+        sftxb = trader_sftxb(service_manager, service_config_id)
         service_safe = chain_config.chain_data.multisig
         owners_before = get_owners(ledger_api=ledger_api, safe=service_safe)
         nonce_before = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
@@ -134,32 +137,15 @@ class TestRetiredProgramUnstakeIntegration(OnFork):
 class TestRetiredProgramDeployIntegration(OnFork):
     """The deploy guard and the stake flow on a retired program, against a fork."""
 
-    @staticmethod
-    def _staking_status(
-        service_manager: t.Any,
-        service_config_id: str,
-        token_id: int,
-        staking_contract: str,
-    ) -> StakingState:
-        service = service_manager.load(service_config_id=service_config_id)
-        sftxb = service_manager.get_eth_safe_tx_builder(
-            ledger_config=service.chain_configs[
-                TRADER_SERVICE_CHAIN.value
-            ].ledger_config
-        )
-        return sftxb.staking_status(
-            service_id=token_id, staking_contract=staking_contract
-        )
-
     @pytest.mark.integration
     def test_a_staked_deploy_is_refused_before_any_transaction(
         self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Currently on the retired program, switching to a live one: refused, nothing sent.
+        """Switching to a retired target program: refused, nothing sent.
 
         Past the minimum period with a new target, an unguarded deploy would
-        unstake and re-stake, so an unchanged nonce shows the refusal came
-        before the first transaction.
+        unstake from the current program, so an unchanged nonce shows the
+        refusal came before the first transaction.
         """
         (
             service_manager,
@@ -171,9 +157,9 @@ class TestRetiredProgramDeployIntegration(OnFork):
         service = service_manager.load(service_config_id=service_config_id)
         service.chain_configs[
             TRADER_SERVICE_CHAIN.value
-        ].chain_data.user_params.staking_program_id = LIVE_TARGET_PROGRAM
+        ].chain_data.user_params.staking_program_id = OTHER_PROGRAM
         service.store()
-        _retire_trader_program(monkeypatch)
+        _retire(monkeypatch, OTHER_PROGRAM)
         nonce_before = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
 
         with pytest.raises(RetiredStakingProgramError) as exc_info:
@@ -181,10 +167,10 @@ class TestRetiredProgramDeployIntegration(OnFork):
                 service_config_id=service_config_id
             )
 
-        assert exc_info.value.staking_program_id == TRADER_STAKING_PROGRAM
+        assert exc_info.value.staking_program_id == OTHER_PROGRAM
         assert master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce_before
         assert (
-            self._staking_status(
+            trader_staking_status(
                 service_manager, service_config_id, token_id, staking_contract
             )
             == StakingState.STAKED
@@ -216,7 +202,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
             service_config_id=service_config_id
         )
         assert (
-            self._staking_status(
+            trader_staking_status(
                 service_manager, service_config_id, token_id, staking_contract
             )
             == StakingState.STAKED
@@ -227,7 +213,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
             service_config_id=service_config_id
         )
         assert (
-            self._staking_status(
+            trader_staking_status(
                 service_manager, service_config_id, token_id, staking_contract
             )
             == StakingState.UNSTAKED
@@ -237,7 +223,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
     def test_the_stake_flow_does_not_stake_on_a_retired_target(
         self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The branch the health checker's re-stake reaches: nothing is staked."""
+        """An unstaked service whose target is retired: the stake flow sends nothing."""
         (
             service_manager,
             service_config_id,
@@ -251,7 +237,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
             staking_program_id=TRADER_STAKING_PROGRAM,
         )
         assert (
-            self._staking_status(
+            trader_staking_status(
                 service_manager, service_config_id, token_id, staking_contract
             )
             == StakingState.UNSTAKED
@@ -267,7 +253,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
 
         assert master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce_before
         assert (
-            self._staking_status(
+            trader_staking_status(
                 service_manager, service_config_id, token_id, staking_contract
             )
             == StakingState.UNSTAKED

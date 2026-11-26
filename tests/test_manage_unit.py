@@ -1732,66 +1732,51 @@ class TestRefuseRetiredStakingPrograms:
     """Tests for _refuse_retired_staking_programs()."""
 
     @pytest.mark.parametrize(
-        ("current", "target", "refused"),
+        ("target", "refused"),
         [
-            (None, "omenstrat_viii", None),
-            ("omenstrat_viii", "omenstrat_ix", None),
-            (None, "omenstrat_i", "omenstrat_i"),
-            ("omenstrat_i", "omenstrat_viii", "omenstrat_i"),
+            ("omenstrat_viii", False),
+            ("omenstrat_i", True),
             # Withdrawal-only: the app PATCHes the target to `no_staking`.
-            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
-            (None, NO_STAKING_PROGRAM_ID, None),
-            # An unset target is unstaked too, as `use_staking` reads it.
-            ("pearl_beta_mech_marketplace_3", None, None),
+            (NO_STAKING_PROGRAM_ID, False),
+            (None, False),
         ],
-        ids=[
-            "unstaked-to-new",
-            "new-to-new",
-            "target-retired",
-            "switch-inside-cooldown",
-            "withdrawal-only-still-staked",
-            "withdrawal-only-unstaked",
-            "no-target",
-        ],
+        ids=["live-target", "retired-target", "no-staking", "no-target"],
     )
-    def test_refuses_only_staying_staked_on_a_retired_program(
-        self,
-        current: t.Optional[str],
-        target: t.Optional[str],
-        refused: t.Optional[str],
+    def test_refuses_only_a_retired_target(
+        self, target: t.Optional[str], refused: bool
     ) -> None:
-        """A staked deploy is refused when either program is retired."""
-        kwargs = dict(
-            chain=_CHAIN,
-            current_staking_program=current,
-            target_staking_program=target,
-        )
-        if refused is None:
-            _refuse_retired_staking_programs(**kwargs)  # type: ignore[arg-type]
+        """Only staking on a retired target is refused."""
+        if not refused:
+            _refuse_retired_staking_programs(
+                chain=_CHAIN, target_staking_program=target
+            )
             return
         with pytest.raises(RetiredStakingProgramError) as exc_info:
-            _refuse_retired_staking_programs(**kwargs)  # type: ignore[arg-type]
-        assert exc_info.value.staking_program_id == refused
-        assert str(exc_info.value) == f"Staking program {refused} is retired."
+            _refuse_retired_staking_programs(
+                chain=_CHAIN, target_staking_program=target
+            )
+        assert exc_info.value.staking_program_id == target
+        assert str(exc_info.value) == f"Staking program {target} is retired."
 
     @pytest.mark.parametrize(
         ("current", "target", "refused"),
         [
-            (None, "omenstrat_i", "omenstrat_i"),
-            ("omenstrat_iii", "omenstrat_viii", "omenstrat_iii"),
+            (None, "omenstrat_i", True),
+            # Retired current, live target: the stake flow moves the service.
+            ("omenstrat_iii", "omenstrat_viii", False),
             # The app's withdrawal-only payload, on a still-staked service.
-            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
+            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, False),
         ],
-        ids=["retired-target", "retired-current", "withdrawal-only"],
+        ids=["retired-target", "retired-current-live-target", "withdrawal-only"],
     )
-    def test_deploy_passes_the_service_programs_to_the_guard(
+    def test_deploy_checks_the_target_before_any_transaction(
         self,
         tmp_path: Path,
         current: t.Optional[str],
         target: str,
-        refused: t.Optional[str],
+        refused: bool,
     ) -> None:
-        """The deploy checks the chain's current and target program, before its first transaction."""
+        """The deploy refuses a retired target before its first transaction."""
 
         class _ReachedModuleEnable(Exception):
             """Raised by the first transaction step, past the guard."""
@@ -1822,10 +1807,10 @@ class TestRefuseRetiredStakingPrograms:
             )
 
         if refused:
-            assert exc_info.value.staking_program_id == refused  # type: ignore[attr-defined]
+            assert exc_info.value.staking_program_id == target  # type: ignore[attr-defined]
 
-    def test_public_check_reads_every_chain(self, tmp_path: Path) -> None:
-        """The route's pre-pause check refuses a retired program on any chain."""
+    def test_public_check_reads_every_chain_from_config(self, tmp_path: Path) -> None:
+        """The route's pre-pause check refuses a retired target on any chain, with no RPC."""
         manager = _make_manager(tmp_path)
         service = _make_staking_service(chains=[_CHAIN, "base"])
         service.home_chain = _CHAIN
@@ -1833,23 +1818,18 @@ class TestRefuseRetiredStakingPrograms:
             "omenstrat_viii"
         )
         service.chain_configs["base"].chain_data.user_params.staking_program_id = (
-            "basius_iv"
+            "basius_ii"
         )
         manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
-        # The home chain is clean; only the other chain is on a retired program.
-        current = {_CHAIN: None, "base": "basius_ii"}
 
         with (
-            patch.object(
-                manager,
-                "_get_current_staking_program",
-                side_effect=lambda _service, chain: current[chain],
-            ),
+            patch.object(manager, "_get_current_staking_program") as read_current,
             pytest.raises(RetiredStakingProgramError) as exc_info,
         ):
             manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
 
         assert exc_info.value.staking_program_id == "basius_ii"
+        read_current.assert_not_called()
 
     def test_public_check_lets_a_new_program_through(self, tmp_path: Path) -> None:
         """Nothing retired: no error."""
@@ -1860,8 +1840,7 @@ class TestRefuseRetiredStakingPrograms:
         )
         manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
 
-        with patch.object(manager, "_get_current_staking_program", return_value=None):
-            manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
+        manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
 
 
 class TestUnstakeServicesOnRetiredPrograms:

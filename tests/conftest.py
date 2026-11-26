@@ -331,15 +331,34 @@ def deploy_and_stake_trader(
         )
         == OnChainState.DEPLOYED
     )
-    sftxb = service_manager.get_eth_safe_tx_builder(
-        ledger_config=service.chain_configs[chain_str].ledger_config
-    )
     assert (
-        sftxb.staking_status(service_id=token_id, staking_contract=staking_contract)
+        trader_staking_status(
+            service_manager, service_config_id, token_id, staking_contract
+        )
         == StakingState.STAKED
     ), "service should be staked after the first deploy"
 
     return service_manager, service_config_id, token_id, staking_contract
+
+
+def trader_sftxb(service_manager: t.Any, service_config_id: str) -> t.Any:
+    """Return the Safe tx builder for the Trader service's chain."""
+    service = service_manager.load(service_config_id=service_config_id)
+    return service_manager.get_eth_safe_tx_builder(
+        ledger_config=service.chain_configs[TRADER_SERVICE_CHAIN.value].ledger_config
+    )
+
+
+def trader_staking_status(
+    service_manager: t.Any,
+    service_config_id: str,
+    token_id: int,
+    staking_contract: str,
+) -> StakingState:
+    """Read the Trader service's on-chain staking state on ``staking_contract``."""
+    return trader_sftxb(service_manager, service_config_id).staking_status(
+        service_id=token_id, staking_contract=staking_contract
+    )
 
 
 @pytest.fixture(autouse=True)

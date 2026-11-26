@@ -2447,7 +2447,7 @@ Deploy and run a service.
 
 **Response (Retired staking program - 409):**
 
-Returned when a staked deploy's current on-chain staking program, or its `staking_program_id`, is retired. It is returned before any transaction. `error_code` is always `RETIRED_STAKING_PROGRAM`, and `staking_program_id` names the retired program. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
+Returned when a deploy's target `staking_program_id` is retired. It is returned before any transaction. `error_code` is always `RETIRED_STAKING_PROGRAM`, and `staking_program_id` names the retired program. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
 
 ```json
 {

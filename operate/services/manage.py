@@ -45,7 +45,6 @@ from operate.constants import (
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
-    NO_STAKING_PROGRAM_ID,
     POLY_SAFE_SERVICE_NAMES,
     TRANSFER_EVENT_TOPIC,
     ZERO_ADDRESS,
@@ -196,22 +195,18 @@ _T = t.TypeVar("_T")
 
 
 def _refuse_retired_staking_programs(
-    chain: str,
-    current_staking_program: t.Optional[str],
-    target_staking_program: t.Optional[str],
+    chain: str, target_staking_program: t.Optional[str]
 ) -> None:
-    """Raise if a staked deploy would use a retired program, current or target.
+    """Raise if a deploy would stake on a retired program.
 
-    A deploy is staked unless its target is unset or ``no_staking``, which is
-    how ``OnChainUserParams.use_staking`` is derived too.
+    Only the target matters: a service still on a retired current program is
+    moved by the stake flow (unstake once allowed, then stake on the target),
+    which itself never stakes on a retired target. Reads local config only.
     """
-    if target_staking_program in (None, NO_STAKING_PROGRAM_ID):
-        return
-    for staking_program_id in (current_staking_program, target_staking_program):
-        if is_retired_staking_program(chain, staking_program_id):
-            raise RetiredStakingProgramError(
-                staking_program_id=t.cast(str, staking_program_id)
-            )
+    if is_retired_staking_program(chain, target_staking_program):
+        raise RetiredStakingProgramError(
+            staking_program_id=t.cast(str, target_staking_program)
+        )
 
 
 class ServiceManager:
@@ -552,12 +547,10 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-        current_staking_program = self._get_current_staking_program(service, chain)
         _refuse_retired_staking_programs(
-            chain=chain,
-            current_staking_program=current_staking_program,
-            target_staking_program=user_params.staking_program_id,
+            chain=chain, target_staking_program=user_params.staking_program_id
         )
+        current_staking_program = self._get_current_staking_program(service, chain)
 
         recovery_module_error = self._try_enable_recovery_module(
             service_config_id=service_config_id, chain=chain
@@ -2149,11 +2142,7 @@ class ServiceManager:
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
             _refuse_retired_staking_programs(
-                chain=chain,
-                current_staking_program=self._get_current_staking_program(
-                    service, chain
-                ),
-                target_staking_program=user_params.staking_program_id,
+                chain=chain, target_staking_program=user_params.staking_program_id
             )
 
     def unstake_services_on_retired_programs(self) -> None:

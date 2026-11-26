@@ -50,6 +50,7 @@ from tests.conftest import (
     deploy_and_stake_trader,
     fork_increase_time,
     master_eoa_nonce,
+    trader_sftxb,
 )
 from tests.constants import LOGGER
 
@@ -149,12 +150,7 @@ class TestHealthCheckerRestakeIntegration(OnFork):
             staking_contract,
         ) = deploy_and_stake_trader(test_env)
         ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
-        service = service_manager.load(service_config_id=service_config_id)
-        sftxb = service_manager.get_eth_safe_tx_builder(
-            ledger_config=service.chain_configs[
-                TRADER_SERVICE_CHAIN.value
-            ].ledger_config
-        )
+        sftxb = trader_sftxb(service_manager, service_config_id)
 
         _evict(service_manager, sftxb, token_id, staking_contract, ledger_api)
         # Default warp is minStakingDuration + 1, so unstaking becomes possible.
@@ -186,12 +182,7 @@ class TestHealthCheckerRestakeIntegration(OnFork):
             staking_contract,
         ) = deploy_and_stake_trader(test_env)
         ledger_api = get_default_ledger_api(TRADER_SERVICE_CHAIN)
-        service = service_manager.load(service_config_id=service_config_id)
-        sftxb = service_manager.get_eth_safe_tx_builder(
-            ledger_config=service.chain_configs[
-                TRADER_SERVICE_CHAIN.value
-            ].ledger_config
-        )
+        sftxb = trader_sftxb(service_manager, service_config_id)
 
         warped = _evict(service_manager, sftxb, token_id, staking_contract, ledger_api)
         params = _staking_params(ledger_api, staking_contract)
