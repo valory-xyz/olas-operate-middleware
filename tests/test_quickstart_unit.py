@@ -1048,6 +1048,7 @@ class TestDeployOnchainOrExit:
         # The same message and hint as the pre-funding refusal.
         assert "Staking program optimus_alpha_2 is retired." in out
         assert "operate reset-staking" in out
+        assert "minimum staking period is over" in out
 
     def test_successful_deploy_returns(self) -> None:
         """A deploy that goes through does not exit."""

@@ -742,7 +742,8 @@ def _exit_refused_deploy(manager: ServiceManager, error: Exception) -> t.NoRetur
     """Log and print a refused on-chain deploy, then exit with status 1."""
     manager.logger.error(f"On-chain deploy refused: {error}", exc_info=error)
     hint = (
-        " Run `operate reset-staking` to pick another staking program."
+        " Run `operate reset-staking` to pick another staking program. It can"
+        " switch only once the current program's minimum staking period is over."
         if isinstance(error, RetiredStakingProgramError)
         else ""
     )

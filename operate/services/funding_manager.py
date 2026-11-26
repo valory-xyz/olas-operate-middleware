@@ -130,8 +130,8 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         self.master_eoa_lock = threading.Lock()
         # One worker, shared by every funding_job: a job cancelled on re-login
         # leaves its running claim or sweep to finish, and the next job's work
-        # queues behind it instead of racing it. The chain tx lock can't do
-        # this, as each job gets its own ServiceManager and so its own locks.
+        # queues behind it instead of racing it. The chain tx lock doesn't
+        # cover claims or Master EOA funding.
         self._job_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="funding-job"
         )

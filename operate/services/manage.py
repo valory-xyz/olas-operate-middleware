@@ -115,6 +115,7 @@ from operate.wallet.master import InsufficientFundsException, MasterWalletManage
 NUM_LOCAL_AGENT_INSTANCES = 1
 
 RPC_SYNC_TIMEOUT = 15
+_T = t.TypeVar("_T")
 
 # Fallback gas limit for the mega-batch MultiSend. The full staking-update
 # path adds well over a dozen sub-calls (teardown + update mint + approvals +
@@ -189,9 +190,6 @@ def _stop_refused_reuse_before_txs(
     # a batched update is refused later by _resolve_safe_reuse.
     if swap_plan is _SwapPlan.STEPWISE and not fixed_by_owner_swap:
         raise recovery_module_error
-
-
-_T = t.TypeVar("_T")
 
 
 def _refuse_retired_staking_programs(
@@ -2226,7 +2224,7 @@ class ServiceManager:
         ran, outcome = self._run_under_chain_tx_lock(
             chain=chain,
             blocking=blocking,
-            skipped=f"staking for {service_config_id}",
+            flow_description=f"staking for {service_config_id}",
             flow=lambda: self._stake_service_on_chain_from_safe_unlocked(
                 service_config_id=service_config_id, chain=chain
             ),
@@ -2239,7 +2237,7 @@ class ServiceManager:
         self,
         chain: str,
         blocking: bool,
-        skipped: str,
+        flow_description: str,
         flow: t.Callable[[], _T],
     ) -> t.Tuple[bool, t.Optional[_T]]:
         """Run ``flow`` holding this chain's lock.
@@ -2250,7 +2248,7 @@ class ServiceManager:
         if not lock.acquire(blocking=blocking):  # pylint: disable=consider-using-with
             self.logger.info(
                 f"A deploy, stake or unstake flow is already in progress on {chain}. "
-                f"Skipping {skipped}."
+                f"Skipping {flow_description}."
             )
             return False, None
 
@@ -2457,7 +2455,7 @@ class ServiceManager:
         ran, _ = self._run_under_chain_tx_lock(
             chain=chain,
             blocking=blocking,
-            skipped=f"unstaking for {service_config_id}",
+            flow_description=f"unstaking for {service_config_id}",
             flow=lambda: self._unstake_service_on_chain_from_safe_unlocked(
                 service_config_id=service_config_id,
                 chain=chain,

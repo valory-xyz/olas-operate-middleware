@@ -88,8 +88,8 @@ class RetiredStakingProgramError(Exception):
         """Return the message, shared by ``str(e)`` and the 409 body."""
         return f"Staking program {staking_program_id} is retired."
 
-    def to_error_fields(self) -> t.Dict:
-        """Return the full JSONResponse body: message, code and program id."""
+    def to_response_body(self) -> t.Dict:
+        """Return the full response body, `error` included, unlike `to_error_fields`."""
         return {
             "error": self.message_for(self.staking_program_id),
             "error_code": self.error_code,

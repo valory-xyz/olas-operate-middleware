@@ -1819,7 +1819,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Deploy refused for {safe_id}: {e}")
             # The body is rebuilt from the program id, so no exception text leaks.
             return JSONResponse(
-                content=e.to_error_fields(),
+                content=e.to_response_body(),
                 status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except
