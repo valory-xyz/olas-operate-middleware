@@ -35,7 +35,10 @@ from operate.constants import (
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS_WITHOUT_SAFE
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.serialization import BigInt
-from operate.services.funding_manager import FundingManager
+from operate.services.funding_manager import (
+    FundingManager,
+    RETIRED_STAKING_CHECK_INTERVAL,
+)
 from operate.services.protocol import StakingState
 from operate.services.service import NON_EXISTENT_TOKEN
 from operate.utils.gnosis import Transfer
@@ -2187,6 +2190,79 @@ class TestFundingJob:
                 pass
 
         manager.logger.exception.assert_called()  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_funding_job_unstakes_retired_programs_right_away_then_every_10_min(
+        self,
+    ) -> None:
+        """The first loop after login sweeps; the next sweep waits 600 s."""
+        manager = _make_manager()
+        mock_service_manager = MagicMock()
+        clock = {"now": 10_000.0}
+        sweeps: list[float] = []
+        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
+            lambda: sweeps.append(clock["now"])
+        )
+
+        async def _advance(_seconds: float) -> None:
+            clock["now"] += 60
+            await _REAL_SLEEP(0)
+
+        with (
+            patch.object(manager, "fund_master_eoa"),
+            patch(
+                "operate.services.funding_manager.time",
+                side_effect=lambda: clock["now"],
+            ),
+            patch(
+                "operate.services.funding_manager.asyncio.sleep", side_effect=_advance
+            ),
+        ):
+            task = asyncio.create_task(manager.funding_job(mock_service_manager))
+            for _ in range(200):
+                if len(sweeps) >= 2:
+                    break
+                await _REAL_SLEEP(0.01)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        assert sweeps[0] == 10_000.0
+        assert sweeps[1] - sweeps[0] > RETIRED_STAKING_CHECK_INTERVAL
+        assert sweeps[1] - sweeps[0] <= RETIRED_STAKING_CHECK_INTERVAL + 60
+
+    @pytest.mark.asyncio
+    async def test_funding_job_logs_retired_unstake_exception(self) -> None:
+        """A failing sweep is logged and the job keeps running."""
+        manager = _make_manager()
+        mock_service_manager = MagicMock()
+        mock_service_manager.unstake_services_on_retired_programs.side_effect = (
+            RuntimeError("rpc down")
+        )
+
+        with (
+            patch.object(manager, "fund_master_eoa"),
+            patch(
+                "operate.services.funding_manager.asyncio.sleep",
+                side_effect=_instant_sleep,
+            ),
+        ):
+            task = asyncio.create_task(manager.funding_job(mock_service_manager))
+            for _ in range(40):
+                if manager.logger.exception.call_count > 0:  # type: ignore[attr-defined]
+                    break
+                await _REAL_SLEEP(0.05)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        manager.logger.exception.assert_called_with(  # type: ignore[attr-defined]
+            "Error occurred while unstaking from retired staking programs"
+        )
 
     @pytest.mark.asyncio
     async def test_funding_job_passes_loop_to_executor(self) -> None:

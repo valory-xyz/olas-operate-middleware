@@ -33,6 +33,7 @@ from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     InsufficientFundsException,
     RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
 )
 from operate.operate_types import (
     Chain,
@@ -45,6 +46,7 @@ from operate.operate_types import (
 from operate.services.manage import (
     ServiceManager,
     _SwapPlan,
+    _refuse_retired_staking_programs,
     _stop_refused_reuse_before_txs,
 )
 from operate.services.protocol import StakingState
@@ -1723,6 +1725,188 @@ class TestStopRefusedReuseBeforeTxs:
         assert exc_info.value is error
 
 
+class TestRefuseRetiredStakingPrograms:
+    """Tests for _refuse_retired_staking_programs()."""
+
+    @pytest.mark.parametrize(
+        ("use_staking", "current", "target", "refused"),
+        [
+            (True, None, "omenstrat_viii", None),
+            (True, "omenstrat_viii", "omenstrat_ix", None),
+            (True, None, "omenstrat_i", "omenstrat_i"),
+            (True, "omenstrat_i", "omenstrat_viii", "omenstrat_i"),
+            (
+                True,
+                "pearl_beta_mech_marketplace_3",
+                None,
+                "pearl_beta_mech_marketplace_3",
+            ),
+            (False, "omenstrat_i", "omenstrat_i", None),
+            (False, None, "omenstrat_i", None),
+        ],
+        ids=[
+            "unstaked-to-new",
+            "new-to-new",
+            "target-retired",
+            "switch-inside-cooldown",
+            "current-retired-no-target",
+            "withdrawal-only-still-staked",
+            "withdrawal-only-unstaked",
+        ],
+    )
+    def test_refuses_only_staying_staked_on_a_retired_program(
+        self,
+        use_staking: bool,
+        current: t.Optional[str],
+        target: t.Optional[str],
+        refused: t.Optional[str],
+    ) -> None:
+        """A deploy that keeps staking is refused when either program is retired."""
+        kwargs = dict(
+            chain=_CHAIN,
+            use_staking=use_staking,
+            current_staking_program=current,
+            target_staking_program=target,
+        )
+        if refused is None:
+            _refuse_retired_staking_programs(**kwargs)  # type: ignore[arg-type]
+            return
+        with pytest.raises(RetiredStakingProgramError) as exc_info:
+            _refuse_retired_staking_programs(**kwargs)  # type: ignore[arg-type]
+        assert exc_info.value.staking_program_id == refused
+        assert str(exc_info.value) == f"Staking program {refused} is retired."
+
+    def test_deploy_refuses_before_any_transaction(self, tmp_path: Path) -> None:
+        """The refusal comes before the first Safe transaction, the module enable."""
+        manager, service, _ = _make_manager_with_service(tmp_path)
+        user_params = service.chain_configs[_CHAIN].chain_data.user_params
+        user_params.use_staking = True
+        user_params.staking_program_id = "omenstrat_viii"
+        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
+        manager._try_enable_recovery_module = MagicMock()  # type: ignore[method-assign]
+
+        with (
+            patch.object(manager, "get_eth_safe_tx_builder"),
+            patch.object(
+                manager, "_get_current_staking_program", return_value="omenstrat_iii"
+            ),
+            pytest.raises(RetiredStakingProgramError),
+        ):
+            manager._deploy_service_onchain_from_safe(
+                service_config_id="sc-test-id", chain=_CHAIN
+            )
+
+        manager._try_enable_recovery_module.assert_not_called()  # type: ignore[attr-defined]
+
+
+class TestUnstakeServicesOnRetiredPrograms:
+    """Tests for unstake_services_on_retired_programs()."""
+
+    @staticmethod
+    def _run(
+        tmp_path: Path,
+        current_program: t.Optional[str],
+        served: bool = True,
+        chains: t.Optional[t.List[str]] = None,
+    ) -> t.Tuple[ServiceManager, MagicMock]:
+        """Sweep one service whose current program and served duration are given."""
+        manager = _make_manager(tmp_path)
+        service = _make_staking_service(chains=chains)
+        manager.get_all_services = MagicMock(  # type: ignore[method-assign]
+            return_value=([service], True)
+        )
+        manager.unstake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
+            return_value=True
+        )
+        staking_manager = MagicMock()
+        staking_manager.has_served_minimum_staking_duration.return_value = served
+        with (
+            patch(
+                "operate.services.manage.StakingManager", return_value=staking_manager
+            ),
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                return_value=current_program,
+            ),
+        ):
+            manager.unstake_services_on_retired_programs()
+        return manager, staking_manager
+
+    def test_unstakes_a_retired_program_once_the_period_is_over(
+        self, tmp_path: Path
+    ) -> None:
+        """Unstakes without waiting for the chain lock, from the current program."""
+        manager, staking_manager = self._run(tmp_path, "omenstrat_iii")
+
+        staking_manager.has_served_minimum_staking_duration.assert_called_once_with(
+            service_id=32, staking_contract="0xABD4f159a088E7f18FEE8241cF9367f1d746780f"
+        )
+        manager.unstake_service_on_chain_from_safe.assert_called_once_with(  # type: ignore[attr-defined]
+            service_config_id="sc-test-id",
+            chain=_CHAIN,
+            staking_program_id="omenstrat_iii",
+            blocking=False,
+        )
+
+    def test_waits_out_the_minimum_staking_period(self, tmp_path: Path) -> None:
+        """Inside the period, nothing is sent."""
+        manager, _ = self._run(tmp_path, "omenstrat_iii", served=False)
+
+        manager.unstake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
+
+    @pytest.mark.parametrize("current_program", [None, "omenstrat_viii"])
+    def test_leaves_unstaked_and_new_programs_alone(
+        self, tmp_path: Path, current_program: t.Optional[str]
+    ) -> None:
+        """Only a retired current program is unstaked."""
+        manager, staking_manager = self._run(tmp_path, current_program)
+
+        staking_manager.has_served_minimum_staking_duration.assert_not_called()
+        manager.unstake_service_on_chain_from_safe.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_skips_chains_without_retired_programs(self, tmp_path: Path) -> None:
+        """A chain with nothing retired is not read at all."""
+        manager = _make_manager(tmp_path)
+        service = _make_staking_service(chains=["mode"])
+        manager.get_all_services = MagicMock(  # type: ignore[method-assign]
+            return_value=([service], True)
+        )
+        manager._get_current_staking_program = MagicMock()  # type: ignore[method-assign]
+
+        manager.unstake_services_on_retired_programs()
+
+        manager._get_current_staking_program.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_a_failure_is_logged_and_the_sweep_goes_on(self, tmp_path: Path) -> None:
+        """A failed unstake on one service does not stop the next one."""
+        manager = _make_manager(tmp_path)
+        first, second = _make_staking_service(), _make_staking_service()
+        second.service_config_id = "sc-second"
+        manager.get_all_services = MagicMock(  # type: ignore[method-assign]
+            return_value=([first, second], True)
+        )
+        manager.unstake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
+            side_effect=[InsufficientFundsException("no gas", chain=_CHAIN), True]
+        )
+        staking_manager = MagicMock()
+        staking_manager.has_served_minimum_staking_duration.return_value = True
+        with (
+            patch(
+                "operate.services.manage.StakingManager", return_value=staking_manager
+            ),
+            patch.object(
+                manager, "_get_current_staking_program", return_value="omenstrat_iii"
+            ),
+            patch.object(manager.logger, "error") as log_error,
+        ):
+            manager.unstake_services_on_retired_programs()
+
+        assert manager.unstake_service_on_chain_from_safe.call_count == 2  # type: ignore[attr-defined]
+        log_error.assert_called_once()
+        assert "sc-test-id" in log_error.call_args.args[0]
+
+
 class TestResolveSafeReuse:
     """Tests for ServiceManager._resolve_safe_reuse(), called by both deploy paths."""
 
@@ -3390,6 +3574,38 @@ class TestChainTransactionLock:
 
         assert ran is False
         manager._stake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_non_blocking_unstake_skips_on_contention(self, tmp_path: Path) -> None:
+        """The background retired-program unstake must not queue behind a start."""
+        manager = _make_manager(tmp_path)
+        manager._unstake_service_on_chain_from_safe_unlocked = MagicMock()  # type: ignore[method-assign]
+
+        with manager.get_chain_tx_lock(_CHAIN):
+            ran = manager.unstake_service_on_chain_from_safe(
+                service_config_id="sc-a",
+                chain=_CHAIN,
+                staking_program_id="omenstrat_i",
+                blocking=False,
+            )
+
+        assert ran is False
+        manager._unstake_service_on_chain_from_safe_unlocked.assert_not_called()  # type: ignore[attr-defined]
+
+    def test_unstake_releases_the_lock_when_the_flow_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed unstake must not leave the chain locked for the next check."""
+        manager = _make_manager(tmp_path)
+        manager._unstake_service_on_chain_from_safe_unlocked = MagicMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("rpc down")
+        )
+
+        with pytest.raises(RuntimeError):
+            manager.unstake_service_on_chain_from_safe(
+                service_config_id="sc-a", chain=_CHAIN, blocking=False
+            )
+
+        assert manager.get_chain_tx_lock(_CHAIN).acquire(blocking=False) is True
 
     def test_another_service_on_the_same_chain_is_blocked(self, tmp_path: Path) -> None:
         """The Safe is shared, so a different service is still a collision."""

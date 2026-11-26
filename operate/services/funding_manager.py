@@ -87,6 +87,9 @@ _ERC20_TRANSFER_GAS_MULTIPLIER = 3
 # nested Gnosis Safe execTransaction calls; this fallback is applied instead.
 _GAS_PER_SAFE_B_TRANSFER = 500_000
 
+# Services on a retired staking program are checked for unstaking this often.
+RETIRED_STAKING_CHECK_INTERVAL = 600
+
 if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
@@ -1409,6 +1412,7 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         with ThreadPoolExecutor() as executor:
             last_claim = 0.0
             last_master_eoa_funding = 0.0
+            last_retired_staking_check = 0.0
             while True:
                 # try claiming rewards every hour
                 if last_claim + 3600 < time():
@@ -1431,6 +1435,18 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                     except Exception:  # pylint: disable=broad-except
                         self.logger.exception("Error occurred while funding Master EOA")
                     last_master_eoa_funding = time()
+
+                if last_retired_staking_check + RETIRED_STAKING_CHECK_INTERVAL < time():
+                    try:
+                        await loop.run_in_executor(
+                            executor,
+                            service_manager.unstake_services_on_retired_programs,
+                        )
+                    except Exception:  # pylint: disable=broad-except
+                        self.logger.exception(
+                            "Error occurred while unstaking from retired staking programs"
+                        )
+                    last_retired_staking_check = time()
 
                 await asyncio.sleep(60)
 

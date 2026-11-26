@@ -57,6 +57,7 @@ from operate.data.contracts.requester_activity_checker.contract import (
 from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     RecoveryModuleNotEnabledError,
+    RetiredStakingProgramError,
 )
 from operate.keys import KeysManager
 from operate.ledger import UnsupportedChainError, get_default_rpc
@@ -66,7 +67,9 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_PRIORITY_MECH,
     OLAS,
+    RETIRED_STAKING_PROGRAMS,
     get_staking_contract,
+    is_retired_staking_program,
     uses_decoupled_activity,
 )
 from operate.operate_types import (
@@ -185,6 +188,22 @@ def _stop_refused_reuse_before_txs(
     # a batched update is refused later by _resolve_safe_reuse.
     if swap_plan is _SwapPlan.STEPWISE and not fixed_by_owner_swap:
         raise recovery_module_error
+
+
+def _refuse_retired_staking_programs(
+    chain: str,
+    use_staking: bool,
+    current_staking_program: t.Optional[str],
+    target_staking_program: t.Optional[str],
+) -> None:
+    """Raise if the deploy would keep the service staked on a retired program."""
+    if not use_staking:
+        return
+    for staking_program_id in (current_staking_program, target_staking_program):
+        if staking_program_id is not None and is_retired_staking_program(
+            chain, staking_program_id
+        ):
+            raise RetiredStakingProgramError(staking_program_id=staking_program_id)
 
 
 class ServiceManager:
@@ -525,6 +544,14 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
+        current_staking_program = self._get_current_staking_program(service, chain)
+        _refuse_retired_staking_programs(
+            chain=chain,
+            use_staking=user_params.use_staking,
+            current_staking_program=current_staking_program,
+            target_staking_program=user_params.staking_program_id,
+        )
+
         recovery_module_error = self._try_enable_recovery_module(
             service_config_id=service_config_id, chain=chain
         )
@@ -546,7 +573,6 @@ class ServiceManager:
             swap_plan=_SwapPlan.UNDECIDED,
         )
 
-        current_staking_program = self._get_current_staking_program(service, chain)
         fallback_params = dict(  # nosec
             staking_contract=ZERO_ADDRESS,
             agent_ids=[user_params.agent_id],
@@ -2099,6 +2125,65 @@ class ServiceManager:
 
         return StakingReconcileOutcome.RECONCILED
 
+    def unstake_services_on_retired_programs(self) -> None:
+        """Unstake every service whose current staking program is retired.
+
+        Each service waits out its minimum staking period first, even when the
+        reward pool is empty. A failure is logged and retried on the next call.
+        """
+        services, _ = self.get_all_services()
+        for service in services:
+            for chain in service.chain_configs:
+                try:
+                    self._unstake_from_retired_program(service=service, chain=chain)
+                except Exception as e:  # pylint: disable=broad-except
+                    self.logger.error(
+                        f"Failed to unstake {service.service_config_id} on {chain} "
+                        f"from its retired staking program. Exception {e}: "
+                        f"{traceback.format_exc()}"
+                    )
+
+    def _unstake_from_retired_program(self, service: Service, chain: str) -> None:
+        """Unstake the service on this chain if it sits on a retired program."""
+        if Chain(chain) not in RETIRED_STAKING_PROGRAMS:
+            return
+
+        current_staking_program = self._get_current_staking_program(service, chain)
+        if not is_retired_staking_program(chain, current_staking_program):
+            return
+
+        chain_config = service.chain_configs[chain]
+        staking_manager = StakingManager(
+            Chain(chain), rpc=chain_config.ledger_config.rpc
+        )
+        if not staking_manager.has_served_minimum_staking_duration(
+            service_id=chain_config.chain_data.token,
+            staking_contract=t.cast(
+                str,
+                get_staking_contract(
+                    chain=chain, staking_program_id=current_staking_program
+                ),
+            ),
+        ):
+            self.logger.info(
+                f"Service {service.service_config_id} is on the retired staking "
+                f"program {current_staking_program} on {chain} and still inside "
+                "its minimum staking period."
+            )
+            return
+
+        self.logger.info(
+            f"Unstaking {service.service_config_id} from the retired staking "
+            f"program {current_staking_program} on {chain}."
+        )
+        # Non-blocking: a background thread must not queue behind a foreground transaction.
+        self.unstake_service_on_chain_from_safe(
+            service_config_id=service.service_config_id,
+            chain=chain,
+            staking_program_id=current_staking_program,
+            blocking=False,
+        )
+
     def get_chain_tx_lock(self, chain: str) -> threading.Lock:
         """Return the lock serialising this chain's deploy, stake and unstake flows."""
         # Keyed on the chain because the master Safe is: its nonce is shared by
@@ -2308,15 +2393,31 @@ class ServiceManager:
         chain: str,
         staking_program_id: t.Optional[str] = None,
         force: bool = False,
-    ) -> None:
-        """Unstake service on-chain, serialised on this chain's lock."""
-        with self.get_chain_tx_lock(chain=chain):
+        blocking: bool = True,
+    ) -> bool:
+        """Unstake service on-chain, serialised on :meth:`get_chain_tx_lock`.
+
+        :param blocking: wait for the lock; background callers pass False to skip instead.
+        :return: True if the unstaking flow ran, False if another caller held the lock.
+        """
+        lock = self.get_chain_tx_lock(chain=chain)
+        if not lock.acquire(blocking=blocking):  # pylint: disable=consider-using-with
+            self.logger.info(
+                f"A deploy, stake or unstake flow is already in progress on {chain}. "
+                f"Skipping unstaking for {service_config_id}."
+            )
+            return False
+
+        try:
             self._unstake_service_on_chain_from_safe_unlocked(
                 service_config_id=service_config_id,
                 chain=chain,
                 staking_program_id=staking_program_id,
                 force=force,
             )
+        finally:
+            lock.release()
+        return True
 
     def _unstake_service_on_chain_from_safe_unlocked(  # pragma: no cover
         self,
