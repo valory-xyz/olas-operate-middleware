@@ -45,6 +45,7 @@ from operate.constants import (
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
+    NO_STAKING_PROGRAM_ID,
     POLY_SAFE_SERVICE_NAMES,
     TRANSFER_EVENT_TOPIC,
     ZERO_ADDRESS,
@@ -192,18 +193,21 @@ def _stop_refused_reuse_before_txs(
 
 def _refuse_retired_staking_programs(
     chain: str,
-    use_staking: bool,
     current_staking_program: t.Optional[str],
     target_staking_program: t.Optional[str],
 ) -> None:
-    """Raise if a staked deploy would use a retired program, current or target."""
-    if not use_staking:
+    """Raise if a staked deploy would use a retired program, current or target.
+
+    A deploy is staked unless its target is unset or ``no_staking``, which is
+    how ``OnChainUserParams.use_staking`` is derived too.
+    """
+    if target_staking_program in (None, NO_STAKING_PROGRAM_ID):
         return
     for staking_program_id in (current_staking_program, target_staking_program):
-        if staking_program_id is not None and is_retired_staking_program(
-            chain, staking_program_id
-        ):
-            raise RetiredStakingProgramError(staking_program_id=staking_program_id)
+        if is_retired_staking_program(chain, staking_program_id):
+            raise RetiredStakingProgramError(
+                staking_program_id=t.cast(str, staking_program_id)
+            )
 
 
 class ServiceManager:
@@ -547,7 +551,6 @@ class ServiceManager:
         current_staking_program = self._get_current_staking_program(service, chain)
         _refuse_retired_staking_programs(
             chain=chain,
-            use_staking=user_params.use_staking,
             current_staking_program=current_staking_program,
             target_staking_program=user_params.staking_program_id,
         )
@@ -2068,7 +2071,19 @@ class ServiceManager:
         if not unstakable:
             return StakingReconcileOutcome.NOTHING_TO_DO
 
+        # The staking flow unstakes these but won't stake on a retired target.
+        service = self.load(service_config_id=service_config_id)
+        retired_target = {
+            chain
+            for chain in unstakable
+            if is_retired_staking_program(
+                chain,
+                service.chain_configs[chain].chain_data.user_params.staking_program_id,
+            )
+        }
+
         restaked: t.List[str] = []
+        unstaked_only: t.List[str] = []
         skipped: t.List[str] = []
         failed: t.List[str] = []
         for chain in unstakable:
@@ -2081,7 +2096,9 @@ class ServiceManager:
                 if self.stake_service_on_chain_from_safe(
                     service_config_id=service_config_id, chain=chain, blocking=False
                 ):
-                    restaked.append(chain)
+                    (unstaked_only if chain in retired_target else restaked).append(
+                        chain
+                    )
                 else:
                     skipped.append(chain)
             except Exception as e:  # pylint: disable=broad-except
@@ -2096,6 +2113,12 @@ class ServiceManager:
             f"Re-staking {service_config_id}: "
             f"re-staked on {restaked}, skipped {skipped}, failed on {failed}."
         )
+        if unstaked_only:
+            self.logger.warning(
+                f"Service {service_config_id} was unstaked but not re-staked on "
+                f"{unstaked_only}: its target staking program is retired. It "
+                "runs unstaked and earns no rewards until it switches program."
+            )
 
         if failed:
             return StakingReconcileOutcome.FAILED
@@ -2126,13 +2149,12 @@ class ServiceManager:
         return StakingReconcileOutcome.RECONCILED
 
     def refuse_retired_staking_programs(self, service_config_id: str) -> None:
-        """Raise RetiredStakingProgramError if a staked deploy would use a retired program, current or target."""
+        """Apply `_refuse_retired_staking_programs` to every chain of the service."""
         service = self.load(service_config_id=service_config_id)
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
             _refuse_retired_staking_programs(
                 chain=chain,
-                use_staking=user_params.use_staking,
                 current_staking_program=self._get_current_staking_program(
                     service, chain
                 ),
@@ -2368,8 +2390,9 @@ class ServiceManager:
         self.logger.info(f"{staking_slots_available=}")
 
         if is_retired_staking_program(chain, target_staking_program):
-            self.logger.info(
-                f"Not staking {chain_config.chain_data.token}: its target staking "
+            self.logger.warning(
+                f"Not staking {service_config_id} (token "
+                f"{chain_config.chain_data.token}) on {chain}: its target staking "
                 f"program {target_staking_program} is retired."
             )
         elif (

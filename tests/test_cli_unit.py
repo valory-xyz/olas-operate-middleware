@@ -2015,7 +2015,11 @@ class TestServiceRoutes:
                 resp = c.post("/api/v2/service/svc1", json={})
                 pauses_after = validate_services.call_count
             assert resp.status_code == HTTPStatus.CONFLICT
-            assert resp.json() == {"error": "Staking program omenstrat_iii is retired."}
+            assert resp.json() == {
+                "error": "Staking program omenstrat_iii is retired.",
+                "error_code": "RETIRED_STAKING_PROGRAM",
+                "staking_program_id": "omenstrat_iii",
+            }
             assert pauses_after == pauses_before
             m.service_manager.return_value.deploy_service_onchain_from_safe.assert_not_called()
 

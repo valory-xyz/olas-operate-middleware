@@ -2447,11 +2447,13 @@ Deploy and run a service.
 
 **Response (Retired staking program - 409):**
 
-Returned when the service would deploy staked (its `user_params.staking_program_id` is not `no_staking`, which is what the read-only `use_staking` reflects) and its current on-chain staking program, or that `staking_program_id`, is retired. It is returned before any transaction. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
+Returned when a staked deploy's current on-chain staking program, or its `staking_program_id`, is retired. It is returned before any transaction. `error_code` is always `RETIRED_STAKING_PROGRAM`, and `staking_program_id` names the retired program. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
 
 ```json
 {
-  "error": "Staking program omenstrat_iii is retired."
+  "error": "Staking program omenstrat_iii is retired.",
+  "error_code": "RETIRED_STAKING_PROGRAM",
+  "staking_program_id": "omenstrat_iii"
 }
 ```
 

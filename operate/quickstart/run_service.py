@@ -745,7 +745,7 @@ def _deploy_onchain_or_exit(manager: ServiceManager, service_config_id: str) -> 
 
 
 def _refuse_retired_or_exit(manager: ServiceManager, service_config_id: str) -> None:
-    """Exit with status 1 before any funding if a staked deploy would use a retired program, current or target."""
+    """Exit 1 if the deploy would be refused."""
     try:
         manager.refuse_retired_staking_programs(service_config_id=service_config_id)
     except RetiredStakingProgramError as e:

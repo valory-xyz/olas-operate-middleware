@@ -28,7 +28,11 @@ from autonomy.chain.exceptions import ChainInteractionError
 from hexbytes import HexBytes
 from web3 import Web3
 
-from operate.constants import TRANSFER_EVENT_TOPIC, ZERO_ADDRESS
+from operate.constants import (
+    NO_STAKING_PROGRAM_ID,
+    TRANSFER_EVENT_TOPIC,
+    ZERO_ADDRESS,
+)
 from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     InsufficientFundsException,
@@ -40,6 +44,7 @@ from operate.operate_types import (
     DeploymentStatus,
     LedgerConfig,
     OnChainState,
+    OnChainUserParams,
     StakingEvictionState,
     StakingReconcileOutcome,
 )
@@ -1726,42 +1731,37 @@ class TestRefuseRetiredStakingPrograms:
     """Tests for _refuse_retired_staking_programs()."""
 
     @pytest.mark.parametrize(
-        ("use_staking", "current", "target", "refused"),
+        ("current", "target", "refused"),
         [
-            (True, None, "omenstrat_viii", None),
-            (True, "omenstrat_viii", "omenstrat_ix", None),
-            (True, None, "omenstrat_i", "omenstrat_i"),
-            (True, "omenstrat_i", "omenstrat_viii", "omenstrat_i"),
-            (
-                True,
-                "pearl_beta_mech_marketplace_3",
-                None,
-                "pearl_beta_mech_marketplace_3",
-            ),
-            (False, "omenstrat_i", "omenstrat_i", None),
-            (False, None, "omenstrat_i", None),
+            (None, "omenstrat_viii", None),
+            ("omenstrat_viii", "omenstrat_ix", None),
+            (None, "omenstrat_i", "omenstrat_i"),
+            ("omenstrat_i", "omenstrat_viii", "omenstrat_i"),
+            # Withdrawal-only: the app PATCHes the target to `no_staking`.
+            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
+            (None, NO_STAKING_PROGRAM_ID, None),
+            # An unset target is unstaked too, as `use_staking` reads it.
+            ("pearl_beta_mech_marketplace_3", None, None),
         ],
         ids=[
             "unstaked-to-new",
             "new-to-new",
             "target-retired",
             "switch-inside-cooldown",
-            "current-retired-no-target",
             "withdrawal-only-still-staked",
             "withdrawal-only-unstaked",
+            "no-target",
         ],
     )
     def test_refuses_only_staying_staked_on_a_retired_program(
         self,
-        use_staking: bool,
         current: t.Optional[str],
         target: t.Optional[str],
         refused: t.Optional[str],
     ) -> None:
-        """A deploy that keeps staking is refused when either program is retired."""
+        """A staked deploy is refused when either program is retired."""
         kwargs = dict(
             chain=_CHAIN,
-            use_staking=use_staking,
             current_staking_program=current,
             target_staking_program=target,
         )
@@ -1777,7 +1777,6 @@ class TestRefuseRetiredStakingPrograms:
         """The refusal comes before the first Safe transaction, the module enable."""
         manager, service, _ = _make_manager_with_service(tmp_path)
         user_params = service.chain_configs[_CHAIN].chain_data.user_params
-        user_params.use_staking = True
         user_params.staking_program_id = "omenstrat_viii"
         manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
         manager._try_enable_recovery_module = MagicMock()  # type: ignore[method-assign]
@@ -1796,30 +1795,35 @@ class TestRefuseRetiredStakingPrograms:
         manager._try_enable_recovery_module.assert_not_called()  # type: ignore[attr-defined]
 
     @pytest.mark.parametrize(
-        ("use_staking", "current", "target", "refused"),
+        ("current", "target", "refused"),
         [
-            (True, None, "omenstrat_i", "omenstrat_i"),
-            (False, "omenstrat_iii", "omenstrat_iii", None),
+            (None, "omenstrat_i", "omenstrat_i"),
+            # The app's withdrawal-only payload, on a still-staked service.
+            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
         ],
         ids=["retired-target", "withdrawal-only"],
     )
     def test_deploy_passes_the_service_programs_to_the_guard(
         self,
         tmp_path: Path,
-        use_staking: bool,
         current: t.Optional[str],
         target: str,
         refused: t.Optional[str],
     ) -> None:
-        """The deploy checks the chain's use_staking, current and target program."""
+        """The deploy checks the chain's current and target program."""
 
         class _ReachedModuleEnable(Exception):
             """Raised by the first transaction step, past the guard."""
 
         manager, service, _ = _make_manager_with_service(tmp_path)
-        user_params = service.chain_configs[_CHAIN].chain_data.user_params
-        user_params.use_staking = use_staking
-        user_params.staking_program_id = target
+        # Real user params, so `use_staking` is derived as in production.
+        service.chain_configs[_CHAIN].chain_data.user_params = OnChainUserParams(
+            staking_program_id=target,
+            nft="bafybei-nft",
+            agent_id=25,
+            cost_of_bond=1,
+            fund_requirements={},
+        )
         manager._try_enable_recovery_module = MagicMock(  # type: ignore[method-assign]
             side_effect=_ReachedModuleEnable
         )
@@ -1842,11 +1846,17 @@ class TestRefuseRetiredStakingPrograms:
     def test_public_check_reads_every_chain(self, tmp_path: Path) -> None:
         """The route's pre-pause check refuses a retired program on any chain."""
         manager = _make_manager(tmp_path)
-        service = _make_staking_service(chains=["base", _CHAIN])
-        for chain_config in service.chain_configs.values():
-            chain_config.chain_data.user_params.staking_program_id = "basius_iv"
+        service = _make_staking_service(chains=[_CHAIN, "base"])
+        service.home_chain = _CHAIN
+        service.chain_configs[_CHAIN].chain_data.user_params.staking_program_id = (
+            "omenstrat_viii"
+        )
+        service.chain_configs["base"].chain_data.user_params.staking_program_id = (
+            "basius_iv"
+        )
         manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
-        current = {"base": None, _CHAIN: "omenstrat_ii"}
+        # The home chain is clean; only the other chain is on a retired program.
+        current = {_CHAIN: None, "base": "basius_ii"}
 
         with (
             patch.object(
@@ -1858,7 +1868,7 @@ class TestRefuseRetiredStakingPrograms:
         ):
             manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
 
-        assert exc_info.value.staking_program_id == "omenstrat_ii"
+        assert exc_info.value.staking_program_id == "basius_ii"
 
     def test_public_check_lets_a_new_program_through(self, tmp_path: Path) -> None:
         """Nothing retired: no error."""
@@ -3467,6 +3477,7 @@ class TestReconcileStakingForRestart:
         tmp_path: Path,
         eviction_states: t.Dict[str, StakingEvictionState],
         after_restake: t.Optional[t.Dict[str, StakingEvictionState]] = None,
+        target_staking_program: str = "omenstrat_viii",
     ) -> ServiceManager:
         """Create a manager whose eviction read returns the given states.
 
@@ -3487,7 +3498,34 @@ class TestReconcileStakingForRestart:
         manager.stake_service_on_chain_from_safe = MagicMock(  # type: ignore[method-assign]
             return_value=True
         )
+        service = _make_staking_service(chains=list(eviction_states))
+        for chain_config in service.chain_configs.values():
+            chain_config.chain_data.user_params.staking_program_id = (
+                target_staking_program
+            )
+        manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
         return manager
+
+    def test_a_retired_target_is_reported_as_unstaked_not_restaked(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The flow unstakes but won't stake on a retired target; say so."""
+        manager = self._manager(
+            tmp_path,
+            {_CHAIN: StakingEvictionState.EVICTED_UNSTAKABLE},
+            target_staking_program="omenstrat_iii",
+        )
+
+        with caplog.at_level(logging.INFO, logger="test"):
+            outcome = manager.reconcile_staking_for_restart(
+                service_config_id="sc-test-id"
+            )
+
+        assert outcome == StakingReconcileOutcome.RECONCILED
+        assert "re-staked on []" in caplog.text
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "not re-staked on ['gnosis']" in warnings[0].getMessage()
 
     def test_not_evicted_touches_nothing(self, tmp_path: Path) -> None:
         """A healthy service must not reach a wallet at all."""

@@ -74,9 +74,18 @@ class AgentCouldNotEnableRecoveryModuleError(RecoveryModuleNotEnabledError):
 
 
 class RetiredStakingProgramError(Exception):
-    """A staked deploy would use a retired staking program, either the current one or the target one."""
+    """The staking program is retired."""
+
+    error_code: t.ClassVar[str] = "RETIRED_STAKING_PROGRAM"
 
     def __init__(self, staking_program_id: str) -> None:
         """Initialize the error."""
         super().__init__(f"Staking program {staking_program_id} is retired.")
         self.staking_program_id = staking_program_id
+
+    def to_error_fields(self) -> t.Dict:
+        """Return structured error fields for merging into a JSONResponse body."""
+        return {
+            "error_code": self.error_code,
+            "staking_program_id": self.staking_program_id,
+        }
