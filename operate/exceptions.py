@@ -85,7 +85,7 @@ class RetiredStakingProgramError(Exception):
 
     @staticmethod
     def message_for(staking_program_id: str) -> str:
-        """Return the message, shared by ``str(e)`` and the 409 body."""
+        """Return the message, shared by ``str(e)`` and the response body."""
         return f"Staking program {staking_program_id} is retired."
 
     def to_response_body(self) -> t.Dict:
