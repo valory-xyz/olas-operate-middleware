@@ -2447,7 +2447,7 @@ Deploy and run a service.
 
 **Response (Retired staking program - 409):**
 
-Returned when `use_staking` is true on the service's chain config and its current on-chain staking program, or its `user_params.staking_program_id`, is retired. It is returned before any transaction. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
+Returned when the service would deploy staked (its `user_params.staking_program_id` is not `no_staking`, which is what the read-only `use_staking` reflects) and its current on-chain staking program, or that `staking_program_id`, is retired. It is returned before any transaction. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
 
 ```json
 {
