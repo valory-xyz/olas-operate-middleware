@@ -1396,18 +1396,21 @@ class ServiceManager:
                 staking_chain = chain_
                 break
 
-        service.update_env_variables_values(
-            {
-                "SAFE_CONTRACT_ADDRESSES": json.dumps(
-                    {
-                        chain: config.chain_data.multisig
-                        for chain, config in service.chain_configs.items()
-                    },
-                    separators=(",", ":"),
-                ),
-                "STAKING_CHAIN": staking_chain,
-            }
-        )
+        post_mint_env_var_to_value = {
+            "SAFE_CONTRACT_ADDRESSES": json.dumps(
+                {
+                    chain: config.chain_data.multisig
+                    for chain, config in service.chain_configs.items()
+                },
+                separators=(",", ":"),
+            ),
+            "STAKING_CHAIN": staking_chain,
+        }
+        if chain == service.home_chain:
+            # Set here rather than with the other home-chain values: a new
+            # service is only minted further up this function.
+            post_mint_env_var_to_value["SERVICE_ID"] = chain_data.token
+        service.update_env_variables_values(post_mint_env_var_to_value)
         service.store()
 
         if user_params.use_staking and not mega_batch_done:

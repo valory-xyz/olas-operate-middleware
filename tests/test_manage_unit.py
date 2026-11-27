@@ -1112,6 +1112,9 @@ class TestDeployRecoveryModuleGate:
         is_update: bool = True,
         multisig: str = _SERVICE_SAFE,
         deploy_goes_through: bool = False,
+        home_chain: str = "ethereum",
+        token: int = 7,
+        minted_token: int = 42,
     ) -> t.Dict[str, t.Any]:
         """Run an update of a service (DEPLOYED by default), ``enable_effect`` driving each enable.
 
@@ -1130,7 +1133,7 @@ class TestDeployRecoveryModuleGate:
             """Raised where the deploy data would be built."""
 
         manager, service, chain_config = _make_manager_with_service(
-            tmp_path, home_chain="ethereum"
+            tmp_path, token=token, home_chain=home_chain
         )
         service.path = tmp_path
         service.description = "new description"
@@ -1158,6 +1161,7 @@ class TestDeployRecoveryModuleGate:
                 "staking_token": ZERO_ADDRESS,
                 "min_staking_deposit": 1,
                 "activity_checker": ZERO_ADDRESS,
+                "service_registry": ZERO_ADDRESS,
             }
         terminate = MagicMock(
             side_effect=(
@@ -1216,6 +1220,10 @@ class TestDeployRecoveryModuleGate:
                 "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
                 side_effect=lambda **_: {"enabled": bool(enabled) and module_turns_on},
             ),
+            patch(
+                "operate.services.manage.registry_contracts.service_registry.process_receipt",
+                return_value={"events": [{"args": {"serviceId": minted_token}}]},
+            ),
             patch("operate.services.manage.get_staking_contract", return_value=None),
             patch.dict("os.environ", {}),
         ):
@@ -1234,6 +1242,7 @@ class TestDeployRecoveryModuleGate:
             "cannot_unstake_yet": cannot_unstake_yet,
             "recovery_flow": recovery_flow,
             "manager": manager,
+            "service": service,
             "build_prefix": build_prefix,
             "reached_teardown": isinstance(raised, _ReachedTeardown),
             "reached_deploy": isinstance(raised, _ReachedDeploy),
@@ -1262,6 +1271,60 @@ class TestDeployRecoveryModuleGate:
         kwargs = run["sftxb"].get_deploy_data_from_safe.call_args.kwargs
         assert kwargs["reuse_multisig"] is (not funded)
         assert run["manager"].funding_manager.fund_service_initial.called is funded
+
+    @staticmethod
+    def _service_id_updates(run: t.Dict[str, t.Any]) -> t.List[t.Dict[str, t.Any]]:
+        """The env-var updates of a run that carry SERVICE_ID."""
+        return [
+            call.args[0]
+            for call in run["service"].update_env_variables_values.call_args_list
+            if "SERVICE_ID" in call.args[0]
+        ]
+
+    @pytest.mark.parametrize(
+        ("home_chain", "expected"),
+        [(_CHAIN, [7]), ("ethereum", [])],
+        ids=["home-chain", "other-chain"],
+    )
+    def test_a_deploy_passes_the_service_id_on_its_home_chain(
+        self, tmp_path: Path, home_chain: str, expected: t.List[int]
+    ) -> None:
+        """SERVICE_ID is the service's token, and is set only for the home chain."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            terminate_effect=lambda **_: None,
+            terminate_tears_down=False,
+            service_state=OnChainState.FINISHED_REGISTRATION,
+            deploy_goes_through=True,
+            home_chain=home_chain,
+        )
+
+        assert run["raised"] is None
+        updates = self._service_id_updates(run)
+        assert [update["SERVICE_ID"] for update in updates] == expected
+
+    def test_a_first_deploy_passes_the_newly_minted_service_id(
+        self, tmp_path: Path
+    ) -> None:
+        """A service minted during the deploy gets its new token, never NON_EXISTENT_TOKEN."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            service_state=OnChainState.NON_EXISTENT,
+            is_update=False,
+            deploy_goes_through=True,
+            home_chain=_CHAIN,
+            token=NON_EXISTENT_TOKEN,
+            minted_token=42,
+        )
+
+        assert run["raised"] is None
+        updates = self._service_id_updates(run)
+        assert [update["SERVICE_ID"] for update in updates] == [42]
+        assert "SAFE_CONTRACT_ADDRESSES" in updates[0]
 
     @pytest.mark.parametrize("module_turns_on", [True, False])
     def test_a_resumed_deploy_decides_reuse_at_the_legacy_deploy_step(
