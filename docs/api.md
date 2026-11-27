@@ -2447,13 +2447,24 @@ Deploy and run a service.
 
 **Response (Retired staking program - 409):**
 
-Returned when a deploy's target `staking_program_id` is retired. It is returned before any transaction. `error_code` is always `RETIRED_STAKING_PROGRAM`, and `staking_program_id` names the retired program. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
+Returned when a staked deploy's current on-chain staking program, or its target `staking_program_id`, is retired. A `no_staking` target is never refused. It is returned before any transaction. `error_code` is always `RETIRED_STAKING_PROGRAM`, and `staking_program_id` names the retired program. See [Retired staking programs](staking-and-onchain-model.md#retired-staking-programs) for what still deploys and when the service can switch.
 
 ```json
 {
   "error": "Staking program omenstrat_iii is retired.",
   "error_code": "RETIRED_STAKING_PROGRAM",
   "staking_program_id": "omenstrat_iii"
+}
+```
+
+**Response (Transaction would revert - 409):**
+
+Returned when the deploy's Safe transaction was simulated as reverting, so it was not sent and no gas was spent. The cause is in the logs.
+
+```json
+{
+  "error": "The on-chain transaction would revert, so it was not sent. Please check the logs.",
+  "error_code": "TRANSACTION_WOULD_REVERT"
 }
 ```
 

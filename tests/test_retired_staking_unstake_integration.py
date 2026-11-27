@@ -28,8 +28,8 @@ from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.exceptions import RetiredStakingProgramError
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import get_staking_contract
-from operate.operate_types import StakeFlowOutcome
-from operate.services.protocol import StakingState
+from operate.operate_types import OnChainState, StakeFlowOutcome
+from operate.services.protocol import EthSafeTxBuilder, StakingState
 from operate.utils.gnosis import get_owners
 
 from tests.conftest import (
@@ -41,6 +41,7 @@ from tests.conftest import (
     fork_empty_reward_pool,
     fork_increase_time,
     master_eoa_nonce,
+    trader_sftxb,
     trader_staking_status,
 )
 
@@ -54,6 +55,21 @@ def _retire(monkeypatch: pytest.MonkeyPatch, staking_program_id: str) -> None:
         "operate.ledger.profiles.RETIRED_STAKING_PROGRAMS",
         {TRADER_SERVICE_CHAIN: frozenset({staking_program_id})},
     )
+
+
+def _refuse_re_registration(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Make building a mint or update mint fail, and return the spy."""
+    mint = MagicMock(side_effect=AssertionError("the service was re-registered"))
+    monkeypatch.setattr(EthSafeTxBuilder, "get_mint_tx_data", mint)
+    return mint
+
+
+def _registry_state(
+    service_manager: t.Any, service_config_id: str, token_id: int
+) -> OnChainState:
+    """Read the service's state from the registry."""
+    sftxb = trader_sftxb(service_manager, service_config_id)
+    return OnChainState(sftxb.info(token_id=token_id)["service_state"])
 
 
 def _logged(logger: MagicMock, level: str, fragment: str) -> bool:
@@ -175,14 +191,10 @@ class TestRetiredProgramDeployIntegration(OnFork):
         )
 
     @pytest.mark.integration
-    def test_a_deploy_moves_a_retired_program_to_a_live_target_once_allowed(
+    def test_a_retired_program_moves_to_a_live_target_after_the_sweep(
         self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Retired current program, live target: the deploy passes, and moves it after the period.
-
-        Inside the minimum period the deploy runs it on the retired program;
-        after it, the next deploy unstakes it there and stakes it on the target.
-        """
+        """Retired current program, live target: refused while staked there, staked on the target after the sweep."""
         (
             service_manager,
             service_config_id,
@@ -195,18 +207,17 @@ class TestRetiredProgramDeployIntegration(OnFork):
             TRADER_SERVICE_CHAIN.value
         ].chain_data.user_params.staking_program_id = OTHER_PROGRAM
         service.store()
+        nonce = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
 
-        service_manager.deploy_service_onchain_from_safe(
-            service_config_id=service_config_id
-        )
-        assert (
-            trader_staking_status(
-                service_manager, service_config_id, token_id, staking_contract
+        with pytest.raises(RetiredStakingProgramError) as exc_info:
+            service_manager.deploy_service_onchain_from_safe(
+                service_config_id=service_config_id
             )
-            == StakingState.STAKED
-        ), "inside the period the service stays on the retired program"
+        assert exc_info.value.staking_program_id == TRADER_STAKING_PROGRAM
+        assert master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce
 
         fork_increase_time(TRADER_SERVICE_CHAIN)
+        service_manager.unstake_services_on_retired_programs()
         service_manager.deploy_service_onchain_from_safe(
             service_config_id=service_config_id
         )
@@ -242,7 +253,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
         """The app's withdrawal-only payload: target ``no_staking`` deploys.
 
         Inside the period the contract keeps it staked; after it, the deploy
-        unstakes it.
+        unstakes it, without re-registering the service.
         """
         (
             service_manager,
@@ -251,6 +262,7 @@ class TestRetiredProgramDeployIntegration(OnFork):
             staking_contract,
         ) = deploy_and_stake_trader(test_env)
         _retire(monkeypatch, TRADER_STAKING_PROGRAM)
+        mint = _refuse_re_registration(monkeypatch)
         service = service_manager.load(service_config_id=service_config_id)
         service.chain_configs[
             TRADER_SERVICE_CHAIN.value
@@ -270,6 +282,54 @@ class TestRetiredProgramDeployIntegration(OnFork):
         fork_increase_time(TRADER_SERVICE_CHAIN)
         service_manager.deploy_service_onchain_from_safe(
             service_config_id=service_config_id
+        )
+        assert (
+            trader_staking_status(
+                service_manager, service_config_id, token_id, staking_contract
+            )
+            == StakingState.UNSTAKED
+        )
+        mint.assert_not_called()
+        assert _registry_state(service_manager, service_config_id, token_id) == (
+            OnChainState.DEPLOYED
+        )
+
+    @pytest.mark.integration
+    def test_a_no_staking_deploy_of_an_unstaked_service_sends_nothing(
+        self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unstaked by the sweep, with a template agent id other than the registered one."""
+        (
+            service_manager,
+            service_config_id,
+            token_id,
+            staking_contract,
+        ) = deploy_and_stake_trader(test_env)
+        fork_increase_time(TRADER_SERVICE_CHAIN)
+        service_manager.unstake_service_on_chain_from_safe(
+            service_config_id=service_config_id,
+            chain=TRADER_SERVICE_CHAIN.value,
+            staking_program_id=TRADER_STAKING_PROGRAM,
+        )
+        _retire(monkeypatch, TRADER_STAKING_PROGRAM)
+        mint = _refuse_re_registration(monkeypatch)
+        service = service_manager.load(service_config_id=service_config_id)
+        user_params = service.chain_configs[
+            TRADER_SERVICE_CHAIN.value
+        ].chain_data.user_params
+        user_params.staking_program_id = NO_STAKING_PROGRAM_ID
+        user_params.agent_id += 1
+        service.store()
+        nonce = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
+
+        service_manager.deploy_service_onchain_from_safe(
+            service_config_id=service_config_id
+        )
+
+        mint.assert_not_called()
+        assert master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce
+        assert _registry_state(service_manager, service_config_id, token_id) == (
+            OnChainState.DEPLOYED
         )
         assert (
             trader_staking_status(

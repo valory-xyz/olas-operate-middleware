@@ -23,8 +23,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from autonomy.chain.config import ChainType
+from autonomy.chain.exceptions import ChainInteractionError
+from web3.exceptions import ContractLogicError
 
 from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.exceptions import SafeTransactionWouldRevertError
 from operate.operate_types import Chain
 from operate.services.protocol import (
     GnosisSafeTransaction,
@@ -217,6 +220,79 @@ class TestGnosisSafeTransaction:
             result = safe_tx.build()
 
         assert result["gas"] == 500_000
+        mock_ledger.api.eth.call.assert_called_once()
+        assert mock_ledger.api.eth.call.call_args.args[0]["gas"] == 500_000
+
+    @pytest.mark.parametrize(
+        "estimated_gas", [0, 100_000], ids=["fallback", "estimated"]
+    )
+    def test_build_sends_nothing_that_would_revert_under_the_fallback(
+        self, estimated_gas: int
+    ) -> None:
+        """A revert under the fallback gas raises from build(); a working estimate is not re-simulated."""
+        mock_ledger = MagicMock()
+        mock_ledger.api.to_checksum_address.return_value = "0x" + "a" * 40
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+        mock_ledger.api.eth.call.side_effect = ContractLogicError("GS013")
+        safe_tx = GnosisSafeTransaction(
+            ledger_api=mock_ledger,
+            crypto=MagicMock(),
+            chain_type=ChainType.GNOSIS,
+            safe="0x" + "b" * 40,
+            gas_fallback=500_000,
+        )
+
+        with (
+            patch("operate.services.protocol.registry_contracts") as mock_contracts,
+            patch("operate.services.protocol.ContractConfigs") as mock_config,
+            patch("operate.services.protocol.update_tx_with_gas_pricing"),
+            patch("operate.services.protocol.update_tx_with_gas_estimate"),
+        ):
+            mock_config.multisend.contracts.__getitem__.return_value = "0x" + "c" * 40
+            mock_contracts.multisend.get_tx_data.return_value = {
+                "data": "0x" + "ab" * 16
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "aa" * 32
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "from": "0x" + "a" * 40,
+                "to": "0x" + "b" * 40,
+                "value": 0,
+                "data": b"",
+                "gas": estimated_gas,
+            }
+
+            if estimated_gas:
+                assert safe_tx.build()["gas"] == estimated_gas
+                mock_ledger.api.eth.call.assert_not_called()
+            else:
+                with pytest.raises(SafeTransactionWouldRevertError):
+                    safe_tx.build()
+        if not estimated_gas:
+            assert "value" not in mock_ledger.api.eth.call.call_args.args[0]
+
+    def test_settle_raises_the_would_revert_error_unwrapped(self) -> None:
+        """Settle re-raises the builder's error that TxSettler wrapped."""
+        safe_tx = GnosisSafeTransaction(
+            ledger_api=MagicMock(),
+            crypto=MagicMock(),
+            chain_type=ChainType.GNOSIS,
+            safe="0x" + "b" * 40,
+        )
+        error = SafeTransactionWouldRevertError("GS013")
+        wrapped = ChainInteractionError("GS013")
+        wrapped.__cause__ = error
+
+        with (
+            patch("operate.services.protocol.wrap_gas_spike_as_insufficient_funds"),
+            patch("operate.services.protocol.TxSettler") as settler,
+        ):
+            settler.return_value.transact.side_effect = wrapped
+            with pytest.raises(SafeTransactionWouldRevertError) as exc_info:
+                safe_tx.settle()
+
+        assert exc_info.value is error
 
     def test_build_normalizes_hex_string_data_with_0x_prefix(self) -> None:
         """Test build() converts '0x'-prefixed hex str data to bytes."""

@@ -70,6 +70,7 @@ from operate.constants import (
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.exceptions import SafeTransactionWouldRevertError
 from operate.ledger import (
     get_default_ledger_api,
     make_chain_ledger_api,
@@ -200,6 +201,15 @@ class GnosisSafeTransaction:
         # fallback so the tx is still submitted with a workable gas limit.
         if tx.get("gas", 0) < 21_000 and self._gas_fallback > 0:
             tx["gas"] = self._gas_fallback
+            # Estimation also fails on a real revert: raise rather than pay gas for it.
+            try:
+                self.ledger_api.api.eth.call(
+                    {k: tx[k] for k in ("from", "to", "data", "gas") if k in tx}
+                )
+            except ContractLogicError as e:
+                raise SafeTransactionWouldRevertError(
+                    f"Safe transaction would revert, so it was not sent: {e}"
+                ) from e
         return t.cast(t.Dict, tx)
 
     def settle(self) -> TxReceipt:
@@ -216,19 +226,26 @@ class GnosisSafeTransaction:
             ledger_api=self.ledger_api,
             signer_address=self.crypto.address,
         ):
-            settler = (
-                TxSettler(
-                    ledger_api=self.ledger_api,
-                    crypto=self.crypto,
-                    chain_type=self.chain_type,
-                    tx_builder=self.build,
-                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                    retries=ON_CHAIN_INTERACT_RETRIES,
-                    sleep=ON_CHAIN_INTERACT_SLEEP,
+            try:
+                settler = (
+                    TxSettler(
+                        ledger_api=self.ledger_api,
+                        crypto=self.crypto,
+                        chain_type=self.chain_type,
+                        tx_builder=self.build,
+                        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                        retries=ON_CHAIN_INTERACT_RETRIES,
+                        sleep=ON_CHAIN_INTERACT_SLEEP,
+                    )
+                    .transact()
+                    .settle()
                 )
-                .transact()
-                .settle()
-            )
+            except ChainInteractionError as e:
+                # TxSettler wraps a builder error in a plain ChainInteractionError.
+                cause = e.__cause__
+                if isinstance(cause, SafeTransactionWouldRevertError):
+                    raise cause from None  # pylint: disable=raising-non-exception
+                raise
 
         receipt = settler.tx_receipt
         if receipt is not None and receipt.get("status") == 0:

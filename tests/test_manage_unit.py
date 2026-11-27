@@ -741,6 +741,7 @@ class TestGetMechConfigs:
 
 
 _SERVICE_SAFE = "0x5afe000000000000000000000000000000000001"
+_OLAS_TOKEN = "0x01a5000000000000000000000000000000000001"  # nosec
 _MASTER_SAFE = "0xd5afe00000000000000000000000000000000002"
 _AGENT = "0xaaaa"
 _RECOVERY_MODULE = "0x7ec0000000000000000000000000000000000003"
@@ -1115,6 +1116,9 @@ class TestDeployRecoveryModuleGate:
         home_chain: str = "ethereum",
         token: int = 7,
         minted_token: int = 42,
+        staking_params: t.Optional[t.Callable[..., t.Dict]] = None,
+        user_agent_id: int = 25,
+        period_over: bool = False,
     ) -> t.Dict[str, t.Any]:
         """Run an update of a service (DEPLOYED by default), ``enable_effect`` driving each enable.
 
@@ -1142,8 +1146,10 @@ class TestDeployRecoveryModuleGate:
         chain_config.chain_data.user_params.nft = _NFT_HASH
         chain_config.chain_data.user_params.staking_program_id = "target_program"
         # The on-chain agent: only the description decides whether this is an update.
-        chain_config.chain_data.user_params.agent_id = 25
+        chain_config.chain_data.user_params.agent_id = user_agent_id
         sftxb = MagicMock()
+        staking_manager = MagicMock()
+        staking_manager.has_served_minimum_staking_duration.return_value = period_over
         sftxb.info.return_value = {
             "service_state": service_state.value,
             "instances": [_AGENT],
@@ -1163,6 +1169,8 @@ class TestDeployRecoveryModuleGate:
                 "activity_checker": ZERO_ADDRESS,
                 "service_registry": ZERO_ADDRESS,
             }
+        if staking_params is not None:
+            sftxb.get_staking_params.side_effect = staking_params
         terminate = MagicMock(
             side_effect=(
                 _ReachedTeardown if terminate_effect is None else terminate_effect
@@ -1216,6 +1224,12 @@ class TestDeployRecoveryModuleGate:
             patch.object(
                 manager, "_execute_recovery_module_flow_from_safe"
             ) as recovery_flow,
+            patch.object(
+                manager, "_unstake_service_on_chain_from_safe_unlocked"
+            ) as unstake,
+            patch(
+                "operate.services.manage.StakingManager", return_value=staking_manager
+            ),
             patch(
                 "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
                 side_effect=lambda **_: {"enabled": bool(enabled) and module_turns_on},
@@ -1241,6 +1255,7 @@ class TestDeployRecoveryModuleGate:
             "enable": enable,
             "cannot_unstake_yet": cannot_unstake_yet,
             "recovery_flow": recovery_flow,
+            "unstake": unstake,
             "manager": manager,
             "service": service,
             "build_prefix": build_prefix,
@@ -1325,6 +1340,74 @@ class TestDeployRecoveryModuleGate:
         updates = self._service_id_updates(run)
         assert [update["SERVICE_ID"] for update in updates] == [42]
         assert "SAFE_CONTRACT_ADDRESSES" in updates[0]
+
+    @staticmethod
+    def _no_staking_params(
+        current_staking_token: str = ZERO_ADDRESS,
+    ) -> t.Callable[..., t.Dict]:
+        """Return the fallback params, as with no staking contract; the first call is the current program."""
+        calls: t.List[None] = []
+
+        def _params(fallback_params: t.Optional[t.Dict] = None, **_: t.Any) -> t.Dict:
+            calls.append(None)
+            if len(calls) == 1:
+                return {
+                    **t.cast(t.Dict, fallback_params),
+                    "staking_token": current_staking_token,
+                }
+            return t.cast(t.Dict, fallback_params)
+
+        return _params
+
+    @pytest.mark.parametrize(
+        "current_staking_token",
+        [ZERO_ADDRESS, _OLAS_TOKEN],
+        ids=["unstaked", "staked"],
+    )
+    def test_a_no_staking_deploy_does_not_re_register(
+        self, tmp_path: Path, current_staking_token: str
+    ) -> None:
+        """Neither the template's agent id nor leaving the staking token re-registers the service."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            is_update=False,
+            deploy_goes_through=True,
+            staking_params=self._no_staking_params(current_staking_token),
+            user_agent_id=14,
+        )
+
+        assert run["raised"] is None
+        run["build_prefix"].assert_not_called()
+        run["terminate"].assert_not_called()
+        run["sftxb"].get_mint_tx_data.assert_not_called()
+
+    @pytest.mark.parametrize("period_over", [True, False])
+    def test_a_no_staking_deploy_unstakes_once_the_period_is_over(
+        self, tmp_path: Path, period_over: bool
+    ) -> None:
+        """A staked service with a no_staking target is unstaked only after its minimum period."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            is_update=False,
+            deploy_goes_through=True,
+            staking_params=self._no_staking_params(_OLAS_TOKEN),
+            period_over=period_over,
+        )
+
+        assert run["raised"] is None
+        run["sftxb"].can_unstake.assert_not_called()
+        if period_over:
+            run["unstake"].assert_called_once_with(
+                service_config_id="sc-test-id",
+                chain=_CHAIN,
+                staking_program_id="current_program",
+            )
+        else:
+            run["unstake"].assert_not_called()
 
     @pytest.mark.parametrize("module_turns_on", [True, False])
     def test_a_resumed_deploy_decides_reuse_at_the_legacy_deploy_step(
@@ -1796,51 +1879,64 @@ class TestRefuseRetiredStakingPrograms:
     """Tests for _refuse_retired_staking_programs()."""
 
     @pytest.mark.parametrize(
-        ("target", "refused"),
+        ("current", "target", "refused"),
         [
-            ("omenstrat_viii", False),
-            ("omenstrat_i", True),
+            (None, "omenstrat_viii", None),
+            (None, "omenstrat_i", "omenstrat_i"),
+            ("omenstrat_iii", "omenstrat_viii", "omenstrat_iii"),
             # Withdrawal-only: the app PATCHes the target to `no_staking`.
-            (NO_STAKING_PROGRAM_ID, False),
-            (None, False),
+            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
+            ("omenstrat_iii", None, None),
         ],
-        ids=["live-target", "retired-target", "no-staking", "no-target"],
+        ids=[
+            "live",
+            "retired-target",
+            "retired-current",
+            "no-staking",
+            "no-target",
+        ],
     )
-    def test_refuses_only_a_retired_target(
-        self, target: t.Optional[str], refused: bool
+    def test_refuses_a_staked_deploy_on_a_retired_program(
+        self,
+        current: t.Optional[str],
+        target: t.Optional[str],
+        refused: t.Optional[str],
     ) -> None:
-        """Only staking on a retired target is refused."""
-        if not refused:
+        """A staked deploy is refused on a retired current or target program."""
+        if refused is None:
             _refuse_retired_staking_programs(
-                chain=_CHAIN, target_staking_program=target
+                chain=_CHAIN,
+                current_staking_program=current,
+                target_staking_program=target,
             )
             return
         with pytest.raises(RetiredStakingProgramError) as exc_info:
             _refuse_retired_staking_programs(
-                chain=_CHAIN, target_staking_program=target
+                chain=_CHAIN,
+                current_staking_program=current,
+                target_staking_program=target,
             )
-        assert exc_info.value.staking_program_id == target
-        assert str(exc_info.value) == f"Staking program {target} is retired."
+        assert exc_info.value.staking_program_id == refused
+        assert str(exc_info.value) == f"Staking program {refused} is retired."
 
     @pytest.mark.parametrize(
         ("current", "target", "refused"),
         [
-            (None, "omenstrat_i", True),
-            # Retired current, live target: the stake flow moves the service.
-            ("omenstrat_iii", "omenstrat_viii", False),
+            (None, "omenstrat_i", "omenstrat_i"),
+            ("omenstrat_iii", "omenstrat_viii", "omenstrat_iii"),
             # The app's withdrawal-only payload, on a still-staked service.
-            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, False),
+            ("omenstrat_iii", NO_STAKING_PROGRAM_ID, None),
         ],
         ids=["retired-target", "retired-current-live-target", "withdrawal-only"],
     )
-    def test_deploy_checks_the_target_before_any_transaction(
+    def test_deploy_checks_before_any_transaction(
         self,
         tmp_path: Path,
         current: t.Optional[str],
         target: str,
-        refused: bool,
+        refused: t.Optional[str],
     ) -> None:
-        """The deploy refuses a retired target before its first transaction."""
+        """The deploy refuses a retired program before its first transaction."""
 
         class _ReachedModuleEnable(Exception):
             """Raised by the first transaction step, past the guard."""
@@ -1871,7 +1967,7 @@ class TestRefuseRetiredStakingPrograms:
             )
 
         if refused:
-            assert exc_info.value.staking_program_id == target  # type: ignore[attr-defined]
+            assert exc_info.value.staking_program_id == refused  # type: ignore[attr-defined]
 
     def test_deploy_stops_before_any_transaction_when_the_current_program_read_fails(
         self, tmp_path: Path
@@ -1903,8 +1999,8 @@ class TestRefuseRetiredStakingPrograms:
 
         manager._try_enable_recovery_module.assert_not_called()  # type: ignore[attr-defined]
 
-    def test_public_check_reads_every_chain_from_config(self, tmp_path: Path) -> None:
-        """The route's pre-pause check refuses a retired target on any chain, with no RPC."""
+    def test_public_check_reads_every_chain(self, tmp_path: Path) -> None:
+        """The route's pre-pause check refuses a retired current program on a non-home chain."""
         manager = _make_manager(tmp_path)
         service = _make_staking_service(chains=[_CHAIN, "base"])
         service.home_chain = _CHAIN
@@ -1912,18 +2008,22 @@ class TestRefuseRetiredStakingPrograms:
             "omenstrat_viii"
         )
         service.chain_configs["base"].chain_data.user_params.staking_program_id = (
-            "basius_ii"
+            "basius_iv"
         )
         manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
+        current = {_CHAIN: None, "base": "basius_ii"}
 
         with (
-            patch.object(manager, "_get_current_staking_program") as read_current,
+            patch.object(
+                manager,
+                "_get_current_staking_program",
+                side_effect=lambda _service, chain: current[chain],
+            ),
             pytest.raises(RetiredStakingProgramError) as exc_info,
         ):
             manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
 
         assert exc_info.value.staking_program_id == "basius_ii"
-        read_current.assert_not_called()
 
     def test_public_check_lets_a_new_program_through(self, tmp_path: Path) -> None:
         """Nothing retired: no error."""
@@ -1934,7 +2034,8 @@ class TestRefuseRetiredStakingPrograms:
         )
         manager.load = MagicMock(return_value=service)  # type: ignore[method-assign]
 
-        manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
+        with patch.object(manager, "_get_current_staking_program", return_value=None):
+            manager.refuse_retired_staking_programs(service_config_id="sc-test-id")
 
 
 class TestUnstakeServicesOnRetiredPrograms:

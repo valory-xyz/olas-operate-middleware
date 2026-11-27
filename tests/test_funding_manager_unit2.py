@@ -22,13 +22,15 @@
 import asyncio
 import threading
 from time import monotonic, time
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from operate.constants import (
     MASTER_SAFE_PLACEHOLDER,
+    MIN_AGENT_BOND,
+    MIN_SECURITY_DEPOSIT,
     NO_STAKING_PROGRAM_ID,
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
@@ -887,15 +889,73 @@ class TestComputeProtocolAssetRequirements:
         )
         # use_staking=False by default in _mock_chain_config
 
-        with patch.object(
-            manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch.object(manager, "_is_fully_bonded", return_value=False),
         ):
             result = manager._compute_protocol_asset_requirements(service)
 
         assert "gnosis" in result
         master_safe_amounts = result["gnosis"][MASTER_SAFE_ADDR]
         assert ZERO_ADDRESS in master_safe_amounts
-        assert master_safe_amounts[ZERO_ADDRESS] > 0
+        assert master_safe_amounts[ZERO_ADDRESS] == 10000 * 2
+
+    def test_no_staking_bonded_service_needs_no_new_bond(self) -> None:
+        """A bonded service leaving staking is not asked for cost_of_bond in native token."""
+        manager = _make_manager()
+        service = _mock_service(chain="gnosis")
+        service.chain_configs["gnosis"].chain_data.user_params.cost_of_bond = (
+            50 * 10**18
+        )
+
+        with (
+            patch.object(
+                manager, "_resolve_master_safe", return_value=MASTER_SAFE_ADDR
+            ),
+            patch.object(manager, "_is_fully_bonded", return_value=True),
+        ):
+            result = manager._compute_protocol_asset_requirements(service)
+
+        assert result["gnosis"][MASTER_SAFE_ADDR] == {
+            ZERO_ADDRESS: MIN_AGENT_BOND + MIN_SECURITY_DEPOSIT
+        }
+
+    @pytest.mark.parametrize(
+        ("token", "state", "expected"),
+        [
+            (NON_EXISTENT_TOKEN, None, False),
+            (7, OnChainState.PRE_REGISTRATION, False),
+            (7, OnChainState.ACTIVE_REGISTRATION, False),
+            (7, OnChainState.FINISHED_REGISTRATION, True),
+            (7, OnChainState.DEPLOYED, True),
+            (7, OnChainState.TERMINATED_BONDED, False),
+        ],
+    )
+    def test_is_fully_bonded_reads_the_registry_state(
+        self, token: int, state: Optional[OnChainState], expected: bool
+    ) -> None:
+        """Only FINISHED_REGISTRATION and DEPLOYED hold the deposit and every agent bond."""
+        chain_config = _mock_service(chain="gnosis").chain_configs["gnosis"]
+        chain_config.chain_data.token = token
+        registry = MagicMock()
+        registry.service_registry.get_instance.return_value.functions.getService.return_value.call.return_value = [
+            0,
+            None,
+            None,
+            1,
+            1,
+            1,
+            state,
+            [25],
+        ]
+
+        with (
+            patch("operate.services.funding_manager.make_chain_ledger_api"),
+            patch("operate.services.funding_manager.registry_contracts", registry),
+        ):
+            assert FundingManager._is_fully_bonded("gnosis", chain_config) is expected
 
     def test_staking_uses_staking_manager(self) -> None:
         """With staking enabled, StakingManager is used for requirements."""

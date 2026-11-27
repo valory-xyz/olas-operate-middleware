@@ -50,6 +50,7 @@ from operate.exceptions import (
     AgentCouldNotEnableRecoveryModuleError,
     RecoveryModuleNotEnabledError,
     RetiredStakingProgramError,
+    SafeTransactionWouldRevertError,
     ServicePackageDownloadError,
 )
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_NEW_SAFE_FUNDS
@@ -2022,6 +2023,23 @@ class TestServiceRoutes:
             }
             assert pauses_after == pauses_before
             m.service_manager.return_value.deploy_service_onchain_from_safe.assert_not_called()
+
+    def test_deploy_service_transaction_would_revert(self) -> None:
+        """Deploy returns 409 with its code when the Safe transaction was refused before sending."""
+        m = self._basic_with_password()
+        m.service_manager.return_value.exists.return_value = True
+        m.service_manager.return_value.deploy_service_onchain_from_safe.side_effect = (
+            SafeTransactionWouldRevertError("GS013")
+        )
+        stack, app, _, _ = _open_app(m)
+        with stack:
+            with TestClient(app) as c:
+                resp = c.post("/api/v2/service/svc1", json={})
+            assert resp.status_code == HTTPStatus.CONFLICT
+            assert resp.json() == {
+                "error": "The on-chain transaction would revert, so it was not sent. Please check the logs.",
+                "error_code": "TRANSACTION_WOULD_REVERT",
+            }
 
     def test_deploy_service_generic_exception(self) -> None:
         """Deploy returns 500 on generic Exception not caught by specific handlers."""

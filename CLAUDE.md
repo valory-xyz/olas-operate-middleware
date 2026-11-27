@@ -282,4 +282,4 @@ operate daemon
 
 ## Version Management
 
-Version lives in `[project].version` in `pyproject.toml`. `create-production-release.yml` sets the next version with `uv version` and re-locks with `uv lock`, so a PR never needs to bump `uv.lock` for it. `operate/__init__.py` reads it at runtime into `__version__` from the installed package metadata. Release process handled via GitHub Actions (`.github/workflows/release.yml`).
+Version lives in `[project].version` in `pyproject.toml`, mirrored in `uv.lock`. A PR that bumps the version updates both: edit `pyproject.toml`, then run `uv lock`. `operate/__init__.py` reads it at runtime into `__version__` from the installed package metadata. Release process handled via GitHub Actions (`.github/workflows/release.yml`).

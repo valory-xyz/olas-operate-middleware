@@ -21,6 +21,8 @@
 
 import typing as t
 
+from autonomy.chain.exceptions import ChainInteractionError
+
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain
@@ -61,6 +63,16 @@ class RecoveryModuleNotEnabledError(Exception):
     """The service Safe still lacks the recovery module, so it cannot be reused."""
 
     error_code: t.ClassVar[str] = "RECOVERY_MODULE_NOT_ENABLED"
+
+    def to_error_fields(self) -> t.Dict:
+        """Return structured error fields for merging into a JSONResponse body."""
+        return {"error_code": self.error_code}
+
+
+class SafeTransactionWouldRevertError(ChainInteractionError):
+    """A Safe transaction was simulated as reverting, so it was not sent."""
+
+    error_code: t.ClassVar[str] = "TRANSACTION_WOULD_REVERT"
 
     def to_error_fields(self) -> t.Dict:
         """Return structured error fields for merging into a JSONResponse body."""
