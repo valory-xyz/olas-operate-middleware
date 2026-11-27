@@ -45,6 +45,7 @@ from operate.constants import (
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
+    NO_STAKING_PROGRAM_ID,
     POLY_SAFE_SERVICE_NAMES,
     TRANSFER_EVENT_TOPIC,
     ZERO_ADDRESS,
@@ -193,18 +194,18 @@ def _stop_refused_reuse_before_txs(
 
 
 def _refuse_retired_staking_programs(
-    chain: str, target_staking_program: t.Optional[str]
+    chain: str,
+    current_staking_program: t.Optional[str],
+    target_staking_program: t.Optional[str],
 ) -> None:
-    """Raise if a deploy would stake on a retired program.
-
-    Only the target matters: a service still on a retired current program is
-    moved by the stake flow (unstake once allowed, then stake on the target),
-    which itself never stakes on a retired target. Reads local config only.
-    """
-    if is_retired_staking_program(chain, target_staking_program):
-        raise RetiredStakingProgramError(
-            staking_program_id=t.cast(str, target_staking_program)
-        )
+    """Raise if a staked deploy would use a retired program, current or target."""
+    if target_staking_program in (None, NO_STAKING_PROGRAM_ID):
+        return
+    for staking_program_id in (target_staking_program, current_staking_program):
+        if is_retired_staking_program(chain, staking_program_id):
+            raise RetiredStakingProgramError(
+                staking_program_id=t.cast(str, staking_program_id)
+            )
 
 
 class ServiceManager:
@@ -550,10 +551,12 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-        _refuse_retired_staking_programs(
-            chain=chain, target_staking_program=user_params.staking_program_id
-        )
         current_staking_program = self._get_current_staking_program(service, chain)
+        _refuse_retired_staking_programs(
+            chain=chain,
+            current_staking_program=current_staking_program,
+            target_staking_program=user_params.staking_program_id,
+        )
 
         recovery_module_error = self._try_enable_recovery_module(
             service_config_id=service_config_id, chain=chain
@@ -1431,10 +1434,16 @@ class ServiceManager:
             )
         elif not mega_batch_done:
             staked_program = self._get_current_staking_program(service, chain)
-            if staked_program is not None and sftxb.can_unstake(
-                chain_data.token,
-                get_staking_contract(
-                    chain=ledger_config.chain, staking_program_id=staked_program
+            # Not `can_unstake`: it also passes inside the period on an empty reward pool.
+            if staked_program is not None and StakingManager(
+                Chain(chain), rpc=ledger_config.rpc
+            ).has_served_minimum_staking_duration(
+                service_id=chain_data.token,
+                staking_contract=t.cast(
+                    str,
+                    get_staking_contract(
+                        chain=ledger_config.chain, staking_program_id=staked_program
+                    ),
                 ),
             ):
                 self._unstake_service_on_chain_from_safe_unlocked(
@@ -2172,7 +2181,11 @@ class ServiceManager:
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
             _refuse_retired_staking_programs(
-                chain=chain, target_staking_program=user_params.staking_program_id
+                chain=chain,
+                current_staking_program=self._get_current_staking_program(
+                    service, chain
+                ),
+                target_staking_program=user_params.staking_program_id,
             )
 
     def unstake_services_on_retired_programs(self) -> None:

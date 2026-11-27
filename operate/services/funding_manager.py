@@ -649,12 +649,16 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
                 or not user_params.staking_program_id
                 or user_params.staking_program_id == NO_STAKING_PROGRAM_ID
             ):
+                # A no_staking deploy of a bonded service bonds nothing new.
+                cost_of_bond = (
+                    0
+                    if self._is_fully_bonded(chain, chain_config)
+                    else user_params.cost_of_bond
+                )
                 protocol_agent_bonds = BigInt(
-                    max(MIN_AGENT_BOND, user_params.cost_of_bond) * number_of_agents
+                    max(MIN_AGENT_BOND, cost_of_bond) * number_of_agents
                 )
-                protocol_security_deposit = max(
-                    MIN_SECURITY_DEPOSIT, user_params.cost_of_bond
-                )
+                protocol_security_deposit = max(MIN_SECURITY_DEPOSIT, cost_of_bond)
                 staking_agent_bonds = BigInt(0)
                 staking_security_deposit = BigInt(0)
             else:
@@ -700,6 +704,22 @@ class FundingManager:  # pylint: disable=too-many-instance-attributes
         # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
         #   and ServiceRegistryTokenUtility .getAgentBond
         # - security_deposit: as the maximum agent bond.
+
+    @staticmethod
+    def _is_fully_bonded(chain: str, chain_config: t.Any) -> bool:
+        """Whether the registry holds the service's security deposit and agent bonds."""
+        service_id = chain_config.chain_data.token
+        if service_id == NON_EXISTENT_TOKEN:
+            return False
+        ledger_api = make_chain_ledger_api(
+            Chain(chain), rpc=chain_config.ledger_config.rpc
+        )
+        service_registry = registry_contracts.service_registry.get_instance(
+            ledger_api=ledger_api,
+            contract_address=CHAIN_PROFILES[chain]["service_registry"],
+        )
+        state = service_registry.functions.getService(service_id).call()[6]
+        return state in (OnChainState.FINISHED_REGISTRATION, OnChainState.DEPLOYED)
 
     def _compute_protocol_bonded_assets(  # pylint: disable=too-many-locals,too-many-statements
         self, service: Service

@@ -191,14 +191,10 @@ class TestRetiredProgramDeployIntegration(OnFork):
         )
 
     @pytest.mark.integration
-    def test_a_deploy_moves_a_retired_program_to_a_live_target_once_allowed(
+    def test_a_retired_program_moves_to_a_live_target_after_the_sweep(
         self, test_env: OperateTestEnv, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Retired current program, live target: the deploy passes, and moves it after the period.
-
-        Inside the minimum period the deploy runs it on the retired program;
-        after it, the next deploy unstakes it there and stakes it on the target.
-        """
+        """Retired current program, live target: refused while staked there, staked on the target after the sweep."""
         (
             service_manager,
             service_config_id,
@@ -211,18 +207,17 @@ class TestRetiredProgramDeployIntegration(OnFork):
             TRADER_SERVICE_CHAIN.value
         ].chain_data.user_params.staking_program_id = OTHER_PROGRAM
         service.store()
+        nonce = master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN)
 
-        service_manager.deploy_service_onchain_from_safe(
-            service_config_id=service_config_id
-        )
-        assert (
-            trader_staking_status(
-                service_manager, service_config_id, token_id, staking_contract
+        with pytest.raises(RetiredStakingProgramError) as exc_info:
+            service_manager.deploy_service_onchain_from_safe(
+                service_config_id=service_config_id
             )
-            == StakingState.STAKED
-        ), "inside the period the service stays on the retired program"
+        assert exc_info.value.staking_program_id == TRADER_STAKING_PROGRAM
+        assert master_eoa_nonce(service_manager, TRADER_SERVICE_CHAIN) == nonce
 
         fork_increase_time(TRADER_SERVICE_CHAIN)
+        service_manager.unstake_services_on_retired_programs()
         service_manager.deploy_service_onchain_from_safe(
             service_config_id=service_config_id
         )

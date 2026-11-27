@@ -78,6 +78,7 @@ from operate.constants import (
 from operate.exceptions import (
     RecoveryModuleNotEnabledError,
     RetiredStakingProgramError,
+    SafeTransactionWouldRevertError,
     ServicePackageDownloadError,
 )
 from operate.funding_run.manager import (
@@ -1820,6 +1821,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # The body is rebuilt from the program id, so no exception text leaks.
             return JSONResponse(
                 content=e.to_response_body(),
+                status_code=HTTPStatus.CONFLICT,
+            )
+        except SafeTransactionWouldRevertError as e:
+            logger.error(f"Deploy failed: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "The on-chain transaction would revert, so it was not sent. Please check the logs.",
+                    **e.to_error_fields(),
+                },
                 status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except
