@@ -578,7 +578,14 @@ class ServiceManager:
 
         fallback_params = dict(  # nosec
             staking_contract=ZERO_ADDRESS,
-            agent_ids=[user_params.agent_id],
+            # With no staking contract to name the agent, keep the registered one.
+            agent_ids=[
+                (
+                    current_agent_id
+                    if current_agent_id is not None
+                    else user_params.agent_id
+                )
+            ],
             service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
             staking_token=ZERO_ADDRESS,  # nosec
             service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
@@ -772,8 +779,12 @@ class ServiceManager:
                     != target_staking_params["min_staking_deposit"]
                 )
                 # TODO Missing complete this check for non-staked services it should compare the current_agent_bond from the protocol, now it's only read for the staking contract.
-                or current_staking_params["staking_token"]
-                != target_staking_params["staking_token"]
+                # Leaving staking needs only an unstake, not a re-registration.
+                or (
+                    user_params.use_staking
+                    and current_staking_params["staking_token"]
+                    != target_staking_params["staking_token"]
+                )
                 or on_chain_description != service.description
                 or needs_update_agent_addresses
             )
@@ -1418,6 +1429,19 @@ class ServiceManager:
             self._stake_service_on_chain_from_safe_unlocked(
                 service_config_id=service_config_id, chain=chain
             )
+        elif not mega_batch_done:
+            staked_program = self._get_current_staking_program(service, chain)
+            if staked_program is not None and sftxb.can_unstake(
+                chain_data.token,
+                get_staking_contract(
+                    chain=ledger_config.chain, staking_program_id=staked_program
+                ),
+            ):
+                self._unstake_service_on_chain_from_safe_unlocked(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    staking_program_id=staked_program,
+                )
 
     def _terminate_and_unbond(
         self,

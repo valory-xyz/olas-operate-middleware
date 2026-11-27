@@ -200,6 +200,10 @@ class GnosisSafeTransaction:
         # fallback so the tx is still submitted with a workable gas limit.
         if tx.get("gas", 0) < 21_000 and self._gas_fallback > 0:
             tx["gas"] = self._gas_fallback
+            # Estimation also fails on a real revert: raise rather than pay gas for it.
+            self.ledger_api.api.eth.call(
+                {k: tx[k] for k in ("from", "to", "data", "value", "gas") if k in tx}
+            )
         return t.cast(t.Dict, tx)
 
     def settle(self) -> TxReceipt:

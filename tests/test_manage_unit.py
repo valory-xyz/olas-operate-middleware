@@ -741,6 +741,7 @@ class TestGetMechConfigs:
 
 
 _SERVICE_SAFE = "0x5afe000000000000000000000000000000000001"
+_OLAS_TOKEN = "0x01a5000000000000000000000000000000000001"  # nosec
 _MASTER_SAFE = "0xd5afe00000000000000000000000000000000002"
 _AGENT = "0xaaaa"
 _RECOVERY_MODULE = "0x7ec0000000000000000000000000000000000003"
@@ -1115,6 +1116,9 @@ class TestDeployRecoveryModuleGate:
         home_chain: str = "ethereum",
         token: int = 7,
         minted_token: int = 42,
+        staking_params: t.Optional[t.Callable[..., t.Dict]] = None,
+        user_agent_id: int = 25,
+        can_unstake: bool = False,
     ) -> t.Dict[str, t.Any]:
         """Run an update of a service (DEPLOYED by default), ``enable_effect`` driving each enable.
 
@@ -1142,8 +1146,9 @@ class TestDeployRecoveryModuleGate:
         chain_config.chain_data.user_params.nft = _NFT_HASH
         chain_config.chain_data.user_params.staking_program_id = "target_program"
         # The on-chain agent: only the description decides whether this is an update.
-        chain_config.chain_data.user_params.agent_id = 25
+        chain_config.chain_data.user_params.agent_id = user_agent_id
         sftxb = MagicMock()
+        sftxb.can_unstake.return_value = can_unstake
         sftxb.info.return_value = {
             "service_state": service_state.value,
             "instances": [_AGENT],
@@ -1163,6 +1168,8 @@ class TestDeployRecoveryModuleGate:
                 "activity_checker": ZERO_ADDRESS,
                 "service_registry": ZERO_ADDRESS,
             }
+        if staking_params is not None:
+            sftxb.get_staking_params.side_effect = staking_params
         terminate = MagicMock(
             side_effect=(
                 _ReachedTeardown if terminate_effect is None else terminate_effect
@@ -1216,6 +1223,9 @@ class TestDeployRecoveryModuleGate:
             patch.object(
                 manager, "_execute_recovery_module_flow_from_safe"
             ) as recovery_flow,
+            patch.object(
+                manager, "_unstake_service_on_chain_from_safe_unlocked"
+            ) as unstake,
             patch(
                 "operate.services.manage.registry_contracts.gnosis_safe.is_module_enabled",
                 side_effect=lambda **_: {"enabled": bool(enabled) and module_turns_on},
@@ -1241,6 +1251,7 @@ class TestDeployRecoveryModuleGate:
             "enable": enable,
             "cannot_unstake_yet": cannot_unstake_yet,
             "recovery_flow": recovery_flow,
+            "unstake": unstake,
             "manager": manager,
             "service": service,
             "build_prefix": build_prefix,
@@ -1325,6 +1336,73 @@ class TestDeployRecoveryModuleGate:
         updates = self._service_id_updates(run)
         assert [update["SERVICE_ID"] for update in updates] == [42]
         assert "SAFE_CONTRACT_ADDRESSES" in updates[0]
+
+    @staticmethod
+    def _no_staking_params(
+        current_staking_token: str = ZERO_ADDRESS,
+    ) -> t.Callable[..., t.Dict]:
+        """Return the fallback params, as with no staking contract; the first call is the current program."""
+        calls: t.List[None] = []
+
+        def _params(fallback_params: t.Optional[t.Dict] = None, **_: t.Any) -> t.Dict:
+            calls.append(None)
+            if len(calls) == 1:
+                return {
+                    **t.cast(t.Dict, fallback_params),
+                    "staking_token": current_staking_token,
+                }
+            return t.cast(t.Dict, fallback_params)
+
+        return _params
+
+    @pytest.mark.parametrize(
+        "current_staking_token",
+        [ZERO_ADDRESS, _OLAS_TOKEN],
+        ids=["unstaked", "staked"],
+    )
+    def test_a_no_staking_deploy_does_not_re_register(
+        self, tmp_path: Path, current_staking_token: str
+    ) -> None:
+        """Neither the template's agent id nor leaving the staking token re-registers the service."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            is_update=False,
+            deploy_goes_through=True,
+            staking_params=self._no_staking_params(current_staking_token),
+            user_agent_id=14,
+        )
+
+        assert run["raised"] is None
+        run["build_prefix"].assert_not_called()
+        run["terminate"].assert_not_called()
+        run["sftxb"].get_mint_tx_data.assert_not_called()
+
+    @pytest.mark.parametrize("can_unstake", [True, False])
+    def test_a_no_staking_deploy_unstakes_once_allowed(
+        self, tmp_path: Path, can_unstake: bool
+    ) -> None:
+        """A staked service with a no_staking target is unstaked, unless its lock window holds it."""
+        run = self._run_deployed_update(
+            tmp_path,
+            None,
+            None,
+            is_update=False,
+            deploy_goes_through=True,
+            staking_params=self._no_staking_params(_OLAS_TOKEN),
+            can_unstake=can_unstake,
+        )
+
+        assert run["raised"] is None
+        if can_unstake:
+            run["unstake"].assert_called_once_with(
+                service_config_id="sc-test-id",
+                chain=_CHAIN,
+                staking_program_id="current_program",
+            )
+        else:
+            run["unstake"].assert_not_called()
 
     @pytest.mark.parametrize("module_turns_on", [True, False])
     def test_a_resumed_deploy_decides_reuse_at_the_legacy_deploy_step(
